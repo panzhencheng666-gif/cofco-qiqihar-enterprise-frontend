@@ -41,6 +41,19 @@ for (const productCode of canonicalProducts) {
     await expect(
       page.getByRole("columnheader", { name: product.qualityLabel, exact: true }),
     ).toBeVisible();
+    expect(
+      await monitoring.objectTypeFilter.locator("option").evaluateAll((options) =>
+        options.map((option) => ({
+          label: option.textContent,
+          value: (option as HTMLOptionElement).value,
+        })),
+      ),
+    ).toEqual([
+      { label: "全部对象类型", value: "" },
+      { label: "农户", value: "FARMER" },
+      { label: "村委会", value: "VILLAGE_COMMITTEE" },
+      { label: "农技站", value: "AGRICULTURAL_TECH_STATION" },
+    ]);
     await expect(
       page.getByText(api.listLabel(productCode), { exact: true }),
     ).toBeVisible();

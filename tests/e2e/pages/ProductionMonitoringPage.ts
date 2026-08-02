@@ -2,6 +2,7 @@ import { expect, type Page } from "@playwright/test";
 
 import {
   productionProducts,
+  type ProductionObjectTypeCode,
   type ProductionProductCode,
 } from "../fixtures/production-api";
 
@@ -59,7 +60,7 @@ export class ProductionMonitoringPage {
     await expect(this.page.getByRole("dialog", { name: "新建产情填报" })).toBeVisible();
   }
 
-  async searchForObjectType(objectTypeCode: "FARMER" | "VILLAGE") {
+  async searchForObjectType(objectTypeCode: ProductionObjectTypeCode) {
     await this.objectTypeFilter.selectOption(objectTypeCode);
     const response = this.page.waitForResponse((candidate) => {
       const url = new URL(candidate.url());

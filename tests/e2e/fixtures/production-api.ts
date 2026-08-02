@@ -1,6 +1,8 @@
 import type { Page, Request, Route } from "@playwright/test";
 
 export type ProductionProductCode = "CORN" | "SOYBEAN" | "RICE";
+export type ProductionObjectTypeCode =
+  "FARMER" | "VILLAGE_COMMITTEE" | "AGRICULTURAL_TECH_STATION";
 
 export const productionProducts = {
   CORN: {
@@ -27,12 +29,11 @@ export interface ProductionListQuery {
   productCode: ProductionProductCode;
   pageNumber: number;
   pageSize: number;
-  objectTypeCode?: string;
+  objectTypeCode?: ProductionObjectTypeCode;
 }
 
 interface PendingListResponse {
   query: ProductionListQuery;
-  request: Request;
   route: Route;
   released: boolean;
 }
@@ -95,7 +96,7 @@ export class ProductionApiRoutes {
         await fulfillJson(route, formDefinition(productCode));
         return;
       }
-      if (request.method() === "GET" && url.pathname === "/api/v1/production-records") {
+      if (url.pathname === "/api/v1/production-records") {
         await this.handleList(route, url);
         return;
       }
@@ -146,10 +147,31 @@ export class ProductionApiRoutes {
   }
 
   private async handleList(route: Route, url: URL) {
-    const productCode = requireProductCode(url.searchParams.get("productCode"));
-    const pageNumber = requiredInteger(url.searchParams, "pageNumber");
-    const pageSize = requiredInteger(url.searchParams, "pageSize");
-    const objectTypeCode = url.searchParams.get("filter.objectTypeCode") ?? undefined;
+    const request = route.request();
+    const productCode = productCodeOrUndefined(singleValue(url, "productCode"));
+    const pageNumber = formalPageNumber(singleValue(url, "pageNumber"));
+    const pageSize = formalPageSize(singleValue(url, "pageSize"));
+    const pageKind = singleValue(url, "pageKind");
+    const objectTypeValue = optionalSingleValue(url, "filter.objectTypeCode");
+    const objectTypeCode = objectTypeCodeOrUndefined(objectTypeValue);
+    if (
+      request.method() !== "GET" ||
+      productCode === undefined ||
+      pageKind !== "MONITORING" ||
+      pageNumber === undefined ||
+      pageSize === undefined ||
+      objectTypeValue === null ||
+      (objectTypeValue !== undefined && objectTypeCode === undefined)
+    ) {
+      this.unexpectedRequests.push(`${request.method()} ${url.pathname}${url.search}`);
+      this.notify();
+      await fulfillJson(
+        route,
+        { error: { code: "INVALID_E2E_PRODUCTION_LIST_QUERY" } },
+        400,
+      );
+      return;
+    }
     const query: ProductionListQuery = {
       productCode,
       pageNumber,
@@ -161,7 +183,6 @@ export class ProductionApiRoutes {
     if (this.holdLatestPage && pageNumber === 1 && objectTypeCode === "FARMER") {
       this.pendingLatest.push({
         query,
-        request: route.request(),
         route,
         released: false,
       });
@@ -213,7 +234,8 @@ function pageDefinition(productCode: ProductionProductCode) {
           placeholder: "全部对象类型",
           options: [
             { value: "FARMER", label: "农户" },
-            { value: "VILLAGE", label: "行政村" },
+            { value: "VILLAGE_COMMITTEE", label: "村委会" },
+            { value: "AGRICULTURAL_TECH_STATION", label: "农技站" },
           ],
         },
       ],
@@ -244,7 +266,7 @@ function pageDefinition(productCode: ProductionProductCode) {
         { code: "NEW", label: "新建填报", scope: "page" },
         { code: "SUBMIT", label: "提交", scope: "row" },
       ],
-      pagination: { defaultPageSize: 20, pageSizeOptions: [20] },
+      pagination: { defaultPageSize: 20, pageSizeOptions: [20, 50, 100] },
     },
   };
 }
@@ -345,13 +367,43 @@ function requireProductCode(value: string | null): ProductionProductCode {
   throw new Error(`Unexpected product code: ${String(value)}`);
 }
 
-function requiredInteger(parameters: URLSearchParams, name: string) {
-  const value = parameters.get(name);
+function productCodeOrUndefined(value: string | undefined) {
+  return value === "CORN" || value === "SOYBEAN" || value === "RICE"
+    ? value
+    : undefined;
+}
+
+function objectTypeCodeOrUndefined(
+  value: string | null | undefined,
+): ProductionObjectTypeCode | undefined {
+  return value === "FARMER" ||
+    value === "VILLAGE_COMMITTEE" ||
+    value === "AGRICULTURAL_TECH_STATION"
+    ? value
+    : undefined;
+}
+
+function formalPageNumber(value: string | undefined) {
   const parsed = Number(value);
-  if (value === null || !Number.isInteger(parsed)) {
-    throw new Error(`Expected integer query parameter ${name}`);
-  }
-  return parsed;
+  return value !== undefined && Number.isSafeInteger(parsed) && parsed >= 0
+    ? parsed
+    : undefined;
+}
+
+function formalPageSize(value: string | undefined) {
+  const parsed = Number(value);
+  return value !== undefined && [20, 50, 100].includes(parsed) ? parsed : undefined;
+}
+
+function singleValue(url: URL, name: string) {
+  const values = url.searchParams.getAll(name);
+  return values.length === 1 && values[0] !== "" ? values[0] : undefined;
+}
+
+function optionalSingleValue(url: URL, name: string) {
+  const values = url.searchParams.getAll(name);
+  if (values.length === 0) return undefined;
+  return values.length === 1 && values[0] !== "" ? values[0] : null;
 }
 
 async function fulfillJson(route: Route, body: unknown, status = 200) {
