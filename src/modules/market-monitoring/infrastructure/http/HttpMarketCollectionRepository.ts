@@ -3,84 +3,38 @@ import { z } from "zod";
 import type { HttpClient } from "../../../../shared/api/HttpClient";
 import { queryString } from "../../../../shared/api/HttpClient";
 import type { MarketCollectionRepository } from "../../application/ports/MarketCollectionRepository";
-import type {
-  MarketCollectionCriteria,
-  MarketCollectionDefinition,
-  MarketFieldDefinition,
-} from "../../domain/marketCollection";
-
-const fieldSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  unit: z.string().optional(),
-  note: z.string().optional(),
-});
-
-const definitionResponseSchema = z.object({
-  data: z.object({
-    productCode: z.string(),
-    productName: z.string(),
-    fieldGroups: z.array(
-      z.object({
-        id: z.string(),
-        name: z.string(),
-        fields: z.array(fieldSchema),
-      }),
-    ),
-  }),
-});
+import type { MarketCollectionCriteria } from "../../domain/marketCollection";
 
 const recordSchema = z.object({
   id: z.string(),
-  collectionDate: z.string(),
-  submittedAt: z.string(),
-  subjectName: z.string(),
-  objectTypeName: z.string(),
-  regionName: z.string(),
-  cultivarName: z.string(),
-  status: z.string(),
-  values: z.record(z.string(), z.string()),
+  values: z.record(z.string(), z.union([z.string(), z.number(), z.null()])),
 });
-const recordListResponseSchema = z.object({ data: z.array(recordSchema) });
-
-function toFieldDefinition(field: z.infer<typeof fieldSchema>): MarketFieldDefinition {
-  return {
-    id: field.id,
-    name: field.name,
-    ...(field.unit === undefined ? {} : { unit: field.unit }),
-    ...(field.note === undefined ? {} : { note: field.note }),
-  };
-}
+const recordPageResponseSchema = z.object({
+  data: z.object({
+    items: z.array(recordSchema),
+    pageNumber: z.number().int().nonnegative(),
+    pageSize: z.number().int().positive(),
+    totalElements: z.number().int().nonnegative(),
+    totalPages: z.number().int().nonnegative(),
+  }),
+});
 
 export class HttpMarketCollectionRepository implements MarketCollectionRepository {
   constructor(private readonly http: HttpClient) {}
 
-  async getDefinition(productCode: string): Promise<MarketCollectionDefinition> {
-    const definition = (
-      await this.http.get(
-        `/api/v1/market-collections/definition?productCode=${productCode}`,
-        definitionResponseSchema,
-      )
-    ).data;
-
-    return {
-      productCode: definition.productCode,
-      productName: definition.productName,
-      fieldGroups: definition.fieldGroups.map((group) => ({
-        id: group.id,
-        name: group.name,
-        fields: group.fields.map(toFieldDefinition),
-      })),
-    };
-  }
-
   async search(criteria: MarketCollectionCriteria) {
-    const query = queryString(criteria);
+    const filters = Object.fromEntries(
+      Object.entries(criteria.values).map(([id, value]) => [`filter.${id}`, value]),
+    );
+    const query = queryString({
+      productCode: criteria.productCode,
+      pageKind: criteria.pageKind,
+      pageNumber: criteria.pageNumber,
+      pageSize: criteria.pageSize,
+      ...filters,
+    });
     return (
-      await this.http.get(
-        `/api/v1/market-collections${query}`,
-        recordListResponseSchema,
-      )
+      await this.http.get(`/api/v1/market-records${query}`, recordPageResponseSchema)
     ).data;
   }
 }

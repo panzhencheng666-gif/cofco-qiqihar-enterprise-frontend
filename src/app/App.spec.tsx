@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { App, type AppDependencies } from "./App";
+import type { MarketCollectionCriteria } from "../modules/market-monitoring/domain/marketCollection";
 import type { ListPageDefinition } from "../shared/application/page-definition";
 
 describe("App production composition", () => {
@@ -11,10 +12,17 @@ describe("App production composition", () => {
 
   it("drives products, initial search, submit, pagination and browser history through one context", async () => {
     const user = userEvent.setup();
-    const searches: Array<Record<string, string | number | undefined>> = [];
+    const searches: MarketCollectionCriteria[] = [];
     const dependencies = dependenciesFixture((criteria) => {
       searches.push(criteria);
-      return Promise.resolve(records(21));
+      return Promise.resolve(
+        page(
+          criteria.pageNumber === 1 ? records(1, 21) : records(20),
+          criteria.pageNumber ?? 0,
+          20,
+          21,
+        ),
+      );
     });
 
     render(<App dependencies={dependencies} />);
@@ -26,6 +34,7 @@ describe("App production composition", () => {
     await waitFor(() => expect(searches).toHaveLength(1));
     expect(searches[0]).toMatchObject({
       productCode: "SOYBEAN_FIXTURE",
+      pageKind: "QUALITY",
       pageNumber: 0,
       pageSize: 20,
     });
@@ -33,7 +42,7 @@ describe("App production composition", () => {
     await user.type(screen.getByRole("textbox", { name: "关键词" }), "北安");
     await user.click(screen.getByRole("button", { name: "查询" }));
     await waitFor(() => expect(searches).toHaveLength(2));
-    expect(searches[1]).toMatchObject({ keyword: "北安" });
+    expect(searches[1]).toMatchObject({ values: { keyword: "北安" } });
     expect(window.location.hash).toContain("filter.keyword=%E5%8C%97%E5%AE%89");
 
     await user.click(screen.getByRole("button", { name: "下一页" }));
@@ -62,7 +71,7 @@ describe("App production composition", () => {
       attempts += 1;
       return attempts === 1
         ? Promise.reject(new Error("offline"))
-        : Promise.resolve(records(1));
+        : Promise.resolve(page(records(1), 0, 20, 1));
     });
 
     render(<App dependencies={dependencies} />);
@@ -77,12 +86,135 @@ describe("App production composition", () => {
     expect(await screen.findByText("记录1")).toBeVisible();
     expect(attempts).toBe(2);
   });
+
+  it("whitelists deep-link filters and pagination against the loaded definition", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "#/pages/MARKET/QUALITY/SOYBEAN_FIXTURE?pageNumber=-3&pageSize=999&filter.keyword=%E5%8C%97%E5%AE%89&filter.unknown=discard",
+    );
+    const searches: Array<Record<string, unknown>> = [];
+    render(
+      <App
+        dependencies={dependenciesFixture((criteria) => {
+          searches.push(criteria);
+          return Promise.resolve(page([], 0, 20, 0));
+        })}
+      />,
+    );
+
+    await waitFor(() => expect(searches).toHaveLength(1));
+    expect(searches[0]).toMatchObject({
+      pageNumber: 0,
+      pageSize: 20,
+      values: { keyword: "北安" },
+    });
+    expect(searches[0]).not.toHaveProperty("values.unknown");
+    expect(window.location.hash).toContain("pageSize=20");
+    expect(window.location.hash).not.toContain("unknown");
+  });
+
+  it("handles damaged encoding and mismatched navigation context without throwing", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "#/pages/LOGISTICS/QUALITY/%E0%A4%A?filter.keyword=%E0%A4%A",
+    );
+
+    expect(() =>
+      render(
+        <App
+          dependencies={dependenciesFixture(() => Promise.resolve(page([], 0, 20, 0)))}
+        />,
+      ),
+    ).not.toThrow();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "页面地址无效，请从业务导航进入。",
+    );
+    expect(screen.getByRole("button", { name: "大豆质量指标" })).toBeVisible();
+  });
+
+  it("normalizes a valid deep link whose domain does not belong to dynamic navigation", async () => {
+    window.history.replaceState(null, "", "#/pages/LOGISTICS/QUALITY/SOYBEAN_FIXTURE");
+    render(
+      <App
+        dependencies={dependenciesFixture(() => Promise.resolve(page([], 0, 20, 0)))}
+      />,
+    );
+
+    expect(await screen.findByRole("heading", { name: "大豆质量指标" })).toBeVisible();
+    expect(window.location.hash).toMatch(/^#\/pages\/MARKET\/QUALITY\/SOYBEAN_FIXTURE/);
+  });
+
+  it("revalidates filter and page-size state arriving through browser history", async () => {
+    const searches: Array<Record<string, unknown>> = [];
+    render(
+      <App
+        dependencies={dependenciesFixture((criteria) => {
+          searches.push(criteria);
+          return Promise.resolve(page([], 0, 20, 0));
+        })}
+      />,
+    );
+    await waitFor(() => expect(searches).toHaveLength(1));
+
+    window.history.replaceState(
+      null,
+      "",
+      "#/pages/MARKET/QUALITY/SOYBEAN_FIXTURE?pageSize=777&filter.unknown=discard&filter.keyword=history",
+    );
+    window.dispatchEvent(new PopStateEvent("popstate"));
+
+    await waitFor(() => expect(searches).toHaveLength(2));
+    expect(searches[1]).toMatchObject({
+      pageSize: 20,
+      values: { keyword: "history" },
+    });
+    expect(window.location.hash).not.toContain("unknown");
+    expect(window.location.hash).not.toContain("777");
+  });
+
+  it("rejects a page definition whose context differs from the requested navigation", async () => {
+    const dependencies = dependenciesFixture(() => Promise.resolve(page([], 0, 20, 0)));
+    dependencies.pageDefinitionGateway = {
+      getDefinition: () => Promise.resolve(definitionFixture("RICE_FIXTURE")),
+    };
+    render(<App dependencies={dependencies} />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "页面上下文与页面定义不一致。",
+    );
+  });
+
+  it("retries dynamic product navigation after an initial failure", async () => {
+    const user = userEvent.setup();
+    let attempts = 0;
+    const dependencies = dependenciesFixture(() => Promise.resolve(page([], 0, 20, 0)));
+    dependencies.masterDataRepository.getProducts = () => {
+      attempts += 1;
+      return attempts === 1
+        ? Promise.reject(new Error("offline"))
+        : Promise.resolve([{ id: "SOYBEAN_FIXTURE", name: "大豆" }]);
+    };
+    render(<App dependencies={dependencies} />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "产品导航加载失败，请稍后重试。",
+    );
+    await user.click(screen.getByRole("button", { name: "重试产品导航" }));
+    expect(await screen.findByRole("button", { name: "大豆质量指标" })).toBeVisible();
+    expect(attempts).toBe(2);
+  });
 });
 
 function dependenciesFixture(
-  search: (
-    criteria: Record<string, string | number | undefined>,
-  ) => Promise<ReturnType<typeof records>>,
+  search: (criteria: {
+    productCode: string;
+    pageKind: string;
+    pageNumber: number;
+    pageSize: number;
+    values: Readonly<Record<string, string>>;
+  }) => Promise<ReturnType<typeof page>>,
 ): AppDependencies {
   return {
     masterDataRepository: {
@@ -102,7 +234,6 @@ function dependenciesFixture(
       getDefinition: (key) => Promise.resolve(definitionFixture(key.productCode)),
     },
     marketCollectionRepository: {
-      getDefinition: () => Promise.reject(new Error("legacy definition unused")),
       search,
     },
   };
@@ -136,16 +267,24 @@ function definitionFixture(productCode: string): ListPageDefinition {
   };
 }
 
-function records(count: number) {
+function records(count: number, first = 1) {
   return Array.from({ length: count }, (_, index) => ({
-    id: `record-${String(index + 1)}`,
-    collectionDate: "",
-    submittedAt: "",
-    subjectName: `记录${String(index + 1)}`,
-    objectTypeName: "",
-    regionName: "",
-    cultivarName: "",
-    status: "",
-    values: {},
+    id: `record-${String(first + index)}`,
+    values: { subjectName: `记录${String(first + index)}` },
   }));
+}
+
+function page(
+  items: ReturnType<typeof records>,
+  pageNumber: number,
+  pageSize: number,
+  totalElements: number,
+) {
+  return {
+    items,
+    pageNumber,
+    pageSize,
+    totalElements,
+    totalPages: Math.ceil(totalElements / pageSize),
+  };
 }

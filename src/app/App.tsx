@@ -36,37 +36,56 @@ interface AppLocation {
   query: { pageNumber?: number; pageSize?: number; values: Record<string, string> };
 }
 
+interface HashState {
+  location?: AppLocation;
+  invalid: boolean;
+}
+
 const domain = "MARKET";
 const pageKind = "QUALITY";
 
-function locationFromHash(): AppLocation | undefined {
+function locationFromHash(): HashState {
   const match = /^#\/pages\/([^/]+)\/([^/]+)\/([^?]+)(?:\?(.*))?$/.exec(
     window.location.hash,
   );
-  if (!match) return undefined;
-  const parameters = new URLSearchParams(match[4] ?? "");
-  const values: Record<string, string> = {};
-  for (const [name, value] of parameters) {
-    if (name.startsWith("filter.")) values[name.slice(7)] = value;
+  if (!match) return { invalid: window.location.hash.length > 0 };
+  try {
+    decodeURIComponent(match[4] ?? "");
+    const parameters = new URLSearchParams(match[4] ?? "");
+    const values: Record<string, string> = {};
+    for (const [name, value] of parameters) {
+      if (name.startsWith("filter.")) values[name.slice(7)] = value;
+    }
+    const pageNumberValue = parameters.get("pageNumber");
+    const pageSizeValue = parameters.get("pageSize");
+    const parsedPageNumber = Number(pageNumberValue);
+    const parsedPageSize = Number(pageSizeValue);
+    return {
+      invalid: false,
+      location: {
+        key: {
+          domain: decodeURIComponent(match[1]!),
+          pageKind: decodeURIComponent(match[2]!),
+          productCode: decodeURIComponent(match[3]!),
+        },
+        query: {
+          ...(pageNumberValue !== null &&
+          Number.isInteger(parsedPageNumber) &&
+          parsedPageNumber >= 0
+            ? { pageNumber: parsedPageNumber }
+            : {}),
+          ...(pageSizeValue !== null &&
+          Number.isInteger(parsedPageSize) &&
+          parsedPageSize > 0
+            ? { pageSize: parsedPageSize }
+            : {}),
+          values,
+        },
+      },
+    };
+  } catch {
+    return { invalid: true };
   }
-  const parsedPageNumber = Number(parameters.get("pageNumber"));
-  const parsedPageSize = Number(parameters.get("pageSize"));
-  return {
-    key: {
-      domain: decodeURIComponent(match[1]!),
-      pageKind: decodeURIComponent(match[2]!),
-      productCode: decodeURIComponent(match[3]!),
-    },
-    query: {
-      ...(Number.isInteger(parsedPageNumber) && parsedPageNumber >= 0
-        ? { pageNumber: parsedPageNumber }
-        : {}),
-      ...(Number.isInteger(parsedPageSize) && parsedPageSize > 0
-        ? { pageSize: parsedPageSize }
-        : {}),
-      values,
-    },
-  };
 }
 
 function hashFor(key: BusinessPageKey, query?: ListQueryState) {
@@ -88,10 +107,9 @@ export function App({
   dependencies?: AppDependencies;
 }) {
   const [products, setProducts] = useState<readonly { id: string; name: string }[]>([]);
-  const [location, setLocation] = useState<AppLocation | undefined>(() =>
-    locationFromHash(),
-  );
+  const [hashState, setHashState] = useState<HashState>(() => locationFromHash());
   const [navigationError, setNavigationError] = useState(false);
+  const [navigationAttempt, setNavigationAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -101,31 +119,36 @@ export function App({
         if (!active) return;
         setProducts(loadedProducts);
         setNavigationError(false);
-        setLocation((current) => {
+        setHashState((current) => {
+          if (current.invalid) return current;
           if (
-            current &&
-            loadedProducts.some((product) => product.id === current.key.productCode)
+            current.location &&
+            current.location.key.domain === domain &&
+            current.location.key.pageKind === pageKind &&
+            loadedProducts.some(
+              (product) => product.id === current.location?.key.productCode,
+            )
           ) {
             return current;
           }
           const first = loadedProducts[0];
-          if (!first) return undefined;
+          if (!first) return { invalid: false };
           const next = {
             key: { domain, pageKind, productCode: first.id },
             query: { values: {} },
           };
           window.history.replaceState(null, "", hashFor(next.key));
-          return next;
+          return { invalid: false, location: next };
         });
       })
       .catch(() => active && setNavigationError(true));
     return () => {
       active = false;
     };
-  }, [dependencies.masterDataRepository]);
+  }, [dependencies.masterDataRepository, navigationAttempt]);
 
   useEffect(() => {
-    const synchronize = () => setLocation(locationFromHash());
+    const synchronize = () => setHashState(locationFromHash());
     window.addEventListener("popstate", synchronize);
     window.addEventListener("hashchange", synchronize);
     return () => {
@@ -134,17 +157,23 @@ export function App({
     };
   }, []);
 
+  const location = hashState.location;
   const pageKey = location?.key;
 
   function selectProduct(productCode: string) {
     const next = { key: { domain, pageKind, productCode }, query: { values: {} } };
     window.history.pushState(null, "", hashFor(next.key));
-    setLocation(next);
+    setHashState({ invalid: false, location: next });
   }
 
   function commitQuery(query: ListQueryState) {
     if (!pageKey) return;
     window.history.pushState(null, "", hashFor(pageKey, query));
+  }
+
+  function normalizeQuery(query: ListQueryState) {
+    if (!pageKey) return;
+    window.history.replaceState(null, "", hashFor(pageKey, query));
   }
 
   return (
@@ -156,6 +185,16 @@ export function App({
       {navigationError ? (
         <div className="page-alert" role="alert">
           产品导航加载失败，请稍后重试。
+          <button
+            onClick={() => setNavigationAttempt((value) => value + 1)}
+            type="button"
+          >
+            重试产品导航
+          </button>
+        </div>
+      ) : hashState.invalid ? (
+        <div className="page-alert" role="alert">
+          页面地址无效，请从业务导航进入。
         </div>
       ) : pageKey === undefined ? (
         <div className="ledger-panel list-workbench-loading">正在加载业务导航</div>
@@ -169,6 +208,7 @@ export function App({
           }
           marketCollectionRepository={dependencies.marketCollectionRepository}
           onQueryCommitted={commitQuery}
+          onQueryNormalized={normalizeQuery}
           pageDefinitionGateway={dependencies.pageDefinitionGateway}
           pageKey={pageKey}
           {...(location ? { routeQuery: location.query } : {})}

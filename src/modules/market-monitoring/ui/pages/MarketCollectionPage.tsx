@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { MarketCollectionRepository } from "../../application/ports/MarketCollectionRepository";
-import type { MarketCollectionRecord } from "../../domain/marketCollection";
 
 import type {
   BusinessPageKey,
@@ -28,6 +27,7 @@ export function MarketCollectionPage({
   loadRegionPath,
   marketCollectionRepository,
   onQueryCommitted,
+  onQueryNormalized,
   pageDefinitionGateway,
   pageKey,
   routeQuery,
@@ -37,6 +37,7 @@ export function MarketCollectionPage({
   loadRegionPath?: LoadRegionPath;
   marketCollectionRepository?: MarketCollectionRepository;
   onQueryCommitted?: (query: ListQueryState) => void;
+  onQueryNormalized?: (query: ListQueryState) => void;
   pageDefinitionGateway: PageDefinitionGateway;
   pageKey: BusinessPageKey;
   routeQuery?: RouteQuery;
@@ -48,6 +49,7 @@ export function MarketCollectionPage({
   const [definitionError, setDefinitionError] = useState(false);
   const [definitionAttempt, setDefinitionAttempt] = useState(0);
   const [listError, setListError] = useState("");
+  const [contextError, setContextError] = useState("");
   const [loading, setLoading] = useState(false);
   const searchVersion = useRef(0);
 
@@ -61,15 +63,34 @@ export function MarketCollectionPage({
         if (search) {
           nextResult = await search(nextQuery);
         } else if (marketCollectionRepository) {
-          const records = await marketCollectionRepository.search({
+          nextResult = await marketCollectionRepository.search({
             productCode: pageKey.productCode,
+            pageKind: pageKey.pageKind,
             pageNumber: nextQuery.pageNumber,
             pageSize: nextQuery.pageSize,
-            ...nextQuery.values,
+            values: nextQuery.values,
           });
-          nextResult = toPagedResult(records, nextQuery);
         } else {
           nextResult = emptyResult(nextQuery);
+        }
+        const lastPage = Math.max(0, nextResult.totalPages - 1);
+        if (nextQuery.pageNumber > lastPage) {
+          const normalizedQuery = { ...nextQuery, pageNumber: lastPage };
+          if (search) {
+            nextResult = await search(normalizedQuery);
+          } else if (marketCollectionRepository) {
+            nextResult = await marketCollectionRepository.search({
+              productCode: pageKey.productCode,
+              pageKind: pageKey.pageKind,
+              pageNumber: normalizedQuery.pageNumber,
+              pageSize: normalizedQuery.pageSize,
+              values: normalizedQuery.values,
+            });
+          }
+          if (version === searchVersion.current) {
+            setQuery(normalizedQuery);
+            onQueryNormalized?.(normalizedQuery);
+          }
         }
         if (version === searchVersion.current) setResult(nextResult);
       } catch {
@@ -80,7 +101,13 @@ export function MarketCollectionPage({
         if (version === searchVersion.current) setLoading(false);
       }
     },
-    [marketCollectionRepository, pageKey.productCode, search],
+    [
+      marketCollectionRepository,
+      onQueryNormalized,
+      pageKey.pageKind,
+      pageKey.productCode,
+      search,
+    ],
   );
 
   useEffect(() => {
@@ -89,16 +116,21 @@ export function MarketCollectionPage({
       if (!active) return undefined;
       setDefinition(undefined);
       setDefinitionError(false);
+      setContextError("");
       return pageDefinitionGateway
         .getDefinition(pageKey)
         .then((loadedDefinition) => {
           if (!active) return;
+          if (!samePageKey(loadedDefinition.key, pageKey)) {
+            setContextError("页面上下文与页面定义不一致。");
+            return;
+          }
           const defaults = createInitialListQuery(loadedDefinition);
-          const initialQuery: ListQueryState = {
-            values: { ...defaults.values, ...routeQuery?.values },
-            pageNumber: routeQuery?.pageNumber ?? defaults.pageNumber,
-            pageSize: routeQuery?.pageSize ?? defaults.pageSize,
-          };
+          const initialQuery = normalizeRouteQuery(
+            loadedDefinition,
+            defaults,
+            routeQuery,
+          );
           setDefinition(loadedDefinition);
           setQuery(initialQuery);
           setResult({
@@ -108,6 +140,7 @@ export function MarketCollectionPage({
             totalElements: 0,
             totalPages: 0,
           });
+          onQueryNormalized?.(initialQuery);
           void executeSearch(initialQuery);
         })
         .catch(() => {
@@ -117,7 +150,14 @@ export function MarketCollectionPage({
     return () => {
       active = false;
     };
-  }, [definitionAttempt, executeSearch, pageDefinitionGateway, pageKey, routeQuery]);
+  }, [
+    definitionAttempt,
+    executeSearch,
+    onQueryNormalized,
+    pageDefinitionGateway,
+    pageKey,
+    routeQuery,
+  ]);
 
   function changeQuery(nextQuery: ListQueryState) {
     const shouldRun =
@@ -150,6 +190,13 @@ export function MarketCollectionPage({
       </div>
     );
   }
+  if (contextError) {
+    return (
+      <div className="page-alert" role="alert">
+        {contextError}
+      </div>
+    );
+  }
   if (definition === undefined || query === undefined || result === undefined) {
     return <div className="ledger-panel list-workbench-loading">正在加载页面定义</div>;
   }
@@ -170,6 +217,42 @@ export function MarketCollectionPage({
   );
 }
 
+function samePageKey(left: BusinessPageKey, right: BusinessPageKey) {
+  return (
+    left.domain === right.domain &&
+    left.pageKind === right.pageKind &&
+    left.productCode === right.productCode
+  );
+}
+
+function normalizeRouteQuery(
+  definition: ListPageDefinition,
+  defaults: ListQueryState,
+  routeQuery?: RouteQuery,
+): ListQueryState {
+  const allowedFilters = new Set(definition.filters.map((filter) => filter.id));
+  const values = Object.fromEntries(
+    Object.entries({ ...defaults.values, ...routeQuery?.values }).filter(([id]) =>
+      allowedFilters.has(id),
+    ),
+  );
+  const requestedPageSize = routeQuery?.pageSize;
+  return {
+    values,
+    pageNumber:
+      routeQuery?.pageNumber !== undefined &&
+      Number.isInteger(routeQuery.pageNumber) &&
+      routeQuery.pageNumber >= 0
+        ? routeQuery.pageNumber
+        : defaults.pageNumber,
+    pageSize:
+      requestedPageSize !== undefined &&
+      definition.pagination.pageSizeOptions.includes(requestedPageSize)
+        ? requestedPageSize
+        : defaults.pageSize,
+  };
+}
+
 function emptyResult(query: ListQueryState): PagedResult {
   return {
     items: [],
@@ -177,22 +260,5 @@ function emptyResult(query: ListQueryState): PagedResult {
     pageSize: query.pageSize,
     totalElements: 0,
     totalPages: 0,
-  };
-}
-
-function toPagedResult(
-  records: readonly MarketCollectionRecord[],
-  query: ListQueryState,
-): PagedResult {
-  const start = query.pageNumber * query.pageSize;
-  return {
-    items: records.slice(start, start + query.pageSize).map((record) => {
-      const { values, ...baseValues } = record;
-      return { id: record.id, values: { ...baseValues, ...values } };
-    }),
-    pageNumber: query.pageNumber,
-    pageSize: query.pageSize,
-    totalElements: records.length,
-    totalPages: Math.ceil(records.length / query.pageSize),
   };
 }

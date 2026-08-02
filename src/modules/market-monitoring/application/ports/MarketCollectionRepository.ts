@@ -1,12 +1,11 @@
 import type {
   MarketCollectionCriteria,
-  MarketCollectionDefinition,
   MarketCollectionRecord,
 } from "../../domain/marketCollection";
+import type { PagedResult } from "../../../../shared/application/page-definition";
 
 export interface MarketCollectionRepository {
-  getDefinition(productCode: string): Promise<MarketCollectionDefinition>;
   search(
     criteria: MarketCollectionCriteria,
-  ): Promise<readonly MarketCollectionRecord[]>;
+  ): Promise<PagedResult<MarketCollectionRecord>>;
 }
