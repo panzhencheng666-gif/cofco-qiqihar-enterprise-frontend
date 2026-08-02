@@ -6,6 +6,9 @@ import { HttpMarketCollectionRepository } from "../modules/market-monitoring/inf
 import type { MasterDataRepository } from "../modules/master-data/application/ports/MasterDataRepository";
 import { HttpMasterDataRepository } from "../modules/master-data/infrastructure/http/HttpMasterDataRepository";
 import { MarketCollectionPage } from "../modules/market-monitoring/ui/pages/MarketCollectionPage";
+import type { ProductionRecordRepository } from "../modules/production-monitoring/application/ports/ProductionRecordRepository";
+import { HttpProductionRecordRepository } from "../modules/production-monitoring/infrastructure/http/HttpProductionRecordRepository";
+import { ProductionMonitoringPage } from "../modules/production-monitoring/ui/pages/ProductionMonitoringPage";
 import type { WorkItemRepository } from "../modules/work-management/application/ports/WorkItemRepository";
 import { HttpWorkItemRepository } from "../modules/work-management/infrastructure/http/HttpWorkItemRepository";
 import { WorkItemsPage } from "../modules/work-management/ui/pages/WorkItemsPage";
@@ -22,12 +25,14 @@ const httpClient = new FetchHttpClient();
 const masterDataRepository = new HttpMasterDataRepository(httpClient);
 const pageDefinitionGateway = new HttpPageDefinitionGateway(httpClient);
 const marketCollectionRepository = new HttpMarketCollectionRepository(httpClient);
+const productionRecordRepository = new HttpProductionRecordRepository(httpClient);
 const workItemRepository = new HttpWorkItemRepository(httpClient);
 
 export interface AppDependencies {
   masterDataRepository: MasterDataRepository;
   pageDefinitionGateway: PageDefinitionGateway;
   marketCollectionRepository: MarketCollectionRepository;
+  productionRecordRepository?: ProductionRecordRepository;
   workItemRepository: WorkItemRepository;
 }
 
@@ -35,6 +40,7 @@ const productionDependencies: AppDependencies = {
   masterDataRepository,
   pageDefinitionGateway,
   marketCollectionRepository,
+  productionRecordRepository,
   workItemRepository,
 };
 
@@ -299,6 +305,23 @@ export function App({
         </div>
       ) : pageKey === undefined ? (
         <div className="ledger-panel list-workbench-loading">正在加载业务导航</div>
+      ) : pageKey.domain === "PRODUCTION" ? (
+        <ProductionMonitoringPage
+          loadRegionChildren={(parentId) =>
+            dependencies.masterDataRepository.getRegionChildren(parentId)
+          }
+          loadRegionPath={(regionId) =>
+            dependencies.masterDataRepository.getRegionPath(regionId)
+          }
+          onQueryCommitted={commitQuery}
+          onQueryNormalized={normalizeQuery}
+          pageDefinitionGateway={dependencies.pageDefinitionGateway}
+          pageKey={pageKey}
+          repository={
+            dependencies.productionRecordRepository ?? productionRecordRepository
+          }
+          {...(location ? { routeQuery: location.query } : {})}
+        />
       ) : (
         <MarketCollectionPage
           loadRegionChildren={(parentId) =>
