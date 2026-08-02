@@ -10,7 +10,12 @@ describe("HttpMarketCollectionRepository canonical paging contract", () => {
         return Promise.resolve(
           schema.parse({
             data: {
-              items: [{ id: "record-41", values: { subjectName: "记录41" } }],
+              items: [
+                {
+                  id: "record-41",
+                  values: { subjectName: "记录41", score: 41.5, note: null },
+                },
+              ],
               pageNumber: 2,
               pageSize: 20,
               totalElements: 41,
@@ -33,7 +38,12 @@ describe("HttpMarketCollectionRepository canonical paging contract", () => {
       "/api/v1/market-records?productCode=SOYBEAN&pageKind=QUALITY&pageNumber=2&pageSize=20&filter.keyword=%E5%8C%97%E5%AE%89",
     ]);
     expect(result).toEqual({
-      items: [{ id: "record-41", values: { subjectName: "记录41" } }],
+      items: [
+        {
+          id: "record-41",
+          values: { subjectName: "记录41", score: 41.5, note: null },
+        },
+      ],
       pageNumber: 2,
       pageSize: 20,
       totalElements: 41,
