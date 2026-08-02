@@ -33,10 +33,13 @@ export interface MarketCollectionRecord {
 
 export interface MarketCollectionCriteria {
   productCode: string;
+  pageNumber?: number;
+  pageSize?: number;
   collectionDate?: string;
   regionId?: string;
   monitoringPeriodId?: string;
   objectTypeId?: string;
   cultivarId?: string;
   status?: CollectionStatus;
+  [filterId: string]: string | number | undefined;
 }

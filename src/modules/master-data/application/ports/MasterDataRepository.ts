@@ -5,6 +5,7 @@ import type {
 } from "../../domain/masterData";
 
 export interface MasterDataRepository {
+  getProducts(domain: string, pageKind: string): Promise<readonly MasterDataOption[]>;
   getCultivars(productCode: string): Promise<readonly MasterDataOption[]>;
   getMarketObjectTypes(productCode: string): Promise<readonly MasterDataOption[]>;
   getMonitoringPeriods(
@@ -13,4 +14,5 @@ export interface MasterDataRepository {
   ): Promise<readonly MasterDataOption[]>;
   getRegionRoots(): Promise<readonly RegionOption[]>;
   getRegionChildren(parentId?: string): Promise<readonly RegionHierarchyNode[]>;
+  getRegionPath(regionId: string): Promise<readonly RegionHierarchyNode[]>;
 }

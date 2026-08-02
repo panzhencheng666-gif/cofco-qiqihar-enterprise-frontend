@@ -79,6 +79,7 @@ export interface RegionNode {
 }
 
 export type LoadRegionChildren = (parentId?: string) => Promise<readonly RegionNode[]>;
+export type LoadRegionPath = (regionId: string) => Promise<readonly RegionNode[]>;
 
 export interface PageDefinitionGateway {
   getDefinition(key: BusinessPageKey): Promise<ListPageDefinition>;

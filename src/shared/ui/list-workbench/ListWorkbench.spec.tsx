@@ -128,6 +128,64 @@ describe("ListWorkbench", () => {
       pageSize: 50,
     });
   });
+
+  it("keeps empty groups aligned and exposes accessible pagination state", () => {
+    const definition = definitionFixture("TEST_PRODUCT", "测试产品", "测试字段");
+    const withEmptyGroup: ListPageDefinition = {
+      ...definition,
+      columnGroups: [
+        ...definition.columnGroups,
+        { id: "empty", label: "暂无适用字段", fields: [] },
+      ],
+    };
+
+    render(
+      <ListWorkbench
+        definition={withEmptyGroup}
+        onQueryChange={() => undefined}
+        onSearch={() => undefined}
+        query={createInitialListQuery(withEmptyGroup)}
+        result={resultFixture("测试字段")}
+      />,
+    );
+
+    expect(screen.getByRole("columnheader", { name: "暂无适用字段" })).toHaveAttribute(
+      "colspan",
+      "1",
+    );
+    expect(
+      screen.getByRole("columnheader", { name: "暂无适用字段 无字段" }),
+    ).toBeVisible();
+    expect(screen.getByRole("cell", { name: "暂无适用字段 无字段" })).toBeVisible();
+    expect(screen.getByText("1", { selector: "[aria-current='page']" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "上一页" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "下一页" })).toBeDisabled();
+  });
+
+  it("keeps the workbench mounted while a query fails and offers retry", async () => {
+    const user = userEvent.setup();
+    let retries = 0;
+    const definition = definitionFixture("TEST_PRODUCT", "测试产品", "测试字段");
+
+    render(
+      <ListWorkbench
+        definition={definition}
+        errorMessage="列表查询失败，请稍后重试。"
+        onQueryChange={() => undefined}
+        onRetry={() => {
+          retries += 1;
+        }}
+        onSearch={() => undefined}
+        query={createInitialListQuery(definition)}
+        result={resultFixture("测试字段")}
+      />,
+    );
+
+    expect(screen.getByRole("table", { name: definition.title })).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent("列表查询失败，请稍后重试。");
+    await user.click(screen.getByRole("button", { name: "重试列表查询" }));
+    expect(retries).toBe(1);
+  });
 });
 
 function definitionFixture(

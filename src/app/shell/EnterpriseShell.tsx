@@ -30,29 +30,20 @@ const navigationGroups: readonly NavigationGroup[] = [
   {
     label: "产情监测",
     items: [
-      { label: "玉米产情填报", route: "#/产情监测/玉米产情填报" },
-      { label: "大豆产情填报", route: "#/产情监测/大豆产情填报" },
-      { label: "稻谷产情填报", route: "#/产情监测/稻谷产情填报" },
+      { label: "产情填报", route: "#/产情监测/产情填报" },
       { label: "产情分析", route: "#/产情监测/产情分析" },
     ],
   },
   {
     label: "市场监测",
     items: [
-      { label: "玉米市场采集", route: "#/市场监测/玉米市场采集" },
-      { label: "大豆市场采集", route: "#/市场监测/大豆市场采集" },
-      { label: "稻谷市场采集", route: "#/市场监测/稻谷市场采集" },
       { label: "物流节点监测", route: "#/市场监测/物流节点监测" },
       { label: "市场分析", route: "#/市场监测/市场分析" },
     ],
   },
   {
     label: "供需分析",
-    items: [
-      { label: "玉米供需平衡", route: "#/供需分析/玉米供需平衡" },
-      { label: "大豆供需平衡", route: "#/供需分析/大豆供需平衡" },
-      { label: "稻谷供需平衡", route: "#/供需分析/稻谷供需平衡" },
-    ],
+    items: [{ label: "供需平衡", route: "#/供需分析/供需平衡" }],
   },
   {
     label: "报表中心",
@@ -67,8 +58,23 @@ function navigate(route: string) {
   window.location.hash = route.slice(1);
 }
 
-export function EnterpriseShell({ children }: { children: ReactNode }) {
-  const activeHash = window.location.hash || "#/市场监测/大豆市场采集";
+export interface ProductNavigationItem {
+  id: string;
+  name: string;
+}
+
+export function EnterpriseShell({
+  activeProductId,
+  children,
+  onProductSelect,
+  products = [],
+}: {
+  activeProductId?: string;
+  children: ReactNode;
+  onProductSelect?: (productId: string) => void;
+  products?: readonly ProductNavigationItem[];
+}) {
+  const activeHash = window.location.hash;
 
   return (
     <div className="enterprise-app-shell">
@@ -140,6 +146,21 @@ export function EnterpriseShell({ children }: { children: ReactNode }) {
                 ))}
               </section>
             ))}
+            {products.length > 0 && (
+              <section>
+                <h2>▾ 质量指标</h2>
+                {products.map((product) => (
+                  <button
+                    className={activeProductId === product.id ? "is-active" : ""}
+                    key={product.id}
+                    onClick={() => onProductSelect?.(product.id)}
+                    type="button"
+                  >
+                    {product.name}质量指标
+                  </button>
+                ))}
+              </section>
+            )}
           </nav>
         </aside>
         <main className="enterprise-main">{children}</main>

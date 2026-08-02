@@ -19,11 +19,11 @@ export class FetchHttpClient implements HttpClient {
 }
 
 export function queryString(
-  values: Readonly<Record<string, string | undefined>>,
+  values: Readonly<Record<string, string | number | undefined>>,
 ): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(values)) {
-    if (value) params.set(key, value);
+    if (value !== undefined && value !== "") params.set(key, String(value));
   }
   const encoded = params.toString();
   return encoded ? `?${encoded}` : "";

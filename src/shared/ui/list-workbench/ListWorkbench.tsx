@@ -1,29 +1,49 @@
 import type {
   ListPageDefinition,
   ListQueryState,
+  ColumnGroupDefinition,
+  FieldDefinition,
   LoadRegionChildren,
+  LoadRegionPath,
   PagedResult,
 } from "../../application/page-definition";
 import { RegionHierarchyFilter } from "./RegionHierarchyFilter";
 
+const emptyRegionPath: LoadRegionPath = () => Promise.resolve([]);
+
 export function ListWorkbench({
   definition,
   loadRegionChildren,
+  loadRegionPath,
+  loading = false,
+  errorMessage,
   onAction,
   onQueryChange,
+  onRetry,
   onSearch,
   query,
   result,
 }: {
   definition: ListPageDefinition;
   loadRegionChildren?: LoadRegionChildren;
+  loadRegionPath?: LoadRegionPath;
+  loading?: boolean;
+  errorMessage?: string;
   onAction?: (actionId: string, rowId?: string) => void;
   onQueryChange: (query: ListQueryState) => void;
+  onRetry?: () => void;
   onSearch: () => void;
   query: ListQueryState;
   result: PagedResult;
 }) {
-  const fields = definition.columnGroups.flatMap((group) => group.fields);
+  const columns = definition.columnGroups.flatMap<{
+    field: FieldDefinition | undefined;
+    group: ColumnGroupDefinition;
+  }>((group) =>
+    group.fields.length > 0
+      ? group.fields.map((field) => ({ field, group }))
+      : [{ field: undefined, group }],
+  );
   const pageActions = definition.actions.filter((action) => action.scope === "page");
   const rowActions = definition.actions.filter((action) => action.scope === "row");
 
@@ -56,44 +76,55 @@ export function ListWorkbench({
         className="enterprise-query-bar"
         role="search"
       >
-        {definition.filters.map((filter) => (
-          <label className="query-field" key={filter.id}>
-            <span>{filter.label}</span>
-            {filter.control === "select" && (
-              <select
-                aria-label={filter.label}
-                onChange={(event) => changeValue(filter.id, event.target.value)}
-                value={query.values[filter.id] ?? ""}
-              >
-                <option value="">{filter.placeholder}</option>
-                {filter.options.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            )}
-            {(filter.control === "date" || filter.control === "text") && (
-              <input
-                aria-label={filter.label}
-                onChange={(event) => changeValue(filter.id, event.target.value)}
-                placeholder={filter.placeholder}
-                type={filter.control}
-                value={query.values[filter.id] ?? ""}
-              />
-            )}
-            {filter.control === "region-hierarchy" && loadRegionChildren && (
+        {definition.filters.map((filter) =>
+          filter.control === "region-hierarchy" && loadRegionChildren ? (
+            <fieldset className="query-field query-field-region" key={filter.id}>
+              <legend>{filter.label}</legend>
               <RegionHierarchyFilter
                 label={filter.label}
                 loadChildren={loadRegionChildren}
+                loadPath={loadRegionPath ?? emptyRegionPath}
                 onChange={(value) => changeValue(filter.id, value)}
                 placeholder={filter.placeholder}
+                value={query.values[filter.id] ?? ""}
               />
-            )}
-          </label>
-        ))}
+            </fieldset>
+          ) : (
+            <label className="query-field" key={filter.id}>
+              <span>{filter.label}</span>
+              {filter.control === "select" && (
+                <select
+                  aria-label={filter.label}
+                  onChange={(event) => changeValue(filter.id, event.target.value)}
+                  value={query.values[filter.id] ?? ""}
+                >
+                  <option value="">{filter.placeholder}</option>
+                  {filter.options.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {(filter.control === "date" || filter.control === "text") && (
+                <input
+                  aria-label={filter.label}
+                  onChange={(event) => changeValue(filter.id, event.target.value)}
+                  placeholder={filter.placeholder}
+                  type={filter.control}
+                  value={query.values[filter.id] ?? ""}
+                />
+              )}
+            </label>
+          ),
+        )}
         <div className="query-actions">
-          <button className="button-primary" onClick={onSearch} type="button">
+          <button
+            className="button-primary"
+            disabled={loading}
+            onClick={onSearch}
+            type="button"
+          >
             查询
           </button>
           {pageActions.map((action) => (
@@ -109,6 +140,16 @@ export function ListWorkbench({
       </header>
 
       <section aria-label={`${definition.title}区域`} className="ledger-panel">
+        {errorMessage && (
+          <div className="page-alert list-query-error" role="alert">
+            <span>{errorMessage}</span>
+            {onRetry && (
+              <button onClick={onRetry} type="button">
+                重试列表查询
+              </button>
+            )}
+          </div>
+        )}
         <div className="ledger-toolbar">
           <strong>共 {result.totalElements} 条记录</strong>
         </div>
@@ -124,42 +165,70 @@ export function ListWorkbench({
                 {rowActions.length > 0 && <th colSpan={rowActions.length}>操作</th>}
               </tr>
               <tr>
-                {fields.map((field) => (
-                  <th aria-label={field.label} key={field.id}>
-                    {field.label}
-                    {field.unit && <small>{field.unit}</small>}
-                    {field.description && <small>{field.description}</small>}
-                  </th>
-                ))}
+                {columns.map(({ field, group }) =>
+                  field ? (
+                    <th aria-label={field.label} key={`${group.id}:${field.id}`}>
+                      {field.label}
+                      {field.unit && <small>{field.unit}</small>}
+                      {field.description && <small>{field.description}</small>}
+                    </th>
+                  ) : (
+                    <th aria-label={`${group.label} 无字段`} key={`${group.id}:empty`}>
+                      —
+                    </th>
+                  ),
+                )}
                 {rowActions.map((action) => (
                   <th key={action.id}>{action.label}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {result.items.map((row) => (
-                <tr key={row.id}>
-                  {fields.map((field) => (
-                    <td key={field.id}>{row.values[field.id] ?? "—"}</td>
-                  ))}
-                  {rowActions.map((action) => (
-                    <td key={action.id}>
-                      <button
-                        className="link-button"
-                        onClick={() => onAction?.(action.id, row.id)}
-                        type="button"
-                      >
-                        {action.label}
-                      </button>
-                    </td>
-                  ))}
-                </tr>
-              ))}
-              {result.items.length === 0 && (
+              {!loading &&
+                result.items.map((row) => (
+                  <tr key={row.id}>
+                    {columns.map(({ field, group }) =>
+                      field ? (
+                        <td key={`${group.id}:${field.id}`}>
+                          {row.values[field.id] ?? "—"}
+                        </td>
+                      ) : (
+                        <td
+                          aria-label={`${group.label} 无字段`}
+                          key={`${group.id}:empty`}
+                        >
+                          —
+                        </td>
+                      ),
+                    )}
+                    {rowActions.map((action) => (
+                      <td key={action.id}>
+                        <button
+                          className="link-button"
+                          onClick={() => onAction?.(action.id, row.id)}
+                          type="button"
+                        >
+                          {action.label}
+                        </button>
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              {loading && (
                 <tr>
                   <td
                     className="empty-ledger"
-                    colSpan={Math.max(1, fields.length + rowActions.length)}
+                    colSpan={Math.max(1, columns.length + rowActions.length)}
+                  >
+                    正在加载列表
+                  </td>
+                </tr>
+              )}
+              {!loading && result.items.length === 0 && (
+                <tr>
+                  <td
+                    className="empty-ledger"
+                    colSpan={Math.max(1, columns.length + rowActions.length)}
                   >
                     暂无记录
                   </td>
@@ -197,16 +266,18 @@ export function ListWorkbench({
           </div>
           <nav aria-label={`${definition.title}分页`}>
             <button
+              aria-label="上一页"
               disabled={result.pageNumber === 0}
               onClick={() => changePage(result.pageNumber - 1)}
               type="button"
             >
               ‹
             </button>
-            <button className="is-current" type="button">
+            <span aria-current="page" className="is-current">
               {result.pageNumber + 1}
-            </button>
+            </span>
             <button
+              aria-label="下一页"
               disabled={result.pageNumber + 1 >= result.totalPages}
               onClick={() => changePage(result.pageNumber + 1)}
               type="button"

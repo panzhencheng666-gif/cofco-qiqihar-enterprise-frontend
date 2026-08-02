@@ -25,6 +25,15 @@ const regionHierarchyListSchema = z.object({
 export class HttpMasterDataRepository implements MasterDataRepository {
   constructor(private readonly http: HttpClient) {}
 
+  async getProducts(domain: string, pageKind: string) {
+    return (
+      await this.http.get(
+        `/api/v1/master-data/products?domain=${encodeURIComponent(domain)}&pageKind=${encodeURIComponent(pageKind)}`,
+        optionListSchema,
+      )
+    ).data;
+  }
+
   async getCultivars(productCode: string) {
     return (
       await this.http.get(
@@ -62,5 +71,14 @@ export class HttpMasterDataRepository implements MasterDataRepository {
         ? "/api/v1/regions"
         : `/api/v1/regions?parentCode=${encodeURIComponent(parentId)}`;
     return (await this.http.get(path, regionHierarchyListSchema)).data;
+  }
+
+  async getRegionPath(regionId: string) {
+    return (
+      await this.http.get(
+        `/api/v1/regions/${encodeURIComponent(regionId)}/path`,
+        regionHierarchyListSchema,
+      )
+    ).data;
   }
 }

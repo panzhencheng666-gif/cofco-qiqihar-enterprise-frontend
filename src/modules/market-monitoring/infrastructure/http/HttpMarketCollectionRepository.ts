@@ -75,15 +75,7 @@ export class HttpMarketCollectionRepository implements MarketCollectionRepositor
   }
 
   async search(criteria: MarketCollectionCriteria) {
-    const query = queryString({
-      productCode: criteria.productCode,
-      collectionDate: criteria.collectionDate,
-      regionId: criteria.regionId,
-      monitoringPeriodId: criteria.monitoringPeriodId,
-      objectTypeId: criteria.objectTypeId,
-      cultivarId: criteria.cultivarId,
-      status: criteria.status,
-    });
+    const query = queryString(criteria);
     return (
       await this.http.get(
         `/api/v1/market-collections${query}`,
