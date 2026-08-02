@@ -75,6 +75,87 @@ describe("App work management composition", () => {
     await waitFor(() => expect(pages).toEqual([1, 0]));
     expect(window.location.hash).toBe("#/work/pending?page=0&pageSize=20");
   });
+
+  it("discards a deferred pending response after switching to completed work", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "#/work/pending?page=2&pageSize=20");
+    const searches: WorkItemCriteria[] = [];
+    let resolvePending:
+      | ((result: {
+          items: never[];
+          pageNumber: number;
+          pageSize: number;
+          totalElements: number;
+          totalPages: number;
+        }) => void)
+      | undefined;
+    const dependencies = fixture((criteria) => {
+      searches.push(criteria);
+      if (criteria.scope === "PENDING" && criteria.pageNumber === 2) {
+        return new Promise((resolve) => {
+          resolvePending = resolve;
+        });
+      }
+      if (criteria.scope === "COMPLETED") {
+        return Promise.resolve({
+          items: [
+            {
+              id: "completed-1",
+              values: { WORK_TASK_NAME: "已办保留结果" },
+            },
+          ],
+          pageNumber: 0,
+          pageSize: 20,
+          totalElements: 1,
+          totalPages: 1,
+        });
+      }
+      return Promise.resolve({
+        items: [],
+        pageNumber: criteria.pageNumber,
+        pageSize: criteria.pageSize,
+        totalElements: 0,
+        totalPages: 0,
+      });
+    });
+
+    render(<App dependencies={dependencies} />);
+    await waitFor(() =>
+      expect(searches).toEqual([
+        expect.objectContaining({ scope: "PENDING", pageNumber: 2 }),
+      ]),
+    );
+
+    await user.click(screen.getByRole("button", { name: "已办事项" }));
+    expect(await screen.findByText("已办保留结果")).toBeVisible();
+    await waitFor(() =>
+      expect(searches).toEqual([
+        expect.objectContaining({ scope: "PENDING", pageNumber: 2 }),
+        expect.objectContaining({ scope: "COMPLETED", pageNumber: 0 }),
+      ]),
+    );
+    expect(window.location.hash).toBe("#/work/completed?page=0&pageSize=20");
+
+    await act(async () => {
+      resolvePending?.({
+        items: [],
+        pageNumber: 2,
+        pageSize: 20,
+        totalElements: 0,
+        totalPages: 0,
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(searches.filter((criteria) => criteria.scope === "PENDING")).toEqual([
+      expect.objectContaining({ pageNumber: 2 }),
+    ]);
+    expect(screen.getByText("已办保留结果")).toBeVisible();
+    expect(window.location.hash).toBe("#/work/completed?page=0&pageSize=20");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByText("正在加载列表")).not.toBeInTheDocument();
+  });
 });
 
 function fixture(

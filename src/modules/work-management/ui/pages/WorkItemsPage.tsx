@@ -131,6 +131,7 @@ export function WorkItemsPage({
       .catch(() => active && setDefinitionError(true));
     return () => {
       active = false;
+      requestVersion.current += 1;
     };
   }, [
     definitionAttempt,
