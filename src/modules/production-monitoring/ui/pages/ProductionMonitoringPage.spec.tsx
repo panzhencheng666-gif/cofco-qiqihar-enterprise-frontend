@@ -52,6 +52,20 @@ describe("ProductionMonitoringPage", () => {
     expect(
       await screen.findByRole("heading", { name: "大豆产情监测" }),
     ).toBeInTheDocument();
+
+    rerender(
+      <ProductionMonitoringPage
+        loadRegionChildren={() => Promise.resolve([])}
+        pageDefinitionGateway={{
+          getDefinition: (key) => Promise.resolve(definitions.get(key.productCode!)!),
+        }}
+        pageKey={{ domain: "PRODUCTION", pageKind: "MONITORING", productCode: "RICE" }}
+        repository={repositoryFixture()}
+      />,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "稻谷产情监测" }),
+    ).toBeInTheDocument();
   });
 
   it("renders only allowed database actions and dispatches real submit with version", async () => {
@@ -97,57 +111,68 @@ describe("ProductionMonitoringPage", () => {
     expect(screen.queryByRole("button", { name: "退回" })).not.toBeInTheDocument();
   });
 
-  it("creates a draft from database fact definitions", async () => {
-    const user = userEvent.setup();
-    const create = vi.fn(() => Promise.resolve(detail("DRAFT", 0)));
-    const repository = repositoryFixture({ create });
-    render(
-      <ProductionMonitoringPage
-        loadRegionChildren={(parent) =>
+  it.each([
+    ["CORN", "MOISTURE", "水分"],
+    ["SOYBEAN", "PROTEIN", "蛋白"],
+    ["RICE", "MILLING_YIELD", "出米率"],
+  ] as const)(
+    "renders and saves all four migrated fact groups for %s",
+    async (productCode, qualityCode, qualityLabel) => {
+      const user = userEvent.setup();
+      const create = vi.fn(() => Promise.resolve(detail("DRAFT", 0)));
+      const repository = repositoryFixture({
+        create,
+        definition: (_requestedProduct, objectTypeCode) =>
           Promise.resolve(
-            parent ? [] : [{ id: "230202", label: "龙沙区", level: "COUNTY" }],
-          )
-        }
-        pageDefinitionGateway={{
-          getDefinition: () => Promise.resolve(actionDefinition()),
-        }}
-        pageKey={{
-          domain: "PRODUCTION",
-          pageKind: "MONITORING",
-          productCode: "SOYBEAN",
-        }}
-        repository={repository}
-      />,
-    );
+            confirmedFormDefinition(
+              productCode,
+              qualityCode,
+              qualityLabel,
+              objectTypeCode ?? null,
+            ),
+          ),
+      });
+      render(
+        <ProductionMonitoringPage
+          loadRegionChildren={() => Promise.resolve([])}
+          pageDefinitionGateway={{
+            getDefinition: () => Promise.resolve(actionDefinition(productCode)),
+          }}
+          pageKey={{ domain: "PRODUCTION", pageKind: "MONITORING", productCode }}
+          repository={repository}
+        />,
+      );
 
-    await user.click(await screen.findByRole("button", { name: "新建填报" }));
-    const dialog = await screen.findByRole("dialog", { name: "新建产情填报" });
-    expect(dialog).toBeVisible();
-    await user.selectOptions(
-      within(dialog).getByRole("combobox", { name: "对象类型" }),
-      "FARMER",
-    );
-    await user.selectOptions(
-      await screen.findByRole("combobox", { name: "地区 第1级" }),
-      "230202",
-    );
-    await user.type(within(dialog).getByLabelText("调查日期"), "2026-08-01");
-    await user.type(within(dialog).getByLabelText("种植面积（亩）"), "1.0000");
-    await user.type(within(dialog).getByLabelText("亩产（公斤/亩）"), "2.0000");
-    await user.type(within(dialog).getByLabelText("测试成本"), "3.0000");
-    await user.click(within(dialog).getByRole("button", { name: "保存草稿" }));
+      await user.click(await screen.findByRole("button", { name: "新建填报" }));
+      const dialog = await screen.findByRole("dialog", { name: "新建产情填报" });
+      await user.selectOptions(
+        within(dialog).getByRole("combobox", { name: "对象类型" }),
+        "FARMER",
+      );
+      expect(within(dialog).getByRole("group", { name: "质量指标" })).toBeVisible();
+      expect(within(dialog).getByRole("group", { name: "生产成本" })).toBeVisible();
+      expect(within(dialog).getByRole("group", { name: "农业保险" })).toBeVisible();
+      expect(within(dialog).getByRole("group", { name: "农业补贴" })).toBeVisible();
+      await user.type(within(dialog).getByLabelText(qualityLabel), "3.0");
+      await user.type(within(dialog).getByLabelText("地租"), "4");
+      await user.type(within(dialog).getByLabelText("保险金额"), "5");
+      await user.type(within(dialog).getByLabelText("补贴金额"), "6");
+      await user.click(within(dialog).getByRole("button", { name: "保存草稿" }));
 
-    await waitFor(() =>
-      expect(create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          productCode: "SOYBEAN",
-          objectTypeCode: "FARMER",
-          regionCode: "230202",
-          costs: { COST_TEST: "3.0000" },
-        }),
-      ),
-    );
-  });
+      await waitFor(() =>
+        expect(create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            productCode,
+            objectTypeCode: "FARMER",
+            quality: { [qualityCode]: "3.0" },
+            costs: { LAND_RENT: "4" },
+            insurance: { INSURANCE_AMOUNT: "5" },
+            subsidies: { SUBSIDY_AMOUNT: "6" },
+          }),
+        ),
+      );
+    },
+  );
 
   it("loads VIEW details and sends PUT with the loaded version and dynamic facts", async () => {
     const user = userEvent.setup();
@@ -472,6 +497,119 @@ describe("ProductionMonitoringPage", () => {
       ),
     );
   });
+
+  it("rolls back an object switch failure so dismiss and save cannot mix B with A facts", async () => {
+    const user = userEvent.setup();
+    const create = vi.fn(() => Promise.resolve(detail("DRAFT", 0)));
+    const repository = repositoryFixture({
+      create,
+      definition: (_productCode, objectTypeCode) => {
+        if (objectTypeCode === "TYPE_B") {
+          return Promise.reject(repositoryFailure("UNEXPECTED"));
+        }
+        return Promise.resolve(
+          formDefinition("SOYBEAN", ["SHARED", "A_ONLY"], objectTypeCode ?? null),
+        );
+      },
+    });
+    render(productionPage("SOYBEAN", repository, twoObjectDefinition()));
+    await user.click(await screen.findByRole("button", { name: "新建填报" }));
+    const dialog = await screen.findByRole("dialog", { name: "新建产情填报" });
+    const objectType = within(dialog).getByRole("combobox", { name: "动态对象" });
+    await user.selectOptions(objectType, "TYPE_A");
+    await user.type(within(dialog).getByLabelText("共享字段"), "3.0000");
+    await user.type(within(dialog).getByLabelText("仅 A 字段"), "8.0000");
+
+    await user.selectOptions(objectType, "TYPE_B");
+    const alert = await screen.findByRole("alert");
+    expect(objectType).toHaveValue("TYPE_A");
+    expect(within(dialog).getByLabelText("仅 A 字段")).toHaveValue("8.0000");
+    await user.click(within(alert).getByRole("button", { name: "关闭操作错误" }));
+    await user.click(within(dialog).getByRole("button", { name: "保存草稿" }));
+
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          objectTypeCode: "TYPE_A",
+          costs: { SHARED: "3.0000", A_ONLY: "8.0000" },
+        }),
+      ),
+    );
+  });
+
+  it("retries a failed object switch atomically and prunes only after B succeeds", async () => {
+    const user = userEvent.setup();
+    const b = deferred<ProductionFormDefinition>();
+    const create = vi.fn(() => Promise.resolve(detail("DRAFT", 0)));
+    let bAttempts = 0;
+    const repository = repositoryFixture({
+      create,
+      definition: (_productCode, objectTypeCode) => {
+        if (objectTypeCode === "TYPE_B") {
+          bAttempts += 1;
+          return bAttempts === 1
+            ? Promise.reject(repositoryFailure("UNEXPECTED"))
+            : b.promise;
+        }
+        return Promise.resolve(
+          formDefinition("SOYBEAN", ["SHARED", "A_ONLY"], objectTypeCode ?? null),
+        );
+      },
+    });
+    render(productionPage("SOYBEAN", repository, twoObjectDefinition()));
+    await user.click(await screen.findByRole("button", { name: "新建填报" }));
+    const dialog = await screen.findByRole("dialog", { name: "新建产情填报" });
+    const objectType = within(dialog).getByRole("combobox", { name: "动态对象" });
+    await user.selectOptions(objectType, "TYPE_A");
+    await user.type(within(dialog).getByLabelText("共享字段"), "3.0000");
+    await user.type(within(dialog).getByLabelText("仅 A 字段"), "8.0000");
+    await user.selectOptions(objectType, "TYPE_B");
+    const alert = await screen.findByRole("alert");
+    await user.click(within(alert).getByRole("button", { name: "重试操作" }));
+
+    await act(async () => {
+      b.resolve(formDefinition("SOYBEAN", ["SHARED", "B_ONLY"], "TYPE_B"));
+      await Promise.resolve();
+    });
+    expect(objectType).toHaveValue("TYPE_B");
+    expect(await within(dialog).findByLabelText("仅 B 字段")).toBeVisible();
+    expect(within(dialog).queryByLabelText("仅 A 字段")).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "保存草稿" }));
+
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          objectTypeCode: "TYPE_B",
+          costs: { SHARED: "3.0000" },
+        }),
+      ),
+    );
+  });
+
+  it("rejects a definition response paired with a different object context", async () => {
+    const user = userEvent.setup();
+    const repository = repositoryFixture({
+      definition: (_productCode, objectTypeCode) =>
+        Promise.resolve(
+          formDefinition(
+            "SOYBEAN",
+            ["SHARED", "A_ONLY"],
+            objectTypeCode === "TYPE_B" ? "TYPE_A" : (objectTypeCode ?? null),
+          ),
+        ),
+    });
+    render(productionPage("SOYBEAN", repository, twoObjectDefinition()));
+    await user.click(await screen.findByRole("button", { name: "新建填报" }));
+    const dialog = await screen.findByRole("dialog", { name: "新建产情填报" });
+    const objectType = within(dialog).getByRole("combobox", { name: "动态对象" });
+    await user.selectOptions(objectType, "TYPE_A");
+    await user.selectOptions(objectType, "TYPE_B");
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "操作失败，请稍后重试。",
+    );
+    expect(objectType).toHaveValue("TYPE_A");
+  });
 });
 
 function productionPage(
@@ -550,14 +688,16 @@ function repositoryFixture(
   return {
     search: () => Promise.resolve(emptyPage()),
     detail: () => Promise.resolve(detail("DRAFT", 0)),
-    definition: () =>
+    definition: (productCode, objectTypeCode) =>
       Promise.resolve({
-        productCode: "SOYBEAN",
-        objectTypeCode: null,
+        productCode,
+        objectTypeCode: objectTypeCode ?? null,
         groups: [
-          { category: "QUALITY", fields: [] },
+          { category: "QUALITY", label: "质量指标", sortOrder: 10, fields: [] },
           {
             category: "COST",
+            label: "生产成本",
+            sortOrder: 20,
             fields: [
               {
                 code: "COST_TEST",
@@ -567,11 +707,12 @@ function repositoryFixture(
                 description: null,
                 precision: 18,
                 scale: 4,
+                sortOrder: 200,
               },
             ],
           },
-          { category: "INSURANCE", fields: [] },
-          { category: "SUBSIDY", fields: [] },
+          { category: "INSURANCE", label: "农业保险", sortOrder: 30, fields: [] },
+          { category: "SUBSIDY", label: "农业补贴", sortOrder: 40, fields: [] },
         ],
       }),
     create: () => Promise.resolve(detail("DRAFT", 0)),
@@ -623,7 +764,11 @@ function actionDefinition(productCode = "SOYBEAN") {
   return {
     ...definition(
       productCode,
-      productCode === "CORN" ? "玉米产情监测" : "大豆产情监测",
+      productCode === "CORN"
+        ? "玉米产情监测"
+        : productCode === "RICE"
+          ? "稻谷产情监测"
+          : "大豆产情监测",
     ),
     filters: [
       {
@@ -716,9 +861,11 @@ function formDefinition(
     productCode,
     objectTypeCode,
     groups: [
-      { category: "QUALITY", fields: [] },
+      { category: "QUALITY", label: "质量指标", sortOrder: 10, fields: [] },
       {
         category: "COST",
+        label: "生产成本",
+        sortOrder: 20,
         fields: codes.map((code) => ({
           code,
           label: labels[code] ?? code,
@@ -727,10 +874,59 @@ function formDefinition(
           description: null,
           precision: 18,
           scale: 4,
+          sortOrder: 200 + codes.indexOf(code),
         })),
       },
-      { category: "INSURANCE", fields: [] },
-      { category: "SUBSIDY", fields: [] },
+      { category: "INSURANCE", label: "农业保险", sortOrder: 30, fields: [] },
+      { category: "SUBSIDY", label: "农业补贴", sortOrder: 40, fields: [] },
+    ],
+  };
+}
+
+function confirmedFormDefinition(
+  productCode: string,
+  qualityCode: string,
+  qualityLabel: string,
+  objectTypeCode: string | null,
+): ProductionFormDefinition {
+  const field = (code: string, label: string, sortOrder: number) => ({
+    code,
+    label,
+    valueType: "DECIMAL",
+    unit: null,
+    description: null,
+    precision: 18,
+    scale: 1,
+    sortOrder,
+  });
+  return {
+    productCode,
+    objectTypeCode,
+    groups: [
+      {
+        category: "QUALITY",
+        label: "质量指标",
+        sortOrder: 10,
+        fields: [field(qualityCode, qualityLabel, 100)],
+      },
+      {
+        category: "COST",
+        label: "生产成本",
+        sortOrder: 20,
+        fields: [field("LAND_RENT", "地租", 200)],
+      },
+      {
+        category: "INSURANCE",
+        label: "农业保险",
+        sortOrder: 30,
+        fields: [field("INSURANCE_AMOUNT", "保险金额", 300)],
+      },
+      {
+        category: "SUBSIDY",
+        label: "农业补贴",
+        sortOrder: 40,
+        fields: [field("SUBSIDY_AMOUNT", "补贴金额", 400)],
+      },
     ],
   };
 }

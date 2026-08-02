@@ -23,13 +23,16 @@ export interface ProductionFactField {
   description: string | null;
   precision: number;
   scale: number;
+  sortOrder: number;
 }
 
 export interface ProductionFormDefinition {
   productCode: string;
   objectTypeCode: string | null;
   groups: readonly {
-    category: ProductionFactCategory;
+    category: string;
+    label: string;
+    sortOrder: number;
     fields: readonly ProductionFactField[];
   }[];
 }

@@ -1,28 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
+  BusinessPageKey,
   ListPageDefinition,
   ListQueryState,
   PagedResult,
+  RouteListQuery,
 } from "../../application/page-definition";
-
-export interface RouteListQuery {
-  pageNumber?: number;
-  pageSize?: number;
-  values: Readonly<Record<string, string>>;
-}
+import {
+  ListPageContextError,
+  normalizeListRouteQuery,
+  validateListPageDefinitionContext,
+} from "../../application/page-definition";
 
 export interface ListPageControllerOptions {
   controllerKey: string;
   definitionErrorMessage?: string;
   listErrorMessage?: string;
   loadDefinition: () => Promise<ListPageDefinition>;
-  normalizeRoute: (
-    definition: ListPageDefinition,
-    routeQuery?: RouteListQuery,
-  ) => ListQueryState;
   onQueryCommitted?: ((query: ListQueryState) => void) | undefined;
   onQueryNormalized?: ((query: ListQueryState) => void) | undefined;
+  pageKey: BusinessPageKey;
   routeQuery?: RouteListQuery | undefined;
   search: (query: ListQueryState) => Promise<PagedResult>;
 }
@@ -92,11 +90,15 @@ export function useListPageController(options: ListPageControllerOptions) {
       })
       .then((loaded) => {
         if (!active || !loaded) return;
-        const initial = optionsRef.current.normalizeRoute(
+        const validated = validateListPageDefinitionContext(
+          optionsRef.current.pageKey,
           loaded,
+        );
+        const initial = normalizeListRouteQuery(
+          validated,
           optionsRef.current.routeQuery,
         );
-        setDefinitionState({ contextKey: options.controllerKey, value: loaded });
+        setDefinitionState({ contextKey: options.controllerKey, value: validated });
         setQuery(initial);
         setResult(emptyResult(initial));
         optionsRef.current.onQueryNormalized?.(initial);
@@ -124,10 +126,7 @@ export function useListPageController(options: ListPageControllerOptions) {
         : undefined;
     const currentQuery = queryRef.current;
     if (!definition || !currentQuery) return;
-    const restored = optionsRef.current.normalizeRoute(
-      definition,
-      optionsRef.current.routeQuery,
-    );
+    const restored = normalizeListRouteQuery(definition, optionsRef.current.routeQuery);
     if (sameQuery(restored, currentQuery)) return;
     requestVersion.current += 1;
     setQuery(restored);
@@ -158,6 +157,11 @@ export function useListPageController(options: ListPageControllerOptions) {
     }
   }, [executeSearch, query]);
 
+  const refreshLatest = useCallback(async () => {
+    const latest = queryRef.current;
+    if (latest) await executeSearch(latest);
+  }, [executeSearch]);
+
   return {
     changeQuery,
     definition:
@@ -169,13 +173,12 @@ export function useListPageController(options: ListPageControllerOptions) {
     listError,
     loading,
     query,
+    refreshLatest,
     result,
     retryDefinition: () => setDefinitionAttempt((value) => value + 1),
     submitSearch,
   };
 }
-
-export class ListPageContextError extends Error {}
 
 function emptyResult(query: ListQueryState): PagedResult {
   return {

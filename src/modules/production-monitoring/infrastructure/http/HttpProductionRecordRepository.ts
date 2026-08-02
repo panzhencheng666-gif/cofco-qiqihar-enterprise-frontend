@@ -55,7 +55,9 @@ const definitionSchema = z.object({
     objectTypeCode: z.string().nullable(),
     groups: z.array(
       z.object({
-        category: z.enum(["QUALITY", "COST", "INSURANCE", "SUBSIDY"]),
+        category: z.string().min(1),
+        label: z.string().min(1),
+        sortOrder: z.number().int(),
         fields: z.array(
           z.object({
             code: z.string(),
@@ -65,6 +67,7 @@ const definitionSchema = z.object({
             description: z.string().nullable(),
             precision: z.number().int().positive(),
             scale: z.number().int().nonnegative(),
+            sortOrder: z.number().int(),
           }),
         ),
       }),

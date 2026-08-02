@@ -22,11 +22,14 @@ module.exports = {
       to: { path: "/(application|infrastructure|ui)/" },
     },
     {
-      name: "application-must-not-depend-on-ui-infrastructure-or-react",
+      name: "application-and-domain-must-not-reach-react-ui-or-infrastructure",
       severity: "error",
-      from: { path: "^src/modules/[^/]+/application/" },
+      from: {
+        path: "^src/(?:modules/[^/]+|shared)/(?:application|domain)/",
+      },
       to: {
-        path: "(^react(?:/|$)|/(ui|infrastructure)/)",
+        path: "(?:^node_modules/(?:react|react-dom)(?:/|$)|/(?:ui|infrastructure)/)",
+        reachable: true,
       },
     },
     {

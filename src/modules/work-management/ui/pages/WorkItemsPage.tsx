@@ -1,18 +1,16 @@
 import type { WorkItemRepository } from "../../application/ports/WorkItemRepository";
 import type { WorkItemScope } from "../../domain/workItem";
 import type {
-  ListPageDefinition,
   ListQueryState,
   LoadRegionChildren,
   LoadRegionPath,
   PageDefinitionGateway,
+  RouteListQuery,
 } from "../../../../shared/application/page-definition";
-import { createInitialListQuery } from "../../../../shared/application/page-definition";
 import {
   ListWorkbench,
   useListPageController,
 } from "../../../../shared/ui/list-workbench";
-import type { RouteListQuery } from "../../../../shared/ui/list-workbench";
 
 const pageKey = { domain: "WORKFLOW", pageKind: "WORK_ITEMS" } as const;
 
@@ -61,10 +59,9 @@ export function WorkItemsPage({
           }
         : dynamic;
     },
-    normalizeRoute: (loaded, current) =>
-      normalizeQuery(loaded, createInitialListQuery(loaded), current, scope),
     onQueryCommitted,
     onQueryNormalized,
+    pageKey,
     routeQuery,
     search: (searchedQuery) =>
       repository.search({
@@ -122,25 +119,4 @@ export function WorkItemsPage({
       {...(loadRegionPath ? { loadRegionPath } : {})}
     />
   );
-}
-
-function normalizeQuery(
-  definition: ListPageDefinition,
-  defaults: ListQueryState,
-  routeQuery: WorkRouteQuery | undefined,
-  scope: WorkItemScope,
-) {
-  const allowed = new Set(definition.filters.map((filter) => filter.id));
-  const values = Object.fromEntries(
-    Object.entries({ ...defaults.values, ...routeQuery?.values }).filter(
-      ([id]) => allowed.has(id) && !(scope === "COMPLETED" && id === "status"),
-    ),
-  );
-  return {
-    values,
-    pageNumber: routeQuery?.pageNumber ?? 0,
-    pageSize: definition.pagination.pageSizeOptions.includes(routeQuery?.pageSize ?? -1)
-      ? routeQuery!.pageSize!
-      : defaults.pageSize,
-  };
 }

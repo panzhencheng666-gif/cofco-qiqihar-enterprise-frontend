@@ -87,7 +87,10 @@ export function useProductionCommands({
     const version = begin();
     try {
       if (action === "NEW") {
-        const definition = await repository.definition(productCode);
+        const definition = requireDefinitionContext(
+          await repository.definition(productCode),
+          productCode,
+        );
         if (active(version)) {
           setEditor({
             draft: emptyDraft(productCode),
@@ -98,7 +101,8 @@ export function useProductionCommands({
       } else if (action === "VIEW" && row) {
         const detail = await repository.detail(row.id);
         if (!active(version)) return;
-        const definition = await repository.definition(
+        const definition = requireDefinitionContext(
+          await repository.definition(productCode, detail.objectTypeCode),
           productCode,
           detail.objectTypeCode,
         );
@@ -171,12 +175,9 @@ export function useProductionCommands({
     const version = ++requestVersion.current;
     setIssue(undefined);
     setDefinitionLoading(true);
-    setEditor({
-      ...editor,
-      draft: { ...editor.draft, objectTypeCode },
-    });
     try {
-      const definition = await repository.definition(
+      const definition = requireDefinitionContext(
+        await repository.definition(productCode, objectTypeCode || undefined),
         productCode,
         objectTypeCode || undefined,
       );
@@ -186,7 +187,7 @@ export function useProductionCommands({
           ? {
               ...current,
               definition,
-              draft: pruneFacts(current.draft, definition),
+              draft: pruneFacts({ ...current.draft, objectTypeCode }, definition),
             }
           : current,
       );
@@ -216,6 +217,20 @@ export function useProductionCommands({
     save,
     setReturnReason,
   };
+}
+
+function requireDefinitionContext(
+  definition: ProductionFormDefinition,
+  productCode: string,
+  objectTypeCode?: string,
+) {
+  if (
+    definition.productCode !== productCode ||
+    definition.objectTypeCode !== (objectTypeCode ?? null)
+  ) {
+    throw new Error("Production definition context mismatch");
+  }
+  return definition;
 }
 
 function pruneFacts(

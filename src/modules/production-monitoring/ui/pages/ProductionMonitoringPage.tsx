@@ -5,19 +5,17 @@ import { useProductionCommands } from "../hooks/useProductionCommands";
 import type { ProductionRecord } from "../../domain/productionRecord";
 import { ProductionRecordEditor } from "../components/ProductionRecordEditor";
 import {
-  createInitialListQuery,
   type BusinessPageKey,
-  type ListPageDefinition,
   type ListQueryState,
   type LoadRegionChildren,
   type LoadRegionPath,
   type PageDefinitionGateway,
+  type RouteListQuery,
 } from "../../../../shared/application/page-definition";
 import {
   ListWorkbench,
   useListPageController,
 } from "../../../../shared/ui/list-workbench";
-import type { RouteListQuery } from "../../../../shared/ui/list-workbench";
 
 export type ProductionRouteQuery = RouteListQuery;
 
@@ -51,14 +49,10 @@ export function ProductionMonitoringPage({
   >([]);
   const controller = useListPageController({
     controllerKey: contextKey,
-    loadDefinition: async () => {
-      const loaded = await pageDefinitionGateway.getDefinition(pageKey);
-      if (!sameKey(loaded.key, pageKey)) throw new Error("definition context mismatch");
-      return loaded;
-    },
-    normalizeRoute: (loaded, current) => route(loaded, current),
+    loadDefinition: () => pageDefinitionGateway.getDefinition(pageKey),
     onQueryCommitted,
     onQueryNormalized,
+    pageKey,
     routeQuery,
     search: (next) =>
       repository.search({
@@ -77,6 +71,7 @@ export function ProductionMonitoringPage({
     listError,
     loading,
     query,
+    refreshLatest,
     result,
     retryDefinition,
     submitSearch,
@@ -86,9 +81,7 @@ export function ProductionMonitoringPage({
     contextKey,
     productCode,
     records,
-    refresh: async () => {
-      if (query) await executeSearch(query);
-    },
+    refresh: refreshLatest,
     repository,
   });
 
@@ -221,36 +214,4 @@ function productionRecords(
 function requireProduct(key: BusinessPageKey) {
   if (!key.productCode) throw new Error("Production page requires product context");
   return key.productCode;
-}
-
-function sameKey(left: BusinessPageKey, right: BusinessPageKey) {
-  return (
-    left.domain === right.domain &&
-    left.pageKind === right.pageKind &&
-    left.productCode === right.productCode
-  );
-}
-
-function route(
-  definition: ListPageDefinition,
-  current?: ProductionRouteQuery,
-): ListQueryState {
-  const defaults = createInitialListQuery(definition);
-  const allowed = new Set(definition.filters.map((item) => item.id));
-  return {
-    values: Object.fromEntries(
-      Object.entries({ ...defaults.values, ...current?.values }).filter(([key]) =>
-        allowed.has(key),
-      ),
-    ),
-    pageNumber:
-      current?.pageNumber !== undefined && current.pageNumber >= 0
-        ? current.pageNumber
-        : defaults.pageNumber,
-    pageSize:
-      current?.pageSize !== undefined &&
-      definition.pagination.pageSizeOptions.includes(current.pageSize)
-        ? current.pageSize
-        : defaults.pageSize,
-  };
 }

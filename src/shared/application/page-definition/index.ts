@@ -59,6 +59,12 @@ export interface ListQueryState {
   pageSize: number;
 }
 
+export interface RouteListQuery {
+  pageNumber?: number;
+  pageSize?: number;
+  values: Readonly<Record<string, string>>;
+}
+
 export interface ListRow {
   id: string;
   values: Readonly<Record<string, string | number | null | undefined>>;
@@ -92,5 +98,54 @@ export function createInitialListQuery(definition: ListPageDefinition): ListQuer
     values: { ...definition.defaultContext },
     pageNumber: 0,
     pageSize: definition.pagination.defaultPageSize,
+  };
+}
+
+export class ListPageContextError extends Error {}
+
+export function validateListPageDefinitionContext(
+  requested: BusinessPageKey,
+  definition: ListPageDefinition,
+) {
+  const actual = definition.key;
+  if (
+    actual.domain !== requested.domain ||
+    actual.pageKind !== requested.pageKind ||
+    actual.productCode !== requested.productCode
+  ) {
+    throw new ListPageContextError("页面上下文与页面定义不一致。");
+  }
+  return definition;
+}
+
+export function normalizeListRouteQuery(
+  definition: ListPageDefinition,
+  routeQuery?: RouteListQuery,
+): ListQueryState {
+  const defaults = createInitialListQuery(definition);
+  const allowedFilters = new Set(definition.filters.map((filter) => filter.id));
+  const values = Object.fromEntries(
+    Object.entries({ ...defaults.values, ...routeQuery?.values }).filter(([id]) =>
+      allowedFilters.has(id),
+    ),
+  );
+  const requestedPageNumber = routeQuery?.pageNumber;
+  const requestedPageSize = routeQuery?.pageSize;
+  return {
+    values,
+    pageNumber:
+      requestedPageNumber !== undefined &&
+      Number.isFinite(requestedPageNumber) &&
+      Number.isInteger(requestedPageNumber) &&
+      requestedPageNumber >= 0
+        ? requestedPageNumber
+        : defaults.pageNumber,
+    pageSize:
+      requestedPageSize !== undefined &&
+      Number.isFinite(requestedPageSize) &&
+      Number.isInteger(requestedPageSize) &&
+      definition.pagination.pageSizeOptions.includes(requestedPageSize)
+        ? requestedPageSize
+        : defaults.pageSize,
   };
 }

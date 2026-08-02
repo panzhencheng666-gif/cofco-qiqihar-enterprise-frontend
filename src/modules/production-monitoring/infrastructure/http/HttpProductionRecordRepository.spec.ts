@@ -3,6 +3,60 @@ import { ProductionRepositoryFailure } from "../../application/ports/ProductionR
 import { HttpProductionRecordRepository } from "./HttpProductionRecordRepository";
 
 describe("HttpProductionRecordRepository", () => {
+  it("preserves ordered Chinese group metadata and future category codes", async () => {
+    const http: HttpClient = {
+      get: (_path, schema) =>
+        Promise.resolve(
+          schema.parse({
+            data: {
+              productCode: "RICE",
+              objectTypeCode: "FARMER",
+              groups: [
+                {
+                  category: "QUALITY",
+                  label: "质量指标",
+                  sortOrder: 10,
+                  fields: [
+                    {
+                      code: "MILLING_YIELD",
+                      label: "出米率",
+                      valueType: "DECIMAL",
+                      unit: "%",
+                      description: null,
+                      precision: 18,
+                      scale: 1,
+                      sortOrder: 110,
+                    },
+                  ],
+                },
+                {
+                  category: "EVIDENCE",
+                  label: "佐证材料",
+                  sortOrder: 50,
+                  fields: [],
+                },
+              ],
+            },
+          }),
+        ),
+    };
+
+    const result = await new HttpProductionRecordRepository(http).definition(
+      "RICE",
+      "FARMER",
+    );
+
+    expect(result.groups).toEqual([
+      expect.objectContaining({
+        category: "QUALITY",
+        label: "质量指标",
+        sortOrder: 10,
+        fields: [expect.objectContaining({ code: "MILLING_YIELD", sortOrder: 110 })],
+      }),
+      { category: "EVIDENCE", label: "佐证材料", sortOrder: 50, fields: [] },
+    ]);
+  });
+
   it("consumes database-driven rows without hard-coded PROD mapping", async () => {
     const http: HttpClient = {
       get: (_path, schema) =>

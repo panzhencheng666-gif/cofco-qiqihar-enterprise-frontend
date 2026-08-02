@@ -72,28 +72,32 @@ export function ProductionRecordEditor({
         })}
         {editor.definition.groups.map((group) => (
           <fieldset key={group.category}>
-            <legend>{group.category}</legend>
-            {group.fields.map((field) => (
-              <label key={field.code}>
-                {field.label}
-                {field.unit ? `（${field.unit}）` : ""}
-                <input
-                  aria-label={field.label}
-                  inputMode="decimal"
-                  onChange={(event) =>
-                    changeFact(
-                      onChange,
-                      draft,
-                      group.category,
-                      field.code,
-                      event.target.value,
-                    )
-                  }
-                  value={factValues(draft, group.category)[field.code] ?? ""}
-                />
-                {field.description && <small>{field.description}</small>}
-              </label>
-            ))}
+            <legend>{group.label}</legend>
+            {categoryKey(group.category) ? (
+              group.fields.map((field) => (
+                <label key={field.code}>
+                  {field.label}
+                  {field.unit ? `（${field.unit}）` : ""}
+                  <input
+                    aria-label={field.label}
+                    inputMode="decimal"
+                    onChange={(event) =>
+                      changeFact(
+                        onChange,
+                        draft,
+                        group.category,
+                        field.code,
+                        event.target.value,
+                      )
+                    }
+                    value={factValues(draft, group.category)[field.code] ?? ""}
+                  />
+                  {field.description && <small>{field.description}</small>}
+                </label>
+              ))
+            ) : (
+              <p role="note">该分组暂不支持填报。</p>
+            )}
           </fieldset>
         ))}
       </fieldset>
@@ -208,21 +212,25 @@ function changeFact(
   value: string,
 ) {
   const key = categoryKey(category);
+  if (!key) return;
   onChange({ ...draft, [key]: { ...draft[key], [code]: value } });
 }
 
 function categoryKey(
   category: string,
-): "quality" | "costs" | "insurance" | "subsidies" {
+): "quality" | "costs" | "insurance" | "subsidies" | undefined {
   return category === "QUALITY"
     ? "quality"
     : category === "COST"
       ? "costs"
       : category === "INSURANCE"
         ? "insurance"
-        : "subsidies";
+        : category === "SUBSIDY"
+          ? "subsidies"
+          : undefined;
 }
 
 function factValues(draft: ProductionDraft, category: string) {
-  return draft[categoryKey(category)];
+  const key = categoryKey(category);
+  return key ? draft[key] : {};
 }

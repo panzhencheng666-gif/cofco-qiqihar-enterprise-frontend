@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
@@ -6,6 +6,7 @@ import { App, type AppDependencies } from "./App";
 import type { MarketCollectionCriteria } from "../modules/market-monitoring/domain/marketCollection";
 import type { ListPageDefinition } from "../shared/application/page-definition";
 import type { ProductionRecordRepository } from "../modules/production-monitoring/application/ports/ProductionRecordRepository";
+import type { ProductionRecordDetail } from "../modules/production-monitoring/domain/productionRecord";
 
 describe("App production composition", () => {
   beforeEach(() => {
@@ -279,6 +280,68 @@ describe("App production composition", () => {
       `#/pages/PRODUCTION/MONITORING/${productCode}?pageNumber=0&pageSize=20`,
     );
   });
+
+  it("refreshes the latest same-product history query after a deferred write settles", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "#/pages/PRODUCTION/MONITORING/SOYBEAN?pageNumber=0&pageSize=20",
+    );
+    const user = userEvent.setup();
+    const submitResult = deferred<ProductionRecordDetail>();
+    const searches: Array<Record<string, string>> = [];
+    const dependencies = dependenciesFixture(() => Promise.resolve(page([], 0, 20, 0)));
+    dependencies.masterDataRepository.getProducts = () =>
+      Promise.resolve([{ id: "SOYBEAN", name: "大豆" }]);
+    dependencies.pageDefinitionGateway.getDefinition = () =>
+      Promise.resolve(productionDefinitionFixture());
+    dependencies.productionRecordRepository = {
+      search: (criteria) => {
+        searches.push({ ...criteria.values });
+        return Promise.resolve({
+          items: [
+            {
+              id: "record-1",
+              values: { PROD_STATUS: "草稿" },
+              allowedActions: ["SUBMIT"],
+              version: 7,
+            },
+          ],
+          pageNumber: criteria.pageNumber,
+          pageSize: criteria.pageSize,
+          totalElements: 1,
+          totalPages: 1,
+        });
+      },
+      submit: () => submitResult.promise,
+      detail: () => Promise.reject(new Error("not called")),
+      definition: () => Promise.reject(new Error("not called")),
+      create: () => Promise.reject(new Error("not called")),
+      saveDraft: () => Promise.reject(new Error("not called")),
+      approve: () => Promise.reject(new Error("not called")),
+      returnForCorrection: () => Promise.reject(new Error("not called")),
+    };
+
+    render(<App dependencies={dependencies} />);
+    await user.click(await screen.findByRole("button", { name: "提交" }));
+    act(() => {
+      window.history.pushState(
+        null,
+        "",
+        "#/pages/PRODUCTION/MONITORING/SOYBEAN?pageNumber=0&pageSize=20&filter.objectTypeCode=FARMER",
+      );
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    await waitFor(() => expect(searches.at(-1)).toEqual({ objectTypeCode: "FARMER" }));
+
+    await act(async () => {
+      submitResult.resolve(productionDetail("PENDING_REVIEW", 8));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(searches).toHaveLength(3));
+    expect(searches.at(-1)).toEqual({ objectTypeCode: "FARMER" });
+  });
 });
 
 function dependenciesFixture(
@@ -359,6 +422,64 @@ function definitionFixture(productCode: string): ListPageDefinition {
     actions: [],
     pagination: { defaultPageSize: 20, pageSizeOptions: [20] },
   };
+}
+
+function productionDefinitionFixture(): ListPageDefinition {
+  return {
+    key: { domain: "PRODUCTION", pageKind: "MONITORING", productCode: "SOYBEAN" },
+    title: "大豆产情监测",
+    breadcrumbs: [],
+    filters: [
+      {
+        id: "objectTypeCode",
+        label: "对象类型",
+        control: "select",
+        placeholder: "全部对象类型",
+        options: [{ value: "FARMER", label: "农户" }],
+      },
+    ],
+    defaultContext: {},
+    columnGroups: [
+      {
+        id: "base",
+        label: "基本信息",
+        fields: [{ id: "PROD_STATUS", label: "状态", valueType: "TEXT" }],
+      },
+    ],
+    actions: [{ id: "SUBMIT", label: "提交", scope: "row" }],
+    pagination: { defaultPageSize: 20, pageSizeOptions: [20] },
+  };
+}
+
+function productionDetail(status: string, version: number): ProductionRecordDetail {
+  return {
+    id: "record-1",
+    productCode: "SOYBEAN",
+    objectTypeCode: "FARMER",
+    regionCode: "230202",
+    cultivarCode: null,
+    surveyDate: "2026-08-01",
+    reportedAt: "2026-08-02T08:00:00+08:00",
+    cultivatedAreaMu: "1.0000",
+    yieldPerMuKilograms: "2.0000",
+    estimatedOutputKilograms: "2.0000",
+    status,
+    returnReason: null,
+    quality: {},
+    costs: {},
+    insurance: {},
+    subsidies: {},
+    allowedActions: [],
+    version,
+  };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
 }
 
 function records(count: number, first = 1) {
