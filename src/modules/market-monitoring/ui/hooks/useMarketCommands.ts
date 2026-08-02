@@ -11,14 +11,14 @@ import type {
   MarketFormDefinition,
   MarketRecordDetail,
 } from "../../domain/marketCollection";
+import { objectTypeField } from "../../domain/marketCollection";
 
 export interface MarketEditorSession {
   id?: string;
   version?: number;
   draft: MarketDraft;
   definition: MarketFormDefinition;
-  actualTradePrice: string;
-  reportedAt: string;
+  readonlyValues: Readonly<Record<string, string | null>>;
   allowedActions: readonly string[];
 }
 
@@ -95,6 +95,32 @@ export function useMarketCommands({
     }
   }
 
+  function refreshFailed(version: number, message: string) {
+    if (active(version)) {
+      setIssue({ message, retry: () => void retryRefresh(message) });
+    }
+  }
+
+  async function retryRefresh(message: string) {
+    const version = begin();
+    if (version === undefined) return;
+    try {
+      await refresh();
+    } catch {
+      refreshFailed(version, message);
+    } finally {
+      finish(version);
+    }
+  }
+
+  async function refreshAfterMutation(version: number, message: string) {
+    try {
+      if (active(version)) await refresh();
+    } catch {
+      refreshFailed(version, message);
+    }
+  }
+
   async function dispatch(action: string, rowId?: string) {
     const row = records.find((candidate) => candidate.id === rowId);
     if (action !== "NEW" && (!row || !row.allowedActions.includes(action))) return;
@@ -110,36 +136,38 @@ export function useMarketCommands({
           setEditor({
             draft: emptyDraft(productCode),
             definition,
-            actualTradePrice: "",
-            reportedAt: "",
+            readonlyValues: {},
             allowedActions: ["SAVE"],
           });
         }
       } else if (action === "VIEW" && row) {
         const detail = await repository.detail(row.id);
         if (!active(version)) return;
+        const objectType = objectTypeValue(
+          detail,
+          await repository.definition(productCode),
+        );
         const definition = requireDefinitionContext(
-          await repository.definition(productCode, detail.objectTypeCode),
+          await repository.definition(productCode, objectType),
           productCode,
-          detail.objectTypeCode,
+          objectType,
         );
         if (active(version)) {
           setEditor({
             id: detail.id,
             version: detail.version,
-            draft: detailDraft(detail),
+            draft: detailDraft(detail, definition),
             definition,
-            actualTradePrice: detail.actualTradePrice,
-            reportedAt: detail.reportedAt,
+            readonlyValues: readOnlyCoreValues(detail, definition),
             allowedActions: detail.allowedActions,
           });
         }
       } else if (action === "SUBMIT" && row) {
         await repository.submit(row.id, row.version);
-        if (active(version)) await refresh();
+        await refreshAfterMutation(version, "状态已变更，但列表刷新失败，请重试刷新。");
       } else if (action === "APPROVE" && row) {
         await repository.approve(row.id, row.version);
-        if (active(version)) await refresh();
+        await refreshAfterMutation(version, "状态已变更，但列表刷新失败，请重试刷新。");
       } else if (action === "RETURN" && row) {
         const detail = await repository.detail(row.id);
         if (active(version)) setReturning(detail);
@@ -164,7 +192,7 @@ export function useMarketCommands({
       }
       if (!active(version)) return;
       setEditor(undefined);
-      await refresh();
+      await refreshAfterMutation(version, "记录已保存，但列表刷新失败，请重试刷新。");
     } catch (failure) {
       fail(version, failure, () => void save());
     } finally {
@@ -183,7 +211,7 @@ export function useMarketCommands({
       if (!active(version)) return;
       setReturning(undefined);
       setReturnReason("");
-      await refresh();
+      await refreshAfterMutation(version, "状态已变更，但列表刷新失败，请重试刷新。");
     } catch (failure) {
       fail(version, failure, () => void confirmReturn());
     } finally {
@@ -204,13 +232,7 @@ export function useMarketCommands({
       );
       if (!active(version)) return;
       setEditor((current) =>
-        current
-          ? {
-              ...current,
-              definition,
-              draft: pruneFacts({ ...current.draft, objectTypeCode }, definition),
-            }
-          : current,
+        current ? updateDefinition(current, definition, objectTypeCode) : current,
       );
     } catch (failure) {
       fail(version, failure, () => void changeObjectType(objectTypeCode));
@@ -269,34 +291,70 @@ function pruneFacts(draft: MarketDraft, definition: MarketFormDefinition): Marke
 function emptyDraft(productCode: string): MarketDraft {
   return {
     productCode,
-    objectTypeCode: "",
-    regionCode: "",
-    tradeDate: "",
-    direction: "",
-    purchaseBasePrice: null,
-    saleBasePrice: null,
-    carriageBoardAmount: "",
-    packagingAmount: "",
-    freightAmount: "",
-    packagingForm: null,
+    coreValues: {},
     facts: {},
   };
 }
 
-function detailDraft(record: MarketRecordDetail): MarketDraft {
+function detailDraft(
+  record: MarketRecordDetail,
+  definition: MarketFormDefinition,
+): MarketDraft {
+  const editable = new Set(
+    definition.coreFields
+      .filter((field) => !field.controlType.startsWith("READONLY_"))
+      .map((field) => field.code),
+  );
   return {
     productCode: record.productCode,
-    objectTypeCode: record.objectTypeCode,
-    regionCode: record.regionCode,
-    tradeDate: record.tradeDate,
-    direction: record.direction,
-    purchaseBasePrice: record.purchaseBasePrice,
-    saleBasePrice: record.saleBasePrice,
-    carriageBoardAmount: record.carriageBoardAmount,
-    packagingAmount: record.packagingAmount,
-    freightAmount: record.freightAmount,
-    packagingForm: record.packagingForm,
+    coreValues: Object.fromEntries(
+      Object.entries(record.coreValues).filter(([code]) => editable.has(code)),
+    ),
     facts: record.facts,
+  };
+}
+
+function readOnlyCoreValues(
+  record: MarketRecordDetail,
+  definition: MarketFormDefinition,
+) {
+  const readOnly = new Set(
+    definition.coreFields
+      .filter((field) => field.controlType.startsWith("READONLY_"))
+      .map((field) => field.code),
+  );
+  return Object.fromEntries(
+    Object.entries(record.coreValues).filter(([code]) => readOnly.has(code)),
+  );
+}
+
+function objectTypeValue(record: MarketRecordDetail, definition: MarketFormDefinition) {
+  const field = objectTypeField(definition);
+  if (!field) throw new Error("Market object-type capability is missing");
+  const value = record.coreValues[field.code];
+  if (!value) throw new Error("Market record object type is missing");
+  return value;
+}
+
+function updateDefinition(
+  editor: MarketEditorSession,
+  definition: MarketFormDefinition,
+  objectTypeCode: string,
+): MarketEditorSession {
+  const currentObjectField = objectTypeField(editor.definition);
+  const nextObjectField = objectTypeField(definition);
+  if (!currentObjectField || !nextObjectField) {
+    throw new Error("Market object-type capability is missing");
+  }
+  const allowedCore = new Set(definition.coreFields.map((field) => field.code));
+  const coreValues = Object.fromEntries(
+    Object.entries(editor.draft.coreValues).filter(([code]) => allowedCore.has(code)),
+  );
+  coreValues[nextObjectField.code] = objectTypeCode;
+  return {
+    ...editor,
+    definition,
+    draft: pruneFacts({ ...editor.draft, coreValues }, definition),
   };
 }
 

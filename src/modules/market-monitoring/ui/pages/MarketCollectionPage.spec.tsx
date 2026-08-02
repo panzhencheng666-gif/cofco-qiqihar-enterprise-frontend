@@ -13,6 +13,8 @@ import { vi } from "vitest";
 import type { MarketCollectionRepository } from "../../application/ports/MarketCollectionRepository";
 import { MarketRepositoryFailure } from "../../application/ports/MarketCollectionRepository";
 import type {
+  MarketCoreCapability,
+  MarketCoreControlType,
   MarketFormDefinition,
   MarketRecordDetail,
 } from "../../domain/marketCollection";
@@ -114,7 +116,9 @@ describe("MarketCollectionPage", () => {
     "creates %s / %s from database core fields and ordered Chinese groups",
     async (productCode, objectTypeCode, qualityLabel, purchaseLabel) => {
       const user = userEvent.setup();
-      const create = vi.fn(() => Promise.resolve(detail(productCode, objectTypeCode)));
+      const create = vi.fn<MarketCollectionRepository["create"]>(() =>
+        Promise.resolve(detail(productCode, objectTypeCode)),
+      );
       const repo = repositoryFixture({
         create,
         definition: (_product, object) =>
@@ -140,15 +144,14 @@ describe("MarketCollectionPage", () => {
       await user.type(within(dialog).getByLabelText(purchaseLabel), "12");
       await user.click(within(dialog).getByRole("button", { name: "保存草稿" }));
 
-      await waitFor(() =>
-        expect(create).toHaveBeenCalledWith(
-          expect.objectContaining({
-            productCode,
-            objectTypeCode,
-            facts: { QUALITY_DYNAMIC: "14.6", PURCHASE_VOLUME: "12" },
-          }),
-        ),
+      await waitFor(() => expect(create).toHaveBeenCalledOnce());
+      expect(create.mock.calls[0]?.[0]).toEqual(
+        expect.objectContaining({
+          productCode,
+          facts: { QUALITY_DYNAMIC: "14.6", PURCHASE_VOLUME: "12" },
+        }),
       );
+      expect(create.mock.calls[0]?.[0].coreValues.MKT_OBJECT_TYPE).toBe(objectTypeCode);
     },
   );
 
@@ -191,11 +194,94 @@ describe("MarketCollectionPage", () => {
     expect(within(alert).getByRole("button", { name: "关闭操作错误" })).toBeVisible();
   });
 
+  it("retries only the refresh after a successful create whose refresh fails", async () => {
+    const user = userEvent.setup();
+    const search = vi
+      .fn()
+      .mockResolvedValueOnce(emptyPage())
+      .mockRejectedValueOnce(new Error("refresh failed"))
+      .mockResolvedValueOnce(emptyPage());
+    const create = vi.fn<MarketCollectionRepository["create"]>(() =>
+      Promise.resolve(detail("CORN", "FEED_MILL")),
+    );
+    const repo = repositoryFixture({
+      search,
+      create,
+      definition: (_product, object) =>
+        Promise.resolve(formDefinition("CORN", object ?? null, "水分")),
+    });
+    render(page("CORN", repo, actionDefinition("CORN", "NEW")));
+
+    await user.click(await screen.findByRole("button", { name: "新建填报" }));
+    await user.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "保存草稿",
+      }),
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("记录已保存，但列表刷新失败");
+    await user.click(within(alert).getByRole("button", { name: "重试操作" }));
+    await waitFor(() => expect(search).toHaveBeenCalledTimes(3));
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries only the refresh after a successful submit whose refresh fails", async () => {
+    const user = userEvent.setup();
+    const search = vi
+      .fn()
+      .mockResolvedValueOnce(rowPage("SUBMIT"))
+      .mockRejectedValueOnce(new Error("refresh failed"))
+      .mockResolvedValueOnce(rowPage("VIEW"));
+    const submit = vi.fn(() =>
+      Promise.resolve(detail("CORN", "TRADER", "PENDING_REVIEW", 8)),
+    );
+    const repo = repositoryFixture({ search, submit });
+    render(page("CORN", repo, actionDefinition("CORN", "SUBMIT")));
+
+    await user.click(await screen.findByRole("button", { name: "提交" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("状态已变更，但列表刷新失败");
+    await user.click(within(alert).getByRole("button", { name: "重试操作" }));
+    await waitFor(() => expect(search).toHaveBeenCalledTimes(3));
+    expect(submit).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries only the refresh after a successful return whose refresh fails", async () => {
+    const user = userEvent.setup();
+    const search = vi
+      .fn()
+      .mockResolvedValueOnce(rowPage("RETURN"))
+      .mockRejectedValueOnce(new Error("refresh failed"))
+      .mockResolvedValueOnce(rowPage("VIEW"));
+    const returnForCorrection = vi.fn(() =>
+      Promise.resolve(detail("SOYBEAN", "TRADER", "RETURNED", 8)),
+    );
+    const repo = repositoryFixture({
+      search,
+      detail: () => Promise.resolve(detail("SOYBEAN", "TRADER", "PENDING_REVIEW", 7)),
+      returnForCorrection,
+    });
+    render(page("SOYBEAN", repo, actionDefinition("SOYBEAN", "RETURN")));
+
+    await user.click(await screen.findByRole("button", { name: "退回" }));
+    const dialog = await screen.findByRole("dialog", { name: "退回市场记录" });
+    await user.type(within(dialog).getByLabelText("退回原因"), "请复核采购凭证");
+    await user.click(within(dialog).getByRole("button", { name: "确认退回" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("状态已变更，但列表刷新失败");
+    await user.click(within(alert).getByRole("button", { name: "重试操作" }));
+    await waitFor(() => expect(search).toHaveBeenCalledTimes(3));
+    expect(returnForCorrection).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps the newest object definition and prunes hidden facts", async () => {
     const user = userEvent.setup();
     const first = deferred<MarketFormDefinition>();
     const second = deferred<MarketFormDefinition>();
-    const create = vi.fn(() => Promise.resolve(detail("SOYBEAN", "TYPE_B")));
+    const create = vi.fn<MarketCollectionRepository["create"]>(() =>
+      Promise.resolve(detail("SOYBEAN", "TYPE_B")),
+    );
     const repo = repositoryFixture({
       create,
       definition: (_product, object) => {
@@ -216,11 +302,9 @@ describe("MarketCollectionPage", () => {
     expect(await within(dialog).findByLabelText("仅 B 字段")).toBeVisible();
     expect(within(dialog).queryByLabelText("仅 A 字段")).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "保存草稿" }));
-    await waitFor(() =>
-      expect(create).toHaveBeenCalledWith(
-        expect.objectContaining({ objectTypeCode: "TYPE_B", facts: {} }),
-      ),
-    );
+    await waitFor(() => expect(create).toHaveBeenCalledOnce());
+    expect(create.mock.calls[0]?.[0].coreValues.MKT_OBJECT_TYPE).toBe("TYPE_B");
+    expect(create.mock.calls[0]?.[0].facts).toEqual({});
   });
 
   it("ignores a deferred NEW definition after switching product context", async () => {
@@ -299,6 +383,35 @@ describe("MarketCollectionPage", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("renders and submits a database-defined generic text core field", async () => {
+    const user = userEvent.setup();
+    const create = vi.fn<MarketCollectionRepository["create"]>(() =>
+      Promise.resolve(detail("CORN", "FEED_MILL")),
+    );
+    const repo = repositoryFixture({
+      create,
+      definition: (_product, object) => {
+        const definition = formDefinition("CORN", object ?? null, "水分");
+        return Promise.resolve({
+          ...definition,
+          coreFields: [
+            ...definition.coreFields,
+            core("DB_SOURCE_NOTE", "数据库来源说明", "TEXT"),
+          ],
+        });
+      },
+    });
+    render(page("CORN", repo, actionDefinition("CORN", "NEW")));
+
+    await user.click(await screen.findByRole("button", { name: "新建填报" }));
+    const dialog = await screen.findByRole("dialog", { name: "新建市场填报" });
+    await user.type(within(dialog).getByLabelText("数据库来源说明"), "产地直采");
+    await user.click(within(dialog).getByRole("button", { name: "保存草稿" }));
+
+    await waitFor(() => expect(create).toHaveBeenCalledOnce());
+    expect(create.mock.calls[0]?.[0].coreValues.DB_SOURCE_NOTE).toBe("产地直采");
+  });
+
   it("updates the exact actual-price preview and shows server-owned reported time and descriptions", async () => {
     const user = userEvent.setup();
     const repo = repositoryFixture({
@@ -317,6 +430,7 @@ describe("MarketCollectionPage", () => {
     const preview = within(dialog).getByLabelText("自动成交");
     expect(preview).toHaveValue("2420.0000");
     await user.clear(within(dialog).getByLabelText("动态车板组成"));
+    expect(preview).toHaveValue("");
     await user.type(within(dialog).getByLabelText("动态车板组成"), "40");
     expect(preview).toHaveValue("2424.0000");
   });
@@ -490,7 +604,9 @@ function core(
   return {
     code,
     label,
-    controlType,
+    controlType: controlType as MarketCoreControlType,
+    capability: capability(code),
+    required: false,
     unit: controlType.includes("DECIMAL") ? "元/吨" : null,
     description,
     precision: controlType.includes("DECIMAL") ? 18 : null,
@@ -498,6 +614,22 @@ function core(
     sortOrder: 10,
     options,
   };
+}
+
+function capability(code: string): MarketCoreCapability {
+  if (code === "MKT_OBJECT_TYPE") return "OBJECT_TYPE_CONTEXT";
+  if (code === "MKT_TRADE_DIRECTION") return "PRICE_DIRECTION";
+  if (code === "MKT_PURCHASE_BASE_PRICE") return "PURCHASE_BASE_PRICE";
+  if (code === "MKT_SALE_BASE_PRICE") return "SALE_BASE_PRICE";
+  if (
+    code === "MKT_CARRIAGE_BOARD_AMOUNT" ||
+    code === "MKT_PACKAGING_AMOUNT" ||
+    code === "MKT_FREIGHT_AMOUNT"
+  ) {
+    return "PRICE_COMPONENT";
+  }
+  if (code === "MKT_ACTUAL_TRADE_PRICE") return "ACTUAL_TRADE_PRICE";
+  return "GENERIC";
 }
 
 function group(category: string, label: string, fieldLabel: string, code: string) {
@@ -529,19 +661,21 @@ function detail(
   return {
     id: "record-1",
     productCode,
-    objectTypeCode,
-    regionCode: "230200",
-    tradeDate: "2026-08-01",
-    direction: "PURCHASE",
-    purchaseBasePrice: "2300.0000",
-    saleBasePrice: null,
-    carriageBoardAmount: "36.0000",
-    packagingAmount: "12.0000",
-    freightAmount: "72.0000",
-    packagingForm: "BULK",
+    coreValues: {
+      MKT_OBJECT_TYPE: objectTypeCode,
+      MKT_REGION: "230200",
+      MKT_TRADE_DATE: "2026-08-01",
+      MKT_REPORTED_AT: "2026-08-02T08:00:00+08:00",
+      MKT_TRADE_DIRECTION: "PURCHASE",
+      MKT_PURCHASE_BASE_PRICE: "2300.0000",
+      MKT_SALE_BASE_PRICE: null,
+      MKT_CARRIAGE_BOARD_AMOUNT: "36.0000",
+      MKT_PACKAGING_AMOUNT: "12.0000",
+      MKT_FREIGHT_AMOUNT: "72.0000",
+      MKT_PACKAGING_FORM: "BULK",
+      MKT_ACTUAL_TRADE_PRICE: "2420.0000",
+    },
     facts: {},
-    reportedAt: "2026-08-02T08:00:00+08:00",
-    actualTradePrice: "2420.0000",
     status,
     returnReason: null,
     allowedActions: ["VIEW", "SAVE"],

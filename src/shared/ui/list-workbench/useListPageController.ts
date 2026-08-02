@@ -44,33 +44,40 @@ export function useListPageController(options: ListPageControllerOptions) {
   const requestVersion = useRef(0);
   const routeKey = routeFingerprint(options.routeQuery);
 
-  const executeSearch = useCallback(async (next: ListQueryState) => {
-    const version = ++requestVersion.current;
-    setLoading(true);
-    setListError("");
-    try {
-      let nextResult = await optionsRef.current.search(next);
-      if (version !== requestVersion.current) return;
-      const lastPage = Math.max(0, nextResult.totalPages - 1);
-      if (next.pageNumber > lastPage) {
-        const normalized = { ...next, pageNumber: lastPage };
-        queryRef.current = normalized;
-        setQuery(normalized);
-        optionsRef.current.onQueryNormalized?.(normalized);
-        nextResult = await optionsRef.current.search(normalized);
+  const executeSearch = useCallback(
+    async (
+      next: ListQueryState,
+      behavior: { propagateFailure?: boolean; showListError?: boolean } = {},
+    ) => {
+      const version = ++requestVersion.current;
+      setLoading(true);
+      setListError("");
+      try {
+        let nextResult = await optionsRef.current.search(next);
         if (version !== requestVersion.current) return;
+        const lastPage = Math.max(0, nextResult.totalPages - 1);
+        if (next.pageNumber > lastPage) {
+          const normalized = { ...next, pageNumber: lastPage };
+          queryRef.current = normalized;
+          setQuery(normalized);
+          optionsRef.current.onQueryNormalized?.(normalized);
+          nextResult = await optionsRef.current.search(normalized);
+          if (version !== requestVersion.current) return;
+        }
+        setResult(nextResult);
+      } catch (failure) {
+        if (version === requestVersion.current && behavior.showListError !== false) {
+          setListError(
+            optionsRef.current.listErrorMessage ?? "列表查询失败，请稍后重试。",
+          );
+        }
+        if (behavior.propagateFailure) throw failure;
+      } finally {
+        if (version === requestVersion.current) setLoading(false);
       }
-      setResult(nextResult);
-    } catch {
-      if (version === requestVersion.current) {
-        setListError(
-          optionsRef.current.listErrorMessage ?? "列表查询失败，请稍后重试。",
-        );
-      }
-    } finally {
-      if (version === requestVersion.current) setLoading(false);
-    }
-  }, []);
+    },
+    [],
+  );
 
   useEffect(() => {
     let active = true;
@@ -162,7 +169,12 @@ export function useListPageController(options: ListPageControllerOptions) {
 
   const refreshLatest = useCallback(async () => {
     const latest = queryRef.current;
-    if (latest) await executeSearch(latest);
+    if (latest) {
+      await executeSearch(latest, {
+        propagateFailure: true,
+        showListError: false,
+      });
+    }
   }, [executeSearch]);
 
   return {

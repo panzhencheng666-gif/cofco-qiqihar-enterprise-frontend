@@ -1,8 +1,15 @@
 import type { Page, Route } from "@playwright/test";
 
 import { parseJavaInt32 } from "../support/java-int32";
+import {
+  marketFactDefinitions,
+  marketProducts,
+  type MarketFactCode,
+  type MarketProductCode,
+} from "./market-contract";
 
-export type MarketProductCode = "CORN" | "SOYBEAN" | "RICE";
+export { marketProducts } from "./market-contract";
+export type { MarketProductCode } from "./market-contract";
 
 const listKeys = new Set([
   "productCode",
@@ -11,27 +18,25 @@ const listKeys = new Set([
   "pageSize",
   "filter.objectTypeCode",
 ]);
-
-export const marketProducts = {
-  CORN: {
-    name: "玉米",
-    objectType: "DEEP_PROCESSOR",
-    qualityCode: "CORN_MOISTURE",
-    qualityLabel: "水分",
-  },
-  SOYBEAN: {
-    name: "大豆",
-    objectType: "DEEP_PROCESSOR",
-    qualityCode: "SOYBEAN_PROTEIN",
-    qualityLabel: "蛋白质",
-  },
-  RICE: {
-    name: "稻谷",
-    objectType: "RICE_MILL",
-    qualityCode: "RICE_MILLING_YIELD",
-    qualityLabel: "出米率",
-  },
-} as const;
+const draftKeys = new Set(["productCode", "coreValues", "facts"]);
+const editableCoreCodes = new Set([
+  "MKT_OBJECT_TYPE",
+  "MKT_REGION",
+  "MKT_TRADE_DATE",
+  "MKT_TRADE_DIRECTION",
+  "MKT_PURCHASE_BASE_PRICE",
+  "MKT_SALE_BASE_PRICE",
+  "MKT_CARRIAGE_BOARD_AMOUNT",
+  "MKT_PACKAGING_FORM",
+  "MKT_PACKAGING_AMOUNT",
+  "MKT_FREIGHT_AMOUNT",
+  "MKT_SOURCE_NOTE",
+]);
+const amountCodes = [
+  "MKT_CARRIAGE_BOARD_AMOUNT",
+  "MKT_PACKAGING_AMOUNT",
+  "MKT_FREIGHT_AMOUNT",
+] as const;
 
 export interface MarketListQuery {
   productCode: MarketProductCode;
@@ -42,42 +47,18 @@ export interface MarketListQuery {
 
 type MarketRecordStatus = "DRAFT" | "PENDING_REVIEW" | "RETURNED" | "APPROVED";
 
-interface FixtureRecord {
-  id: string;
+interface FixtureDraft {
   productCode: MarketProductCode;
-  objectTypeCode: string;
-  regionCode: string;
-  tradeDate: string;
-  reportedAt: string;
-  direction: "PURCHASE" | "SALE";
-  purchaseBasePrice: string | null;
-  saleBasePrice: string | null;
-  carriageBoardAmount: string;
-  packagingAmount: string;
-  freightAmount: string;
-  packagingForm: string | null;
-  actualTradePrice: string;
-  status: MarketRecordStatus;
-  returnReason: string | null;
+  coreValues: Record<string, string | null>;
   facts: Record<string, string>;
-  version: number;
 }
 
-type FixtureDraft = Pick<
-  FixtureRecord,
-  | "productCode"
-  | "objectTypeCode"
-  | "regionCode"
-  | "tradeDate"
-  | "direction"
-  | "purchaseBasePrice"
-  | "saleBasePrice"
-  | "carriageBoardAmount"
-  | "packagingAmount"
-  | "freightAmount"
-  | "packagingForm"
-  | "facts"
->;
+interface FixtureRecord extends FixtureDraft {
+  id: string;
+  status: MarketRecordStatus;
+  returnReason: string | null;
+  version: number;
+}
 
 export interface MarketWriteRequest {
   method: string;
@@ -120,9 +101,9 @@ export class MarketApiRoutes {
         url.pathname === "/api/v1/master-data/products"
       ) {
         await json(route, {
-          data: Object.entries(marketProducts).map(([id, product]) => ({
+          data: Object.entries(marketProducts).map(([id, item]) => ({
             id,
-            name: product.name,
+            name: item.name,
           })),
         });
         return;
@@ -145,8 +126,7 @@ export class MarketApiRoutes {
         return;
       }
       if (request.method() === "GET" && definition) {
-        const productCode = product(url.searchParams.get("productCode"));
-        await json(route, pageDefinition(productCode));
+        await json(route, pageDefinition(product(url.searchParams.get("productCode"))));
         return;
       }
       if (
@@ -154,8 +134,12 @@ export class MarketApiRoutes {
         url.pathname === "/api/v1/market-record-definitions"
       ) {
         const productCode = product(url.searchParams.get("productCode"));
-        const objectTypeCode = url.searchParams.get("objectTypeCode");
-        await json(route, formDefinition(productCode, objectTypeCode));
+        const requestedObject = url.searchParams.get("objectTypeCode");
+        if (requestedObject && !objectContract(productCode, requestedObject)) {
+          await json(route, { error: { code: "INVALID_MARKET_RECORD" } }, 400);
+          return;
+        }
+        await json(route, formDefinition(productCode, requestedObject));
         return;
       }
       if (url.pathname === "/api/v1/market-records" && request.method() === "GET") {
@@ -216,8 +200,9 @@ export class MarketApiRoutes {
     const pending = this.pendingSubmit;
     if (!pending) throw new Error("No pending market submit");
     const body = pending.body as { version?: unknown };
-    if (body.version !== 7)
+    if (body.version !== 7) {
       throw new Error(`Expected version 7, got ${String(body.version)}`);
+    }
     this.pendingSubmit = undefined;
     await this.transition(pending.route, pending.recordId, body, "submit");
   }
@@ -232,12 +217,12 @@ export class MarketApiRoutes {
   private async list(route: Route, url: URL) {
     const parameters = url.searchParams;
     const keys = [...parameters.keys()];
-    const unique = new Set(keys);
     const productCode = productOrUndefined(parameters.get("productCode"));
     const pageNumber = parseJavaInt32(parameters.get("pageNumber"));
     const pageSize = parseJavaInt32(parameters.get("pageSize"));
+    const objectTypeCode = parameters.get("filter.objectTypeCode");
     const valid =
-      keys.length === unique.size &&
+      keys.length === new Set(keys).size &&
       keys.every((key) => listKeys.has(key)) &&
       [...parameters.values()].every((value) => value.trim() !== "") &&
       ["productCode", "pageKind", "pageNumber", "pageSize"].every((key) =>
@@ -248,7 +233,8 @@ export class MarketApiRoutes {
       pageNumber !== undefined &&
       pageNumber >= 0 &&
       pageSize !== undefined &&
-      [20, 50, 100].includes(pageSize);
+      [20, 50, 100].includes(pageSize) &&
+      (!objectTypeCode || objectContract(productCode, objectTypeCode) !== undefined);
     if (!valid) {
       this.unexpectedRequests.push(`GET ${url.pathname}${url.search}`);
       this.notify();
@@ -259,22 +245,17 @@ export class MarketApiRoutes {
       productCode,
       pageNumber,
       pageSize,
-      ...(parameters.has("filter.objectTypeCode")
-        ? { objectTypeCode: parameters.get("filter.objectTypeCode")! }
-        : {}),
+      ...(objectTypeCode ? { objectTypeCode } : {}),
     };
     this.listQueries.push(query);
     this.notify();
-    this.seed(query.productCode);
-    await json(
-      route,
-      listResponse(
-        query,
-        [...this.records.values()].filter(
-          (record) => record.productCode === query.productCode,
-        ),
-      ),
+    this.seed(productCode);
+    const records = [...this.records.values()].filter(
+      (record) =>
+        record.productCode === productCode &&
+        (!objectTypeCode || record.coreValues.MKT_OBJECT_TYPE === objectTypeCode),
     );
+    await json(route, listResponse(query, records));
   }
 
   private async create(route: Route, body: unknown) {
@@ -285,9 +266,7 @@ export class MarketApiRoutes {
     }
     const record: FixtureRecord = {
       id: `${draft.productCode}-created-${this.nextId++}`,
-      ...draft,
-      reportedAt: "2026-08-03T09:00:00+08:00",
-      actualTradePrice: actualPrice(draft),
+      ...serverDraft(draft, "2026-08-03T09:00:00+08:00"),
       status: "DRAFT",
       returnReason: null,
       version: 0,
@@ -319,8 +298,7 @@ export class MarketApiRoutes {
     }
     const next: FixtureRecord = {
       ...current,
-      ...draft,
-      actualTradePrice: actualPrice(draft),
+      ...serverDraft(draft, "2026-08-03T09:00:00+08:00"),
       status: "DRAFT",
       returnReason: null,
       version: current.version + 1,
@@ -383,7 +361,10 @@ export class MarketApiRoutes {
     await json(
       route,
       {
-        error: { code: status === 409 ? "VERSION_CONFLICT" : "INVALID_MARKET_RECORD" },
+        error: {
+          code:
+            status === 409 ? "MARKET_RECORD_VERSION_CONFLICT" : "INVALID_MARKET_RECORD",
+        },
       },
       status,
     );
@@ -403,21 +384,27 @@ export class MarketApiRoutes {
     this.records.set(id, {
       id,
       productCode,
-      objectTypeCode: item.objectType,
-      regionCode: "230200",
-      tradeDate: "2026-08-01",
-      reportedAt: "2026-08-03T08:00:00+08:00",
-      direction: "PURCHASE",
-      purchaseBasePrice: "2300.0000",
-      saleBasePrice: null,
-      carriageBoardAmount: "36.0000",
-      packagingAmount: "12.0000",
-      freightAmount: "72.0000",
-      packagingForm: "BULK",
-      actualTradePrice: "2420.0000",
+      coreValues: {
+        MKT_OBJECT_TYPE: item.defaultObject,
+        MKT_REGION: "230200",
+        MKT_TRADE_DATE: "2026-08-01",
+        MKT_REPORTED_AT: "2026-08-03T08:00:00+08:00",
+        MKT_TRADE_DIRECTION: "PURCHASE",
+        MKT_PURCHASE_BASE_PRICE: "2300.0000",
+        MKT_SALE_BASE_PRICE: null,
+        MKT_CARRIAGE_BOARD_AMOUNT: "36.0000",
+        MKT_PACKAGING_FORM: "BULK",
+        MKT_PACKAGING_AMOUNT: "12.0000",
+        MKT_FREIGHT_AMOUNT: "72.0000",
+        MKT_SOURCE_NOTE: "产地直采",
+        MKT_ACTUAL_TRADE_PRICE: "2420.0000",
+      },
+      facts: {
+        [item.qualityCode]: "14.2000",
+        PURCHASE_VOLUME: "100.0000",
+      },
       status: "DRAFT",
       returnReason: null,
-      facts: { [item.qualityCode]: "14.2000", PURCHASE_VOLUME: "100.0000" },
       version: 7,
     });
   }
@@ -454,7 +441,11 @@ function pageDefinition(productCode: MarketProductCode) {
           label: "监测对象",
           control: "select",
           placeholder: "全部监测对象",
-          options: [{ value: item.objectType, label: objectLabel(item.objectType) }],
+          options: objectEntries(productCode).map(([value, contract], index) => ({
+            value,
+            label: contract.label,
+            sortOrder: (index + 1) * 10,
+          })),
         },
       ],
       defaultContext: {},
@@ -480,6 +471,7 @@ function pageDefinition(productCode: MarketProductCode) {
             field("MKT_CARRIAGE_BOARD_AMOUNT", "车板费用", "DECIMAL"),
             field("MKT_PACKAGING_AMOUNT", "包装费用", "DECIMAL"),
             field("MKT_FREIGHT_AMOUNT", "运费", "DECIMAL"),
+            field("MKT_SOURCE_NOTE", "来源说明", "TEXT"),
             field(
               "MKT_ACTUAL_TRADE_PRICE",
               "实际成交价",
@@ -496,7 +488,9 @@ function pageDefinition(productCode: MarketProductCode) {
         {
           code: "quality",
           label: "质量指标",
-          fields: [field(item.qualityCode, item.qualityLabel, "DECIMAL")],
+          fields: [
+            factField(item.qualityCode, marketFactDefinitions[item.qualityCode]),
+          ],
         },
       ],
       actions: [
@@ -515,26 +509,30 @@ function formDefinition(
   productCode: MarketProductCode,
   requestedObject: string | null,
 ) {
-  const item = marketProducts[productCode];
-  const objectTypeCode = requestedObject ?? null;
+  const applicableFacts = requestedObject
+    ? objectContract(productCode, requestedObject)!.facts
+    : [];
   return {
     data: {
       productCode,
-      objectTypeCode,
+      objectTypeCode: requestedObject,
       coreFields: [
-        core("MKT_OBJECT_TYPE", "监测对象", "SELECT", [
-          {
-            value: item.objectType,
-            label: objectLabel(item.objectType),
-            sortOrder: 10,
-          },
-          { value: "BREEDING_ENTERPRISE", label: "养殖企业", sortOrder: 20 },
-          { value: "FEED_ENTERPRISE", label: "饲料企业", sortOrder: 30 },
-        ]),
-        core("MKT_REGION", "地区", "REGION_HIERARCHY"),
-        core("MKT_TRADE_DATE", "交易日期", "DATE"),
-        core("MKT_REPORTED_AT", "填报时间", "READONLY_DATETIME"),
-        core("MKT_TRADE_DIRECTION", "购销方向", "SELECT", [
+        core(
+          "MKT_OBJECT_TYPE",
+          "监测对象",
+          "SELECT",
+          "OBJECT_TYPE_CONTEXT",
+          true,
+          objectEntries(productCode).map(([value, contract], index) => ({
+            value,
+            label: contract.label,
+            sortOrder: (index + 1) * 10,
+          })),
+        ),
+        core("MKT_REGION", "地区", "REGION_HIERARCHY", "GENERIC", true),
+        core("MKT_TRADE_DATE", "交易日期", "DATE", "GENERIC", true),
+        core("MKT_REPORTED_AT", "填报时间", "READONLY_DATETIME", "GENERIC", false),
+        core("MKT_TRADE_DIRECTION", "购销方向", "SELECT", "PRICE_DIRECTION", true, [
           { value: "PURCHASE", label: "采购", sortOrder: 10 },
           { value: "SALE", label: "销售", sortOrder: 20 },
         ]),
@@ -542,6 +540,8 @@ function formDefinition(
           "MKT_PURCHASE_BASE_PRICE",
           "采购基础价",
           "DECIMAL",
+          "PURCHASE_BASE_PRICE",
+          false,
           [],
           "采购基础价未包含车板、包装和运费组成",
         ),
@@ -549,28 +549,41 @@ function formDefinition(
           "MKT_SALE_BASE_PRICE",
           "销售基础价",
           "DECIMAL",
+          "SALE_BASE_PRICE",
+          false,
           [],
           "销售基础价未包含车板、包装和运费组成",
         ),
-        core("MKT_CARRIAGE_BOARD_AMOUNT", "车板费用", "DECIMAL"),
-        core("MKT_PACKAGING_FORM", "包装形式", "SELECT", [
-          { value: "BULK", label: "散粮", sortOrder: 10 },
+        core(
+          "MKT_CARRIAGE_BOARD_AMOUNT",
+          "车板费用",
+          "DECIMAL",
+          "PRICE_COMPONENT",
+          true,
+        ),
+        core("MKT_PACKAGING_FORM", "包装形式", "SELECT", "GENERIC", true, [
+          { value: "BAGGED", label: "包粮", sortOrder: 10 },
+          { value: "BULK", label: "散粮", sortOrder: 20 },
         ]),
-        core("MKT_PACKAGING_AMOUNT", "包装费用", "DECIMAL"),
-        core("MKT_FREIGHT_AMOUNT", "运费", "DECIMAL"),
+        core("MKT_PACKAGING_AMOUNT", "包装费用", "DECIMAL", "PRICE_COMPONENT", true),
+        core("MKT_FREIGHT_AMOUNT", "运费", "DECIMAL", "PRICE_COMPONENT", true),
+        core("MKT_SOURCE_NOTE", "来源说明", "TEXT", "GENERIC", false),
         core(
           "MKT_ACTUAL_TRADE_PRICE",
           "实际成交价",
           "READONLY_DECIMAL",
+          "ACTUAL_TRADE_PRICE",
+          false,
           [],
           "实际成交价已包含车板、包装和运费组成",
         ),
       ],
       groups: [
-        group("QUALITY", "质量指标", item.qualityCode, item.qualityLabel, 10),
-        group("PURCHASE", "采购与成交", "PURCHASE_VOLUME", "采购量", 20),
-        group("PROCESSING", "加工生产", "PROCESSING_VOLUME", "加工量", 30),
-        group("INVENTORY", "库存", "INVENTORY_VOLUME", "库存量", 40),
+        factGroup("QUALITY", "质量指标", 10, applicableFacts),
+        factGroup("PURCHASE", "采购与成交", 20, applicableFacts),
+        factGroup("SALES", "销售", 30, applicableFacts),
+        factGroup("PROCESSING", "加工生产", 40, applicableFacts),
+        factGroup("INVENTORY", "库存", 50, applicableFacts),
       ],
     },
   };
@@ -583,18 +596,15 @@ function listResponse(query: MarketListQuery, records: FixtureRecord[]) {
       items: records.map((record) => ({
         id: record.id,
         values: {
-          MKT_OBJECT_TYPE: objectLabel(record.objectTypeCode),
-          MKT_REPORTED_AT: record.reportedAt,
-          MKT_PURCHASE_BASE_PRICE: record.purchaseBasePrice,
-          MKT_SALE_BASE_PRICE: record.saleBasePrice,
-          MKT_CARRIAGE_BOARD_AMOUNT: record.carriageBoardAmount,
-          MKT_PACKAGING_AMOUNT: record.packagingAmount,
-          MKT_FREIGHT_AMOUNT: record.freightAmount,
-          MKT_ACTUAL_TRADE_PRICE: record.actualTradePrice,
+          ...record.coreValues,
+          MKT_OBJECT_TYPE:
+            objectContract(record.productCode, record.coreValues.MKT_OBJECT_TYPE ?? "")
+              ?.label ?? null,
           MKT_REGION: "齐齐哈尔市",
-          MKT_TRADE_DATE: record.tradeDate,
-          MKT_TRADE_DIRECTION: record.direction === "PURCHASE" ? "采购" : "销售",
-          MKT_PACKAGING_FORM: record.packagingForm === "BULK" ? "散粮" : null,
+          MKT_TRADE_DIRECTION:
+            record.coreValues.MKT_TRADE_DIRECTION === "PURCHASE" ? "采购" : "销售",
+          MKT_PACKAGING_FORM:
+            record.coreValues.MKT_PACKAGING_FORM === "BULK" ? "散粮" : "包粮",
           MKT_STATUS: statusLabel(record.status),
           [item.qualityCode]: record.facts[item.qualityCode] ?? null,
         },
@@ -618,82 +628,50 @@ function recordDetail(record: FixtureRecord) {
   };
 }
 
-function allowedActions(status: MarketRecordStatus) {
-  if (status === "DRAFT" || status === "RETURNED") {
-    return ["VIEW", "SAVE", "SUBMIT"];
-  }
-  if (status === "PENDING_REVIEW") return ["VIEW", "APPROVE", "RETURN"];
-  return ["VIEW"];
-}
-
-function statusLabel(status: MarketRecordStatus) {
-  if (status === "DRAFT") return "草稿";
-  if (status === "PENDING_REVIEW") return "待审核";
-  if (status === "RETURNED") return "已退回";
-  return "已审核";
-}
-
-const draftKeys = new Set([
-  "productCode",
-  "objectTypeCode",
-  "regionCode",
-  "tradeDate",
-  "direction",
-  "purchaseBasePrice",
-  "saleBasePrice",
-  "carriageBoardAmount",
-  "packagingAmount",
-  "freightAmount",
-  "packagingForm",
-  "facts",
-]);
-
 function validDraft(value: unknown): FixtureDraft | undefined {
   if (!plainObject(value) || !exactKeys(value, draftKeys)) return undefined;
   const productCode = productOrUndefined(stringValue(value.productCode));
-  if (!productCode) return undefined;
-  const item = marketProducts[productCode];
-  const direction = value.direction;
-  const purchaseBasePrice = nullableDecimal(value.purchaseBasePrice);
-  const saleBasePrice = nullableDecimal(value.saleBasePrice);
-  const carriageBoardAmount = decimal(value.carriageBoardAmount);
-  const packagingAmount = decimal(value.packagingAmount);
-  const freightAmount = decimal(value.freightAmount);
+  if (!productCode || !plainObject(value.coreValues) || !plainObject(value.facts)) {
+    return undefined;
+  }
+  const coreValues = value.coreValues;
+  if (!Object.keys(coreValues).every((code) => editableCoreCodes.has(code))) {
+    return undefined;
+  }
+  const objectType = stringValue(coreValues.MKT_OBJECT_TYPE);
+  const object = objectType ? objectContract(productCode, objectType) : undefined;
+  const direction = coreValues.MKT_TRADE_DIRECTION;
+  const purchase = nullableDecimal(coreValues.MKT_PURCHASE_BASE_PRICE);
+  const sale = nullableDecimal(coreValues.MKT_SALE_BASE_PRICE);
   if (
-    typeof value.objectTypeCode !== "string" ||
-    !new Set([item.objectType, "BREEDING_ENTERPRISE", "FEED_ENTERPRISE"]).has(
-      value.objectTypeCode,
-    ) ||
-    value.regionCode !== "230200" ||
-    typeof value.tradeDate !== "string" ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(value.tradeDate) ||
+    !object ||
+    coreValues.MKT_REGION !== "230200" ||
+    typeof coreValues.MKT_TRADE_DATE !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(coreValues.MKT_TRADE_DATE) ||
     (direction !== "PURCHASE" && direction !== "SALE") ||
-    purchaseBasePrice === undefined ||
-    saleBasePrice === undefined ||
-    (direction === "PURCHASE" &&
-      (purchaseBasePrice === null || saleBasePrice !== null)) ||
-    (direction === "SALE" && (saleBasePrice === null || purchaseBasePrice !== null)) ||
-    carriageBoardAmount === undefined ||
-    packagingAmount === undefined ||
-    freightAmount === undefined ||
-    (value.packagingForm !== null && value.packagingForm !== "BULK") ||
-    !validFacts(value.facts, productCode)
+    purchase === undefined ||
+    sale === undefined ||
+    (direction === "PURCHASE" && purchase === null) ||
+    (direction === "SALE" && sale === null) ||
+    amountCodes.some((code) => decimal(coreValues[code]) === undefined) ||
+    (coreValues.MKT_PACKAGING_FORM !== "BAGGED" &&
+      coreValues.MKT_PACKAGING_FORM !== "BULK") ||
+    (coreValues.MKT_SOURCE_NOTE !== undefined &&
+      (typeof coreValues.MKT_SOURCE_NOTE !== "string" ||
+        coreValues.MKT_SOURCE_NOTE.trim() === "")) ||
+    !validFacts(value.facts, object.facts)
   ) {
     return undefined;
   }
   return {
     productCode,
-    objectTypeCode: value.objectTypeCode,
-    regionCode: value.regionCode,
-    tradeDate: value.tradeDate,
-    direction,
-    purchaseBasePrice,
-    saleBasePrice,
-    carriageBoardAmount,
-    packagingAmount,
-    freightAmount,
-    packagingForm: value.packagingForm,
-    facts: value.facts,
+    coreValues: Object.fromEntries(
+      Object.entries(coreValues).map(([code, entry]) => [
+        code,
+        entry === undefined ? null : (entry as string | null),
+      ]),
+    ),
+    facts: value.facts as Record<string, string>,
   };
 }
 
@@ -724,61 +702,106 @@ function validCommand(value: unknown, action: "submit" | "approve" | "return") {
   };
 }
 
+function serverDraft(draft: FixtureDraft, reportedAt: string): FixtureDraft {
+  const coreValues = { ...draft.coreValues };
+  for (const code of [
+    "MKT_PURCHASE_BASE_PRICE",
+    "MKT_SALE_BASE_PRICE",
+    ...amountCodes,
+  ]) {
+    const value = coreValues[code];
+    if (value) coreValues[code] = formatUnits(decimalUnits(value)!);
+  }
+  coreValues.MKT_REPORTED_AT = reportedAt;
+  coreValues.MKT_ACTUAL_TRADE_PRICE = actualPrice(draft);
+  return {
+    productCode: draft.productCode,
+    coreValues,
+    facts: Object.fromEntries(
+      Object.entries(draft.facts).map(([code, value]) => [
+        code,
+        formatUnits(decimalUnits(value)!),
+      ]),
+    ),
+  };
+}
+
 function validFacts(
-  value: unknown,
-  productCode: MarketProductCode,
-): value is Record<string, string> {
-  if (!plainObject(value)) return false;
-  const allowed = new Set([
-    marketProducts[productCode].qualityCode,
-    "PURCHASE_VOLUME",
-    "PROCESSING_VOLUME",
-    "INVENTORY_VOLUME",
-  ]);
+  value: Record<string, unknown>,
+  applicable: readonly MarketFactCode[],
+) {
+  const allowed = new Set<string>(applicable);
   return Object.entries(value).every(
-    ([key, fact]) => allowed.has(key) && decimal(fact) !== undefined,
+    ([code, factValue]) => allowed.has(code) && decimal(factValue) !== undefined,
   );
 }
 
 function actualPrice(draft: FixtureDraft) {
+  const direction = draft.coreValues.MKT_TRADE_DIRECTION;
   const base =
-    draft.direction === "PURCHASE" ? draft.purchaseBasePrice! : draft.saleBasePrice!;
-  const total = [
-    base,
-    draft.carriageBoardAmount,
-    draft.packagingAmount,
-    draft.freightAmount,
-  ].reduce((sum, value) => sum + decimalUnits(value), 0n);
-  return `${total / 10_000n}.${String(total % 10_000n).padStart(4, "0")}`;
+    direction === "PURCHASE"
+      ? draft.coreValues.MKT_PURCHASE_BASE_PRICE
+      : draft.coreValues.MKT_SALE_BASE_PRICE;
+  const values = [base, ...amountCodes.map((code) => draft.coreValues[code])];
+  let total = 0n;
+  for (const value of values) total += decimalUnits(value)!;
+  return formatUnits(total);
 }
 
-function decimalUnits(value: string) {
-  const [whole, fraction = ""] = value.split(".");
-  return BigInt(whole!) * 10_000n + BigInt(fraction.padEnd(4, "0"));
+function decimalUnits(value: unknown) {
+  if (typeof value !== "string" || !/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(value)) {
+    return undefined;
+  }
+  const [whole = "0", fraction = ""] = value.split(".");
+  const padded = fraction.padEnd(5, "0");
+  let units = BigInt(whole || "0") * 10_000n + BigInt(padded.slice(0, 4));
+  if (padded.charAt(4) >= "5") units += 1n;
+  return units <= 999_999_999_999_999_999n ? units : undefined;
+}
+
+function formatUnits(units: bigint) {
+  return `${units / 10_000n}.${String(units % 10_000n).padStart(4, "0")}`;
 }
 
 function nullableDecimal(value: unknown): string | null | undefined {
-  if (value === null) return null;
+  if (value === null || value === undefined) return null;
   return decimal(value);
 }
 
 function decimal(value: unknown): string | undefined {
-  return typeof value === "string" && /^(0|[1-9]\d*)(\.\d{1,4})?$/.test(value)
-    ? value
-    : undefined;
+  return decimalUnits(value) === undefined ? undefined : (value as string);
 }
 
-function exactKeys(value: Record<string, unknown>, expected: Set<string>) {
-  const keys = Object.keys(value);
-  return keys.length === expected.size && keys.every((key) => expected.has(key));
+function factGroup(
+  category: "QUALITY" | "PURCHASE" | "SALES" | "PROCESSING" | "INVENTORY",
+  label: string,
+  sortOrder: number,
+  applicable: readonly MarketFactCode[],
+) {
+  return {
+    category,
+    label,
+    sortOrder,
+    fields: applicable
+      .filter((code) => marketFactDefinitions[code].category === category)
+      .map((code) => factField(code, marketFactDefinitions[code])),
+  };
 }
 
-function plainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function stringValue(value: unknown) {
-  return typeof value === "string" ? value : null;
+function factField(
+  code: MarketFactCode,
+  definition: (typeof marketFactDefinitions)[MarketFactCode],
+) {
+  return {
+    code,
+    label: definition.label,
+    valueType: "DECIMAL",
+    unit: definition.unit,
+    description: null,
+    precision: 18,
+    scale: definition.category === "QUALITY" ? 1 : 4,
+    sortOrder: definition.sortOrder,
+  };
 }
 
 function field(
@@ -794,6 +817,8 @@ function core(
   code: string,
   label: string,
   controlType: string,
+  capability: string,
+  required: boolean,
   options: { value: string; label: string; sortOrder: number }[] = [],
   description: string | null = null,
 ) {
@@ -801,6 +826,8 @@ function core(
     code,
     label,
     controlType,
+    capability,
+    required,
     unit: controlType.includes("DECIMAL") ? "元/吨" : null,
     description,
     precision: controlType.includes("DECIMAL") ? 18 : null,
@@ -810,38 +837,41 @@ function core(
   };
 }
 
-function group(
-  category: string,
-  label: string,
-  code: string,
-  fieldLabel: string,
-  sortOrder: number,
-) {
-  return {
-    category,
-    label,
-    sortOrder,
-    fields: [
-      {
-        code,
-        label: fieldLabel,
-        valueType: "DECIMAL",
-        unit: "吨",
-        description: null,
-        precision: 18,
-        scale: 4,
-        sortOrder: 10,
-      },
-    ],
-  };
+function objectEntries(productCode: MarketProductCode) {
+  return Object.entries(marketProducts[productCode].objects) as [
+    string,
+    { label: string; facts: readonly MarketFactCode[] },
+  ][];
 }
 
-function objectLabel(code: string) {
-  return code === "RICE_MILL"
-    ? "米厂"
-    : code === "DEEP_PROCESSOR"
-      ? "深加工企业"
-      : code;
+function objectContract(productCode: MarketProductCode, objectTypeCode: string) {
+  return Object.fromEntries(objectEntries(productCode))[objectTypeCode];
+}
+
+function allowedActions(status: MarketRecordStatus) {
+  if (status === "DRAFT" || status === "RETURNED") return ["VIEW", "SAVE", "SUBMIT"];
+  if (status === "PENDING_REVIEW") return ["VIEW", "APPROVE", "RETURN"];
+  return ["VIEW"];
+}
+
+function statusLabel(status: MarketRecordStatus) {
+  if (status === "DRAFT") return "草稿";
+  if (status === "PENDING_REVIEW") return "待审核";
+  if (status === "RETURNED") return "已退回";
+  return "已审核";
+}
+
+function exactKeys(value: Record<string, unknown>, expected: Set<string>) {
+  const keys = Object.keys(value);
+  return keys.length === expected.size && keys.every((key) => expected.has(key));
+}
+
+function plainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" ? value : null;
 }
 
 function product(value: string | null): MarketProductCode {

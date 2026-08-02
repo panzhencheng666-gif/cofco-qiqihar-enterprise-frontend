@@ -19,10 +19,30 @@ export interface MarketFieldOption {
   sortOrder: number;
 }
 
+export type MarketCoreControlType =
+  | "SELECT"
+  | "REGION_HIERARCHY"
+  | "DATE"
+  | "DECIMAL"
+  | "TEXT"
+  | "READONLY_DECIMAL"
+  | "READONLY_DATETIME";
+
+export type MarketCoreCapability =
+  | "GENERIC"
+  | "OBJECT_TYPE_CONTEXT"
+  | "PRICE_DIRECTION"
+  | "PURCHASE_BASE_PRICE"
+  | "SALE_BASE_PRICE"
+  | "PRICE_COMPONENT"
+  | "ACTUAL_TRADE_PRICE";
+
 export interface MarketCoreField {
   code: string;
   label: string;
-  controlType: string;
+  controlType: MarketCoreControlType;
+  capability: MarketCoreCapability;
+  required: boolean;
   unit: string | null;
   description?: string | null;
   precision: number | null;
@@ -56,72 +76,46 @@ export interface MarketFormDefinition {
 
 export interface MarketDraft {
   productCode: string;
-  objectTypeCode: string;
-  regionCode: string;
-  tradeDate: string;
-  direction: string;
-  purchaseBasePrice: string | null;
-  saleBasePrice: string | null;
-  carriageBoardAmount: string;
-  packagingAmount: string;
-  freightAmount: string;
-  packagingForm: string | null;
+  coreValues: Readonly<Record<string, string | null>>;
   facts: Readonly<Record<string, string>>;
 }
 
 export interface MarketRecordDetail extends MarketDraft {
   id: string;
-  reportedAt: string;
-  actualTradePrice: string;
   status: string;
   returnReason: string | null;
   allowedActions: readonly string[];
   version: number;
 }
 
-export type MarketDraftCoreField = Exclude<keyof MarketDraft, "productCode" | "facts">;
-export type MarketDisplayCoreField =
-  MarketDraftCoreField | "actualTradePrice" | "reportedAt";
-
-const draftFields: Readonly<Record<string, MarketDisplayCoreField>> = {
-  MKT_OBJECT_TYPE: "objectTypeCode",
-  MKT_REGION: "regionCode",
-  MKT_TRADE_DATE: "tradeDate",
-  MKT_REPORTED_AT: "reportedAt",
-  MKT_TRADE_DIRECTION: "direction",
-  MKT_PURCHASE_BASE_PRICE: "purchaseBasePrice",
-  MKT_SALE_BASE_PRICE: "saleBasePrice",
-  MKT_CARRIAGE_BOARD_AMOUNT: "carriageBoardAmount",
-  MKT_PACKAGING_FORM: "packagingForm",
-  MKT_PACKAGING_AMOUNT: "packagingAmount",
-  MKT_FREIGHT_AMOUNT: "freightAmount",
-  MKT_ACTUAL_TRADE_PRICE: "actualTradePrice",
-};
 const maximumMarketAmountUnits = 999_999_999_999_999_999n;
 
-export const marketCoreFieldCodes = new Set(Object.keys(draftFields));
+/** Mirrors MarketPricing: every submitted amount is HALF_UP rounded to scale 4 first. */
+export function calculateMarketActualPrice(
+  coreValues: Readonly<Record<string, string | null>>,
+  fields: readonly MarketCoreField[],
+): string {
+  const directionField = singleCapability(fields, "PRICE_DIRECTION");
+  const purchaseField = singleCapability(fields, "PURCHASE_BASE_PRICE");
+  const saleField = singleCapability(fields, "SALE_BASE_PRICE");
+  if (!directionField || !purchaseField || !saleField) return "";
 
-export function marketDraftField(code: string) {
-  const field = draftFields[code];
-  if (!field) throw new Error(`Unsupported market core field: ${code}`);
-  return field;
-}
+  const direction = coreValues[directionField.code];
+  const baseField =
+    direction === "PURCHASE"
+      ? purchaseField
+      : direction === "SALE"
+        ? saleField
+        : undefined;
+  if (!baseField) return "";
 
-export function calculateMarketActualPrice(draft: MarketDraft): string {
-  const base =
-    draft.direction === "PURCHASE"
-      ? draft.purchaseBasePrice
-      : draft.direction === "SALE"
-        ? draft.saleBasePrice
-        : null;
-  const amounts = [
-    base,
-    draft.carriageBoardAmount,
-    draft.packagingAmount,
-    draft.freightAmount,
-  ].map(decimalUnits);
+  const amountFields = [
+    baseField,
+    ...fields.filter((field) => field.capability === "PRICE_COMPONENT"),
+  ];
   let total = 0n;
-  for (const amount of amounts) {
+  for (const field of amountFields) {
+    const amount = decimalUnits(coreValues[field.code]);
     if (amount === undefined) return "";
     total += amount;
     if (total > maximumMarketAmountUnits) return "";
@@ -129,12 +123,30 @@ export function calculateMarketActualPrice(draft: MarketDraft): string {
   return formatUnits(total);
 }
 
-function decimalUnits(value: string | null): bigint | undefined {
-  if (value === null || !/^(?:\d+(?:\.\d{0,4})?|\.\d{1,4})$/.test(value)) {
+export function objectTypeField(definition: MarketFormDefinition) {
+  return singleCapability(definition.coreFields, "OBJECT_TYPE_CONTEXT");
+}
+
+function singleCapability(
+  fields: readonly MarketCoreField[],
+  capability: MarketCoreCapability,
+) {
+  const matching = fields.filter((field) => field.capability === capability);
+  return matching.length === 1 ? matching[0] : undefined;
+}
+
+function decimalUnits(value: string | null | undefined): bigint | undefined {
+  if (
+    value === null ||
+    value === undefined ||
+    !/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(value)
+  ) {
     return undefined;
   }
   const [whole = "0", fraction = ""] = value.split(".");
-  const units = BigInt(whole || "0") * 10_000n + BigInt(fraction.padEnd(4, "0"));
+  const padded = fraction.padEnd(5, "0");
+  let units = BigInt(whole || "0") * 10_000n + BigInt(padded.slice(0, 4));
+  if (padded.charAt(4) >= "5") units += 1n;
   return units <= maximumMarketAmountUnits ? units : undefined;
 }
 

@@ -34,6 +34,7 @@ for (const productCode of products) {
       "车板费用",
       "包装费用",
       "运费",
+      "来源说明",
       product.qualityLabel,
     ]) {
       await expect(
@@ -66,7 +67,7 @@ for (const productCode of products) {
     const dialog = page.getByRole("dialog", { name: "新建市场填报" });
     await dialog
       .getByRole("combobox", { name: "监测对象" })
-      .selectOption(product.objectType);
+      .selectOption(product.defaultObject);
     await expect(dialog.getByRole("group", { name: "质量指标" })).toBeVisible();
     await expect(dialog.getByRole("group", { name: "采购与成交" })).toBeVisible();
     await expect(
@@ -90,18 +91,58 @@ for (const productCode of products) {
     const main = await page.locator(".enterprise-main").boundingBox();
     const query = await page.locator(".enterprise-query-bar").boundingBox();
     const ledger = page.locator(".ledger-scroll");
+    const footer = page.locator(".ledger-footer");
+    const tableHeader = page.locator(".ledger-scroll thead");
+    const firstRow = page.locator(".ledger-scroll tbody tr").first();
     expect(header).not.toBeNull();
     expect(sidebar).not.toBeNull();
     expect(main).not.toBeNull();
     expect(query).not.toBeNull();
+    const ledgerBox = await ledger.boundingBox();
+    const footerBox = await footer.boundingBox();
+    const tableHeaderBox = await tableHeader.boundingBox();
+    const firstRowBox = await firstRow.boundingBox();
+    expect(ledgerBox).not.toBeNull();
+    expect(footerBox).not.toBeNull();
+    expect(tableHeaderBox).not.toBeNull();
+    expect(firstRowBox).not.toBeNull();
     expect(sidebar!.width).toBe(230);
     expect(main!.x).toBeGreaterThanOrEqual(sidebar!.x + sidebar!.width - 1);
     expect(main!.y).toBeGreaterThanOrEqual(header!.y + header!.height - 1);
     expect(query!.height).toBeLessThan(120);
-    expect(await ledger.evaluate((node) => node.scrollWidth > node.clientWidth)).toBe(
-      true,
+    expect(ledgerBox!.y + ledgerBox!.height).toBeLessThanOrEqual(footerBox!.y + 1);
+    expect(tableHeaderBox!.y + tableHeaderBox!.height).toBeLessThanOrEqual(
+      firstRowBox!.y + 1,
     );
-    await expect(page.locator(".ledger-footer")).toBeVisible();
+    const rowActions = [
+      page.getByRole("button", { name: "查看", exact: true }),
+      page.getByRole("button", { name: "提交", exact: true }),
+    ];
+    const actionBoxes = await Promise.all(
+      rowActions.map((action) => action.boundingBox()),
+    );
+    expect(actionBoxes.every((box) => box !== null)).toBe(true);
+    expect(actionBoxes[0]!.x + actionBoxes[0]!.width).toBeLessThanOrEqual(
+      actionBoxes[1]!.x,
+    );
+    const horizontal = await ledger.evaluate((node) => {
+      node.scrollLeft = node.scrollWidth;
+      return {
+        clientWidth: node.clientWidth,
+        scrollLeft: node.scrollLeft,
+        scrollWidth: node.scrollWidth,
+      };
+    });
+    expect(horizontal.scrollWidth).toBeGreaterThan(horizontal.clientWidth);
+    expect(horizontal.scrollLeft).toBeGreaterThan(0);
+    await expect(
+      page.getByRole("columnheader", { name: product.qualityLabel, exact: true }),
+    ).toBeVisible();
+    await expect(footer).toBeVisible();
+    await page.getByRole("button", { name: "下一页" }).click();
+    await expect(page).toHaveURL(/pageNumber=1/);
+    await page.getByRole("button", { name: "上一页" }).click();
+    await expect(page).toHaveURL(/pageNumber=0/);
     expect(api.unexpectedRequests).toEqual([]);
   });
 }
@@ -148,17 +189,31 @@ test("market writes follow the real draft, review, return, and approval workflow
   await expect(editor).toBeHidden();
   await page.getByRole("button", { name: "提交", exact: true }).click();
   await expect(page.getByText("待审核", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "审核通过", exact: true }).click();
-  await expect(page.getByText("已审核", { exact: true })).toBeVisible();
 
-  const staleStatus = await page.evaluate(async () =>
-    fetch("/api/v1/market-records/CORN-record/approve", {
+  const staleResult = await page.evaluate(async () => {
+    const read = async () => {
+      const response = await fetch("/api/v1/market-records/CORN-record");
+      const body: unknown = await response.json();
+      if (typeof body !== "object" || body === null || !("data" in body)) {
+        throw new Error("Missing market detail data");
+      }
+      return body.data as { status: string; version: number; facts: unknown };
+    };
+    const before = await read();
+    const status = await fetch("/api/v1/market-records/CORN-record/approve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ version: 12 }),
-    }).then((response) => response.status),
-  );
-  expect(staleStatus).toBe(409);
+      body: JSON.stringify({ version: before.version - 1 }),
+    }).then((response) => response.status);
+    const after = await read();
+    return { after, before, status };
+  });
+  expect(staleResult.before.status).toBe("PENDING_REVIEW");
+  expect(staleResult.before.version).toBe(12);
+  expect(staleResult.status).toBe(409);
+  expect(staleResult.after).toEqual(staleResult.before);
+
+  await page.getByRole("button", { name: "审核通过", exact: true }).click();
   await expect(page.getByText("已审核", { exact: true })).toBeVisible();
 
   await market.openNew();
@@ -178,6 +233,7 @@ test("market writes follow the real draft, review, return, and approval workflow
   await createEditor.getByRole("combobox", { name: "包装形式" }).selectOption("BULK");
   await createEditor.getByRole("textbox", { name: "包装费用" }).fill("10");
   await createEditor.getByRole("textbox", { name: "运费" }).fill("50");
+  await createEditor.getByRole("textbox", { name: "来源说明" }).fill("新粮采购");
   await createEditor.getByRole("textbox", { name: "水分" }).fill("14.5");
   await createEditor.getByRole("textbox", { name: "采购量" }).fill("120");
   await expect(createEditor.getByRole("textbox", { name: "实际成交价" })).toHaveValue(
@@ -186,6 +242,7 @@ test("market writes follow the real draft, review, return, and approval workflow
   await createEditor.getByRole("button", { name: "保存草稿", exact: true }).click();
   await expect(createEditor).toBeHidden();
   await expect(page.getByText("2090.0000", { exact: true })).toBeVisible();
+  await expect(page.getByText("新粮采购", { exact: true })).toBeVisible();
   expect(api.recordCount("CORN")).toBe(2);
 
   const beforeRejectedCreate = api.recordCount("CORN");
@@ -197,6 +254,38 @@ test("market writes follow the real draft, review, return, and approval workflow
     }).then((response) => response.status),
   );
   expect(invalidStatus).toBe(400);
+  expect(api.recordCount("CORN")).toBe(beforeRejectedCreate);
+
+  const pseudocodeStatuses = await page.evaluate(async () => {
+    const legacyFact = ["CORN", "MOISTURE"].join("_");
+    const legacyObject = ["BREEDING", "ENTERPRISE"].join("_");
+    const coreValues = {
+      MKT_OBJECT_TYPE: "DEEP_PROCESSOR",
+      MKT_REGION: "230200",
+      MKT_TRADE_DATE: "2026-08-03",
+      MKT_TRADE_DIRECTION: "PURCHASE",
+      MKT_PURCHASE_BASE_PRICE: "2000",
+      MKT_CARRIAGE_BOARD_AMOUNT: "30",
+      MKT_PACKAGING_FORM: "BULK",
+      MKT_PACKAGING_AMOUNT: "10",
+      MKT_FREIGHT_AMOUNT: "50",
+    };
+    const request = (body: unknown) =>
+      fetch("/api/v1/market-records", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }).then((response) => response.status);
+    return Promise.all([
+      request({ productCode: "CORN", coreValues, facts: { [legacyFact]: "1" } }),
+      request({
+        productCode: "CORN",
+        coreValues: { ...coreValues, MKT_OBJECT_TYPE: legacyObject },
+        facts: { MOISTURE: "1" },
+      }),
+    ]);
+  });
+  expect(pseudocodeStatuses).toEqual([400, 400]);
   expect(api.recordCount("CORN")).toBe(beforeRejectedCreate);
   expect(
     api.writes

@@ -1,10 +1,8 @@
 import type { MarketEditorSession } from "../hooks/useMarketCommands";
 import {
   calculateMarketActualPrice,
-  marketDraftField,
   type MarketCoreField,
   type MarketDraft,
-  type MarketDraftCoreField,
 } from "../../domain/marketCollection";
 import type {
   LoadRegionChildren,
@@ -36,8 +34,11 @@ export function MarketRecordEditor({
   onSave: () => void;
 }) {
   const editable = editor.id === undefined || editor.allowedActions.includes("SAVE");
-  const change = (key: MarketDraftCoreField, value: string | null) =>
-    onChange({ ...editor.draft, [key]: value });
+  const change = (code: string, value: string | null) =>
+    onChange({
+      ...editor.draft,
+      coreValues: { ...editor.draft.coreValues, [code]: value },
+    });
   return (
     <div
       aria-labelledby="market-editor-title"
@@ -52,8 +53,8 @@ export function MarketRecordEditor({
           <CoreField
             definition={field}
             draft={editor.draft}
-            actualTradePrice={editor.actualTradePrice}
-            reportedAt={editor.reportedAt}
+            coreFields={editor.definition.coreFields}
+            readonlyValues={editor.readonlyValues}
             key={field.code}
             loadRegionChildren={loadRegionChildren}
             loadRegionPath={loadRegionPath}
@@ -102,8 +103,8 @@ export function MarketRecordEditor({
 }
 
 function CoreField({
-  actualTradePrice,
-  reportedAt,
+  coreFields,
+  readonlyValues,
   definition,
   draft,
   loadRegionChildren,
@@ -111,46 +112,50 @@ function CoreField({
   onChange,
   onObjectTypeChange,
 }: {
-  actualTradePrice: string;
-  reportedAt: string;
+  coreFields: MarketEditorSession["definition"]["coreFields"];
+  readonlyValues: MarketEditorSession["readonlyValues"];
   definition: MarketCoreField;
   draft: MarketDraft;
   loadRegionChildren: LoadRegionChildren;
   loadRegionPath: LoadRegionPath;
-  onChange: (key: MarketDraftCoreField, value: string | null) => void;
+  onChange: (code: string, value: string | null) => void;
   onObjectTypeChange: (value: string) => void;
 }) {
-  const field = marketDraftField(definition.code);
-  if (field === "actualTradePrice") {
+  const value =
+    (definition.controlType.startsWith("READONLY_")
+      ? readonlyValues[definition.code]
+      : draft.coreValues[definition.code]) ?? "";
+  if (definition.capability === "ACTUAL_TRADE_PRICE") {
     return (
       <label>
         {fieldLabel(definition)}
         <input
           aria-label={definition.label}
           readOnly
-          value={calculateMarketActualPrice(draft) || actualTradePrice}
+          value={calculateMarketActualPrice(draft.coreValues, coreFields)}
         />
         {definition.description && <small>{definition.description}</small>}
       </label>
     );
   }
-  if (field === "reportedAt") {
+  if (definition.controlType === "READONLY_DATETIME") {
     return (
       <label>
         {fieldLabel(definition)}
-        <input aria-label={definition.label} readOnly value={reportedAt} />
+        <input aria-label={definition.label} readOnly value={value} />
         {definition.description && <small>{definition.description}</small>}
       </label>
     );
   }
-  if (field === "objectTypeCode") {
+  if (definition.capability === "OBJECT_TYPE_CONTEXT") {
     return (
       <label>
         {fieldLabel(definition)}
         <select
           aria-label={definition.label}
           onChange={(event) => onObjectTypeChange(event.target.value)}
-          value={draft.objectTypeCode}
+          required={definition.required}
+          value={value}
         >
           <option value="">—</option>
           {definition.options.map((option) => (
@@ -163,16 +168,16 @@ function CoreField({
       </label>
     );
   }
-  if (field === "regionCode") {
+  if (definition.controlType === "REGION_HIERARCHY") {
     return (
       <div>
         <RegionHierarchyFilter
           label={definition.label}
           loadChildren={loadRegionChildren}
           loadPath={loadRegionPath}
-          onChange={(value) => onChange(field, value)}
+          onChange={(next) => onChange(definition.code, next)}
           placeholder={definition.label}
-          value={draft.regionCode}
+          value={value}
         />
         {definition.description && <small>{definition.description}</small>}
       </div>
@@ -184,8 +189,9 @@ function CoreField({
         {fieldLabel(definition)}
         <select
           aria-label={definition.label}
-          onChange={(event) => onChange(field, event.target.value || null)}
-          value={String(draft[field] ?? "")}
+          onChange={(event) => onChange(definition.code, event.target.value || null)}
+          required={definition.required}
+          value={value}
         >
           <option value="">—</option>
           {definition.options.map((option) => (
@@ -204,9 +210,11 @@ function CoreField({
       <input
         aria-label={definition.label}
         inputMode={definition.controlType === "DECIMAL" ? "decimal" : undefined}
-        onChange={(event) => onChange(field, event.target.value)}
+        onChange={(event) => onChange(definition.code, event.target.value)}
+        readOnly={definition.controlType === "READONLY_DECIMAL"}
+        required={definition.required}
         type={definition.controlType === "DATE" ? "date" : "text"}
-        value={String(draft[field] ?? "")}
+        value={value}
       />
       {definition.description && <small>{definition.description}</small>}
     </label>

@@ -85,7 +85,7 @@ describe("HttpMarketCollectionRepository canonical paging contract", () => {
     expect(result.totalPages).toBe(11);
   });
 
-  it("fails closed with a typed definition error for an unknown server core field", async () => {
+  it("accepts a database-defined supported core field without a frontend code enum", async () => {
     const http: HttpClient = {
       get: (_path, schema) =>
         Promise.resolve(
@@ -95,9 +95,11 @@ describe("HttpMarketCollectionRepository canonical paging contract", () => {
               objectTypeCode: null,
               coreFields: [
                 {
-                  code: "MKT_FUTURE_UNKNOWN",
-                  label: "未知字段",
+                  code: "MKT_SOURCE_NOTE",
+                  label: "来源说明",
                   controlType: "TEXT",
+                  capability: "GENERIC",
+                  required: false,
                   unit: null,
                   precision: null,
                   scale: null,
@@ -113,10 +115,53 @@ describe("HttpMarketCollectionRepository canonical paging contract", () => {
 
     await expect(
       new HttpMarketCollectionRepository(http).definition("CORN"),
-    ).rejects.toEqual(
-      expect.objectContaining<Partial<MarketRepositoryFailure>>({
-        kind: "DEFINITION",
+    ).resolves.toEqual(
+      expect.objectContaining({
+        coreFields: [expect.objectContaining({ code: "MKT_SOURCE_NOTE" })],
       }),
     );
   });
+
+  it.each([
+    ["MARKDOWN", "GENERIC"],
+    ["TEXT", "SERVER_ONLY_MAGIC"],
+  ])(
+    "fails closed for unsupported %s / %s definition semantics",
+    async (controlType, capability) => {
+      const http: HttpClient = {
+        get: (_path, schema) =>
+          Promise.resolve(
+            schema.parse({
+              data: {
+                productCode: "CORN",
+                objectTypeCode: null,
+                coreFields: [
+                  {
+                    code: "DB_FUTURE_FIELD",
+                    label: "未来字段",
+                    controlType,
+                    capability,
+                    required: false,
+                    unit: null,
+                    precision: null,
+                    scale: null,
+                    sortOrder: 10,
+                    options: [],
+                  },
+                ],
+                groups: [],
+              },
+            }),
+          ),
+      };
+
+      await expect(
+        new HttpMarketCollectionRepository(http).definition("CORN"),
+      ).rejects.toEqual(
+        expect.objectContaining<Partial<MarketRepositoryFailure>>({
+          kind: "DEFINITION",
+        }),
+      );
+    },
+  );
 });

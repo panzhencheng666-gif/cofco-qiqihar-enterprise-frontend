@@ -14,7 +14,6 @@ import type {
   MarketCollectionCriteria,
   MarketDraft,
 } from "../../domain/marketCollection";
-import { marketCoreFieldCodes } from "../../domain/marketCollection";
 
 const listRecordSchema = z.object({
   id: z.string(),
@@ -34,18 +33,7 @@ const pageSchema = z.object({
 const detailRecordSchema = z.object({
   id: z.string(),
   productCode: z.string(),
-  objectTypeCode: z.string(),
-  regionCode: z.string(),
-  tradeDate: z.string(),
-  reportedAt: z.string(),
-  direction: z.string(),
-  purchaseBasePrice: z.string().nullable(),
-  saleBasePrice: z.string().nullable(),
-  carriageBoardAmount: z.string(),
-  packagingAmount: z.string(),
-  freightAmount: z.string(),
-  packagingForm: z.string().nullable(),
-  actualTradePrice: z.string(),
+  coreValues: z.record(z.string(), z.string().nullable()),
   status: z.string(),
   returnReason: z.string().nullable(),
   facts: z.record(z.string(), z.string()),
@@ -58,15 +46,35 @@ const optionSchema = z.object({
   label: z.string(),
   sortOrder: z.number().int(),
 });
+const coreControlSchema = z.enum([
+  "SELECT",
+  "REGION_HIERARCHY",
+  "DATE",
+  "DECIMAL",
+  "TEXT",
+  "READONLY_DECIMAL",
+  "READONLY_DATETIME",
+]);
+const coreCapabilitySchema = z.enum([
+  "GENERIC",
+  "OBJECT_TYPE_CONTEXT",
+  "PRICE_DIRECTION",
+  "PURCHASE_BASE_PRICE",
+  "SALE_BASE_PRICE",
+  "PRICE_COMPONENT",
+  "ACTUAL_TRADE_PRICE",
+]);
 const definitionSchema = z.object({
   data: z.object({
     productCode: z.string(),
     objectTypeCode: z.string().nullable(),
     coreFields: z.array(
       z.object({
-        code: z.string().refine((code) => marketCoreFieldCodes.has(code)),
+        code: z.string().min(1),
         label: z.string(),
-        controlType: z.string(),
+        controlType: coreControlSchema,
+        capability: coreCapabilitySchema,
+        required: z.boolean(),
         unit: z.string().nullable(),
         description: z.string().nullable().default(null),
         precision: z.number().int().positive().nullable(),
