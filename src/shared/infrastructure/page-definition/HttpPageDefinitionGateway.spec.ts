@@ -37,4 +37,37 @@ describe("HttpPageDefinitionGateway", () => {
     ]);
     expect(definition.key.productCode).toBe("SOYBEAN");
   });
+
+  it("omits the product query for a genuinely product-independent page", async () => {
+    const paths: string[] = [];
+    const http: HttpClient = {
+      get: (path, schema) => {
+        paths.push(path);
+        return Promise.resolve(
+          schema.parse({
+            data: {
+              domain: "WORKFLOW",
+              pageKind: "WORK_ITEMS",
+              productCode: null,
+              title: "任务列表",
+              breadcrumbs: [],
+              filters: [],
+              defaultContext: {},
+              columnGroups: [],
+              actions: [],
+              pagination: { defaultPageSize: 20, pageSizeOptions: [20] },
+            },
+          }),
+        );
+      },
+    };
+
+    const definition = await new HttpPageDefinitionGateway(http).getDefinition({
+      domain: "WORKFLOW",
+      pageKind: "WORK_ITEMS",
+    });
+
+    expect(paths).toEqual(["/api/v1/page-definitions/WORKFLOW/WORK_ITEMS"]);
+    expect(definition.key).not.toHaveProperty("productCode");
+  });
 });

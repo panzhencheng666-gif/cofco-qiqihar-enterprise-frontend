@@ -25,10 +25,14 @@ const regionHierarchyListSchema = z.object({
 export class HttpMasterDataRepository implements MasterDataRepository {
   constructor(private readonly http: HttpClient) {}
 
-  async getProducts(domain: string, pageKind: string) {
+  async getProducts(domain?: string, pageKind?: string) {
+    const applicability =
+      domain === undefined && pageKind === undefined
+        ? ""
+        : `?domain=${encodeURIComponent(domain ?? "")}&pageKind=${encodeURIComponent(pageKind ?? "")}`;
     return (
       await this.http.get(
-        `/api/v1/master-data/products?domain=${encodeURIComponent(domain)}&pageKind=${encodeURIComponent(pageKind)}`,
+        `/api/v1/master-data/products${applicability}`,
         optionListSchema,
       )
     ).data;

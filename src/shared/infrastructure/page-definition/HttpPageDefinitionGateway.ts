@@ -11,7 +11,7 @@ const definitionSchema = z.object({
   data: z.object({
     domain: z.string(),
     pageKind: z.string(),
-    productCode: z.string(),
+    productCode: z.string().nullable().optional(),
     title: z.string(),
     breadcrumbs: z.array(z.object({ code: z.string(), label: z.string() })),
     filters: z.array(
@@ -58,7 +58,7 @@ export class HttpPageDefinitionGateway implements PageDefinitionGateway {
 
   async getDefinition(key: BusinessPageKey): Promise<ListPageDefinition> {
     const response = await this.http.get(
-      `/api/v1/page-definitions/${encodeURIComponent(key.domain)}/${encodeURIComponent(key.pageKind)}?productCode=${encodeURIComponent(key.productCode)}`,
+      `/api/v1/page-definitions/${encodeURIComponent(key.domain)}/${encodeURIComponent(key.pageKind)}${key.productCode === undefined ? "" : `?productCode=${encodeURIComponent(key.productCode)}`}`,
       definitionSchema,
     );
     const definition = response.data;
@@ -67,7 +67,9 @@ export class HttpPageDefinitionGateway implements PageDefinitionGateway {
       key: {
         domain: definition.domain,
         pageKind: definition.pageKind,
-        productCode: definition.productCode,
+        ...(definition.productCode == null
+          ? {}
+          : { productCode: definition.productCode }),
       },
       title: definition.title,
       breadcrumbs: definition.breadcrumbs.map((item) => ({

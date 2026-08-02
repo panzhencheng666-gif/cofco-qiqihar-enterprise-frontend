@@ -43,6 +43,7 @@ export function MarketCollectionPage({
   routeQuery?: RouteQuery;
   search?: SearchList;
 }) {
+  const productCode = requiredProductCode(pageKey);
   const [definition, setDefinition] = useState<ListPageDefinition>();
   const [query, setQuery] = useState<ListQueryState>();
   const [result, setResult] = useState<PagedResult>();
@@ -64,7 +65,7 @@ export function MarketCollectionPage({
           nextResult = await search(nextQuery);
         } else if (marketCollectionRepository) {
           nextResult = await marketCollectionRepository.search({
-            productCode: pageKey.productCode,
+            productCode,
             pageKind: pageKey.pageKind,
             pageNumber: nextQuery.pageNumber,
             pageSize: nextQuery.pageSize,
@@ -80,7 +81,7 @@ export function MarketCollectionPage({
             nextResult = await search(normalizedQuery);
           } else if (marketCollectionRepository) {
             nextResult = await marketCollectionRepository.search({
-              productCode: pageKey.productCode,
+              productCode,
               pageKind: pageKey.pageKind,
               pageNumber: normalizedQuery.pageNumber,
               pageSize: normalizedQuery.pageSize,
@@ -105,7 +106,7 @@ export function MarketCollectionPage({
       marketCollectionRepository,
       onQueryNormalized,
       pageKey.pageKind,
-      pageKey.productCode,
+      productCode,
       search,
     ],
   );
@@ -223,6 +224,13 @@ function samePageKey(left: BusinessPageKey, right: BusinessPageKey) {
     left.pageKind === right.pageKind &&
     left.productCode === right.productCode
   );
+}
+
+function requiredProductCode(key: BusinessPageKey) {
+  if (key.productCode === undefined) {
+    throw new Error("Market page requires a real product context");
+  }
+  return key.productCode;
 }
 
 function normalizeRouteQuery(

@@ -413,6 +413,19 @@ select:focus-visible {
   color: var(--muted);
 }
 
+.work-status-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.work-status-tabs button[aria-pressed="true"] {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
 .ledger-toolbar,
 .ledger-footer {
   min-height: 46px;

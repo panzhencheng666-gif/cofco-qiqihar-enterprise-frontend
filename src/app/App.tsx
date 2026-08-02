@@ -6,6 +6,10 @@ import { HttpMarketCollectionRepository } from "../modules/market-monitoring/inf
 import type { MasterDataRepository } from "../modules/master-data/application/ports/MasterDataRepository";
 import { HttpMasterDataRepository } from "../modules/master-data/infrastructure/http/HttpMasterDataRepository";
 import { MarketCollectionPage } from "../modules/market-monitoring/ui/pages/MarketCollectionPage";
+import type { WorkItemRepository } from "../modules/work-management/application/ports/WorkItemRepository";
+import { HttpWorkItemRepository } from "../modules/work-management/infrastructure/http/HttpWorkItemRepository";
+import { WorkItemsPage } from "../modules/work-management/ui/pages/WorkItemsPage";
+import type { WorkItemScope } from "../modules/work-management/domain/workItem";
 import type {
   BusinessPageKey,
   ListQueryState,
@@ -18,26 +22,35 @@ const httpClient = new FetchHttpClient();
 const masterDataRepository = new HttpMasterDataRepository(httpClient);
 const pageDefinitionGateway = new HttpPageDefinitionGateway(httpClient);
 const marketCollectionRepository = new HttpMarketCollectionRepository(httpClient);
+const workItemRepository = new HttpWorkItemRepository(httpClient);
 
 export interface AppDependencies {
   masterDataRepository: MasterDataRepository;
   pageDefinitionGateway: PageDefinitionGateway;
   marketCollectionRepository: MarketCollectionRepository;
+  workItemRepository: WorkItemRepository;
 }
 
 const productionDependencies: AppDependencies = {
   masterDataRepository,
   pageDefinitionGateway,
   marketCollectionRepository,
+  workItemRepository,
 };
 
 interface AppLocation {
-  key: BusinessPageKey;
+  key: BusinessPageKey & { productCode: string };
+  query: { pageNumber?: number; pageSize?: number; values: Record<string, string> };
+}
+
+interface WorkLocation {
+  scope: WorkItemScope;
   query: { pageNumber?: number; pageSize?: number; values: Record<string, string> };
 }
 
 interface HashState {
   location?: AppLocation;
+  workLocation?: WorkLocation;
   invalid: boolean;
 }
 
@@ -45,6 +58,41 @@ const domain = "MARKET";
 const pageKind = "QUALITY";
 
 function locationFromHash(): HashState {
+  const workMatch = /^#\/work\/(pending|completed)(?:\?(.*))?$/.exec(
+    window.location.hash,
+  );
+  if (workMatch) {
+    try {
+      decodeURIComponent(workMatch[2] ?? "");
+      const parameters = new URLSearchParams(workMatch[2] ?? "");
+      const values: Record<string, string> = {};
+      for (const name of ["status", "domain", "regionId", "productCode"]) {
+        const value = parameters.get(name);
+        if (value) values[name] = value;
+      }
+      const pageValue = parameters.get("page");
+      const pageSizeValue = parameters.get("pageSize");
+      const pageNumber = Number(pageValue);
+      const pageSize = Number(pageSizeValue);
+      return {
+        invalid: false,
+        workLocation: {
+          scope: workMatch[1] === "pending" ? "PENDING" : "COMPLETED",
+          query: {
+            values,
+            ...(pageValue !== null && Number.isInteger(pageNumber) && pageNumber >= 0
+              ? { pageNumber }
+              : {}),
+            ...(pageSizeValue !== null && Number.isInteger(pageSize) && pageSize > 0
+              ? { pageSize }
+              : {}),
+          },
+        },
+      };
+    } catch {
+      return { invalid: true };
+    }
+  }
   const match = /^#\/pages\/([^/]+)\/([^/]+)\/([^?]+)(?:\?(.*))?$/.exec(
     window.location.hash,
   );
@@ -88,7 +136,23 @@ function locationFromHash(): HashState {
   }
 }
 
-function hashFor(key: BusinessPageKey, query?: ListQueryState) {
+function workHash(scope: WorkItemScope, query?: ListQueryState) {
+  const parameters = new URLSearchParams();
+  if (query) {
+    parameters.set("page", String(query.pageNumber));
+    parameters.set("pageSize", String(query.pageSize));
+    for (const [name, value] of Object.entries(query.values)) {
+      if (value) parameters.set(name, value);
+    }
+  }
+  const suffix = parameters.size ? `?${parameters.toString()}` : "";
+  return `#/work/${scope === "PENDING" ? "pending" : "completed"}${suffix}`;
+}
+
+function hashFor(
+  key: BusinessPageKey & { productCode: string },
+  query?: ListQueryState,
+) {
   const parameters = new URLSearchParams();
   if (query) {
     parameters.set("pageNumber", String(query.pageNumber));
@@ -112,6 +176,9 @@ export function App({
   const [navigationAttempt, setNavigationAttempt] = useState(0);
 
   useEffect(() => {
+    if (hashState.workLocation) {
+      return;
+    }
     let active = true;
     void dependencies.masterDataRepository
       .getProducts(domain, pageKind)
@@ -145,7 +212,7 @@ export function App({
     return () => {
       active = false;
     };
-  }, [dependencies.masterDataRepository, navigationAttempt]);
+  }, [dependencies.masterDataRepository, hashState.workLocation, navigationAttempt]);
 
   useEffect(() => {
     const synchronize = () => setHashState(locationFromHash());
@@ -158,6 +225,7 @@ export function App({
   }, []);
 
   const location = hashState.location;
+  const workLocation = hashState.workLocation;
   const pageKey = location?.key;
 
   function selectProduct(productCode: string) {
@@ -176,13 +244,46 @@ export function App({
     window.history.replaceState(null, "", hashFor(pageKey, query));
   }
 
+  function commitWorkQuery(query: ListQueryState) {
+    if (!workLocation) return;
+    window.history.pushState(null, "", workHash(workLocation.scope, query));
+  }
+
+  function normalizeWorkQuery(query: ListQueryState) {
+    if (!workLocation) return;
+    window.history.replaceState(null, "", workHash(workLocation.scope, query));
+  }
+
   return (
     <EnterpriseShell
       onProductSelect={selectProduct}
-      products={products}
+      products={workLocation ? [] : products}
       {...(pageKey ? { activeProductId: pageKey.productCode } : {})}
     >
-      {navigationError ? (
+      {workLocation ? (
+        <WorkItemsPage
+          key={workLocation.scope}
+          loadRegionChildren={(parentId) =>
+            dependencies.masterDataRepository.getRegionChildren(parentId)
+          }
+          loadRegionPath={(regionId) =>
+            dependencies.masterDataRepository.getRegionPath(regionId)
+          }
+          loadProducts={() =>
+            dependencies.masterDataRepository
+              .getProducts()
+              .then((items) =>
+                items.map((item) => ({ value: item.id, label: item.name })),
+              )
+          }
+          onQueryCommitted={commitWorkQuery}
+          onQueryNormalized={normalizeWorkQuery}
+          pageDefinitionGateway={dependencies.pageDefinitionGateway}
+          repository={dependencies.workItemRepository}
+          routeQuery={workLocation.query}
+          scope={workLocation.scope}
+        />
+      ) : navigationError ? (
         <div className="page-alert" role="alert">
           产品导航加载失败，请稍后重试。
           <button

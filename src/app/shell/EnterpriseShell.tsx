@@ -23,8 +23,8 @@ const navigationGroups: readonly NavigationGroup[] = [
   {
     label: "我的工作",
     items: [
-      { label: "待办任务", route: "#/我的工作/待办任务" },
-      { label: "已办事项", route: "#/我的工作/已办事项" },
+      { label: "待办任务", route: "#/work/pending" },
+      { label: "已办事项", route: "#/work/completed" },
     ],
   },
   {

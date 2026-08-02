@@ -231,10 +231,14 @@ function dependenciesFixture(
       getRegionPath: () => Promise.resolve([]),
     },
     pageDefinitionGateway: {
-      getDefinition: (key) => Promise.resolve(definitionFixture(key.productCode)),
+      getDefinition: (key) =>
+        Promise.resolve(definitionFixture(key.productCode ?? "SOYBEAN_FIXTURE")),
     },
     marketCollectionRepository: {
       search,
+    },
+    workItemRepository: {
+      search: () => Promise.reject(new Error("not called")),
     },
   };
 }

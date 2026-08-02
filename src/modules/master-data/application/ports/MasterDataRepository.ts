@@ -5,7 +5,7 @@ import type {
 } from "../../domain/masterData";
 
 export interface MasterDataRepository {
-  getProducts(domain: string, pageKind: string): Promise<readonly MasterDataOption[]>;
+  getProducts(domain?: string, pageKind?: string): Promise<readonly MasterDataOption[]>;
   getCultivars(productCode: string): Promise<readonly MasterDataOption[]>;
   getMarketObjectTypes(productCode: string): Promise<readonly MasterDataOption[]>;
   getMonitoringPeriods(

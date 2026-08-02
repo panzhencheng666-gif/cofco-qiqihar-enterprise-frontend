@@ -1,7 +1,7 @@
 export interface BusinessPageKey {
   domain: string;
   pageKind: string;
-  productCode: string;
+  productCode?: string;
 }
 
 export interface DefinitionOption {
