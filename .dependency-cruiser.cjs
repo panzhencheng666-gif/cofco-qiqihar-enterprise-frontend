@@ -22,6 +22,14 @@ module.exports = {
       to: { path: "/(application|infrastructure|ui)/" },
     },
     {
+      name: "application-must-not-depend-on-ui-infrastructure-or-react",
+      severity: "error",
+      from: { path: "^src/modules/[^/]+/application/" },
+      to: {
+        path: "(^react(?:/|$)|/(ui|infrastructure)/)",
+      },
+    },
+    {
       name: "no-circular",
       severity: "error",
       from: {},

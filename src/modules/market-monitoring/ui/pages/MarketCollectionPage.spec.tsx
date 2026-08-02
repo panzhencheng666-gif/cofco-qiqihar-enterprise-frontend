@@ -1,6 +1,12 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
+import { vi } from "vitest";
 
-import type { ListPageDefinition } from "../../../../shared/application/page-definition";
+import type {
+  ListPageDefinition,
+  ListQueryState,
+} from "../../../../shared/application/page-definition";
 import { MarketCollectionPage } from "./MarketCollectionPage";
 
 describe("MarketCollectionPage", () => {
@@ -53,4 +59,50 @@ describe("MarketCollectionPage", () => {
       within(table).getByRole("columnheader", { name: "测试业务字段" }),
     ).toBeVisible();
   });
+
+  it("runs a paging command once under StrictMode", async () => {
+    const user = userEvent.setup();
+    const pageDefinition = definition();
+    const search = vi.fn((query: ListQueryState) =>
+      Promise.resolve({
+        items: [],
+        pageNumber: query.pageNumber,
+        pageSize: query.pageSize,
+        totalElements: 21,
+        totalPages: 2,
+      }),
+    );
+    const committed = vi.fn();
+    render(
+      <StrictMode>
+        <MarketCollectionPage
+          loadRegionChildren={() => Promise.resolve([])}
+          onQueryCommitted={committed}
+          pageDefinitionGateway={{
+            getDefinition: () => Promise.resolve(pageDefinition),
+          }}
+          pageKey={pageDefinition.key}
+          search={search}
+        />
+      </StrictMode>,
+    );
+
+    await waitFor(() => expect(search).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole("button", { name: "下一页" }));
+    await waitFor(() => expect(search).toHaveBeenCalledTimes(2));
+    expect(committed).toHaveBeenCalledTimes(1);
+  });
 });
+
+function definition(): ListPageDefinition {
+  return {
+    key: { domain: "MARKET", pageKind: "COLLECTION", productCode: "FIXTURE" },
+    title: "测试产品采集表",
+    breadcrumbs: [],
+    filters: [],
+    defaultContext: {},
+    columnGroups: [],
+    actions: [],
+    pagination: { defaultPageSize: 20, pageSizeOptions: [20] },
+  };
+}

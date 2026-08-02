@@ -30,7 +30,7 @@ const navigationGroups: readonly NavigationGroup[] = [
   {
     label: "产情监测",
     items: [
-      { label: "产情填报", route: "#/pages/PRODUCTION/MONITORING/CORN" },
+      { label: "产情填报", route: "#/production" },
       { label: "产情分析", route: "#/产情监测/产情分析" },
     ],
   },
@@ -143,17 +143,24 @@ export function EnterpriseShell({
             {navigationGroups.map((group) => (
               <section key={group.label}>
                 <h2>▾ {group.label}</h2>
-                {group.items.map((item) => (
-                  <button
-                    aria-current={activePath === item.route ? "page" : undefined}
-                    className={activePath === item.route ? "is-active" : ""}
-                    key={item.route}
-                    onClick={() => navigate(item.route)}
-                    type="button"
-                  >
-                    {item.label}
-                  </button>
-                ))}
+                {group.items.map((item) => {
+                  const route =
+                    item.route === "#/production" && products[0]
+                      ? `#/pages/PRODUCTION/MONITORING/${encodeURIComponent(products[0].id)}`
+                      : item.route;
+                  return (
+                    <button
+                      aria-current={activePath === route ? "page" : undefined}
+                      className={activePath === route ? "is-active" : ""}
+                      disabled={item.route === "#/production" && !products[0]}
+                      key={item.route}
+                      onClick={() => navigate(route)}
+                      type="button"
+                    >
+                      {item.label}
+                    </button>
+                  );
+                })}
               </section>
             ))}
             {products.length > 0 && (

@@ -62,8 +62,12 @@ interface HashState {
 
 const defaultPageKey = { domain: "MARKET", pageKind: "QUALITY" } as const;
 
+function isProductionPage(key?: BusinessPageKey) {
+  return key?.domain === "PRODUCTION" && key.pageKind === "MONITORING";
+}
+
 function supportedPageContext(key?: BusinessPageKey) {
-  return key?.domain === "PRODUCTION" && key.pageKind === "MONITORING"
+  return isProductionPage(key)
     ? { domain: "PRODUCTION", pageKind: "MONITORING" }
     : defaultPageKey;
 }
@@ -119,14 +123,18 @@ function locationFromHash(): HashState {
     const pageSizeValue = parameters.get("pageSize");
     const parsedPageNumber = Number(pageNumberValue);
     const parsedPageSize = Number(pageSizeValue);
+    const key = {
+      domain: decodeURIComponent(match[1]!),
+      pageKind: decodeURIComponent(match[2]!),
+      productCode: decodeURIComponent(match[3]!),
+    };
+    if (key.domain === "PRODUCTION" && !isProductionPage(key)) {
+      return { invalid: true };
+    }
     return {
       invalid: false,
       location: {
-        key: {
-          domain: decodeURIComponent(match[1]!),
-          pageKind: decodeURIComponent(match[2]!),
-          productCode: decodeURIComponent(match[3]!),
-        },
+        key,
         query: {
           ...(pageNumberValue !== null &&
           Number.isInteger(parsedPageNumber) &&
@@ -261,21 +269,31 @@ export function App({
   function commitQuery(query: ListQueryState) {
     if (!pageKey) return;
     window.history.pushState(null, "", hashFor(pageKey, query));
+    setHashState({ invalid: false, location: { key: pageKey, query } });
   }
 
   function normalizeQuery(query: ListQueryState) {
     if (!pageKey) return;
     window.history.replaceState(null, "", hashFor(pageKey, query));
+    setHashState({ invalid: false, location: { key: pageKey, query } });
   }
 
   function commitWorkQuery(query: ListQueryState) {
     if (!workLocation) return;
     window.history.pushState(null, "", workHash(workLocation.scope, query));
+    setHashState({
+      invalid: false,
+      workLocation: { scope: workLocation.scope, query },
+    });
   }
 
   function normalizeWorkQuery(query: ListQueryState) {
     if (!workLocation) return;
     window.history.replaceState(null, "", workHash(workLocation.scope, query));
+    setHashState({
+      invalid: false,
+      workLocation: { scope: workLocation.scope, query },
+    });
   }
 
   return (
@@ -327,7 +345,7 @@ export function App({
         </div>
       ) : pageKey === undefined ? (
         <div className="ledger-panel list-workbench-loading">正在加载业务导航</div>
-      ) : pageKey.domain === "PRODUCTION" ? (
+      ) : isProductionPage(pageKey) ? (
         <ProductionMonitoringPage
           loadCultivars={(productCode) =>
             dependencies.masterDataRepository

@@ -32,8 +32,12 @@ export function useListPageController(options: ListPageControllerOptions) {
   useEffect(() => {
     optionsRef.current = options;
   }, [options]);
-  const [definition, setDefinition] = useState<ListPageDefinition>();
+  const [definitionState, setDefinitionState] = useState<{
+    contextKey: string;
+    value: ListPageDefinition;
+  }>();
   const [query, setQuery] = useState<ListQueryState>();
+  const queryRef = useRef<ListQueryState | undefined>(undefined);
   const [result, setResult] = useState<PagedResult>();
   const [definitionError, setDefinitionError] = useState("");
   const [listError, setListError] = useState("");
@@ -41,6 +45,10 @@ export function useListPageController(options: ListPageControllerOptions) {
   const [definitionAttempt, setDefinitionAttempt] = useState(0);
   const requestVersion = useRef(0);
   const routeKey = routeFingerprint(options.routeQuery);
+
+  useEffect(() => {
+    queryRef.current = query;
+  }, [query]);
 
   const executeSearch = useCallback(async (next: ListQueryState) => {
     const version = ++requestVersion.current;
@@ -75,7 +83,7 @@ export function useListPageController(options: ListPageControllerOptions) {
     void Promise.resolve()
       .then(() => {
         if (!active) return undefined;
-        setDefinition(undefined);
+        setDefinitionState(undefined);
         setQuery(undefined);
         setResult(undefined);
         setDefinitionError("");
@@ -88,7 +96,7 @@ export function useListPageController(options: ListPageControllerOptions) {
           loaded,
           optionsRef.current.routeQuery,
         );
-        setDefinition(loaded);
+        setDefinitionState({ contextKey: options.controllerKey, value: loaded });
         setQuery(initial);
         setResult(emptyResult(initial));
         optionsRef.current.onQueryNormalized?.(initial);
@@ -107,39 +115,55 @@ export function useListPageController(options: ListPageControllerOptions) {
       active = false;
       requestVersion.current += 1;
     };
-  }, [definitionAttempt, executeSearch, options.controllerKey, routeKey]);
+  }, [definitionAttempt, executeSearch, options.controllerKey]);
+
+  useEffect(() => {
+    const definition =
+      definitionState?.contextKey === options.controllerKey
+        ? definitionState.value
+        : undefined;
+    const currentQuery = queryRef.current;
+    if (!definition || !currentQuery) return;
+    const restored = optionsRef.current.normalizeRoute(
+      definition,
+      optionsRef.current.routeQuery,
+    );
+    if (sameQuery(restored, currentQuery)) return;
+    requestVersion.current += 1;
+    setQuery(restored);
+    setResult(emptyResult(restored));
+    optionsRef.current.onQueryNormalized?.(restored);
+    void executeSearch(restored);
+  }, [definitionState, executeSearch, options.controllerKey, routeKey]);
 
   const changeQuery = useCallback(
     (next: ListQueryState) => {
-      setQuery((current) => {
-        const shouldSearch =
-          current !== undefined &&
-          sameValues(current.values, next.values) &&
-          (current.pageNumber !== next.pageNumber ||
-            current.pageSize !== next.pageSize);
-        if (shouldSearch) {
-          optionsRef.current.onQueryCommitted?.(next);
-          void executeSearch(next);
-        }
-        return next;
-      });
+      const shouldSearch =
+        query !== undefined &&
+        sameValues(query.values, next.values) &&
+        (query.pageNumber !== next.pageNumber || query.pageSize !== next.pageSize);
+      setQuery(next);
+      if (shouldSearch) {
+        optionsRef.current.onQueryCommitted?.(next);
+        void executeSearch(next);
+      }
     },
-    [executeSearch],
+    [executeSearch, query],
   );
 
   const submitSearch = useCallback(() => {
-    setQuery((current) => {
-      if (current) {
-        optionsRef.current.onQueryCommitted?.(current);
-        void executeSearch(current);
-      }
-      return current;
-    });
-  }, [executeSearch]);
+    if (query) {
+      optionsRef.current.onQueryCommitted?.(query);
+      void executeSearch(query);
+    }
+  }, [executeSearch, query]);
 
   return {
     changeQuery,
-    definition,
+    definition:
+      definitionState?.contextKey === options.controllerKey
+        ? definitionState.value
+        : undefined,
     definitionError,
     executeSearch,
     listError,
@@ -161,6 +185,14 @@ function emptyResult(query: ListQueryState): PagedResult {
     totalElements: 0,
     totalPages: 0,
   };
+}
+
+function sameQuery(left: ListQueryState, right: ListQueryState) {
+  return (
+    left.pageNumber === right.pageNumber &&
+    left.pageSize === right.pageSize &&
+    sameValues(left.values, right.values)
+  );
 }
 
 function sameValues(

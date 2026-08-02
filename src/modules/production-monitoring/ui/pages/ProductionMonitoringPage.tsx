@@ -1,12 +1,9 @@
 import { useEffect, useState } from "react";
 
 import type { ProductionRecordRepository } from "../../application/ports/ProductionRecordRepository";
-import type {
-  ProductionDraft,
-  ProductionFormDefinition,
-  ProductionRecordDetail,
-} from "../../domain/productionRecord";
-import { HttpError } from "../../../../shared/api/HttpClient";
+import { useProductionCommands } from "../hooks/useProductionCommands";
+import type { ProductionRecord } from "../../domain/productionRecord";
+import { ProductionRecordEditor } from "../components/ProductionRecordEditor";
 import {
   createInitialListQuery,
   type BusinessPageKey,
@@ -18,22 +15,11 @@ import {
 } from "../../../../shared/application/page-definition";
 import {
   ListWorkbench,
-  RegionHierarchyFilter,
   useListPageController,
 } from "../../../../shared/ui/list-workbench";
 import type { RouteListQuery } from "../../../../shared/ui/list-workbench";
 
 export type ProductionRouteQuery = RouteListQuery;
-
-interface EditorState {
-  id?: string;
-  version?: number;
-  draft: ProductionDraft;
-  definition: ProductionFormDefinition;
-  allowedActions: readonly string[];
-}
-
-const emptyRegionPath: LoadRegionPath = () => Promise.resolve([]);
 
 export function ProductionMonitoringPage({
   loadCultivars,
@@ -59,16 +45,12 @@ export function ProductionMonitoringPage({
   onQueryNormalized?: (query: ListQueryState) => void;
 }) {
   const productCode = requireProduct(pageKey);
-  const [actionError, setActionError] = useState("");
-  const [actionLoading, setActionLoading] = useState(false);
-  const [editor, setEditor] = useState<EditorState>();
+  const contextKey = `${pageKey.domain}/${pageKey.pageKind}/${productCode}`;
   const [cultivars, setCultivars] = useState<
     readonly { value: string; label: string }[]
   >([]);
-  const [returning, setReturning] = useState<ProductionRecordDetail>();
-  const [returnReason, setReturnReason] = useState("");
   const controller = useListPageController({
-    controllerKey: `${pageKey.domain}/${pageKey.pageKind}/${productCode}`,
+    controllerKey: contextKey,
     loadDefinition: async () => {
       const loaded = await pageDefinitionGateway.getDefinition(pageKey);
       if (!sameKey(loaded.key, pageKey)) throw new Error("definition context mismatch");
@@ -91,7 +73,7 @@ export function ProductionMonitoringPage({
     changeQuery,
     definition,
     definitionError,
-    executeSearch: search,
+    executeSearch,
     listError,
     loading,
     query,
@@ -99,17 +81,21 @@ export function ProductionMonitoringPage({
     retryDefinition,
     submitSearch,
   } = controller;
-  const error = actionError || listError;
+  const records = productionRecords(result?.items ?? []);
+  const commands = useProductionCommands({
+    contextKey,
+    productCode,
+    records,
+    refresh: async () => {
+      if (query) await executeSearch(query);
+    },
+    repository,
+  });
 
   useEffect(() => {
     let active = true;
     void Promise.resolve()
-      .then(() => {
-        if (!active) return [];
-        setEditor(undefined);
-        setCultivars([]);
-        return loadCultivars?.(productCode) ?? Promise.resolve([]);
-      })
+      .then(() => (active ? (loadCultivars?.(productCode) ?? []) : []))
       .then((loaded) => {
         if (active) setCultivars(loaded);
       });
@@ -117,97 +103,6 @@ export function ProductionMonitoringPage({
       active = false;
     };
   }, [loadCultivars, productCode]);
-
-  async function dispatch(action: string, rowId?: string) {
-    setActionError("");
-    if (action === "NEW") {
-      setActionLoading(true);
-      try {
-        const formDefinition = await repository.definition(productCode);
-        setEditor({
-          draft: emptyDraft(productCode),
-          definition: formDefinition,
-          allowedActions: ["SAVE"],
-        });
-      } catch (failure) {
-        setActionError(writeError(failure));
-      } finally {
-        setActionLoading(false);
-      }
-      return;
-    }
-    if (!rowId || !result) return;
-    const row = result.items.find((item) => item.id === rowId);
-    if (!row || row.version === undefined || !row.allowedActions?.includes(action))
-      return;
-    setActionLoading(true);
-    try {
-      if (action === "VIEW") {
-        const record = await repository.detail(rowId);
-        const formDefinition = await repository.definition(
-          productCode,
-          record.objectTypeCode,
-        );
-        setEditor({
-          id: record.id,
-          version: record.version,
-          draft: detailDraft(record),
-          definition: formDefinition,
-          allowedActions: record.allowedActions,
-        });
-      } else if (action === "SUBMIT") {
-        await repository.submit(rowId, row.version);
-        if (query) await search(query);
-      } else if (action === "APPROVE") {
-        await repository.approve(rowId, row.version);
-        if (query) await search(query);
-      } else if (action === "RETURN") {
-        setReturning(await repository.detail(rowId));
-      }
-    } catch (failure) {
-      setActionError(writeError(failure));
-    } finally {
-      setActionLoading(false);
-    }
-  }
-
-  async function saveEditor() {
-    if (!editor) return;
-    setActionLoading(true);
-    setActionError("");
-    try {
-      if (editor.id !== undefined && editor.version !== undefined) {
-        await repository.saveDraft(editor.id, editor.version, editor.draft);
-      } else {
-        await repository.create(editor.draft);
-      }
-      setEditor(undefined);
-      if (query) await search(query);
-    } catch (failure) {
-      setActionError(writeError(failure));
-    } finally {
-      setActionLoading(false);
-    }
-  }
-
-  async function confirmReturn() {
-    if (!returning || !returnReason.trim()) return;
-    setActionLoading(true);
-    try {
-      await repository.returnForCorrection(
-        returning.id,
-        returning.version,
-        returnReason,
-      );
-      setReturning(undefined);
-      setReturnReason("");
-      if (query) await search(query);
-    } catch (failure) {
-      setActionError(writeError(failure));
-    } finally {
-      setActionLoading(false);
-    }
-  }
 
   if (definitionError) {
     return (
@@ -224,68 +119,68 @@ export function ProductionMonitoringPage({
   }
   return (
     <>
+      {commands.issue && (
+        <div className="page-alert production-action-error" role="alert">
+          <span>{commands.issue.message}</span>
+          <button onClick={commands.retryIssue} type="button">
+            重试操作
+          </button>
+          <button onClick={commands.dismissIssue} type="button">
+            关闭操作错误
+          </button>
+        </div>
+      )}
       <ListWorkbench
         definition={definition}
+        errorMessage={listError}
         loadRegionChildren={loadRegionChildren}
         {...(loadRegionPath ? { loadRegionPath } : {})}
-        loading={loading || actionLoading}
-        errorMessage={error}
-        onAction={(action, rowId) => void dispatch(action, rowId)}
+        loading={loading}
+        onAction={(action, rowId) => void commands.dispatch(action, rowId)}
+        onQueryChange={changeQuery}
+        onRetry={() => void executeSearch(query)}
+        onSearch={submitSearch}
         query={query}
         result={result}
-        onRetry={() => void search(query)}
-        onSearch={submitSearch}
-        onQueryChange={changeQuery}
       />
-      {editor && (
-        <ProductionEditor
+      {commands.editor && (
+        <ProductionRecordEditor
+          coreFields={definition.columnGroups.flatMap((group) => group.fields)}
           cultivars={cultivars}
-          editor={editor}
-          loading={actionLoading}
+          definitionLoading={commands.definitionLoading}
+          editor={commands.editor}
+          loading={commands.loading}
           loadRegionChildren={loadRegionChildren}
-          loadRegionPath={loadRegionPath ?? emptyRegionPath}
+          {...(loadRegionPath ? { loadRegionPath } : {})}
           objectTypeOptions={
             definition.filters.find((filter) => filter.id === "objectTypeCode")
               ?.options ?? []
           }
-          onCancel={() => setEditor(undefined)}
-          onChange={(draft) => setEditor({ ...editor, draft })}
-          onObjectTypeChange={(objectTypeCode) => {
-            setEditor({
-              ...editor,
-              draft: { ...editor.draft, objectTypeCode },
-            });
-            void repository
-              .definition(productCode, objectTypeCode || undefined)
-              .then((next) =>
-                setEditor((current) =>
-                  current ? { ...current, definition: next } : current,
-                ),
-              )
-              .catch((failure) => setActionError(writeError(failure)));
-          }}
-          onSave={() => void saveEditor()}
+          onCancel={commands.closeEditor}
+          onChange={commands.changeDraft}
+          onObjectTypeChange={(value) => void commands.changeObjectType(value)}
+          onSave={() => void commands.save()}
         />
       )}
-      {returning && (
+      {commands.returning && (
         <div aria-labelledby="return-title" className="production-dialog" role="dialog">
           <h2 id="return-title">退回产情记录</h2>
           <label>
             退回原因
             <textarea
               aria-label="退回原因"
-              onChange={(event) => setReturnReason(event.target.value)}
-              value={returnReason}
+              onChange={(event) => commands.setReturnReason(event.target.value)}
+              value={commands.returnReason}
             />
           </label>
           <button
-            disabled={actionLoading || !returnReason.trim()}
-            onClick={() => void confirmReturn()}
+            disabled={commands.loading || !commands.returnReason.trim()}
+            onClick={() => void commands.confirmReturn()}
             type="button"
           >
             确认退回
           </button>
-          <button onClick={() => setReturning(undefined)} type="button">
+          <button onClick={commands.closeReturn} type="button">
             取消
           </button>
         </div>
@@ -294,231 +189,40 @@ export function ProductionMonitoringPage({
   );
 }
 
-function ProductionEditor({
-  cultivars,
-  editor,
-  loading,
-  loadRegionChildren,
-  loadRegionPath,
-  objectTypeOptions,
-  onCancel,
-  onChange,
-  onObjectTypeChange,
-  onSave,
-}: {
-  cultivars: readonly { value: string; label: string }[];
-  editor: EditorState;
-  loading: boolean;
-  loadRegionChildren: LoadRegionChildren;
-  loadRegionPath: LoadRegionPath;
-  objectTypeOptions: readonly { value: string; label: string }[];
-  onCancel: () => void;
-  onChange: (draft: ProductionDraft) => void;
-  onObjectTypeChange: (value: string) => void;
-  onSave: () => void;
-}) {
-  const draft = editor.draft;
-  const editable = editor.id === undefined || editor.allowedActions.includes("SAVE");
-  const change = (key: keyof ProductionDraft, value: unknown) =>
-    onChange({ ...draft, [key]: value });
-  return (
-    <div
-      aria-labelledby="production-editor-title"
-      className="production-dialog"
-      role="dialog"
-    >
-      <h2 id="production-editor-title">
-        {editor.id === undefined ? "新建产情填报" : "产情记录详情"}
-      </h2>
-      <fieldset disabled={!editable || loading}>
-        <label>
-          对象类型
-          <select
-            aria-label="对象类型"
-            onChange={(event) => onObjectTypeChange(event.target.value)}
-            value={draft.objectTypeCode}
-          >
-            <option value="">请选择对象类型</option>
-            {objectTypeOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          地区
-          <RegionHierarchyFilter
-            label="地区"
-            loadChildren={loadRegionChildren}
-            loadPath={loadRegionPath}
-            onChange={(value) => change("regionCode", value)}
-            placeholder="请选择地区"
-            value={draft.regionCode}
-          />
-        </label>
-        {cultivars.length > 0 && (
-          <label>
-            品种
-            <select
-              aria-label="品种"
-              onChange={(event) => change("cultivarCode", event.target.value || null)}
-              value={draft.cultivarCode ?? ""}
-            >
-              <option value="">不选择具体品种</option>
-              {cultivars.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <label>
-          调查日期
-          <input
-            aria-label="调查日期"
-            onChange={(event) => change("surveyDate", event.target.value)}
-            type="date"
-            value={draft.surveyDate}
-          />
-        </label>
-        <label>
-          种植面积（亩）
-          <input
-            aria-label="种植面积（亩）"
-            inputMode="decimal"
-            onChange={(event) => change("cultivatedAreaMu", event.target.value)}
-            value={draft.cultivatedAreaMu}
-          />
-        </label>
-        <label>
-          亩产（公斤/亩）
-          <input
-            aria-label="亩产（公斤/亩）"
-            inputMode="decimal"
-            onChange={(event) => change("yieldPerMuKilograms", event.target.value)}
-            value={draft.yieldPerMuKilograms}
-          />
-        </label>
-        {editor.definition.groups.map((group) => (
-          <fieldset key={group.category}>
-            <legend>{categoryLabel(group.category)}</legend>
-            {group.fields.map((field) => (
-              <label key={field.code}>
-                {field.label}
-                {field.unit ? `（${field.unit}）` : ""}
-                <input
-                  aria-label={field.label}
-                  inputMode="decimal"
-                  onChange={(event) =>
-                    changeFact(
-                      onChange,
-                      draft,
-                      group.category,
-                      field.code,
-                      event.target.value,
-                    )
-                  }
-                  value={factValues(draft, group.category)[field.code] ?? ""}
-                />
-                {field.description && <small>{field.description}</small>}
-              </label>
-            ))}
-          </fieldset>
-        ))}
-      </fieldset>
-      {editable && (
-        <button disabled={loading} onClick={onSave} type="button">
-          保存草稿
-        </button>
-      )}
-      <button onClick={onCancel} type="button">
-        关闭
-      </button>
-    </div>
+function productionRecords(
+  rows: readonly {
+    id: string;
+    values: Readonly<Record<string, string | number | null | undefined>>;
+    allowedActions?: readonly string[];
+    version?: number;
+  }[],
+): readonly ProductionRecord[] {
+  return rows.flatMap((row) =>
+    row.allowedActions !== undefined && row.version !== undefined
+      ? [
+          {
+            id: row.id,
+            values: Object.fromEntries(
+              Object.entries(row.values).map(([key, value]) => [
+                key,
+                value === undefined || typeof value === "number"
+                  ? String(value ?? "")
+                  : value,
+              ]),
+            ),
+            allowedActions: row.allowedActions,
+            version: row.version,
+          },
+        ]
+      : [],
   );
 }
 
-function changeFact(
-  onChange: (draft: ProductionDraft) => void,
-  draft: ProductionDraft,
-  category: string,
-  code: string,
-  value: string,
-) {
-  const key = categoryKey(category);
-  onChange({ ...draft, [key]: { ...draft[key], [code]: value } });
-}
-function categoryKey(
-  category: string,
-): "quality" | "costs" | "insurance" | "subsidies" {
-  return category === "QUALITY"
-    ? "quality"
-    : category === "COST"
-      ? "costs"
-      : category === "INSURANCE"
-        ? "insurance"
-        : "subsidies";
-}
-function factValues(draft: ProductionDraft, category: string) {
-  return draft[categoryKey(category)];
-}
-function categoryLabel(category: string) {
-  return category === "QUALITY"
-    ? "质量"
-    : category === "COST"
-      ? "成本"
-      : category === "INSURANCE"
-        ? "保险"
-        : "补贴";
-}
-function emptyDraft(productCode: string): ProductionDraft {
-  return {
-    productCode,
-    objectTypeCode: "",
-    regionCode: "",
-    cultivarCode: null,
-    surveyDate: "",
-    cultivatedAreaMu: "",
-    yieldPerMuKilograms: "",
-    quality: {},
-    costs: {},
-    insurance: {},
-    subsidies: {},
-  };
-}
-function detailDraft(record: ProductionRecordDetail): ProductionDraft {
-  return {
-    productCode: record.productCode,
-    objectTypeCode: record.objectTypeCode,
-    regionCode: record.regionCode,
-    cultivarCode: record.cultivarCode,
-    surveyDate: record.surveyDate,
-    cultivatedAreaMu: record.cultivatedAreaMu,
-    yieldPerMuKilograms: record.yieldPerMuKilograms,
-    quality: record.quality,
-    costs: record.costs,
-    insurance: record.insurance,
-    subsidies: record.subsidies,
-  };
-}
-function writeError(failure: unknown) {
-  const status =
-    failure instanceof HttpError
-      ? failure.status
-      : typeof failure === "object" && failure !== null && "status" in failure
-        ? Number(failure.status)
-        : 0;
-  if (status === 401) return "登录已失效，请重新登录。";
-  if (status === 409) return "记录已被其他用户修改，请刷新后重试。";
-  if (status === 400) return "填报内容校验失败，请检查后重试。";
-  return "操作失败，请稍后重试。";
-}
 function requireProduct(key: BusinessPageKey) {
   if (!key.productCode) throw new Error("Production page requires product context");
   return key.productCode;
 }
+
 function sameKey(left: BusinessPageKey, right: BusinessPageKey) {
   return (
     left.domain === right.domain &&
@@ -526,6 +230,7 @@ function sameKey(left: BusinessPageKey, right: BusinessPageKey) {
     left.productCode === right.productCode
   );
 }
+
 function route(
   definition: ListPageDefinition,
   current?: ProductionRouteQuery,

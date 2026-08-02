@@ -1,9 +1,11 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { vi } from "vitest";
 
 import { App, type AppDependencies } from "./App";
 import type { MarketCollectionCriteria } from "../modules/market-monitoring/domain/marketCollection";
 import type { ListPageDefinition } from "../shared/application/page-definition";
+import type { ProductionRecordRepository } from "../modules/production-monitoring/application/ports/ProductionRecordRepository";
 
 describe("App production composition", () => {
   beforeEach(() => {
@@ -50,18 +52,19 @@ describe("App production composition", () => {
     expect(searches[2]).toMatchObject({ pageNumber: 1 });
     expect(screen.getByText("记录21")).toBeVisible();
 
-    const soybeanLocation = "#/pages/MARKET/QUALITY/SOYBEAN_FIXTURE";
     await user.click(screen.getByRole("button", { name: "稻谷质量指标" }));
     expect(await screen.findByRole("heading", { name: "稻谷质量指标" })).toBeVisible();
-    const riceLocation = window.location.hash;
 
-    window.history.replaceState(null, "", soybeanLocation);
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    window.history.back();
     expect(await screen.findByRole("heading", { name: "大豆质量指标" })).toBeVisible();
+    expect(await screen.findByText("记录21")).toBeVisible();
 
-    window.history.replaceState(null, "", riceLocation);
-    window.dispatchEvent(new PopStateEvent("popstate"));
-    expect(await screen.findByRole("heading", { name: "稻谷质量指标" })).toBeVisible();
+    window.history.back();
+    expect(await screen.findByText("记录1")).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "关键词" })).toHaveValue("北安");
+
+    window.history.forward();
+    expect(await screen.findByText("记录21")).toBeVisible();
   });
 
   it("keeps the workbench mounted and retries a failed real search adapter call", async () => {
@@ -186,6 +189,31 @@ describe("App production composition", () => {
     );
   });
 
+  it("rejects an unsupported production page kind before definition or list requests", async () => {
+    window.history.replaceState(null, "", "#/pages/PRODUCTION/QUALITY/SOYBEAN_FIXTURE");
+    const dependencies = dependenciesFixture(() => Promise.resolve(page([], 0, 20, 0)));
+    const definitionRequest = vi.spyOn(
+      dependencies.pageDefinitionGateway,
+      "getDefinition",
+    );
+    const productionSearch: ProductionRecordRepository["search"] = vi.fn(() =>
+      Promise.resolve({
+        items: [],
+        pageNumber: 0,
+        pageSize: 20,
+        totalElements: 0,
+        totalPages: 0,
+      }),
+    );
+    dependencies.productionRecordRepository = productionRepository(productionSearch);
+
+    render(<App dependencies={dependencies} />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("页面地址无效");
+    expect(definitionRequest).not.toHaveBeenCalled();
+    expect(productionSearch).not.toHaveBeenCalled();
+  });
+
   it("retries dynamic product navigation after an initial failure", async () => {
     const user = userEvent.setup();
     let attempts = 0;
@@ -286,6 +314,22 @@ function dependenciesFixture(
     workItemRepository: {
       search: () => Promise.reject(new Error("not called")),
     },
+  };
+}
+
+function productionRepository(
+  search: ProductionRecordRepository["search"],
+): ProductionRecordRepository {
+  const unused = () => Promise.reject(new Error("not called"));
+  return {
+    search,
+    detail: unused,
+    definition: unused,
+    create: unused,
+    saveDraft: unused,
+    submit: unused,
+    approve: unused,
+    returnForCorrection: unused,
   };
 }
 

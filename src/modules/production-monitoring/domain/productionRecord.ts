@@ -57,3 +57,24 @@ export interface ProductionRecordDetail extends ProductionDraft {
   allowedActions: readonly string[];
   version: number;
 }
+
+export type ProductionDraftCoreField =
+  | "objectTypeCode"
+  | "regionCode"
+  | "cultivarCode"
+  | "surveyDate"
+  | "cultivatedAreaMu"
+  | "yieldPerMuKilograms";
+
+const commandFields: Readonly<Record<string, ProductionDraftCoreField>> = {
+  PROD_OBJECT_TYPE: "objectTypeCode",
+  PROD_REGION: "regionCode",
+  PROD_CULTIVAR: "cultivarCode",
+  PROD_SURVEY_DATE: "surveyDate",
+  PROD_AREA_MU: "cultivatedAreaMu",
+  PROD_YIELD_PER_MU: "yieldPerMuKilograms",
+};
+
+export function productionDraftField(code: string) {
+  return commandFields[code];
+}

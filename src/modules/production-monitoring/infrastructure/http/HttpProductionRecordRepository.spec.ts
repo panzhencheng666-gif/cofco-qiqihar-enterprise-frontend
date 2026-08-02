@@ -1,4 +1,5 @@
-import type { HttpClient } from "../../../../shared/api/HttpClient";
+import { HttpError, type HttpClient } from "../../../../shared/api/HttpClient";
+import { ProductionRepositoryFailure } from "../../application/ports/ProductionRecordRepository";
 import { HttpProductionRecordRepository } from "./HttpProductionRecordRepository";
 
 describe("HttpProductionRecordRepository", () => {
@@ -125,5 +126,26 @@ describe("HttpProductionRecordRepository", () => {
         body: { version: 3, reason: "补充依据" },
       },
     ]);
+  });
+
+  it.each([
+    [400, "VALIDATION"],
+    [401, "AUTHENTICATION"],
+    [409, "CONFLICT"],
+    [503, "UNEXPECTED"],
+  ] as const)("maps HTTP %s to a typed %s repository failure", async (status, kind) => {
+    const http: HttpClient = {
+      get: () => Promise.reject(new Error("not called")),
+      post: () => Promise.reject(new HttpError(status, "request failed")),
+    };
+
+    await expect(
+      new HttpProductionRecordRepository(http).submit("record-1", 7),
+    ).rejects.toEqual(
+      expect.objectContaining({
+        kind,
+        name: ProductionRepositoryFailure.name,
+      }),
+    );
   });
 });

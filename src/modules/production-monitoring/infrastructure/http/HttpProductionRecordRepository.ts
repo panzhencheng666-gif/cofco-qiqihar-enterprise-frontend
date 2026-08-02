@@ -1,8 +1,12 @@
 import { z } from "zod";
 
-import type { HttpClient } from "../../../../shared/api/HttpClient";
+import { HttpError, type HttpClient } from "../../../../shared/api/HttpClient";
 import { queryString } from "../../../../shared/api/HttpClient";
-import type { ProductionRecordRepository } from "../../application/ports/ProductionRecordRepository";
+import {
+  ProductionRepositoryFailure,
+  type ProductionRecordRepository,
+  type ProductionRepositoryFailureKind,
+} from "../../application/ports/ProductionRecordRepository";
 import type {
   ProductionDraft,
   ProductionRecordCriteria,
@@ -75,31 +79,39 @@ export class HttpProductionRecordRepository implements ProductionRecordRepositor
     const filters = Object.fromEntries(
       Object.entries(criteria.values).map(([key, value]) => [`filter.${key}`, value]),
     );
-    const response = await this.http.get(
-      `/api/v1/production-records${queryString({
-        productCode: criteria.productCode,
-        pageKind: criteria.pageKind,
-        pageNumber: criteria.pageNumber,
-        pageSize: criteria.pageSize,
-        ...filters,
-      })}`,
-      pageSchema,
+    const response = await repositoryRequest(() =>
+      this.http.get(
+        `/api/v1/production-records${queryString({
+          productCode: criteria.productCode,
+          pageKind: criteria.pageKind,
+          pageNumber: criteria.pageNumber,
+          pageSize: criteria.pageSize,
+          ...filters,
+        })}`,
+        pageSchema,
+      ),
     );
     return response.data;
   }
 
   async detail(id: string) {
-    return (await this.http.get(`/api/v1/production-records/${id}`, detailSchema)).data;
+    return (
+      await repositoryRequest(() =>
+        this.http.get(`/api/v1/production-records/${id}`, detailSchema),
+      )
+    ).data;
   }
 
   async definition(productCode: string, objectTypeCode?: string) {
     return (
-      await this.http.get(
-        `/api/v1/production-record-definitions${queryString({
-          productCode,
-          objectTypeCode,
-        })}`,
-        definitionSchema,
+      await repositoryRequest(() =>
+        this.http.get(
+          `/api/v1/production-record-definitions${queryString({
+            productCode,
+            objectTypeCode,
+          })}`,
+          definitionSchema,
+        ),
       )
     ).data;
   }
@@ -139,11 +151,30 @@ export class HttpProductionRecordRepository implements ProductionRecordRepositor
   }
 
   private writer(method: "post" | "put", path: string, body: unknown) {
-    if (method === "post") {
-      if (!this.http.post) throw new Error("HTTP client does not support writes");
-      return this.http.post(path, body, detailSchema);
-    }
-    if (!this.http.put) throw new Error("HTTP client does not support writes");
-    return this.http.put(path, body, detailSchema);
+    return repositoryRequest(() => {
+      if (method === "post") {
+        if (!this.http.post) throw new Error("HTTP client does not support writes");
+        return this.http.post(path, body, detailSchema);
+      }
+      if (!this.http.put) throw new Error("HTTP client does not support writes");
+      return this.http.put(path, body, detailSchema);
+    });
   }
+}
+
+async function repositoryRequest<T>(request: () => Promise<T>): Promise<T> {
+  try {
+    return await request();
+  } catch (failure) {
+    if (failure instanceof ProductionRepositoryFailure) throw failure;
+    throw new ProductionRepositoryFailure(failureKind(failure), failure);
+  }
+}
+
+function failureKind(failure: unknown): ProductionRepositoryFailureKind {
+  if (!(failure instanceof HttpError)) return "UNEXPECTED";
+  if (failure.status === 400) return "VALIDATION";
+  if (failure.status === 401) return "AUTHENTICATION";
+  if (failure.status === 409) return "CONFLICT";
+  return "UNEXPECTED";
 }

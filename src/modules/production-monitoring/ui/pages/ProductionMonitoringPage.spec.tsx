@@ -1,10 +1,18 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { ProductionMonitoringPage } from "./ProductionMonitoringPage";
-import type { ProductionRecordRepository } from "../../application/ports/ProductionRecordRepository";
-import type { ProductionRecordDetail } from "../../domain/productionRecord";
+import {
+  ProductionRepositoryFailure,
+  type ProductionRecordRepository,
+  type ProductionRepositoryFailureKind,
+} from "../../application/ports/ProductionRecordRepository";
+import type {
+  ProductionFormDefinition,
+  ProductionRecordDetail,
+} from "../../domain/productionRecord";
+import type { ListPageDefinition } from "../../../../shared/application/page-definition";
 
 describe("ProductionMonitoringPage", () => {
   it("uses one dynamic workbench for corn soybean and rice definitions", async () => {
@@ -123,11 +131,11 @@ describe("ProductionMonitoringPage", () => {
       await screen.findByRole("combobox", { name: "地区 第1级" }),
       "230202",
     );
-    await user.type(screen.getByLabelText("调查日期"), "2026-08-01");
-    await user.type(screen.getByLabelText("种植面积（亩）"), "1.0000");
-    await user.type(screen.getByLabelText("亩产（公斤/亩）"), "2.0000");
-    await user.type(screen.getByLabelText("测试成本"), "3.0000");
-    await user.click(screen.getByRole("button", { name: "保存草稿" }));
+    await user.type(within(dialog).getByLabelText("调查日期"), "2026-08-01");
+    await user.type(within(dialog).getByLabelText("种植面积（亩）"), "1.0000");
+    await user.type(within(dialog).getByLabelText("亩产（公斤/亩）"), "2.0000");
+    await user.type(within(dialog).getByLabelText("测试成本"), "3.0000");
+    await user.click(within(dialog).getByRole("button", { name: "保存草稿" }));
 
     await waitFor(() =>
       expect(create).toHaveBeenCalledWith(
@@ -184,20 +192,302 @@ describe("ProductionMonitoringPage", () => {
   });
 
   it.each([
-    [401, "登录已失效，请重新登录。"],
-    [409, "记录已被其他用户修改，请刷新后重试。"],
-  ])("shows a stable action error for HTTP %s", async (status, message) => {
+    ["AUTHENTICATION", "登录已失效，请重新登录。"],
+    ["CONFLICT", "记录已被其他用户修改，请刷新后重试。"],
+  ] as const)("shows a stable action error for %s", async (kind, message) => {
     const user = userEvent.setup();
     const repository = repositoryWithRow("SUBMIT", {
-      submit: () =>
-        Promise.reject(Object.assign(new Error("write failed"), { status })),
+      submit: () => Promise.reject(repositoryFailure(kind)),
     });
     renderPage(repository);
 
     await user.click(await screen.findByRole("button", { name: "提交" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(message);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(message);
+    expect(within(alert).getByRole("button", { name: "重试操作" })).toBeVisible();
+    expect(within(alert).getByRole("button", { name: "关闭操作错误" })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "重试列表查询" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("retries an action independently and clears its action-only error", async () => {
+    const user = userEvent.setup();
+    const submit = vi
+      .fn<ProductionRecordRepository["submit"]>()
+      .mockRejectedValueOnce(repositoryFailure("CONFLICT"))
+      .mockResolvedValueOnce(detail("PENDING_REVIEW", 8));
+    renderPage(repositoryWithRow("SUBMIT", { submit }));
+
+    await user.click(await screen.findByRole("button", { name: "提交" }));
+    const alert = await screen.findByRole("alert");
+    await user.click(within(alert).getByRole("button", { name: "重试操作" }));
+
+    await waitFor(() => expect(submit).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+    expect(
+      screen.queryByRole("button", { name: "重试列表查询" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("ignores a deferred NEW definition after switching product context", async () => {
+    const user = userEvent.setup();
+    const cornDefinition = deferred<ProductionFormDefinition>();
+    const repository = repositoryFixture({
+      definition: (productCode) =>
+        productCode === "CORN"
+          ? cornDefinition.promise
+          : Promise.resolve(formDefinition("SOYBEAN", ["SOY_ONLY"])),
+    });
+    const { rerender } = render(productionPage("CORN", repository));
+    await user.click(await screen.findByRole("button", { name: "新建填报" }));
+
+    rerender(productionPage("SOYBEAN", repository));
+    cornDefinition.resolve(formDefinition("CORN", ["CORN_ONLY"]));
+
+    await screen.findByRole("heading", { name: "大豆产情监测" });
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "新建产情填报" }),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("ignores a deferred VIEW definition after switching product context", async () => {
+    const user = userEvent.setup();
+    const cornDefinition = deferred<ProductionFormDefinition>();
+    const loadDefinition = vi.fn((productCode: string) =>
+      productCode === "CORN"
+        ? cornDefinition.promise
+        : Promise.resolve(formDefinition("SOYBEAN", ["SOY_ONLY"])),
+    );
+    const repository = repositoryWithRow("VIEW", {
+      definition: loadDefinition,
+      detail: () => Promise.resolve({ ...detail("DRAFT", 7), productCode: "CORN" }),
+    });
+    const { rerender } = render(productionPage("CORN", repository));
+    await user.click(await screen.findByRole("button", { name: "查看" }));
+    await waitFor(() => expect(loadDefinition).toHaveBeenCalledWith("CORN", "FARMER"));
+
+    rerender(productionPage("SOYBEAN", repository));
+    await act(async () => {
+      cornDefinition.resolve(formDefinition("CORN", ["CORN_ONLY"], "FARMER"));
+      await Promise.resolve();
+    });
+
+    await screen.findByRole("heading", { name: "大豆产情监测" });
+    expect(
+      screen.queryByRole("dialog", { name: "产情记录详情" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("ignores a deferred RETURN detail after switching product context", async () => {
+    const user = userEvent.setup();
+    const cornDetail = deferred<ProductionRecordDetail>();
+    const loadDetail = vi.fn(() => cornDetail.promise);
+    const repository = repositoryWithRow("RETURN", { detail: loadDetail });
+    const { rerender } = render(productionPage("CORN", repository));
+    await user.click(await screen.findByRole("button", { name: "退回" }));
+    await waitFor(() => expect(loadDetail).toHaveBeenCalledWith("record-1"));
+
+    rerender(productionPage("SOYBEAN", repository));
+    await act(async () => {
+      cornDetail.resolve({ ...detail("PENDING_REVIEW", 7), productCode: "CORN" });
+      await Promise.resolve();
+    });
+
+    await screen.findByRole("heading", { name: "大豆产情监测" });
+    expect(
+      screen.queryByRole("dialog", { name: "退回产情记录" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["SUBMIT", "提交", "submit"],
+    ["APPROVE", "审核", "approve"],
+  ] as const)(
+    "does not refresh the new context when a deferred %s write settles",
+    async (action, label, method) => {
+      const user = userEvent.setup();
+      const write = deferred<ProductionRecordDetail>();
+      const searches: string[] = [];
+      const repository = repositoryWithRow(action, {
+        search: (criteria) => {
+          searches.push(criteria.productCode);
+          return Promise.resolve(rowPage(action));
+        },
+        [method]: () => write.promise,
+      });
+      const { rerender } = render(productionPage("CORN", repository));
+      await user.click(await screen.findByRole("button", { name: label }));
+
+      rerender(productionPage("SOYBEAN", repository));
+      await screen.findByRole("heading", { name: "大豆产情监测" });
+      await waitFor(() => expect(searches).toEqual(["CORN", "SOYBEAN"]));
+      await act(async () => {
+        write.resolve(detail(action === "SUBMIT" ? "PENDING_REVIEW" : "APPROVED", 8));
+        await Promise.resolve();
+      });
+
+      expect(searches).toEqual(["CORN", "SOYBEAN"]);
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    },
+  );
+
+  it("does not refresh or reopen after a deferred create settles in an old context", async () => {
+    const user = userEvent.setup();
+    const createResult = deferred<ProductionRecordDetail>();
+    const searches: string[] = [];
+    const repository = repositoryFixture({
+      create: () => createResult.promise,
+      search: (criteria) => {
+        searches.push(criteria.productCode);
+        return Promise.resolve(emptyPage());
+      },
+    });
+    const { rerender } = render(productionPage("CORN", repository));
+    await user.click(await screen.findByRole("button", { name: "新建填报" }));
+    const dialog = await screen.findByRole("dialog", { name: "新建产情填报" });
+    await user.click(within(dialog).getByRole("button", { name: "保存草稿" }));
+
+    rerender(productionPage("SOYBEAN", repository));
+    await screen.findByRole("heading", { name: "大豆产情监测" });
+    await waitFor(() => expect(searches).toEqual(["CORN", "SOYBEAN"]));
+    await act(async () => {
+      createResult.resolve(detail("DRAFT", 1));
+      await Promise.resolve();
+    });
+
+    expect(searches).toEqual(["CORN", "SOYBEAN"]);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("does not refresh or close the new context after a deferred draft update settles", async () => {
+    const user = userEvent.setup();
+    const saveResult = deferred<ProductionRecordDetail>();
+    const searches: string[] = [];
+    const repository = repositoryWithRow("VIEW", {
+      definition: (productCode, objectTypeCode) =>
+        Promise.resolve(
+          formDefinition(productCode, ["COST_TEST"], objectTypeCode ?? null),
+        ),
+      detail: () => Promise.resolve({ ...detail("DRAFT", 7), productCode: "CORN" }),
+      saveDraft: () => saveResult.promise,
+      search: (criteria) => {
+        searches.push(criteria.productCode);
+        return Promise.resolve(rowPage("VIEW"));
+      },
+    });
+    const { rerender } = render(productionPage("CORN", repository));
+    await user.click(await screen.findByRole("button", { name: "查看" }));
+    const dialog = await screen.findByRole("dialog", { name: "产情记录详情" });
+    await user.click(within(dialog).getByRole("button", { name: "保存草稿" }));
+
+    rerender(productionPage("SOYBEAN", repository));
+    await screen.findByRole("heading", { name: "大豆产情监测" });
+    await waitFor(() => expect(searches).toEqual(["CORN", "SOYBEAN"]));
+    await act(async () => {
+      saveResult.resolve(detail("DRAFT", 8));
+      await Promise.resolve();
+    });
+
+    expect(searches).toEqual(["CORN", "SOYBEAN"]);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("does not refresh the new context after a deferred return write settles", async () => {
+    const user = userEvent.setup();
+    const returnResult = deferred<ProductionRecordDetail>();
+    const searches: string[] = [];
+    const repository = repositoryWithRow("RETURN", {
+      detail: () =>
+        Promise.resolve({ ...detail("PENDING_REVIEW", 7), productCode: "CORN" }),
+      returnForCorrection: () => returnResult.promise,
+      search: (criteria) => {
+        searches.push(criteria.productCode);
+        return Promise.resolve(rowPage("RETURN"));
+      },
+    });
+    const { rerender } = render(productionPage("CORN", repository));
+    await user.click(await screen.findByRole("button", { name: "退回" }));
+    const dialog = await screen.findByRole("dialog", { name: "退回产情记录" });
+    await user.type(within(dialog).getByLabelText("退回原因"), "切换上下文");
+    await user.click(within(dialog).getByRole("button", { name: "确认退回" }));
+
+    rerender(productionPage("SOYBEAN", repository));
+    await screen.findByRole("heading", { name: "大豆产情监测" });
+    await waitFor(() => expect(searches).toEqual(["CORN", "SOYBEAN"]));
+    await act(async () => {
+      returnResult.resolve(detail("RETURNED", 8));
+      await Promise.resolve();
+    });
+
+    expect(searches).toEqual(["CORN", "SOYBEAN"]);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("keeps the newest object definition and prunes hidden fact values", async () => {
+    const user = userEvent.setup();
+    const a = deferred<ProductionFormDefinition>();
+    const b = deferred<ProductionFormDefinition>();
+    const create = vi.fn(() => Promise.resolve(detail("DRAFT", 0)));
+    const repository = repositoryFixture({
+      create,
+      definition: (_productCode, objectTypeCode) => {
+        if (objectTypeCode === "TYPE_A") return a.promise;
+        if (objectTypeCode === "TYPE_B") return b.promise;
+        return Promise.resolve(formDefinition("SOYBEAN", ["SHARED", "A_ONLY"]));
+      },
+    });
+    render(productionPage("SOYBEAN", repository, twoObjectDefinition()));
+    await user.click(await screen.findByRole("button", { name: "新建填报" }));
+    const dialog = await screen.findByRole("dialog", { name: "新建产情填报" });
+    expect(
+      within(dialog).getByRole("combobox", { name: "动态地区 第1级" }),
+    ).toBeVisible();
+    expect(within(dialog).getByLabelText("动态日期")).toHaveAttribute("type", "date");
+    expect(within(dialog).getByRole("combobox", { name: "动态品种" })).toBeVisible();
+    expect(within(dialog).getByLabelText("动态面积")).toHaveAttribute(
+      "inputmode",
+      "decimal",
+    );
+    expect(within(dialog).getByText("动态面积（动态亩）")).toBeVisible();
+    expect(within(dialog).getByLabelText("动态亩产")).toBeVisible();
+    await user.type(within(dialog).getByLabelText("仅 A 字段"), "8.0000");
+    await user.type(within(dialog).getByLabelText("共享字段"), "3.0000");
+
+    const objectType = within(dialog).getByRole("combobox", { name: "动态对象" });
+    await user.selectOptions(objectType, "TYPE_A");
+    await user.selectOptions(objectType, "TYPE_B");
+    b.resolve(formDefinition("SOYBEAN", ["SHARED", "B_ONLY"], "TYPE_B"));
+    a.resolve(formDefinition("SOYBEAN", ["SHARED", "A_ONLY"], "TYPE_A"));
+
+    expect(await within(dialog).findByLabelText("仅 B 字段")).toBeVisible();
+    expect(within(dialog).queryByLabelText("仅 A 字段")).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "保存草稿" }));
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({ costs: { SHARED: "3.0000" } }),
+      ),
+    );
   });
 });
+
+function productionPage(
+  productCode: string,
+  repository: ProductionRecordRepository,
+  loadedDefinition: ListPageDefinition = actionDefinition(productCode),
+) {
+  return (
+    <ProductionMonitoringPage
+      loadRegionChildren={() => Promise.resolve([])}
+      pageDefinitionGateway={{ getDefinition: () => Promise.resolve(loadedDefinition) }}
+      pageKey={{ domain: "PRODUCTION", pageKind: "MONITORING", productCode }}
+      repository={repository}
+    />
+  );
+}
 
 function renderPage(repository: ProductionRecordRepository) {
   return render(
@@ -221,38 +511,44 @@ function repositoryWithRow(
   overrides: Partial<ProductionRecordRepository> = {},
 ) {
   return repositoryFixture({
-    search: () =>
-      Promise.resolve({
-        items: [
-          {
-            id: "record-1",
-            values: { PROD_STATUS: "草稿" },
-            allowedActions: [action],
-            version: 7,
-          },
-        ],
-        pageNumber: 0,
-        pageSize: 20,
-        totalElements: 1,
-        totalPages: 1,
-      }),
+    search: () => Promise.resolve(rowPage(action)),
     detail: () => Promise.resolve(detail("DRAFT", 7)),
     ...overrides,
   });
+}
+
+function rowPage(action: "VIEW" | "SUBMIT" | "APPROVE" | "RETURN") {
+  return {
+    items: [
+      {
+        id: "record-1",
+        values: { PROD_STATUS: "草稿" },
+        allowedActions: [action],
+        version: 7,
+      },
+    ],
+    pageNumber: 0,
+    pageSize: 20,
+    totalElements: 1,
+    totalPages: 1,
+  };
+}
+
+function emptyPage() {
+  return {
+    items: [],
+    pageNumber: 0,
+    pageSize: 20,
+    totalElements: 0,
+    totalPages: 0,
+  };
 }
 
 function repositoryFixture(
   overrides: Partial<ProductionRecordRepository> = {},
 ): ProductionRecordRepository {
   return {
-    search: () =>
-      Promise.resolve({
-        items: [],
-        pageNumber: 0,
-        pageSize: 20,
-        totalElements: 0,
-        totalPages: 0,
-      }),
+    search: () => Promise.resolve(emptyPage()),
     detail: () => Promise.resolve(detail("DRAFT", 0)),
     definition: () =>
       Promise.resolve({
@@ -323,9 +619,12 @@ function definition(productCode: string, title: string) {
   } as const;
 }
 
-function actionDefinition() {
+function actionDefinition(productCode = "SOYBEAN") {
   return {
-    ...definition("SOYBEAN", "大豆产情监测"),
+    ...definition(
+      productCode,
+      productCode === "CORN" ? "玉米产情监测" : "大豆产情监测",
+    ),
     filters: [
       {
         id: "objectTypeCode",
@@ -339,7 +638,19 @@ function actionDefinition() {
       {
         id: "report",
         label: "填报信息",
-        fields: [{ id: "PROD_STATUS", label: "状态", valueType: "TEXT" }],
+        fields: [
+          { id: "PROD_OBJECT_TYPE", label: "对象类型", valueType: "TEXT" },
+          { id: "PROD_REGION", label: "地区", valueType: "TEXT" },
+          { id: "PROD_SURVEY_DATE", label: "调查日期", valueType: "DATE" },
+          { id: "PROD_CULTIVAR", label: "品种", valueType: "TEXT" },
+          { id: "PROD_AREA_MU", label: "种植面积（亩）", valueType: "DECIMAL" },
+          {
+            id: "PROD_YIELD_PER_MU",
+            label: "亩产（公斤/亩）",
+            valueType: "DECIMAL",
+          },
+          { id: "PROD_STATUS", label: "状态", valueType: "TEXT" },
+        ],
       },
     ],
     actions: [
@@ -350,4 +661,88 @@ function actionDefinition() {
       { id: "RETURN", label: "退回", scope: "row" },
     ],
   } as const;
+}
+
+function twoObjectDefinition() {
+  const loaded = actionDefinition();
+  const labels: Record<string, string> = {
+    PROD_OBJECT_TYPE: "动态对象",
+    PROD_REGION: "动态地区",
+    PROD_SURVEY_DATE: "动态日期",
+    PROD_CULTIVAR: "动态品种",
+    PROD_AREA_MU: "动态面积",
+    PROD_YIELD_PER_MU: "动态亩产",
+  };
+  return {
+    ...loaded,
+    filters: [
+      {
+        ...loaded.filters[0],
+        label: "动态对象",
+        options: [
+          { value: "TYPE_A", label: "A 类型" },
+          { value: "TYPE_B", label: "B 类型" },
+        ],
+      },
+    ],
+    columnGroups: loaded.columnGroups.map((group) => ({
+      ...group,
+      fields: group.fields.map((field) =>
+        labels[field.id]
+          ? {
+              ...field,
+              label: labels[field.id]!,
+              ...(field.id === "PROD_AREA_MU" ? { unit: "动态亩" } : {}),
+            }
+          : field,
+      ),
+    })),
+  };
+}
+
+function formDefinition(
+  productCode: string,
+  codes: readonly string[],
+  objectTypeCode: string | null = null,
+): ProductionFormDefinition {
+  const labels: Record<string, string> = {
+    SHARED: "共享字段",
+    A_ONLY: "仅 A 字段",
+    B_ONLY: "仅 B 字段",
+    SOY_ONLY: "大豆字段",
+    CORN_ONLY: "玉米字段",
+  };
+  return {
+    productCode,
+    objectTypeCode,
+    groups: [
+      { category: "QUALITY", fields: [] },
+      {
+        category: "COST",
+        fields: codes.map((code) => ({
+          code,
+          label: labels[code] ?? code,
+          valueType: "DECIMAL",
+          unit: null,
+          description: null,
+          precision: 18,
+          scale: 4,
+        })),
+      },
+      { category: "INSURANCE", fields: [] },
+      { category: "SUBSIDY", fields: [] },
+    ],
+  };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
+
+function repositoryFailure(kind: ProductionRepositoryFailureKind) {
+  return new ProductionRepositoryFailure(kind);
 }
