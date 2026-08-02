@@ -1,8 +1,16 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { ProductionMonitoringPage } from "./ProductionMonitoringPage";
+import { useProductionCommands } from "../hooks/useProductionCommands";
 import {
   ProductionRepositoryFailure,
   type ProductionRecordRepository,
@@ -15,6 +23,66 @@ import type {
 import type { ListPageDefinition } from "../../../../shared/application/page-definition";
 
 describe("ProductionMonitoringPage", () => {
+  it.each(["resolve", "reject"] as const)(
+    "releases the mutation owner after mixed VIEW and NEW requests when the mutation %s",
+    async (outcome) => {
+      const firstSubmit = deferred<ProductionRecordDetail>();
+      const staleDetail = deferred<ProductionRecordDetail>();
+      const submit = vi
+        .fn<ProductionRecordRepository["submit"]>()
+        .mockReturnValueOnce(firstSubmit.promise)
+        .mockResolvedValueOnce(detail("PENDING_REVIEW", 9));
+      const repository = repositoryFixture({
+        submit,
+        detail: () => staleDetail.promise,
+      });
+      const refresh = vi.fn(() => Promise.resolve());
+      const { result } = renderHook(() =>
+        useProductionCommands({
+          contextKey: "PRODUCTION/MONITORING/CORN",
+          productCode: "CORN",
+          records: rowPage("SUBMIT").items,
+          refresh,
+          repository,
+        }),
+      );
+      await act(async () => Promise.resolve());
+
+      let mutation!: Promise<void>;
+      await act(async () => {
+        mutation = result.current.dispatch("SUBMIT", "record-1");
+        await Promise.resolve();
+      });
+      expect(result.current.loading).toBe(true);
+
+      await act(async () => {
+        void result.current.dispatch("VIEW", "record-1");
+        void result.current.dispatch("NEW");
+        await Promise.resolve();
+      });
+      await waitFor(() => expect(result.current.editor?.id).toBeUndefined());
+      expect(result.current.loading).toBe(true);
+
+      await act(async () => {
+        staleDetail.resolve(detail("APPROVED", 17));
+        await staleDetail.promise;
+      });
+      expect(result.current.editor?.id).toBeUndefined();
+
+      await act(async () => {
+        if (outcome === "resolve") firstSubmit.resolve(detail("PENDING_REVIEW", 8));
+        else firstSubmit.reject(new Error("submit failed"));
+        await mutation;
+      });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      await act(async () => {
+        await result.current.dispatch("SUBMIT", "record-1");
+      });
+      expect(submit).toHaveBeenCalledTimes(2);
+    },
+  );
+
   it("uses one dynamic workbench for corn soybean and rice definitions", async () => {
     const definitions = new Map([
       ["CORN", definition("CORN", "玉米产情监测")],
@@ -1124,10 +1192,12 @@ function confirmedFormDefinition(
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((next) => {
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((next, fail) => {
     resolve = next;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, reject, resolve };
 }
 
 function repositoryFailure(kind: ProductionRepositoryFailureKind) {

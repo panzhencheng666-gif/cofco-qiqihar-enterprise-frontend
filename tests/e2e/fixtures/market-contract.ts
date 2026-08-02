@@ -4,9 +4,17 @@ export type MarketProductCode = "CORN" | "SOYBEAN" | "RICE";
 
 export type MarketFactCode = keyof typeof marketFactDefinitions;
 
-export const marketContractVersion = "V22";
+export const marketContractVersion = "V23";
 export const backendMarketContractSha256 =
-  "0efc5505da3daff584e7af903e2dba0ca58e513aa56c9e5ba5ae4c61a77a7ac2";
+  "16bbb60018df7c34f7a0cc2ccef4e577fcc75813139506d1108b6368ba5ac278";
+
+export const marketFactCategories = [
+  { code: "QUALITY", label: "质量指标", sortOrder: 10 },
+  { code: "PURCHASE", label: "采购与成交", sortOrder: 20 },
+  { code: "SALES", label: "销售", sortOrder: 30 },
+  { code: "PROCESSING", label: "加工生产", sortOrder: 40 },
+  { code: "INVENTORY", label: "库存", sortOrder: 50 },
+] as const;
 
 export const marketFactDefinitions = {
   MOISTURE: fact("QUALITY", "水分", "%", 10, 1),
@@ -281,49 +289,83 @@ export const marketProducts = {
   }),
 } as const;
 
-export const canonicalMarketContract = `${[
-  ...Object.entries(marketProducts).flatMap(([productCode, product]) =>
-    Object.entries(product.objects).flatMap(([objectCode, object]) => [
-      `OBJECT|${productCode}|${objectCode}|${object.label}|${object.sortOrder}`,
-      ...object.facts.map((factCode) => {
-        const definition = marketFactDefinitions[factCode];
-        return [
-          "FACT",
-          productCode,
-          objectCode,
-          factCode,
-          definition.category,
-          definition.label,
-          definition.unit,
-          18,
-          definition.scale,
-          object.factSortOrders[factCode],
-        ].join("|");
-      }),
-    ]),
-  ),
-  ...Object.keys(marketProducts).flatMap((productCode) =>
-    marketCoreFieldDefinitions.map((definition) =>
-      [
-        "CORE",
-        productCode,
-        definition.code,
-        definition.label,
-        definition.controlType,
-        definition.unit ?? "",
-        definition.precision ?? "",
-        definition.scale ?? "",
-        definition.sortOrder,
-        definition.domainBinding,
-        definition.capability,
-        definition.required ? "t" : "f",
-        definition.pageSortOrder,
-      ].join("|"),
+export function serializeMarketContract(
+  overrides: {
+    categories?: readonly { code: string; label: string; sortOrder: number }[];
+    facts?: Record<
+      string,
+      {
+        category: string;
+        label: string;
+        valueType: string;
+        unit: string | null;
+        description: string | null;
+        precision: number;
+        scale: number;
+      }
+    >;
+    coreFields?: readonly ReturnType<typeof coreDefinition>[];
+  } = {},
+) {
+  const categories = overrides.categories ?? marketFactCategories;
+  const facts = overrides.facts ?? marketFactDefinitions;
+  const coreFields = overrides.coreFields ?? marketCoreFieldDefinitions;
+  const lines = [
+    ...categories.map(({ code, label, sortOrder }) =>
+      ["CATEGORY", code, label, sortOrder].join("|"),
     ),
-  ),
-]
-  .sort()
-  .join("\n")}\n`;
+    ...Object.entries(marketProducts).flatMap(([productCode, product]) =>
+      Object.entries(product.objects).flatMap(([objectCode, object]) => [
+        `OBJECT|${productCode}|${objectCode}|${object.label}|${object.sortOrder}`,
+        ...object.facts.map((factCode) => {
+          const definition = facts[factCode];
+          return [
+            "FACT",
+            productCode,
+            objectCode,
+            factCode,
+            definition.category,
+            definition.label,
+            definition.valueType,
+            definition.unit ?? "",
+            definition.description ?? "",
+            definition.precision,
+            definition.scale,
+            object.factSortOrders[factCode],
+          ].join("|");
+        }),
+      ]),
+    ),
+    ...Object.keys(marketProducts).flatMap((productCode) =>
+      coreFields.flatMap((definition) => [
+        [
+          "CORE",
+          productCode,
+          definition.code,
+          definition.label,
+          definition.controlType,
+          definition.unit ?? "",
+          definition.description ?? "",
+          definition.precision ?? "",
+          definition.scale ?? "",
+          definition.sortOrder,
+          definition.domainBinding,
+          definition.capability,
+          definition.required ? "t" : "f",
+          definition.pageSortOrder,
+        ].join("|"),
+        ...definition.options.map(({ value, label, sortOrder }) =>
+          ["CORE_OPTION", productCode, definition.code, value, label, sortOrder].join(
+            "|",
+          ),
+        ),
+      ]),
+    ),
+  ];
+  return `${lines.sort(codePointCompare).join("\n")}\n`;
+}
+
+export const canonicalMarketContract = serializeMarketContract();
 
 export const marketContractSha256 = createHash("sha256")
   .update(canonicalMarketContract, "utf8")
@@ -336,7 +378,31 @@ function fact(
   sortOrder: number,
   scale: number,
 ) {
-  return { category, label, unit, sortOrder, scale };
+  return {
+    category,
+    label,
+    valueType: "DECIMAL",
+    unit,
+    description: null,
+    precision: 18,
+    sortOrder,
+    scale,
+  };
+}
+
+function codePointCompare(left: string, right: string) {
+  const leftPoints = Array.from(left, (character) => character.codePointAt(0)!);
+  const rightPoints = Array.from(right, (character) => character.codePointAt(0)!);
+  for (
+    let index = 0;
+    index < Math.min(leftPoints.length, rightPoints.length);
+    index++
+  ) {
+    if (leftPoints[index] !== rightPoints[index]) {
+      return leftPoints[index]! - rightPoints[index]!;
+    }
+  }
+  return leftPoints.length - rightPoints.length;
 }
 
 function coreDefinition(

@@ -45,10 +45,12 @@ export function useProductionCommands({
   const [definitionLoading, setDefinitionLoading] = useState(false);
   const [issue, setIssue] = useState<ProductionActionIssue>();
   const requestVersion = useRef(0);
-  const mutationInFlight = useRef(false);
+  const pendingOperations = useRef(new Set<number>());
+  const mutationOwner = useRef<number | undefined>(undefined);
   const mounted = useRef(false);
 
   useEffect(() => {
+    const operations = pendingOperations.current;
     mounted.current = true;
     requestVersion.current += 1;
     void Promise.resolve().then(() => {
@@ -57,14 +59,16 @@ export function useProductionCommands({
       setReturning(undefined);
       setReturnReason("");
       setIssue(undefined);
-      mutationInFlight.current = false;
+      operations.clear();
+      mutationOwner.current = undefined;
       setLoading(false);
       setDefinitionLoading(false);
     });
     return () => {
       mounted.current = false;
       requestVersion.current += 1;
-      mutationInFlight.current = false;
+      operations.clear();
+      mutationOwner.current = undefined;
     };
   }, [contextKey]);
 
@@ -74,21 +78,28 @@ export function useProductionCommands({
 
   function begin() {
     const version = ++requestVersion.current;
+    pendingOperations.current.add(version);
     setIssue(undefined);
     setLoading(true);
     return version;
   }
 
   function beginMutation() {
-    if (mutationInFlight.current) return undefined;
-    mutationInFlight.current = true;
-    return begin();
+    if (mutationOwner.current !== undefined) return undefined;
+    const version = begin();
+    mutationOwner.current = version;
+    return version;
   }
 
-  function finishMutation(version: number) {
-    if (!active(version)) return;
-    mutationInFlight.current = false;
-    setLoading(false);
+  function finish(version: number) {
+    pendingOperations.current.delete(version);
+    if (mounted.current) setLoading(pendingOperations.current.size > 0);
+  }
+
+  function finishMutation(owner: number) {
+    if (mutationOwner.current !== owner) return;
+    mutationOwner.current = undefined;
+    finish(owner);
   }
 
   function fail(version: number, failure: unknown, retry: () => void) {
@@ -108,7 +119,7 @@ export function useProductionCommands({
     } catch {
       refreshFailed(version, message);
     } finally {
-      if (active(version)) setLoading(false);
+      finish(version);
     }
   }
 
@@ -170,7 +181,7 @@ export function useProductionCommands({
       fail(version, failure, () => void dispatch(action, rowId));
     } finally {
       if (mutates) finishMutation(version);
-      else if (active(version)) setLoading(false);
+      else finish(version);
     }
   }
 

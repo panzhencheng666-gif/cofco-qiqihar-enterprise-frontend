@@ -3,6 +3,7 @@ import type { Page, Route } from "@playwright/test";
 import { parseJavaInt32 } from "../support/java-int32";
 import {
   marketCoreFieldDefinitions,
+  marketFactCategories,
   marketFactDefinitions,
   marketProducts,
   type MarketFactCode,
@@ -20,24 +21,17 @@ const listKeys = new Set([
   "filter.objectTypeCode",
 ]);
 const draftKeys = new Set(["productCode", "coreValues", "facts"]);
-const editableCoreCodes = new Set([
-  "MKT_OBJECT_TYPE",
-  "MKT_REGION",
-  "MKT_TRADE_DATE",
-  "MKT_TRADE_DIRECTION",
-  "MKT_PURCHASE_BASE_PRICE",
-  "MKT_SALE_BASE_PRICE",
-  "MKT_CARRIAGE_BOARD_AMOUNT",
-  "MKT_PACKAGING_FORM",
-  "MKT_PACKAGING_AMOUNT",
-  "MKT_FREIGHT_AMOUNT",
-  "MKT_SOURCE_NOTE",
-]);
-const amountCodes = [
-  "MKT_CARRIAGE_BOARD_AMOUNT",
-  "MKT_PACKAGING_AMOUNT",
-  "MKT_FREIGHT_AMOUNT",
-] as const;
+const editableCoreCodes = new Set(
+  marketCoreFieldDefinitions
+    .filter(({ controlType }) => !controlType.startsWith("READONLY_"))
+    .map(({ code }) => code),
+);
+const amountCodes = marketCoreFieldDefinitions
+  .filter(({ capability }) => capability === "PRICE_COMPONENT")
+  .map(({ code }) => code);
+const basePriceCodes = marketCoreFieldDefinitions
+  .filter(({ capability }) => capability.endsWith("_BASE_PRICE"))
+  .map(({ code }) => code);
 
 export interface MarketListQuery {
   productCode: MarketProductCode;
@@ -526,13 +520,9 @@ function formDefinition(
       coreFields: marketCoreFieldDefinitions.map((definition) =>
         coreFieldResponse(definition, productCode),
       ),
-      groups: [
-        factGroup("QUALITY", "质量指标", 10, applicableFacts, applicableSortOrders),
-        factGroup("PURCHASE", "采购与成交", 20, applicableFacts, applicableSortOrders),
-        factGroup("SALES", "销售", 30, applicableFacts, applicableSortOrders),
-        factGroup("PROCESSING", "加工生产", 40, applicableFacts, applicableSortOrders),
-        factGroup("INVENTORY", "库存", 50, applicableFacts, applicableSortOrders),
-      ],
+      groups: marketFactCategories.map(({ code, label, sortOrder }) =>
+        factGroup(code, label, sortOrder, applicableFacts, applicableSortOrders),
+      ),
     },
   };
 }
@@ -652,11 +642,7 @@ function validCommand(value: unknown, action: "submit" | "approve" | "return") {
 
 function serverDraft(draft: FixtureDraft, reportedAt: string): FixtureDraft {
   const coreValues = { ...draft.coreValues };
-  for (const code of [
-    "MKT_PURCHASE_BASE_PRICE",
-    "MKT_SALE_BASE_PRICE",
-    ...amountCodes,
-  ]) {
+  for (const code of [...basePriceCodes, ...amountCodes]) {
     const value = coreValues[code];
     if (value) coreValues[code] = formatUnits(decimalUnits(value)!);
   }
