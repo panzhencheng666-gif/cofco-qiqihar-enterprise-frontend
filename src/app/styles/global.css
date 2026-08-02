@@ -533,6 +533,42 @@ select:focus-visible {
   background: #fff;
 }
 
+.row-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+}
+
+.production-dialog {
+  position: fixed;
+  z-index: 20;
+  inset: 8vh 8vw auto;
+  max-height: 84vh;
+  padding: 24px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 16px 48px rgb(21 54 72 / 28%);
+}
+
+.production-dialog fieldset {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-block: 12px;
+  border: 1px solid var(--line);
+}
+
+.production-dialog label,
+.production-dialog label > input,
+.production-dialog label > select,
+.production-dialog label > textarea {
+  display: block;
+  width: 100%;
+}
+
 @media (max-width: 1450px) {
   .enterprise-top-nav button {
     min-width: 82px;

@@ -1,5 +1,3 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-
 import type { MarketCollectionRepository } from "../../application/ports/MarketCollectionRepository";
 
 import type {
@@ -12,15 +10,16 @@ import type {
   PageDefinitionGateway,
 } from "../../../../shared/application/page-definition";
 import { createInitialListQuery } from "../../../../shared/application/page-definition";
-import { ListWorkbench } from "../../../../shared/ui/list-workbench";
+import {
+  ListPageContextError,
+  ListWorkbench,
+  useListPageController,
+} from "../../../../shared/ui/list-workbench";
+import type { RouteListQuery } from "../../../../shared/ui/list-workbench";
 
 type SearchList = (query: ListQueryState) => Promise<PagedResult>;
 
-export interface RouteQuery {
-  pageNumber?: number;
-  pageSize?: number;
-  values: Readonly<Record<string, string>>;
-}
+export type RouteQuery = RouteListQuery;
 
 export function MarketCollectionPage({
   loadRegionChildren,
@@ -44,157 +43,52 @@ export function MarketCollectionPage({
   search?: SearchList;
 }) {
   const productCode = requiredProductCode(pageKey);
-  const [definition, setDefinition] = useState<ListPageDefinition>();
-  const [query, setQuery] = useState<ListQueryState>();
-  const [result, setResult] = useState<PagedResult>();
-  const [definitionError, setDefinitionError] = useState(false);
-  const [definitionAttempt, setDefinitionAttempt] = useState(0);
-  const [listError, setListError] = useState("");
-  const [contextError, setContextError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const searchVersion = useRef(0);
-
-  const executeSearch = useCallback(
-    async (nextQuery: ListQueryState) => {
-      const version = ++searchVersion.current;
-      setLoading(true);
-      setListError("");
-      try {
-        let nextResult: PagedResult;
-        if (search) {
-          nextResult = await search(nextQuery);
-        } else if (marketCollectionRepository) {
-          nextResult = await marketCollectionRepository.search({
-            productCode,
-            pageKind: pageKey.pageKind,
-            pageNumber: nextQuery.pageNumber,
-            pageSize: nextQuery.pageSize,
-            values: nextQuery.values,
-          });
-        } else {
-          nextResult = emptyResult(nextQuery);
-        }
-        const lastPage = Math.max(0, nextResult.totalPages - 1);
-        if (nextQuery.pageNumber > lastPage) {
-          const normalizedQuery = { ...nextQuery, pageNumber: lastPage };
-          if (search) {
-            nextResult = await search(normalizedQuery);
-          } else if (marketCollectionRepository) {
-            nextResult = await marketCollectionRepository.search({
-              productCode,
-              pageKind: pageKey.pageKind,
-              pageNumber: normalizedQuery.pageNumber,
-              pageSize: normalizedQuery.pageSize,
-              values: normalizedQuery.values,
-            });
-          }
-          if (version === searchVersion.current) {
-            setQuery(normalizedQuery);
-            onQueryNormalized?.(normalizedQuery);
-          }
-        }
-        if (version === searchVersion.current) setResult(nextResult);
-      } catch {
-        if (version === searchVersion.current) {
-          setListError("列表查询失败，请稍后重试。");
-        }
-      } finally {
-        if (version === searchVersion.current) setLoading(false);
+  const controller = useListPageController({
+    controllerKey: `${pageKey.domain}/${pageKey.pageKind}/${productCode}`,
+    loadDefinition: async () => {
+      const loaded = await pageDefinitionGateway.getDefinition(pageKey);
+      if (!samePageKey(loaded.key, pageKey)) {
+        throw new ListPageContextError("页面上下文与页面定义不一致。");
       }
+      return loaded;
     },
-    [
-      marketCollectionRepository,
-      onQueryNormalized,
-      pageKey.pageKind,
-      productCode,
-      search,
-    ],
-  );
-
-  useEffect(() => {
-    let active = true;
-    void Promise.resolve().then(() => {
-      if (!active) return undefined;
-      setDefinition(undefined);
-      setDefinitionError(false);
-      setContextError("");
-      return pageDefinitionGateway
-        .getDefinition(pageKey)
-        .then((loadedDefinition) => {
-          if (!active) return;
-          if (!samePageKey(loadedDefinition.key, pageKey)) {
-            setContextError("页面上下文与页面定义不一致。");
-            return;
-          }
-          const defaults = createInitialListQuery(loadedDefinition);
-          const initialQuery = normalizeRouteQuery(
-            loadedDefinition,
-            defaults,
-            routeQuery,
-          );
-          setDefinition(loadedDefinition);
-          setQuery(initialQuery);
-          setResult({
-            items: [],
-            pageNumber: initialQuery.pageNumber,
-            pageSize: initialQuery.pageSize,
-            totalElements: 0,
-            totalPages: 0,
-          });
-          onQueryNormalized?.(initialQuery);
-          void executeSearch(initialQuery);
-        })
-        .catch(() => {
-          if (active) setDefinitionError(true);
-        });
-    });
-    return () => {
-      active = false;
-    };
-  }, [
-    definitionAttempt,
-    executeSearch,
+    normalizeRoute: (loaded, current) =>
+      normalizeRouteQuery(loaded, createInitialListQuery(loaded), current),
+    onQueryCommitted,
     onQueryNormalized,
-    pageDefinitionGateway,
-    pageKey,
     routeQuery,
-  ]);
-
-  function changeQuery(nextQuery: ListQueryState) {
-    const shouldRun =
-      query !== undefined &&
-      (nextQuery.pageNumber !== query.pageNumber ||
-        nextQuery.pageSize !== query.pageSize);
-    setQuery(nextQuery);
-    if (shouldRun) {
-      onQueryCommitted?.(nextQuery);
-      void executeSearch(nextQuery);
-    }
-  }
-
-  function submitSearch() {
-    if (!query) return;
-    onQueryCommitted?.(query);
-    void executeSearch(query);
-  }
+    search: async (nextQuery) => {
+      if (search) return search(nextQuery);
+      if (!marketCollectionRepository) return emptyResult(nextQuery);
+      return marketCollectionRepository.search({
+        productCode,
+        pageKind: pageKey.pageKind,
+        pageNumber: nextQuery.pageNumber,
+        pageSize: nextQuery.pageSize,
+        values: nextQuery.values,
+      });
+    },
+  });
+  const {
+    changeQuery,
+    definition,
+    definitionError,
+    executeSearch,
+    listError,
+    loading,
+    query,
+    result,
+    retryDefinition,
+    submitSearch,
+  } = controller;
 
   if (definitionError) {
     return (
       <div className="page-alert" role="alert">
-        页面定义加载失败，请稍后重试。
-        <button
-          onClick={() => setDefinitionAttempt((value) => value + 1)}
-          type="button"
-        >
+        {definitionError}
+        <button onClick={retryDefinition} type="button">
           重试页面定义
         </button>
-      </div>
-    );
-  }
-  if (contextError) {
-    return (
-      <div className="page-alert" role="alert">
-        {contextError}
       </div>
     );
   }

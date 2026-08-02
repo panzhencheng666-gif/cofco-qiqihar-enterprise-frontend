@@ -30,7 +30,7 @@ const navigationGroups: readonly NavigationGroup[] = [
   {
     label: "产情监测",
     items: [
-      { label: "产情填报", route: "#/产情监测/产情填报" },
+      { label: "产情填报", route: "#/pages/PRODUCTION/MONITORING/CORN" },
       { label: "产情分析", route: "#/产情监测/产情分析" },
     ],
   },
@@ -68,11 +68,15 @@ export function EnterpriseShell({
   children,
   onProductSelect,
   products = [],
+  productItemSuffix = "质量指标",
+  productNavigationTitle = "质量指标",
 }: {
   activeProductId?: string;
   children: ReactNode;
   onProductSelect?: (productId: string) => void;
   products?: readonly ProductNavigationItem[];
+  productItemSuffix?: string;
+  productNavigationTitle?: string;
 }) {
   const activePath = window.location.hash.split("?", 1)[0] ?? "";
 
@@ -154,7 +158,7 @@ export function EnterpriseShell({
             ))}
             {products.length > 0 && (
               <section>
-                <h2>▾ 质量指标</h2>
+                <h2>▾ {productNavigationTitle}</h2>
                 {products.map((product) => (
                   <button
                     aria-current={activeProductId === product.id ? "page" : undefined}
@@ -163,7 +167,8 @@ export function EnterpriseShell({
                     onClick={() => onProductSelect?.(product.id)}
                     type="button"
                   >
-                    {product.name}质量指标
+                    {product.name}
+                    {productItemSuffix}
                   </button>
                 ))}
               </section>

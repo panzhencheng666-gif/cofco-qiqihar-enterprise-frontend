@@ -162,7 +162,7 @@ export function ListWorkbench({
                     {group.label}
                   </th>
                 ))}
-                {rowActions.length > 0 && <th colSpan={rowActions.length}>操作</th>}
+                {rowActions.length > 0 && <th>操作</th>}
               </tr>
               <tr>
                 {columns.map(({ field, group }) =>
@@ -178,9 +178,7 @@ export function ListWorkbench({
                     </th>
                   ),
                 )}
-                {rowActions.map((action) => (
-                  <th key={action.id}>{action.label}</th>
-                ))}
+                {rowActions.length > 0 && <th aria-label="可用操作">可用操作</th>}
               </tr>
             </thead>
             <tbody>
@@ -201,24 +199,36 @@ export function ListWorkbench({
                         </td>
                       ),
                     )}
-                    {rowActions.map((action) => (
-                      <td key={action.id}>
-                        <button
-                          className="link-button"
-                          onClick={() => onAction?.(action.id, row.id)}
-                          type="button"
-                        >
-                          {action.label}
-                        </button>
+                    {rowActions.length > 0 && (
+                      <td className="row-actions">
+                        {rowActions
+                          .filter(
+                            (action) =>
+                              row.allowedActions === undefined ||
+                              row.allowedActions.includes(action.id),
+                          )
+                          .map((action) => (
+                            <button
+                              className="link-button"
+                              key={action.id}
+                              onClick={() => onAction?.(action.id, row.id)}
+                              type="button"
+                            >
+                              {action.label}
+                            </button>
+                          ))}
                       </td>
-                    ))}
+                    )}
                   </tr>
                 ))}
               {loading && (
                 <tr>
                   <td
                     className="empty-ledger"
-                    colSpan={Math.max(1, columns.length + rowActions.length)}
+                    colSpan={Math.max(
+                      1,
+                      columns.length + (rowActions.length > 0 ? 1 : 0),
+                    )}
                   >
                     正在加载列表
                   </td>
@@ -228,7 +238,10 @@ export function ListWorkbench({
                 <tr>
                   <td
                     className="empty-ledger"
-                    colSpan={Math.max(1, columns.length + rowActions.length)}
+                    colSpan={Math.max(
+                      1,
+                      columns.length + (rowActions.length > 0 ? 1 : 0),
+                    )}
                   >
                     暂无记录
                   </td>

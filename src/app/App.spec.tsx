@@ -205,6 +205,52 @@ describe("App production composition", () => {
     expect(await screen.findByRole("button", { name: "大豆质量指标" })).toBeVisible();
     expect(attempts).toBe(2);
   });
+
+  it.each([
+    ["CORN", "玉米产情监测"],
+    ["SOYBEAN", "大豆产情监测"],
+    ["RICE", "稻谷产情监测"],
+  ])("preserves canonical production deep link for %s", async (productCode, title) => {
+    window.history.replaceState(
+      null,
+      "",
+      `#/pages/PRODUCTION/MONITORING/${productCode}`,
+    );
+    const dependencies = dependenciesFixture(() => Promise.resolve(page([], 0, 20, 0)));
+    dependencies.masterDataRepository.getProducts = () =>
+      Promise.resolve([
+        { id: "CORN", name: "玉米" },
+        { id: "SOYBEAN", name: "大豆" },
+        { id: "RICE", name: "稻谷" },
+      ]);
+    dependencies.pageDefinitionGateway.getDefinition = (key) =>
+      Promise.resolve({
+        ...definitionFixture(key.productCode!),
+        key,
+        title,
+      });
+    dependencies.productionRecordRepository = {
+      search: () =>
+        Promise.resolve({
+          ...page([], 0, 20, 0),
+          items: [],
+        }),
+      detail: () => Promise.reject(new Error("not called")),
+      definition: () => Promise.reject(new Error("not called")),
+      create: () => Promise.reject(new Error("not called")),
+      saveDraft: () => Promise.reject(new Error("not called")),
+      submit: () => Promise.reject(new Error("not called")),
+      approve: () => Promise.reject(new Error("not called")),
+      returnForCorrection: () => Promise.reject(new Error("not called")),
+    };
+
+    render(<App dependencies={dependencies} />);
+
+    expect(await screen.findByRole("heading", { name: title })).toBeVisible();
+    expect(window.location.hash).toBe(
+      `#/pages/PRODUCTION/MONITORING/${productCode}?pageNumber=0&pageSize=20`,
+    );
+  });
 });
 
 function dependenciesFixture(

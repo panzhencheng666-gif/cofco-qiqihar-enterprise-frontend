@@ -60,8 +60,13 @@ interface HashState {
   invalid: boolean;
 }
 
-const domain = "MARKET";
-const pageKind = "QUALITY";
+const defaultPageKey = { domain: "MARKET", pageKind: "QUALITY" } as const;
+
+function supportedPageContext(key?: BusinessPageKey) {
+  return key?.domain === "PRODUCTION" && key.pageKind === "MONITORING"
+    ? { domain: "PRODUCTION", pageKind: "MONITORING" }
+    : defaultPageKey;
+}
 
 function locationFromHash(): HashState {
   const workMatch = /^#\/work\/(pending|completed)(?:\?(.*))?$/.exec(
@@ -180,6 +185,8 @@ export function App({
   const [hashState, setHashState] = useState<HashState>(() => locationFromHash());
   const [navigationError, setNavigationError] = useState(false);
   const [navigationAttempt, setNavigationAttempt] = useState(0);
+  const { domain: navigationDomain, pageKind: navigationPageKind } =
+    supportedPageContext(hashState.location?.key);
 
   useEffect(() => {
     if (hashState.workLocation) {
@@ -187,7 +194,7 @@ export function App({
     }
     let active = true;
     void dependencies.masterDataRepository
-      .getProducts(domain, pageKind)
+      .getProducts(navigationDomain, navigationPageKind)
       .then((loadedProducts) => {
         if (!active) return;
         setProducts(loadedProducts);
@@ -196,8 +203,8 @@ export function App({
           if (current.invalid) return current;
           if (
             current.location &&
-            current.location.key.domain === domain &&
-            current.location.key.pageKind === pageKind &&
+            current.location.key.domain === navigationDomain &&
+            current.location.key.pageKind === navigationPageKind &&
             loadedProducts.some(
               (product) => product.id === current.location?.key.productCode,
             )
@@ -207,7 +214,11 @@ export function App({
           const first = loadedProducts[0];
           if (!first) return { invalid: false };
           const next = {
-            key: { domain, pageKind, productCode: first.id },
+            key: {
+              domain: navigationDomain,
+              pageKind: navigationPageKind,
+              productCode: first.id,
+            },
             query: { values: {} },
           };
           window.history.replaceState(null, "", hashFor(next.key));
@@ -218,7 +229,13 @@ export function App({
     return () => {
       active = false;
     };
-  }, [dependencies.masterDataRepository, hashState.workLocation, navigationAttempt]);
+  }, [
+    dependencies.masterDataRepository,
+    navigationDomain,
+    navigationPageKind,
+    hashState.workLocation,
+    navigationAttempt,
+  ]);
 
   useEffect(() => {
     const synchronize = () => setHashState(locationFromHash());
@@ -235,7 +252,8 @@ export function App({
   const pageKey = location?.key;
 
   function selectProduct(productCode: string) {
-    const next = { key: { domain, pageKind, productCode }, query: { values: {} } };
+    const context = supportedPageContext(pageKey);
+    const next = { key: { ...context, productCode }, query: { values: {} } };
     window.history.pushState(null, "", hashFor(next.key));
     setHashState({ invalid: false, location: next });
   }
@@ -264,6 +282,10 @@ export function App({
     <EnterpriseShell
       onProductSelect={selectProduct}
       products={workLocation ? [] : products}
+      productItemSuffix={pageKey?.domain === "PRODUCTION" ? "产情监测" : "质量指标"}
+      productNavigationTitle={
+        pageKey?.domain === "PRODUCTION" ? "产情产品" : "质量指标"
+      }
       {...(pageKey ? { activeProductId: pageKey.productCode } : {})}
     >
       {workLocation ? (
@@ -307,6 +329,13 @@ export function App({
         <div className="ledger-panel list-workbench-loading">正在加载业务导航</div>
       ) : pageKey.domain === "PRODUCTION" ? (
         <ProductionMonitoringPage
+          loadCultivars={(productCode) =>
+            dependencies.masterDataRepository
+              .getCultivars(productCode)
+              .then((items) =>
+                items.map((item) => ({ value: item.id, label: item.name })),
+              )
+          }
           loadRegionChildren={(parentId) =>
             dependencies.masterDataRepository.getRegionChildren(parentId)
           }

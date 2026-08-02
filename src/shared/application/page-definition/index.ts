@@ -62,6 +62,8 @@ export interface ListQueryState {
 export interface ListRow {
   id: string;
   values: Readonly<Record<string, string | number | null | undefined>>;
+  allowedActions?: readonly string[];
+  version?: number;
 }
 
 export interface PagedResult<T extends ListRow = ListRow> {

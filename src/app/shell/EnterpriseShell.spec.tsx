@@ -36,6 +36,14 @@ describe("EnterpriseShell", () => {
     expect(window.location.hash).toBe("#/work/completed");
   });
 
+  it("uses a canonical parseable production monitoring route", async () => {
+    const user = userEvent.setup();
+    render(<EnterpriseShell>业务内容</EnterpriseShell>);
+
+    await user.click(screen.getByRole("button", { name: "产情填报" }));
+    expect(window.location.hash).toBe("#/pages/PRODUCTION/MONITORING/CORN");
+  });
+
   it("activates work navigation by hash pathname and exposes aria-current", () => {
     window.history.replaceState(
       null,
