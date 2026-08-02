@@ -81,6 +81,30 @@ export function useProductionCommands({
     setIssue({ message: actionFailureMessage(failure), retry });
   }
 
+  function refreshFailed(version: number, message: string) {
+    if (!active(version)) return;
+    setIssue({ message, retry: () => void retryRefresh(message) });
+  }
+
+  async function retryRefresh(message: string) {
+    const version = begin();
+    try {
+      await refresh();
+    } catch {
+      refreshFailed(version, message);
+    } finally {
+      if (active(version)) setLoading(false);
+    }
+  }
+
+  async function refreshAfterMutation(version: number, message: string) {
+    try {
+      if (active(version)) await refresh();
+    } catch {
+      refreshFailed(version, message);
+    }
+  }
+
   async function dispatch(action: string, rowId?: string) {
     const row = records.find((candidate) => candidate.id === rowId);
     if (action !== "NEW" && (!row || !row.allowedActions.includes(action))) return;
@@ -117,10 +141,10 @@ export function useProductionCommands({
         }
       } else if (action === "SUBMIT" && row) {
         await repository.submit(row.id, row.version);
-        if (active(version)) await refresh();
+        await refreshAfterMutation(version, "状态已变更，但列表刷新失败，请重试刷新。");
       } else if (action === "APPROVE" && row) {
         await repository.approve(row.id, row.version);
-        if (active(version)) await refresh();
+        await refreshAfterMutation(version, "状态已变更，但列表刷新失败，请重试刷新。");
       } else if (action === "RETURN" && row) {
         const detail = await repository.detail(row.id);
         if (active(version)) setReturning(detail);
@@ -144,7 +168,7 @@ export function useProductionCommands({
       }
       if (!active(version)) return;
       setEditor(undefined);
-      await refresh();
+      await refreshAfterMutation(version, "记录已保存，但列表刷新失败，请重试刷新。");
     } catch (failure) {
       fail(version, failure, () => void save());
     } finally {
@@ -162,7 +186,7 @@ export function useProductionCommands({
       if (!active(version)) return;
       setReturning(undefined);
       setReturnReason("");
-      await refresh();
+      await refreshAfterMutation(version, "状态已变更，但列表刷新失败，请重试刷新。");
     } catch (failure) {
       fail(version, failure, () => void confirmReturn());
     } finally {

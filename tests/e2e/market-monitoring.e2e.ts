@@ -31,10 +31,10 @@ for (const productCode of products) {
     }
     for (const header of [
       "填报时间",
-      "车板费用",
-      "包装费用",
-      "运费",
-      "来源说明",
+      "市场车板组成",
+      "市场包装组成",
+      "市场运费组成",
+      "市场来源说明",
       product.qualityLabel,
     ]) {
       await expect(
@@ -66,7 +66,7 @@ for (const productCode of products) {
     await market.openNew();
     const dialog = page.getByRole("dialog", { name: "新建市场填报" });
     await dialog
-      .getByRole("combobox", { name: "监测对象" })
+      .getByRole("combobox", { name: "对象类型" })
       .selectOption(product.defaultObject);
     await expect(dialog.getByRole("group", { name: "质量指标" })).toBeVisible();
     await expect(dialog.getByRole("group", { name: "采购与成交" })).toBeVisible();
@@ -161,7 +161,7 @@ test("market writes follow the real draft, review, return, and approval workflow
     "2026-08-03T08:00:00+08:00",
   );
   await expect(editor.getByText("采购基础价未包含车板、包装和运费组成")).toBeVisible();
-  await editor.getByRole("textbox", { name: "车板费用" }).fill("40");
+  await editor.getByRole("textbox", { name: "车板组成" }).fill("40");
   await expect(editor.getByRole("textbox", { name: "实际成交价" })).toHaveValue(
     "2424.0000",
   );
@@ -181,7 +181,7 @@ test("market writes follow the real draft, review, return, and approval workflow
 
   await page.getByRole("button", { name: "查看", exact: true }).click();
   editor = page.getByRole("dialog", { name: "市场记录详情" });
-  await editor.getByRole("textbox", { name: "运费" }).fill("70");
+  await editor.getByRole("textbox", { name: "运费组成" }).fill("70");
   await expect(editor.getByRole("textbox", { name: "实际成交价" })).toHaveValue(
     "2422.0000",
   );
@@ -219,21 +219,24 @@ test("market writes follow the real draft, review, return, and approval workflow
   await market.openNew();
   const createEditor = page.getByRole("dialog", { name: "新建市场填报" });
   await createEditor
-    .getByRole("combobox", { name: "监测对象" })
+    .getByRole("combobox", { name: "对象类型" })
     .selectOption("DEEP_PROCESSOR");
   await createEditor
     .getByRole("combobox", { name: "地区 第1级" })
     .selectOption("230200");
   await createEditor.getByRole("textbox", { name: "交易日期" }).fill("2026-08-03");
   await createEditor
-    .getByRole("combobox", { name: "购销方向" })
+    .getByRole("combobox", { name: "买卖方向" })
     .selectOption("PURCHASE");
   await createEditor.getByRole("textbox", { name: "采购基础价" }).fill("2000");
-  await createEditor.getByRole("textbox", { name: "车板费用" }).fill("30");
-  await createEditor.getByRole("combobox", { name: "包装形式" }).selectOption("BULK");
-  await createEditor.getByRole("textbox", { name: "包装费用" }).fill("10");
-  await createEditor.getByRole("textbox", { name: "运费" }).fill("50");
-  await createEditor.getByRole("textbox", { name: "来源说明" }).fill("新粮采购");
+  await createEditor.getByRole("textbox", { name: "车板组成" }).fill("30");
+  await createEditor.getByRole("combobox", { name: "包装形态" }).selectOption("BULK");
+  await createEditor.getByRole("textbox", { name: "包装组成" }).fill("10");
+  await createEditor.getByRole("textbox", { name: "运费组成" }).fill("50");
+  await createEditor
+    .getByRole("textbox", { name: "来源说明", exact: true })
+    .fill("新粮采购");
+  await createEditor.getByRole("textbox", { name: "玉米来源说明" }).fill("龙江产区");
   await createEditor.getByRole("textbox", { name: "水分" }).fill("14.5");
   await createEditor.getByRole("textbox", { name: "采购量" }).fill("120");
   await expect(createEditor.getByRole("textbox", { name: "实际成交价" })).toHaveValue(
@@ -243,6 +246,7 @@ test("market writes follow the real draft, review, return, and approval workflow
   await expect(createEditor).toBeHidden();
   await expect(page.getByText("2090.0000", { exact: true })).toBeVisible();
   await expect(page.getByText("新粮采购", { exact: true })).toBeVisible();
+  await expect(page.getByText("龙江产区", { exact: true })).toBeVisible();
   expect(api.recordCount("CORN")).toBe(2);
 
   const beforeRejectedCreate = api.recordCount("CORN");
@@ -283,9 +287,16 @@ test("market writes follow the real draft, review, return, and approval workflow
         coreValues: { ...coreValues, MKT_OBJECT_TYPE: legacyObject },
         facts: { MOISTURE: "1" },
       }),
+      ...["+1", "1e3", "1E3"].map((value) =>
+        request({
+          productCode: "CORN",
+          coreValues: { ...coreValues, MKT_PURCHASE_BASE_PRICE: value },
+          facts: { MOISTURE: "1" },
+        }),
+      ),
     ]);
   });
-  expect(pseudocodeStatuses).toEqual([400, 400]);
+  expect(pseudocodeStatuses).toEqual([400, 400, 400, 400, 400]);
   expect(api.recordCount("CORN")).toBe(beforeRejectedCreate);
   expect(
     api.writes

@@ -116,7 +116,7 @@ export function calculateMarketActualPrice(
   let total = 0n;
   for (const field of amountFields) {
     const amount = decimalUnits(coreValues[field.code]);
-    if (amount === undefined) return "";
+    if (amount === undefined || amount < 0n) return "";
     total += amount;
     if (total > maximumMarketAmountUnits) return "";
   }
@@ -139,15 +139,20 @@ function decimalUnits(value: string | null | undefined): bigint | undefined {
   if (
     value === null ||
     value === undefined ||
-    !/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(value)
+    !/^-?(?:\d+(?:\.\d*)?|\.\d+)$/.test(value)
   ) {
     return undefined;
   }
-  const [whole = "0", fraction = ""] = value.split(".");
+  const negative = value.startsWith("-");
+  const unsigned = negative ? value.slice(1) : value;
+  const [whole = "0", fraction = ""] = unsigned.split(".");
   const padded = fraction.padEnd(5, "0");
   let units = BigInt(whole || "0") * 10_000n + BigInt(padded.slice(0, 4));
   if (padded.charAt(4) >= "5") units += 1n;
-  return units <= maximumMarketAmountUnits ? units : undefined;
+  if (negative) units = -units;
+  return units >= -maximumMarketAmountUnits && units <= maximumMarketAmountUnits
+    ? units
+    : undefined;
 }
 
 function formatUnits(value: bigint): string {

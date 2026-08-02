@@ -31,6 +31,7 @@ const editableCoreCodes = new Set([
   "MKT_PACKAGING_AMOUNT",
   "MKT_FREIGHT_AMOUNT",
   "MKT_SOURCE_NOTE",
+  "MKT_CORN_SOURCE_NOTE",
 ]);
 const amountCodes = [
   "MKT_CARRIAGE_BOARD_AMOUNT",
@@ -441,10 +442,10 @@ function pageDefinition(productCode: MarketProductCode) {
           label: "监测对象",
           control: "select",
           placeholder: "全部监测对象",
-          options: objectEntries(productCode).map(([value, contract], index) => ({
+          options: objectEntries(productCode).map(([value, contract]) => ({
             value,
             label: contract.label,
-            sortOrder: (index + 1) * 10,
+            sortOrder: contract.sortOrder,
           })),
         },
       ],
@@ -454,7 +455,7 @@ function pageDefinition(productCode: MarketProductCode) {
           code: "base",
           label: "价格构成",
           fields: [
-            field("MKT_OBJECT_TYPE", "监测对象", "TEXT"),
+            field("MKT_OBJECT_TYPE", "市场对象类型", "TEXT"),
             field("MKT_REPORTED_AT", "填报时间", "DATETIME"),
             field(
               "MKT_PURCHASE_BASE_PRICE",
@@ -468,28 +469,35 @@ function pageDefinition(productCode: MarketProductCode) {
               "DECIMAL",
               "销售基础价未包含车板、包装和运费组成",
             ),
-            field("MKT_CARRIAGE_BOARD_AMOUNT", "车板费用", "DECIMAL"),
-            field("MKT_PACKAGING_AMOUNT", "包装费用", "DECIMAL"),
-            field("MKT_FREIGHT_AMOUNT", "运费", "DECIMAL"),
-            field("MKT_SOURCE_NOTE", "来源说明", "TEXT"),
+            field("MKT_CARRIAGE_BOARD_AMOUNT", "市场车板组成", "DECIMAL"),
+            field("MKT_PACKAGING_AMOUNT", "市场包装组成", "DECIMAL"),
+            field("MKT_FREIGHT_AMOUNT", "市场运费组成", "DECIMAL"),
+            field("MKT_SOURCE_NOTE", "市场来源说明", "TEXT"),
             field(
               "MKT_ACTUAL_TRADE_PRICE",
               "实际成交价",
               "DECIMAL",
               "实际成交价已包含车板、包装和运费组成",
             ),
-            field("MKT_REGION", "地区", "TEXT"),
-            field("MKT_TRADE_DATE", "交易日期", "DATE"),
-            field("MKT_TRADE_DIRECTION", "购销方向", "TEXT"),
-            field("MKT_PACKAGING_FORM", "包装形式", "TEXT"),
-            field("MKT_STATUS", "状态", "TEXT"),
+            ...(productCode === "CORN"
+              ? [field("MKT_CORN_SOURCE_NOTE", "玉米市场来源说明", "TEXT")]
+              : []),
+            field("MKT_REGION", "市场地区", "TEXT"),
+            field("MKT_TRADE_DATE", "市场交易日期", "DATE"),
+            field("MKT_TRADE_DIRECTION", "市场买卖方向", "TEXT"),
+            field("MKT_PACKAGING_FORM", "市场包装形态", "TEXT"),
+            field("MKT_STATUS", "市场填报状态", "TEXT"),
           ],
         },
         {
           code: "quality",
           label: "质量指标",
           fields: [
-            factField(item.qualityCode, marketFactDefinitions[item.qualityCode]),
+            factField(
+              item.qualityCode,
+              marketFactDefinitions[item.qualityCode],
+              marketFactDefinitions[item.qualityCode].sortOrder,
+            ),
           ],
         },
       ],
@@ -509,9 +517,11 @@ function formDefinition(
   productCode: MarketProductCode,
   requestedObject: string | null,
 ) {
-  const applicableFacts = requestedObject
-    ? objectContract(productCode, requestedObject)!.facts
-    : [];
+  const applicableContract = requestedObject
+    ? objectContract(productCode, requestedObject)
+    : undefined;
+  const applicableFacts = applicableContract?.facts ?? [];
+  const applicableSortOrders = applicableContract?.factSortOrders ?? {};
   return {
     data: {
       productCode,
@@ -519,20 +529,20 @@ function formDefinition(
       coreFields: [
         core(
           "MKT_OBJECT_TYPE",
-          "监测对象",
+          "对象类型",
           "SELECT",
           "OBJECT_TYPE_CONTEXT",
           true,
-          objectEntries(productCode).map(([value, contract], index) => ({
+          objectEntries(productCode).map(([value, contract]) => ({
             value,
             label: contract.label,
-            sortOrder: (index + 1) * 10,
+            sortOrder: contract.sortOrder,
           })),
         ),
         core("MKT_REGION", "地区", "REGION_HIERARCHY", "GENERIC", true),
         core("MKT_TRADE_DATE", "交易日期", "DATE", "GENERIC", true),
         core("MKT_REPORTED_AT", "填报时间", "READONLY_DATETIME", "GENERIC", false),
-        core("MKT_TRADE_DIRECTION", "购销方向", "SELECT", "PRICE_DIRECTION", true, [
+        core("MKT_TRADE_DIRECTION", "买卖方向", "SELECT", "PRICE_DIRECTION", true, [
           { value: "PURCHASE", label: "采购", sortOrder: 10 },
           { value: "SALE", label: "销售", sortOrder: 20 },
         ]),
@@ -556,18 +566,39 @@ function formDefinition(
         ),
         core(
           "MKT_CARRIAGE_BOARD_AMOUNT",
-          "车板费用",
+          "车板组成",
           "DECIMAL",
           "PRICE_COMPONENT",
           true,
         ),
-        core("MKT_PACKAGING_FORM", "包装形式", "SELECT", "GENERIC", true, [
+        core("MKT_PACKAGING_FORM", "包装形态", "SELECT", "GENERIC", true, [
           { value: "BAGGED", label: "包粮", sortOrder: 10 },
           { value: "BULK", label: "散粮", sortOrder: 20 },
         ]),
-        core("MKT_PACKAGING_AMOUNT", "包装费用", "DECIMAL", "PRICE_COMPONENT", true),
-        core("MKT_FREIGHT_AMOUNT", "运费", "DECIMAL", "PRICE_COMPONENT", true),
-        core("MKT_SOURCE_NOTE", "来源说明", "TEXT", "GENERIC", false),
+        core("MKT_PACKAGING_AMOUNT", "包装组成", "DECIMAL", "PRICE_COMPONENT", true),
+        core("MKT_FREIGHT_AMOUNT", "运费组成", "DECIMAL", "PRICE_COMPONENT", true),
+        core(
+          "MKT_SOURCE_NOTE",
+          "来源说明",
+          "TEXT",
+          "GENERIC",
+          false,
+          [],
+          "由数据库定义的可扩展核心字段",
+        ),
+        ...(productCode === "CORN"
+          ? [
+              core(
+                "MKT_CORN_SOURCE_NOTE",
+                "玉米来源说明",
+                "TEXT",
+                "GENERIC",
+                false,
+                [],
+                "仅适用于玉米市场采集的数据库扩展字段",
+              ),
+            ]
+          : []),
         core(
           "MKT_ACTUAL_TRADE_PRICE",
           "实际成交价",
@@ -579,11 +610,11 @@ function formDefinition(
         ),
       ],
       groups: [
-        factGroup("QUALITY", "质量指标", 10, applicableFacts),
-        factGroup("PURCHASE", "采购与成交", 20, applicableFacts),
-        factGroup("SALES", "销售", 30, applicableFacts),
-        factGroup("PROCESSING", "加工生产", 40, applicableFacts),
-        factGroup("INVENTORY", "库存", 50, applicableFacts),
+        factGroup("QUALITY", "质量指标", 10, applicableFacts, applicableSortOrders),
+        factGroup("PURCHASE", "采购与成交", 20, applicableFacts, applicableSortOrders),
+        factGroup("SALES", "销售", 30, applicableFacts, applicableSortOrders),
+        factGroup("PROCESSING", "加工生产", 40, applicableFacts, applicableSortOrders),
+        factGroup("INVENTORY", "库存", 50, applicableFacts, applicableSortOrders),
       ],
     },
   };
@@ -635,7 +666,10 @@ function validDraft(value: unknown): FixtureDraft | undefined {
     return undefined;
   }
   const coreValues = value.coreValues;
-  if (!Object.keys(coreValues).every((code) => editableCoreCodes.has(code))) {
+  if (
+    !Object.keys(coreValues).every((code) => editableCoreCodes.has(code)) ||
+    (productCode !== "CORN" && "MKT_CORN_SOURCE_NOTE" in coreValues)
+  ) {
     return undefined;
   }
   const objectType = stringValue(coreValues.MKT_OBJECT_TYPE);
@@ -659,6 +693,9 @@ function validDraft(value: unknown): FixtureDraft | undefined {
     (coreValues.MKT_SOURCE_NOTE !== undefined &&
       (typeof coreValues.MKT_SOURCE_NOTE !== "string" ||
         coreValues.MKT_SOURCE_NOTE.trim() === "")) ||
+    (coreValues.MKT_CORN_SOURCE_NOTE !== undefined &&
+      (typeof coreValues.MKT_CORN_SOURCE_NOTE !== "string" ||
+        coreValues.MKT_CORN_SOURCE_NOTE.trim() === "")) ||
     !validFacts(value.facts, object.facts)
   ) {
     return undefined;
@@ -749,14 +786,18 @@ function actualPrice(draft: FixtureDraft) {
 }
 
 function decimalUnits(value: unknown) {
-  if (typeof value !== "string" || !/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(value)) {
+  if (typeof value !== "string" || !/^-?(?:\d+(?:\.\d*)?|\.\d+)$/.test(value)) {
     return undefined;
   }
-  const [whole = "0", fraction = ""] = value.split(".");
+  const negative = value.startsWith("-");
+  const unsigned = negative ? value.slice(1) : value;
+  const [whole = "0", fraction = ""] = unsigned.split(".");
   const padded = fraction.padEnd(5, "0");
   let units = BigInt(whole || "0") * 10_000n + BigInt(padded.slice(0, 4));
   if (padded.charAt(4) >= "5") units += 1n;
-  return units <= 999_999_999_999_999_999n ? units : undefined;
+  if (negative) units = -units;
+  const maximum = 999_999_999_999_999_999n;
+  return units >= -maximum && units <= maximum ? units : undefined;
 }
 
 function formatUnits(units: bigint) {
@@ -769,7 +810,8 @@ function nullableDecimal(value: unknown): string | null | undefined {
 }
 
 function decimal(value: unknown): string | undefined {
-  return decimalUnits(value) === undefined ? undefined : (value as string);
+  const units = decimalUnits(value);
+  return units === undefined || units < 0n ? undefined : (value as string);
 }
 
 function factGroup(
@@ -777,6 +819,7 @@ function factGroup(
   label: string,
   sortOrder: number,
   applicable: readonly MarketFactCode[],
+  applicableSortOrders: Partial<Record<MarketFactCode, number>>,
 ) {
   return {
     category,
@@ -784,13 +827,16 @@ function factGroup(
     sortOrder,
     fields: applicable
       .filter((code) => marketFactDefinitions[code].category === category)
-      .map((code) => factField(code, marketFactDefinitions[code])),
+      .map((code) =>
+        factField(code, marketFactDefinitions[code], applicableSortOrders[code]!),
+      ),
   };
 }
 
 function factField(
   code: MarketFactCode,
   definition: (typeof marketFactDefinitions)[MarketFactCode],
+  sortOrder: number,
 ) {
   return {
     code,
@@ -799,8 +845,8 @@ function factField(
     unit: definition.unit,
     description: null,
     precision: 18,
-    scale: definition.category === "QUALITY" ? 1 : 4,
-    sortOrder: definition.sortOrder,
+    scale: definition.scale,
+    sortOrder,
   };
 }
 
@@ -812,6 +858,23 @@ function field(
 ) {
   return { code, label, valueType, unit: null, description };
 }
+
+const coreSortOrders: Record<string, number> = {
+  MKT_OBJECT_TYPE: 10,
+  MKT_REGION: 20,
+  MKT_TRADE_DATE: 30,
+  MKT_REPORTED_AT: 35,
+  MKT_TRADE_DIRECTION: 40,
+  MKT_PURCHASE_BASE_PRICE: 50,
+  MKT_SALE_BASE_PRICE: 60,
+  MKT_CARRIAGE_BOARD_AMOUNT: 70,
+  MKT_PACKAGING_FORM: 80,
+  MKT_PACKAGING_AMOUNT: 90,
+  MKT_FREIGHT_AMOUNT: 100,
+  MKT_SOURCE_NOTE: 105,
+  MKT_CORN_SOURCE_NOTE: 106,
+  MKT_ACTUAL_TRADE_PRICE: 110,
+};
 
 function core(
   code: string,
@@ -832,7 +895,7 @@ function core(
     description,
     precision: controlType.includes("DECIMAL") ? 18 : null,
     scale: controlType.includes("DECIMAL") ? 4 : null,
-    sortOrder: 10,
+    sortOrder: coreSortOrders[code],
     options,
   };
 }
@@ -840,7 +903,12 @@ function core(
 function objectEntries(productCode: MarketProductCode) {
   return Object.entries(marketProducts[productCode].objects) as [
     string,
-    { label: string; facts: readonly MarketFactCode[] },
+    {
+      label: string;
+      sortOrder: number;
+      facts: readonly MarketFactCode[];
+      factSortOrders: Partial<Record<MarketFactCode, number>>;
+    },
   ][];
 }
 

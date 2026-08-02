@@ -255,6 +255,23 @@ describe("ProductionMonitoringPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("retries only the refresh after a successful create whose refresh fails", async () => {
+    await expectMutationRefreshRetry("CREATE");
+  });
+
+  it("retries only the refresh after a successful submit whose refresh fails", async () => {
+    await expectMutationRefreshRetry("SUBMIT");
+  });
+
+  it("retries only the refresh after a successful return whose refresh fails", async () => {
+    await expectMutationRefreshRetry("RETURN");
+  });
+
+  it.each(["SAVE", "APPROVE"] as const)(
+    "retries only the refresh after a successful %s whose refresh fails",
+    expectMutationRefreshRetry,
+  );
+
   it("ignores a deferred NEW definition after switching product context", async () => {
     const user = userEvent.setup();
     const cornDefinition = deferred<ProductionFormDefinition>();
@@ -642,6 +659,81 @@ function renderPage(repository: ProductionRecordRepository) {
       repository={repository}
     />,
   );
+}
+
+async function expectMutationRefreshRetry(
+  scenario: "CREATE" | "SAVE" | "SUBMIT" | "APPROVE" | "RETURN",
+) {
+  const user = userEvent.setup();
+  const initialAction =
+    scenario === "SAVE" ? "VIEW" : scenario === "CREATE" ? undefined : scenario;
+  const search = vi
+    .fn<ProductionRecordRepository["search"]>()
+    .mockResolvedValueOnce(initialAction ? rowPage(initialAction) : emptyPage())
+    .mockRejectedValueOnce(new Error("refresh failed"))
+    .mockResolvedValueOnce(emptyPage());
+  const mutation = vi.fn(() =>
+    Promise.resolve(
+      detail(
+        scenario === "SUBMIT"
+          ? "PENDING_REVIEW"
+          : scenario === "APPROVE"
+            ? "APPROVED"
+            : scenario === "RETURN"
+              ? "RETURNED"
+              : "DRAFT",
+        8,
+      ),
+    ),
+  );
+  const repository = repositoryFixture({
+    search,
+    ...(scenario === "CREATE" ? { create: mutation } : {}),
+    ...(scenario === "SAVE" ? { saveDraft: mutation } : {}),
+    ...(scenario === "SUBMIT" ? { submit: mutation } : {}),
+    ...(scenario === "APPROVE" ? { approve: mutation } : {}),
+    ...(scenario === "RETURN" ? { returnForCorrection: mutation } : {}),
+  });
+  renderPage(repository);
+
+  if (scenario === "CREATE") {
+    await user.click(await screen.findByRole("button", { name: "新建填报" }));
+    await user.click(
+      within(await screen.findByRole("dialog", { name: "新建产情填报" })).getByRole(
+        "button",
+        { name: "保存草稿" },
+      ),
+    );
+  } else if (scenario === "SAVE") {
+    await user.click(await screen.findByRole("button", { name: "查看" }));
+    await user.click(
+      within(await screen.findByRole("dialog", { name: "产情记录详情" })).getByRole(
+        "button",
+        { name: "保存草稿" },
+      ),
+    );
+  } else if (scenario === "RETURN") {
+    await user.click(await screen.findByRole("button", { name: "退回" }));
+    const dialog = await screen.findByRole("dialog", { name: "退回产情记录" });
+    await user.type(within(dialog).getByLabelText("退回原因"), "刷新失败测试");
+    await user.click(within(dialog).getByRole("button", { name: "确认退回" }));
+  } else {
+    await user.click(
+      await screen.findByRole("button", {
+        name: scenario === "SUBMIT" ? "提交" : "审核",
+      }),
+    );
+  }
+
+  const alert = await screen.findByRole("alert");
+  expect(alert).toHaveTextContent(
+    scenario === "CREATE" || scenario === "SAVE"
+      ? "记录已保存，但列表刷新失败"
+      : "状态已变更，但列表刷新失败",
+  );
+  await user.click(within(alert).getByRole("button", { name: "重试操作" }));
+  await waitFor(() => expect(search).toHaveBeenCalledTimes(3));
+  expect(mutation).toHaveBeenCalledTimes(1);
 }
 
 function repositoryWithRow(
