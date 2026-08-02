@@ -1,5 +1,6 @@
 import type { MarketEditorSession } from "../hooks/useMarketCommands";
 import {
+  calculateMarketActualPrice,
   marketDraftField,
   type MarketCoreField,
   type MarketDraft,
@@ -52,6 +53,7 @@ export function MarketRecordEditor({
             definition={field}
             draft={editor.draft}
             actualTradePrice={editor.actualTradePrice}
+            reportedAt={editor.reportedAt}
             key={field.code}
             loadRegionChildren={loadRegionChildren}
             loadRegionPath={loadRegionPath}
@@ -101,6 +103,7 @@ export function MarketRecordEditor({
 
 function CoreField({
   actualTradePrice,
+  reportedAt,
   definition,
   draft,
   loadRegionChildren,
@@ -109,6 +112,7 @@ function CoreField({
   onObjectTypeChange,
 }: {
   actualTradePrice: string;
+  reportedAt: string;
   definition: MarketCoreField;
   draft: MarketDraft;
   loadRegionChildren: LoadRegionChildren;
@@ -117,12 +121,25 @@ function CoreField({
   onObjectTypeChange: (value: string) => void;
 }) {
   const field = marketDraftField(definition.code);
-  if (!field) return null;
   if (field === "actualTradePrice") {
     return (
       <label>
         {fieldLabel(definition)}
-        <input aria-label={definition.label} readOnly value={actualTradePrice} />
+        <input
+          aria-label={definition.label}
+          readOnly
+          value={calculateMarketActualPrice(draft) || actualTradePrice}
+        />
+        {definition.description && <small>{definition.description}</small>}
+      </label>
+    );
+  }
+  if (field === "reportedAt") {
+    return (
+      <label>
+        {fieldLabel(definition)}
+        <input aria-label={definition.label} readOnly value={reportedAt} />
+        {definition.description && <small>{definition.description}</small>}
       </label>
     );
   }
@@ -142,19 +159,23 @@ function CoreField({
             </option>
           ))}
         </select>
+        {definition.description && <small>{definition.description}</small>}
       </label>
     );
   }
   if (field === "regionCode") {
     return (
-      <RegionHierarchyFilter
-        label={definition.label}
-        loadChildren={loadRegionChildren}
-        loadPath={loadRegionPath}
-        onChange={(value) => onChange(field, value)}
-        placeholder={definition.label}
-        value={draft.regionCode}
-      />
+      <div>
+        <RegionHierarchyFilter
+          label={definition.label}
+          loadChildren={loadRegionChildren}
+          loadPath={loadRegionPath}
+          onChange={(value) => onChange(field, value)}
+          placeholder={definition.label}
+          value={draft.regionCode}
+        />
+        {definition.description && <small>{definition.description}</small>}
+      </div>
     );
   }
   if (definition.controlType === "SELECT") {
@@ -173,6 +194,7 @@ function CoreField({
             </option>
           ))}
         </select>
+        {definition.description && <small>{definition.description}</small>}
       </label>
     );
   }
@@ -186,6 +208,7 @@ function CoreField({
         type={definition.controlType === "DATE" ? "date" : "text"}
         value={String(draft[field] ?? "")}
       />
+      {definition.description && <small>{definition.description}</small>}
     </label>
   );
 }

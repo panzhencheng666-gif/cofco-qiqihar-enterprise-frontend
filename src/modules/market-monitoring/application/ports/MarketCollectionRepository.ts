@@ -8,7 +8,7 @@ import type {
 } from "../../domain/marketCollection";
 
 export type MarketRepositoryFailureKind =
-  "AUTHENTICATION" | "CONFLICT" | "VALIDATION" | "UNEXPECTED";
+  "AUTHENTICATION" | "CONFLICT" | "VALIDATION" | "DEFINITION" | "UNEXPECTED";
 
 export class MarketRepositoryFailure extends Error {
   readonly name = "MarketRepositoryFailure";

@@ -1,4 +1,11 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { vi } from "vitest";
@@ -235,6 +242,84 @@ describe("MarketCollectionPage", () => {
     await screen.findByRole("heading", { name: "SOYBEAN市场采集" });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
+
+  it("guards row commands synchronously and disables actions until refresh completes", async () => {
+    const pending = deferred<MarketRecordDetail>();
+    const submit = vi.fn(() => pending.promise);
+    const repo = repositoryFixture({
+      search: () => Promise.resolve(rowPage("SUBMIT")),
+      submit,
+    });
+    render(page("CORN", repo, actionDefinition("CORN", "SUBMIT")));
+    const button = await screen.findByRole("button", { name: "提交" });
+
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(button).toBeDisabled();
+    pending.resolve(detail("CORN", "TRADER", "PENDING_REVIEW", 8));
+    await waitFor(() => expect(button).toBeEnabled());
+  });
+
+  it("keeps a double-click conflict to one same-version request", async () => {
+    const pending = deferred<MarketRecordDetail>();
+    const submit = vi.fn(() => pending.promise);
+    const repo = repositoryFixture({
+      search: () => Promise.resolve(rowPage("SUBMIT")),
+      submit,
+    });
+    render(page("CORN", repo, actionDefinition("CORN", "SUBMIT")));
+    const button = await screen.findByRole("button", { name: "提交" });
+
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(submit).toHaveBeenCalledTimes(1);
+
+    pending.reject(new MarketRepositoryFailure("CONFLICT"));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "记录已被其他用户修改，请刷新后重试。",
+    );
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(button).toBeEnabled();
+  });
+
+  it("shows an explicit definition contract error instead of silently hiding fields", async () => {
+    const user = userEvent.setup();
+    const repo = repositoryFixture({
+      definition: () => Promise.reject(new MarketRepositoryFailure("DEFINITION")),
+    });
+    render(page("CORN", repo, actionDefinition("CORN", "NEW")));
+
+    await user.click(await screen.findByRole("button", { name: "新建填报" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "市场表单定义包含不受支持的字段，请联系管理员。",
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("updates the exact actual-price preview and shows server-owned reported time and descriptions", async () => {
+    const user = userEvent.setup();
+    const repo = repositoryFixture({
+      search: () => Promise.resolve(rowPage("VIEW")),
+      detail: () => Promise.resolve(detail("CORN", "TRADER")),
+      definition: () => Promise.resolve(formDefinition("CORN", "TRADER", "水分", true)),
+    });
+    render(page("CORN", repo, actionDefinition("CORN", "VIEW")));
+    await user.click(await screen.findByRole("button", { name: "提交" }));
+    const dialog = await screen.findByRole("dialog", { name: "市场记录详情" });
+
+    expect(within(dialog).getByLabelText("动态填报时间")).toHaveValue(
+      "2026-08-02T08:00:00+08:00",
+    );
+    expect(within(dialog).getByText("采购基础价不含组成费用")).toBeVisible();
+    const preview = within(dialog).getByLabelText("自动成交");
+    expect(preview).toHaveValue("2420.0000");
+    await user.clear(within(dialog).getByLabelText("动态车板组成"));
+    await user.type(within(dialog).getByLabelText("动态车板组成"), "40");
+    expect(preview).toHaveValue("2424.0000");
+  });
 });
 
 function definition(): ListPageDefinition {
@@ -333,6 +418,7 @@ function formDefinition(
   productCode: string,
   objectTypeCode: string | null,
   qualityLabel: string,
+  includeMetadata = false,
 ): MarketFormDefinition {
   const objectOptions =
     objectTypeCode === null
@@ -350,11 +436,20 @@ function formDefinition(
       core("MKT_OBJECT_TYPE", "动态对象", "SELECT", objectOptions),
       core("MKT_REGION", "动态地区", "REGION_HIERARCHY"),
       core("MKT_TRADE_DATE", "动态日期", "DATE"),
+      ...(includeMetadata
+        ? [core("MKT_REPORTED_AT", "动态填报时间", "READONLY_DATETIME")]
+        : []),
       core("MKT_TRADE_DIRECTION", "动态方向", "SELECT", [
         { value: "PURCHASE", label: "采购", sortOrder: 10 },
         { value: "SALE", label: "销售", sortOrder: 20 },
       ]),
-      core("MKT_PURCHASE_BASE_PRICE", "动态采购基础价", "DECIMAL"),
+      core(
+        "MKT_PURCHASE_BASE_PRICE",
+        "动态采购基础价",
+        "DECIMAL",
+        [],
+        includeMetadata ? "采购基础价不含组成费用" : null,
+      ),
       core("MKT_SALE_BASE_PRICE", "动态销售基础价", "DECIMAL"),
       core("MKT_CARRIAGE_BOARD_AMOUNT", "动态车板组成", "DECIMAL"),
       core("MKT_PACKAGING_FORM", "动态包装", "SELECT", [
@@ -390,12 +485,14 @@ function core(
   label: string,
   controlType: string,
   options: { value: string; label: string; sortOrder: number }[] = [],
+  description: string | null = null,
 ) {
   return {
     code,
     label,
     controlType,
     unit: controlType.includes("DECIMAL") ? "元/吨" : null,
+    description,
     precision: controlType.includes("DECIMAL") ? 18 : null,
     scale: controlType.includes("DECIMAL") ? 4 : null,
     sortOrder: 10,
@@ -481,8 +578,10 @@ function emptyPage() {
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((next) => {
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((next, fail) => {
     resolve = next;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, reject, resolve };
 }

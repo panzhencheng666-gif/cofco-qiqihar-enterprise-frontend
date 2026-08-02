@@ -12,6 +12,7 @@ import { RegionHierarchyFilter } from "./RegionHierarchyFilter";
 const emptyRegionPath: LoadRegionPath = () => Promise.resolve([]);
 
 export function ListWorkbench({
+  actionsDisabled = false,
   definition,
   loadRegionChildren,
   loadRegionPath,
@@ -24,6 +25,7 @@ export function ListWorkbench({
   query,
   result,
 }: {
+  actionsDisabled?: boolean;
   definition: ListPageDefinition;
   loadRegionChildren?: LoadRegionChildren;
   loadRegionPath?: LoadRegionPath;
@@ -128,7 +130,12 @@ export function ListWorkbench({
             查询
           </button>
           {pageActions.map((action) => (
-            <button key={action.id} onClick={() => onAction?.(action.id)} type="button">
+            <button
+              disabled={actionsDisabled}
+              key={action.id}
+              onClick={() => onAction?.(action.id)}
+              type="button"
+            >
               {action.label}
             </button>
           ))}
@@ -210,6 +217,7 @@ export function ListWorkbench({
                           .map((action) => (
                             <button
                               className="link-button"
+                              disabled={actionsDisabled}
                               key={action.id}
                               onClick={() => onAction?.(action.id, row.id)}
                               type="button"

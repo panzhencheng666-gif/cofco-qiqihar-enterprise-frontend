@@ -18,6 +18,7 @@ export interface MarketEditorSession {
   draft: MarketDraft;
   definition: MarketFormDefinition;
   actualTradePrice: string;
+  reportedAt: string;
   allowedActions: readonly string[];
 }
 
@@ -46,10 +47,12 @@ export function useMarketCommands({
   const [definitionLoading, setDefinitionLoading] = useState(false);
   const [issue, setIssue] = useState<MarketActionIssue>();
   const requestVersion = useRef(0);
+  const inFlight = useRef(false);
   const mounted = useRef(false);
 
   useEffect(() => {
     mounted.current = true;
+    inFlight.current = false;
     requestVersion.current += 1;
     void Promise.resolve().then(() => {
       if (!mounted.current) return;
@@ -62,6 +65,7 @@ export function useMarketCommands({
     });
     return () => {
       mounted.current = false;
+      inFlight.current = false;
       requestVersion.current += 1;
     };
   }, [contextKey]);
@@ -71,10 +75,18 @@ export function useMarketCommands({
   }
 
   function begin() {
+    if (inFlight.current) return undefined;
+    inFlight.current = true;
     const version = ++requestVersion.current;
     setIssue(undefined);
     setLoading(true);
     return version;
+  }
+
+  function finish(version: number) {
+    if (requestVersion.current !== version) return;
+    inFlight.current = false;
+    if (active(version)) setLoading(false);
   }
 
   function fail(version: number, failure: unknown, retry: () => void) {
@@ -87,6 +99,7 @@ export function useMarketCommands({
     const row = records.find((candidate) => candidate.id === rowId);
     if (action !== "NEW" && (!row || !row.allowedActions.includes(action))) return;
     const version = begin();
+    if (version === undefined) return;
     try {
       if (action === "NEW") {
         const definition = requireDefinitionContext(
@@ -98,6 +111,7 @@ export function useMarketCommands({
             draft: emptyDraft(productCode),
             definition,
             actualTradePrice: "",
+            reportedAt: "",
             allowedActions: ["SAVE"],
           });
         }
@@ -116,6 +130,7 @@ export function useMarketCommands({
             draft: detailDraft(detail),
             definition,
             actualTradePrice: detail.actualTradePrice,
+            reportedAt: detail.reportedAt,
             allowedActions: detail.allowedActions,
           });
         }
@@ -132,7 +147,7 @@ export function useMarketCommands({
     } catch (failure) {
       fail(version, failure, () => void dispatch(action, rowId));
     } finally {
-      if (active(version)) setLoading(false);
+      finish(version);
     }
   }
 
@@ -140,6 +155,7 @@ export function useMarketCommands({
     if (!editor) return;
     const snapshot = editor;
     const version = begin();
+    if (version === undefined) return;
     try {
       if (snapshot.id !== undefined && snapshot.version !== undefined) {
         await repository.saveDraft(snapshot.id, snapshot.version, snapshot.draft);
@@ -152,7 +168,7 @@ export function useMarketCommands({
     } catch (failure) {
       fail(version, failure, () => void save());
     } finally {
-      if (active(version)) setLoading(false);
+      finish(version);
     }
   }
 
@@ -161,6 +177,7 @@ export function useMarketCommands({
     const detail = returning;
     const reason = returnReason;
     const version = begin();
+    if (version === undefined) return;
     try {
       await repository.returnForCorrection(detail.id, detail.version, reason);
       if (!active(version)) return;
@@ -170,7 +187,7 @@ export function useMarketCommands({
     } catch (failure) {
       fail(version, failure, () => void confirmReturn());
     } finally {
-      if (active(version)) setLoading(false);
+      finish(version);
     }
   }
 
@@ -289,5 +306,8 @@ function actionFailureMessage(failure: unknown) {
   if (kind === "AUTHENTICATION") return "登录已失效，请重新登录。";
   if (kind === "CONFLICT") return "记录已被其他用户修改，请刷新后重试。";
   if (kind === "VALIDATION") return "填报内容校验失败，请检查后重试。";
+  if (kind === "DEFINITION") {
+    return "市场表单定义包含不受支持的字段，请联系管理员。";
+  }
   return "操作失败，请稍后重试。";
 }

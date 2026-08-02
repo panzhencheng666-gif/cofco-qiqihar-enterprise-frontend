@@ -1,5 +1,6 @@
 import type { HttpClient } from "../../../../shared/api/HttpClient";
 import { HttpMarketCollectionRepository } from "./HttpMarketCollectionRepository";
+import type { MarketRepositoryFailure } from "../../application/ports/MarketCollectionRepository";
 
 describe("HttpMarketCollectionRepository canonical paging contract", () => {
   it("requests the canonical market-records endpoint and preserves server page metadata", async () => {
@@ -82,5 +83,40 @@ describe("HttpMarketCollectionRepository canonical paging contract", () => {
     expect(result.pageNumber).toBe(1);
     expect(result.totalElements).toBe(101);
     expect(result.totalPages).toBe(11);
+  });
+
+  it("fails closed with a typed definition error for an unknown server core field", async () => {
+    const http: HttpClient = {
+      get: (_path, schema) =>
+        Promise.resolve(
+          schema.parse({
+            data: {
+              productCode: "CORN",
+              objectTypeCode: null,
+              coreFields: [
+                {
+                  code: "MKT_FUTURE_UNKNOWN",
+                  label: "未知字段",
+                  controlType: "TEXT",
+                  unit: null,
+                  precision: null,
+                  scale: null,
+                  sortOrder: 10,
+                  options: [],
+                },
+              ],
+              groups: [],
+            },
+          }),
+        ),
+    };
+
+    await expect(
+      new HttpMarketCollectionRepository(http).definition("CORN"),
+    ).rejects.toEqual(
+      expect.objectContaining<Partial<MarketRepositoryFailure>>({
+        kind: "DEFINITION",
+      }),
+    );
   });
 });

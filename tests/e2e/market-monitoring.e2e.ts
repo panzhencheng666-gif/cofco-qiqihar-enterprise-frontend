@@ -30,11 +30,10 @@ for (const productCode of products) {
       ).toBeVisible();
     }
     for (const header of [
-      "采购基础价",
+      "填报时间",
       "车板费用",
       "包装费用",
       "运费",
-      "实际成交价",
       product.qualityLabel,
     ]) {
       await expect(
@@ -42,7 +41,22 @@ for (const productCode of products) {
       ).toBeVisible();
     }
     await expect(page.getByText("2420.0000", { exact: true })).toBeVisible();
-    for (const action of ["查看", "提交", "审核通过", "退回"]) {
+    const purchaseHeader = page.getByRole("columnheader", {
+      name: "采购基础价",
+      exact: true,
+    });
+    const saleHeader = page.getByRole("columnheader", {
+      name: "销售基础价",
+      exact: true,
+    });
+    const actualHeader = page.getByRole("columnheader", {
+      name: "实际成交价",
+      exact: true,
+    });
+    await expect(purchaseHeader).toContainText("采购基础价未包含车板、包装和运费组成");
+    await expect(saleHeader).toContainText("销售基础价未包含车板、包装和运费组成");
+    await expect(actualHeader).toContainText("实际成交价已包含车板、包装和运费组成");
+    for (const action of ["查看", "提交"]) {
       await expect(
         page.getByRole("button", { name: action, exact: true }),
       ).toBeVisible();
@@ -59,6 +73,12 @@ for (const productCode of products) {
       dialog.getByRole("textbox", { name: product.qualityLabel }),
     ).toBeVisible();
     await expect(dialog.getByRole("textbox", { name: "采购量" })).toBeVisible();
+    await expect(
+      dialog.getByText("采购基础价未包含车板、包装和运费组成"),
+    ).toBeVisible();
+    await expect(
+      dialog.getByText("销售基础价未包含车板、包装和运费组成"),
+    ).toBeVisible();
     await expect(dialog.getByRole("textbox", { name: "实际成交价" })).toHaveAttribute(
       "readonly",
       "",
@@ -85,6 +105,114 @@ for (const productCode of products) {
     expect(api.unexpectedRequests).toEqual([]);
   });
 }
+
+test("market writes follow the real draft, review, return, and approval workflow", async ({
+  page,
+}) => {
+  const api = new MarketApiRoutes();
+  await api.install(page);
+  const market = new MarketMonitoringPage(page);
+  await market.goto("CORN");
+
+  await page.getByRole("button", { name: "查看", exact: true }).click();
+  let editor = page.getByRole("dialog", { name: "市场记录详情" });
+  await expect(editor.getByRole("textbox", { name: "填报时间" })).toHaveValue(
+    "2026-08-03T08:00:00+08:00",
+  );
+  await expect(editor.getByText("采购基础价未包含车板、包装和运费组成")).toBeVisible();
+  await editor.getByRole("textbox", { name: "车板费用" }).fill("40");
+  await expect(editor.getByRole("textbox", { name: "实际成交价" })).toHaveValue(
+    "2424.0000",
+  );
+  await editor.getByRole("button", { name: "保存草稿", exact: true }).click();
+  await expect(editor).toBeHidden();
+  await expect(page.getByText("2424.0000", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "提交", exact: true }).click();
+  await expect(page.getByText("待审核", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "退回", exact: true }).click();
+  const returnDialog = page.getByRole("dialog", { name: "退回市场记录" });
+  await returnDialog.getByRole("textbox", { name: "退回原因" }).fill("请复核采购凭证");
+  await returnDialog.getByRole("button", { name: "确认退回" }).click();
+  await expect(returnDialog).toBeHidden();
+  await expect(page.getByText("已退回", { exact: true })).toBeVisible();
+  expect(api.returnBodies).toEqual([{ version: 9, reason: "请复核采购凭证" }]);
+
+  await page.getByRole("button", { name: "查看", exact: true }).click();
+  editor = page.getByRole("dialog", { name: "市场记录详情" });
+  await editor.getByRole("textbox", { name: "运费" }).fill("70");
+  await expect(editor.getByRole("textbox", { name: "实际成交价" })).toHaveValue(
+    "2422.0000",
+  );
+  await editor.getByRole("button", { name: "保存草稿", exact: true }).click();
+  await expect(editor).toBeHidden();
+  await page.getByRole("button", { name: "提交", exact: true }).click();
+  await expect(page.getByText("待审核", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "审核通过", exact: true }).click();
+  await expect(page.getByText("已审核", { exact: true })).toBeVisible();
+
+  const staleStatus = await page.evaluate(async () =>
+    fetch("/api/v1/market-records/CORN-record/approve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ version: 12 }),
+    }).then((response) => response.status),
+  );
+  expect(staleStatus).toBe(409);
+  await expect(page.getByText("已审核", { exact: true })).toBeVisible();
+
+  await market.openNew();
+  const createEditor = page.getByRole("dialog", { name: "新建市场填报" });
+  await createEditor
+    .getByRole("combobox", { name: "监测对象" })
+    .selectOption("DEEP_PROCESSOR");
+  await createEditor
+    .getByRole("combobox", { name: "地区 第1级" })
+    .selectOption("230200");
+  await createEditor.getByRole("textbox", { name: "交易日期" }).fill("2026-08-03");
+  await createEditor
+    .getByRole("combobox", { name: "购销方向" })
+    .selectOption("PURCHASE");
+  await createEditor.getByRole("textbox", { name: "采购基础价" }).fill("2000");
+  await createEditor.getByRole("textbox", { name: "车板费用" }).fill("30");
+  await createEditor.getByRole("combobox", { name: "包装形式" }).selectOption("BULK");
+  await createEditor.getByRole("textbox", { name: "包装费用" }).fill("10");
+  await createEditor.getByRole("textbox", { name: "运费" }).fill("50");
+  await createEditor.getByRole("textbox", { name: "水分" }).fill("14.5");
+  await createEditor.getByRole("textbox", { name: "采购量" }).fill("120");
+  await expect(createEditor.getByRole("textbox", { name: "实际成交价" })).toHaveValue(
+    "2090.0000",
+  );
+  await createEditor.getByRole("button", { name: "保存草稿", exact: true }).click();
+  await expect(createEditor).toBeHidden();
+  await expect(page.getByText("2090.0000", { exact: true })).toBeVisible();
+  expect(api.recordCount("CORN")).toBe(2);
+
+  const beforeRejectedCreate = api.recordCount("CORN");
+  const invalidStatus = await page.evaluate(async () =>
+    fetch("/api/v1/market-records", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ productCode: "CORN", unexpected: true }),
+    }).then((response) => response.status),
+  );
+  expect(invalidStatus).toBe(400);
+  expect(api.recordCount("CORN")).toBe(beforeRejectedCreate);
+  expect(
+    api.writes
+      .filter((write) => write.status < 400)
+      .map((write) => `${write.method} ${write.path}`),
+  ).toEqual([
+    "PUT /api/v1/market-records/CORN-record",
+    "POST /api/v1/market-records/CORN-record/submit",
+    "POST /api/v1/market-records/CORN-record/return",
+    "PUT /api/v1/market-records/CORN-record",
+    "POST /api/v1/market-records/CORN-record/submit",
+    "POST /api/v1/market-records/CORN-record/approve",
+    "POST /api/v1/market-records",
+  ]);
+  expect(api.unexpectedRequests).toEqual([]);
+});
 
 test("market fixture fails closed and pending submit refresh follows back/forward state", async ({
   page,

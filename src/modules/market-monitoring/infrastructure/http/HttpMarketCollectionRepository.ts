@@ -14,6 +14,7 @@ import type {
   MarketCollectionCriteria,
   MarketDraft,
 } from "../../domain/marketCollection";
+import { marketCoreFieldCodes } from "../../domain/marketCollection";
 
 const listRecordSchema = z.object({
   id: z.string(),
@@ -63,10 +64,11 @@ const definitionSchema = z.object({
     objectTypeCode: z.string().nullable(),
     coreFields: z.array(
       z.object({
-        code: z.string(),
+        code: z.string().refine((code) => marketCoreFieldCodes.has(code)),
         label: z.string(),
         controlType: z.string(),
         unit: z.string().nullable(),
+        description: z.string().nullable().default(null),
         precision: z.number().int().positive().nullable(),
         scale: z.number().int().nonnegative().nullable(),
         sortOrder: z.number().int(),
@@ -128,11 +130,13 @@ export class HttpMarketCollectionRepository implements MarketCollectionRepositor
 
   async definition(productCode: string, objectTypeCode?: string) {
     return (
-      await repositoryRequest(() =>
-        this.http.get(
-          `/api/v1/market-record-definitions${queryString({ productCode, objectTypeCode })}`,
-          definitionSchema,
-        ),
+      await repositoryRequest(
+        () =>
+          this.http.get(
+            `/api/v1/market-record-definitions${queryString({ productCode, objectTypeCode })}`,
+            definitionSchema,
+          ),
+        "DEFINITION",
       )
     ).data;
   }
@@ -180,12 +184,20 @@ export class HttpMarketCollectionRepository implements MarketCollectionRepositor
   }
 }
 
-async function repositoryRequest<T>(request: () => Promise<T>): Promise<T> {
+async function repositoryRequest<T>(
+  request: () => Promise<T>,
+  contractFailureKind?: MarketRepositoryFailureKind,
+): Promise<T> {
   try {
     return await request();
   } catch (failure) {
     if (failure instanceof MarketRepositoryFailure) throw failure;
-    throw new MarketRepositoryFailure(failureKind(failure), failure);
+    throw new MarketRepositoryFailure(
+      failure instanceof z.ZodError && contractFailureKind
+        ? contractFailureKind
+        : failureKind(failure),
+      failure,
+    );
   }
 }
 
