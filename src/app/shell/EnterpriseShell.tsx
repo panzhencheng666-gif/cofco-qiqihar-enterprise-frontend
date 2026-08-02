@@ -74,7 +74,7 @@ export function EnterpriseShell({
   onProductSelect?: (productId: string) => void;
   products?: readonly ProductNavigationItem[];
 }) {
-  const activeHash = window.location.hash;
+  const activePath = window.location.hash.split("?", 1)[0] ?? "";
 
   return (
     <div className="enterprise-app-shell">
@@ -88,15 +88,22 @@ export function EnterpriseShell({
           <strong>齐齐哈尔粮食商情企业平台</strong>
         </button>
         <nav aria-label="业务应用" className="enterprise-top-nav">
-          {topApplications.map((application) => (
-            <button
-              className={activeHash.includes(application) ? "is-active" : ""}
-              key={application}
-              type="button"
-            >
-              {application}
-            </button>
-          ))}
+          {topApplications.map((application) => {
+            const active =
+              application === "我的工作"
+                ? activePath.startsWith("#/work/")
+                : activePath.includes(application);
+            return (
+              <button
+                aria-current={active ? "page" : undefined}
+                className={active ? "is-active" : ""}
+                key={application}
+                type="button"
+              >
+                {application}
+              </button>
+            );
+          })}
         </nav>
         <button className="enterprise-unit" type="button">
           <span aria-hidden="true">⌂</span>
@@ -107,9 +114,7 @@ export function EnterpriseShell({
           <input aria-label="全局搜索" placeholder="搜索地区、企业、任务和报告" />
         </label>
         <div className="enterprise-user-tools">
-          <button type="button">
-            待办<sup>9</sup>
-          </button>
+          <button type="button">待办</button>
           <button type="button">
             通知<sup>2</sup>
           </button>
@@ -136,7 +141,8 @@ export function EnterpriseShell({
                 <h2>▾ {group.label}</h2>
                 {group.items.map((item) => (
                   <button
-                    className={activeHash === item.route ? "is-active" : ""}
+                    aria-current={activePath === item.route ? "page" : undefined}
+                    className={activePath === item.route ? "is-active" : ""}
                     key={item.route}
                     onClick={() => navigate(item.route)}
                     type="button"
@@ -151,6 +157,7 @@ export function EnterpriseShell({
                 <h2>▾ 质量指标</h2>
                 {products.map((product) => (
                   <button
+                    aria-current={activeProductId === product.id ? "page" : undefined}
                     className={activeProductId === product.id ? "is-active" : ""}
                     key={product.id}
                     onClick={() => onProductSelect?.(product.id)}

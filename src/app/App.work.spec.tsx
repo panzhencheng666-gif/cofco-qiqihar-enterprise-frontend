@@ -53,6 +53,28 @@ describe("App work management composition", () => {
       expect(searches.at(-1)).toMatchObject({ scope: "PENDING", status: "RETURNED" }),
     );
   });
+
+  it("replaces an out-of-range work deep link with the normalized server page", async () => {
+    window.history.replaceState(null, "", "#/work/pending?page=1&pageSize=20");
+    const pages: number[] = [];
+    render(
+      <App
+        dependencies={fixture((criteria) => {
+          pages.push(criteria.pageNumber);
+          return Promise.resolve({
+            items: [],
+            pageNumber: criteria.pageNumber,
+            pageSize: criteria.pageSize,
+            totalElements: 0,
+            totalPages: 0,
+          });
+        })}
+      />,
+    );
+
+    await waitFor(() => expect(pages).toEqual([1, 0]));
+    expect(window.location.hash).toBe("#/work/pending?page=0&pageSize=20");
+  });
 });
 
 function fixture(

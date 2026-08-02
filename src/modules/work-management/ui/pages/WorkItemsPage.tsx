@@ -57,18 +57,36 @@ export function WorkItemsPage({
       setLoading(true);
       setListError("");
       try {
-        const nextResult = await repository.search({
-          scope,
-          ...(nextQuery.values.status ? { status: nextQuery.values.status } : {}),
-          ...(nextQuery.values.domain ? { domain: nextQuery.values.domain } : {}),
-          ...(nextQuery.values.regionId ? { regionId: nextQuery.values.regionId } : {}),
-          ...(nextQuery.values.productCode
-            ? { productCode: nextQuery.values.productCode }
-            : {}),
-          pageNumber: nextQuery.pageNumber,
-          pageSize: nextQuery.pageSize,
-        });
-        if (version === requestVersion.current) setResult(nextResult);
+        const search = (searchedQuery: ListQueryState) =>
+          repository.search({
+            scope,
+            ...(searchedQuery.values.status
+              ? { status: searchedQuery.values.status }
+              : {}),
+            ...(searchedQuery.values.domain
+              ? { domain: searchedQuery.values.domain }
+              : {}),
+            ...(searchedQuery.values.regionId
+              ? { regionId: searchedQuery.values.regionId }
+              : {}),
+            ...(searchedQuery.values.productCode
+              ? { productCode: searchedQuery.values.productCode }
+              : {}),
+            pageNumber: searchedQuery.pageNumber,
+            pageSize: searchedQuery.pageSize,
+          });
+        let nextResult = await search(nextQuery);
+        if (version !== requestVersion.current) return;
+
+        const lastPage = Math.max(0, nextResult.totalPages - 1);
+        if (nextQuery.pageNumber > lastPage) {
+          const normalizedQuery = { ...nextQuery, pageNumber: lastPage };
+          nextResult = await search(normalizedQuery);
+          if (version !== requestVersion.current) return;
+          setQuery(normalizedQuery);
+          onQueryNormalized?.(normalizedQuery);
+        }
+        setResult(nextResult);
       } catch {
         if (version === requestVersion.current) {
           setListError("任务列表查询失败，请稍后重试。");
@@ -77,7 +95,7 @@ export function WorkItemsPage({
         if (version === requestVersion.current) setLoading(false);
       }
     },
-    [repository, scope],
+    [onQueryNormalized, repository, scope],
   );
 
   useEffect(() => {
@@ -147,57 +165,34 @@ export function WorkItemsPage({
     return <div className="ledger-panel list-workbench-loading">正在加载任务页面</div>;
   }
 
-  const statusFilter = definition.filters.find((filter) => filter.id === "status");
   return (
-    <>
-      {scope === "PENDING" && statusFilter && (
-        <nav aria-label="待办状态" className="work-status-tabs">
-          <button
-            aria-pressed={!query.values.status}
-            onClick={() =>
-              run({ ...query, pageNumber: 0, values: { ...query.values, status: "" } })
-            }
-            type="button"
-          >
-            {statusFilter.placeholder}
-          </button>
-          {statusFilter.options.map((option) => (
-            <button
-              aria-pressed={query.values.status === option.value}
-              key={option.value}
-              onClick={() =>
-                run({
-                  ...query,
-                  pageNumber: 0,
-                  values: { ...query.values, status: option.value },
-                })
-              }
-              type="button"
-            >
-              {option.label}
-            </button>
-          ))}
-        </nav>
-      )}
-      <ListWorkbench
-        definition={definition}
-        errorMessage={listError}
-        loadRegionChildren={loadRegionChildren}
-        loading={loading}
-        onQueryChange={(next) => {
-          const paged =
-            next.pageNumber !== query.pageNumber || next.pageSize !== query.pageSize;
-          setQuery(next);
-          if (paged) run(next);
-        }}
-        onRetry={() => void execute(query)}
-        onSearch={() => run(query)}
-        query={query}
-        result={result}
-        {...(loadRegionPath ? { loadRegionPath } : {})}
-      />
-    </>
+    <ListWorkbench
+      definition={definition}
+      errorMessage={listError}
+      loadRegionChildren={loadRegionChildren}
+      loading={loading}
+      onQueryChange={(next) => {
+        const paged =
+          sameFilterValues(next.values, query.values) &&
+          (next.pageNumber !== query.pageNumber || next.pageSize !== query.pageSize);
+        setQuery(next);
+        if (paged) run(next);
+      }}
+      onRetry={() => void execute(query)}
+      onSearch={() => run(query)}
+      query={query}
+      result={result}
+      {...(loadRegionPath ? { loadRegionPath } : {})}
+    />
   );
+}
+
+function sameFilterValues(
+  left: Readonly<Record<string, string>>,
+  right: Readonly<Record<string, string>>,
+) {
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+  return [...keys].every((key) => left[key] === right[key]);
 }
 
 function normalizeQuery(
