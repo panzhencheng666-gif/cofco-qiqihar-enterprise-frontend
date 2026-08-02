@@ -95,15 +95,25 @@ test("production list fixture mirrors Java integer lexical and 32-bit range rule
     validListPrefix,
     "/api/v1/production-records?productCode=CORN&pageKind=MONITORING&pageNumber=%2B0&pageSize=%2B20&filter.objectTypeCode=FARMER",
     "/api/v1/production-records?productCode=CORN&pageKind=MONITORING&pageNumber=2147483647&pageSize=20",
+    "/api/v1/production-records?productCode=CORN&pageKind=MONITORING&pageNumber=１２&pageSize=２０",
+    "/api/v1/production-records?productCode=CORN&pageKind=MONITORING&pageNumber=١٢&pageSize=٢٠",
+    "/api/v1/production-records?productCode=CORN&pageKind=MONITORING&pageNumber=%2B２０&pageSize=２０",
+    "/api/v1/production-records?productCode=CORN&pageKind=MONITORING&pageNumber=𝟙𝟚&pageSize=𝟚𝟘",
   ];
 
-  expect(await browserStatuses(page, validIntegerPaths)).toEqual([200, 200, 200]);
+  expect(await browserStatuses(page, validIntegerPaths)).toEqual(
+    validIntegerPaths.map(() => 200),
+  );
   expect(
     api.listQueries.map(({ pageNumber, pageSize }) => ({ pageNumber, pageSize })),
   ).toEqual([
     { pageNumber: 0, pageSize: 20 },
     { pageNumber: 0, pageSize: 20 },
     { pageNumber: 2147483647, pageSize: 20 },
+    { pageNumber: 12, pageSize: 20 },
+    { pageNumber: 12, pageSize: 20 },
+    { pageNumber: 20, pageSize: 20 },
+    { pageNumber: 12, pageSize: 20 },
   ]);
 
   const invalidIntegerPaths = [
@@ -115,13 +125,20 @@ test("production list fixture mirrors Java integer lexical and 32-bit range rule
     "/api/v1/production-records?productCode=CORN&pageKind=MONITORING&pageNumber=NaN&pageSize=20",
     "/api/v1/production-records?productCode=CORN&pageKind=MONITORING&pageNumber=Infinity&pageSize=20",
     "/api/v1/production-records?productCode=CORN&pageKind=MONITORING&pageNumber=%200%20&pageSize=20",
+    "/api/v1/production-records?productCode=CORN&pageKind=MONITORING&pageNumber=%2B&pageSize=20",
+    "/api/v1/production-records?productCode=CORN&pageKind=MONITORING&pageNumber=%2B%2B1&pageSize=20",
+    "/api/v1/production-records?productCode=CORN&pageKind=MONITORING&pageNumber=²&pageSize=20",
+    "/api/v1/production-records?productCode=CORN&pageKind=MONITORING&pageNumber=２１４７４８３６４８&pageSize=20",
   ];
 
   expect(await browserStatuses(page, invalidIntegerPaths)).toEqual(
     invalidIntegerPaths.map(() => 400),
   );
   expect(api.unexpectedRequests).toEqual(
-    invalidIntegerPaths.map((path) => `GET ${path}`),
+    invalidIntegerPaths.map((path) => {
+      const url = new URL(path, page.url());
+      return `GET ${url.pathname}${url.search}`;
+    }),
   );
   expect(api.listQueries).toHaveLength(validIntegerPaths.length);
 });

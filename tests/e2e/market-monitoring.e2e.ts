@@ -103,6 +103,21 @@ test("market fixture fails closed and pending submit refresh follows back/forwar
   expect(api.unexpectedRequests).toHaveLength(1);
   api.unexpectedRequests.length = 0;
 
+  const javaIntegerStatuses = await page.evaluate(async () =>
+    Promise.all(
+      [
+        "/api/v1/market-records?productCode=SOYBEAN&pageKind=MONITORING&pageNumber=１２&pageSize=２０",
+        "/api/v1/market-records?productCode=SOYBEAN&pageKind=MONITORING&pageNumber=١٢&pageSize=%2B٢٠",
+      ].map(async (path) => (await fetch(path)).status),
+    ),
+  );
+  expect(javaIntegerStatuses).toEqual([200, 200]);
+  expect(api.listQueries.slice(-2)).toEqual([
+    { productCode: "SOYBEAN", pageNumber: 12, pageSize: 20 },
+    { productCode: "SOYBEAN", pageNumber: 12, pageSize: 20 },
+  ]);
+  expect(api.unexpectedRequests).toEqual([]);
+
   await page.getByRole("button", { name: "提交", exact: true }).click();
   await api.waitForSubmit();
   await page.getByRole("combobox", { name: "监测对象" }).selectOption("DEEP_PROCESSOR");

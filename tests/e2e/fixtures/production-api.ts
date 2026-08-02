@@ -1,5 +1,7 @@
 import type { Page, Request, Route } from "@playwright/test";
 
+import { parseJavaInt32 } from "../support/java-int32";
+
 export type ProductionProductCode = "CORN" | "SOYBEAN" | "RICE";
 export type ProductionObjectTypeCode =
   "FARMER" | "VILLAGE_COMMITTEE" | "AGRICULTURAL_TECH_STATION";
@@ -15,9 +17,6 @@ const productionListAllowedKeys = new Set<string>([
   ...productionListRequiredKeys,
   ...productionListOptionalKeys,
 ]);
-const javaIntegerMinimum = -2147483648n;
-const javaIntegerMaximum = 2147483647n;
-
 export const productionProducts = {
   CORN: {
     name: "玉米",
@@ -410,22 +409,14 @@ function objectTypeCodeOrUndefined(
 }
 
 function formalPageNumber(value: string | undefined) {
-  const parsed = javaInteger(value);
+  const parsed = parseJavaInt32(value);
   return parsed !== undefined && parsed >= 0 ? parsed : undefined;
 }
 
 function formalPageSize(value: string | undefined) {
-  const parsed = javaInteger(value);
+  const parsed = parseJavaInt32(value);
   return parsed !== undefined && parsed >= 1 && [20, 50, 100].includes(parsed)
     ? parsed
-    : undefined;
-}
-
-function javaInteger(value: string | undefined) {
-  if (value === undefined || !/^[+-]?[0-9]+$/.test(value)) return undefined;
-  const parsed = BigInt(value);
-  return parsed >= javaIntegerMinimum && parsed <= javaIntegerMaximum
-    ? Number(parsed)
     : undefined;
 }
 

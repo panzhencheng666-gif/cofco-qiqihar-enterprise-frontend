@@ -1,5 +1,7 @@
 import type { Page, Request, Route } from "@playwright/test";
 
+import { parseJavaInt32 } from "../support/java-int32";
+
 export type MarketProductCode = "CORN" | "SOYBEAN" | "RICE";
 
 const listKeys = new Set([
@@ -148,8 +150,8 @@ export class MarketApiRoutes {
     const keys = [...parameters.keys()];
     const unique = new Set(keys);
     const productCode = productOrUndefined(parameters.get("productCode"));
-    const pageNumber = integer(parameters.get("pageNumber"), 0);
-    const pageSize = integer(parameters.get("pageSize"), 1);
+    const pageNumber = parseJavaInt32(parameters.get("pageNumber"));
+    const pageSize = parseJavaInt32(parameters.get("pageSize"));
     const valid =
       keys.length === unique.size &&
       keys.every((key) => listKeys.has(key)) &&
@@ -160,6 +162,7 @@ export class MarketApiRoutes {
       productCode !== undefined &&
       parameters.get("pageKind") === "MONITORING" &&
       pageNumber !== undefined &&
+      pageNumber >= 0 &&
       pageSize !== undefined &&
       [20, 50, 100].includes(pageSize);
     if (!valid) {
@@ -429,14 +432,6 @@ function productOrUndefined(value: string | null) {
 
 function productFromRecord(id: string) {
   return product(id.split("-", 1)[0] ?? null);
-}
-
-function integer(value: string | null, minimum: number) {
-  if (value === null || !/^(0|[1-9][0-9]*)$/.test(value)) return undefined;
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) && parsed >= minimum && parsed <= 2147483647
-    ? parsed
-    : undefined;
 }
 
 async function json(route: Route, body: unknown, status = 200) {
