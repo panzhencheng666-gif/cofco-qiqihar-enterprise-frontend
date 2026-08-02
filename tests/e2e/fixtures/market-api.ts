@@ -2,6 +2,7 @@ import type { Page, Route } from "@playwright/test";
 
 import { parseJavaInt32 } from "../support/java-int32";
 import {
+  marketCoreFieldDefinitions,
   marketFactDefinitions,
   marketProducts,
   type MarketFactCode,
@@ -31,7 +32,6 @@ const editableCoreCodes = new Set([
   "MKT_PACKAGING_AMOUNT",
   "MKT_FREIGHT_AMOUNT",
   "MKT_SOURCE_NOTE",
-  "MKT_CORN_SOURCE_NOTE",
 ]);
 const amountCodes = [
   "MKT_CARRIAGE_BOARD_AMOUNT",
@@ -479,9 +479,6 @@ function pageDefinition(productCode: MarketProductCode) {
               "DECIMAL",
               "实际成交价已包含车板、包装和运费组成",
             ),
-            ...(productCode === "CORN"
-              ? [field("MKT_CORN_SOURCE_NOTE", "玉米市场来源说明", "TEXT")]
-              : []),
             field("MKT_REGION", "市场地区", "TEXT"),
             field("MKT_TRADE_DATE", "市场交易日期", "DATE"),
             field("MKT_TRADE_DIRECTION", "市场买卖方向", "TEXT"),
@@ -526,89 +523,9 @@ function formDefinition(
     data: {
       productCode,
       objectTypeCode: requestedObject,
-      coreFields: [
-        core(
-          "MKT_OBJECT_TYPE",
-          "对象类型",
-          "SELECT",
-          "OBJECT_TYPE_CONTEXT",
-          true,
-          objectEntries(productCode).map(([value, contract]) => ({
-            value,
-            label: contract.label,
-            sortOrder: contract.sortOrder,
-          })),
-        ),
-        core("MKT_REGION", "地区", "REGION_HIERARCHY", "GENERIC", true),
-        core("MKT_TRADE_DATE", "交易日期", "DATE", "GENERIC", true),
-        core("MKT_REPORTED_AT", "填报时间", "READONLY_DATETIME", "GENERIC", false),
-        core("MKT_TRADE_DIRECTION", "买卖方向", "SELECT", "PRICE_DIRECTION", true, [
-          { value: "PURCHASE", label: "采购", sortOrder: 10 },
-          { value: "SALE", label: "销售", sortOrder: 20 },
-        ]),
-        core(
-          "MKT_PURCHASE_BASE_PRICE",
-          "采购基础价",
-          "DECIMAL",
-          "PURCHASE_BASE_PRICE",
-          false,
-          [],
-          "采购基础价未包含车板、包装和运费组成",
-        ),
-        core(
-          "MKT_SALE_BASE_PRICE",
-          "销售基础价",
-          "DECIMAL",
-          "SALE_BASE_PRICE",
-          false,
-          [],
-          "销售基础价未包含车板、包装和运费组成",
-        ),
-        core(
-          "MKT_CARRIAGE_BOARD_AMOUNT",
-          "车板组成",
-          "DECIMAL",
-          "PRICE_COMPONENT",
-          true,
-        ),
-        core("MKT_PACKAGING_FORM", "包装形态", "SELECT", "GENERIC", true, [
-          { value: "BAGGED", label: "包粮", sortOrder: 10 },
-          { value: "BULK", label: "散粮", sortOrder: 20 },
-        ]),
-        core("MKT_PACKAGING_AMOUNT", "包装组成", "DECIMAL", "PRICE_COMPONENT", true),
-        core("MKT_FREIGHT_AMOUNT", "运费组成", "DECIMAL", "PRICE_COMPONENT", true),
-        core(
-          "MKT_SOURCE_NOTE",
-          "来源说明",
-          "TEXT",
-          "GENERIC",
-          false,
-          [],
-          "由数据库定义的可扩展核心字段",
-        ),
-        ...(productCode === "CORN"
-          ? [
-              core(
-                "MKT_CORN_SOURCE_NOTE",
-                "玉米来源说明",
-                "TEXT",
-                "GENERIC",
-                false,
-                [],
-                "仅适用于玉米市场采集的数据库扩展字段",
-              ),
-            ]
-          : []),
-        core(
-          "MKT_ACTUAL_TRADE_PRICE",
-          "实际成交价",
-          "READONLY_DECIMAL",
-          "ACTUAL_TRADE_PRICE",
-          false,
-          [],
-          "实际成交价已包含车板、包装和运费组成",
-        ),
-      ],
+      coreFields: marketCoreFieldDefinitions.map((definition) =>
+        coreFieldResponse(definition, productCode),
+      ),
       groups: [
         factGroup("QUALITY", "质量指标", 10, applicableFacts, applicableSortOrders),
         factGroup("PURCHASE", "采购与成交", 20, applicableFacts, applicableSortOrders),
@@ -666,10 +583,7 @@ function validDraft(value: unknown): FixtureDraft | undefined {
     return undefined;
   }
   const coreValues = value.coreValues;
-  if (
-    !Object.keys(coreValues).every((code) => editableCoreCodes.has(code)) ||
-    (productCode !== "CORN" && "MKT_CORN_SOURCE_NOTE" in coreValues)
-  ) {
+  if (!Object.keys(coreValues).every((code) => editableCoreCodes.has(code))) {
     return undefined;
   }
   const objectType = stringValue(coreValues.MKT_OBJECT_TYPE);
@@ -693,9 +607,6 @@ function validDraft(value: unknown): FixtureDraft | undefined {
     (coreValues.MKT_SOURCE_NOTE !== undefined &&
       (typeof coreValues.MKT_SOURCE_NOTE !== "string" ||
         coreValues.MKT_SOURCE_NOTE.trim() === "")) ||
-    (coreValues.MKT_CORN_SOURCE_NOTE !== undefined &&
-      (typeof coreValues.MKT_CORN_SOURCE_NOTE !== "string" ||
-        coreValues.MKT_CORN_SOURCE_NOTE.trim() === "")) ||
     !validFacts(value.facts, object.facts)
   ) {
     return undefined;
@@ -859,44 +770,29 @@ function field(
   return { code, label, valueType, unit: null, description };
 }
 
-const coreSortOrders: Record<string, number> = {
-  MKT_OBJECT_TYPE: 10,
-  MKT_REGION: 20,
-  MKT_TRADE_DATE: 30,
-  MKT_REPORTED_AT: 35,
-  MKT_TRADE_DIRECTION: 40,
-  MKT_PURCHASE_BASE_PRICE: 50,
-  MKT_SALE_BASE_PRICE: 60,
-  MKT_CARRIAGE_BOARD_AMOUNT: 70,
-  MKT_PACKAGING_FORM: 80,
-  MKT_PACKAGING_AMOUNT: 90,
-  MKT_FREIGHT_AMOUNT: 100,
-  MKT_SOURCE_NOTE: 105,
-  MKT_CORN_SOURCE_NOTE: 106,
-  MKT_ACTUAL_TRADE_PRICE: 110,
-};
-
-function core(
-  code: string,
-  label: string,
-  controlType: string,
-  capability: string,
-  required: boolean,
-  options: { value: string; label: string; sortOrder: number }[] = [],
-  description: string | null = null,
+function coreFieldResponse(
+  definition: (typeof marketCoreFieldDefinitions)[number],
+  productCode: MarketProductCode,
 ) {
   return {
-    code,
-    label,
-    controlType,
-    capability,
-    required,
-    unit: controlType.includes("DECIMAL") ? "元/吨" : null,
-    description,
-    precision: controlType.includes("DECIMAL") ? 18 : null,
-    scale: controlType.includes("DECIMAL") ? 4 : null,
-    sortOrder: coreSortOrders[code],
-    options,
+    code: definition.code,
+    label: definition.label,
+    controlType: definition.controlType,
+    capability: definition.capability,
+    required: definition.required,
+    unit: definition.unit,
+    description: definition.description,
+    precision: definition.precision,
+    scale: definition.scale,
+    sortOrder: definition.sortOrder,
+    options:
+      definition.code === "MKT_OBJECT_TYPE"
+        ? objectEntries(productCode).map(([value, contract]) => ({
+            value,
+            label: contract.label,
+            sortOrder: contract.sortOrder,
+          }))
+        : [...definition.options],
   };
 }
 

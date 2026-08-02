@@ -124,6 +124,7 @@ export function ProductionMonitoringPage({
         </div>
       )}
       <ListWorkbench
+        actionsDisabled={commands.loading}
         definition={definition}
         errorMessage={listError}
         loadRegionChildren={loadRegionChildren}

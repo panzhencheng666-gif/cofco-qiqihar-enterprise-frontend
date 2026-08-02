@@ -45,6 +45,7 @@ export function useProductionCommands({
   const [definitionLoading, setDefinitionLoading] = useState(false);
   const [issue, setIssue] = useState<ProductionActionIssue>();
   const requestVersion = useRef(0);
+  const mutationInFlight = useRef(false);
   const mounted = useRef(false);
 
   useEffect(() => {
@@ -56,12 +57,14 @@ export function useProductionCommands({
       setReturning(undefined);
       setReturnReason("");
       setIssue(undefined);
+      mutationInFlight.current = false;
       setLoading(false);
       setDefinitionLoading(false);
     });
     return () => {
       mounted.current = false;
       requestVersion.current += 1;
+      mutationInFlight.current = false;
     };
   }, [contextKey]);
 
@@ -74,6 +77,18 @@ export function useProductionCommands({
     setIssue(undefined);
     setLoading(true);
     return version;
+  }
+
+  function beginMutation() {
+    if (mutationInFlight.current) return undefined;
+    mutationInFlight.current = true;
+    return begin();
+  }
+
+  function finishMutation(version: number) {
+    if (!active(version)) return;
+    mutationInFlight.current = false;
+    setLoading(false);
   }
 
   function fail(version: number, failure: unknown, retry: () => void) {
@@ -108,7 +123,9 @@ export function useProductionCommands({
   async function dispatch(action: string, rowId?: string) {
     const row = records.find((candidate) => candidate.id === rowId);
     if (action !== "NEW" && (!row || !row.allowedActions.includes(action))) return;
-    const version = begin();
+    const mutates = action === "SUBMIT" || action === "APPROVE";
+    const version = mutates ? beginMutation() : begin();
+    if (version === undefined) return;
     try {
       if (action === "NEW") {
         const definition = requireDefinitionContext(
@@ -152,14 +169,16 @@ export function useProductionCommands({
     } catch (failure) {
       fail(version, failure, () => void dispatch(action, rowId));
     } finally {
-      if (active(version)) setLoading(false);
+      if (mutates) finishMutation(version);
+      else if (active(version)) setLoading(false);
     }
   }
 
   async function save() {
     if (!editor) return;
     const snapshot = editor;
-    const version = begin();
+    const version = beginMutation();
+    if (version === undefined) return;
     try {
       if (snapshot.id !== undefined && snapshot.version !== undefined) {
         await repository.saveDraft(snapshot.id, snapshot.version, snapshot.draft);
@@ -172,7 +191,7 @@ export function useProductionCommands({
     } catch (failure) {
       fail(version, failure, () => void save());
     } finally {
-      if (active(version)) setLoading(false);
+      finishMutation(version);
     }
   }
 
@@ -180,7 +199,8 @@ export function useProductionCommands({
     if (!returning || !returnReason.trim()) return;
     const detail = returning;
     const reason = returnReason;
-    const version = begin();
+    const version = beginMutation();
+    if (version === undefined) return;
     try {
       await repository.returnForCorrection(detail.id, detail.version, reason);
       if (!active(version)) return;
@@ -190,7 +210,7 @@ export function useProductionCommands({
     } catch (failure) {
       fail(version, failure, () => void confirmReturn());
     } finally {
-      if (active(version)) setLoading(false);
+      finishMutation(version);
     }
   }
 

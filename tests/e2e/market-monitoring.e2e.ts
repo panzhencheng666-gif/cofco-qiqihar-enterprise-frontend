@@ -236,7 +236,6 @@ test("market writes follow the real draft, review, return, and approval workflow
   await createEditor
     .getByRole("textbox", { name: "来源说明", exact: true })
     .fill("新粮采购");
-  await createEditor.getByRole("textbox", { name: "玉米来源说明" }).fill("龙江产区");
   await createEditor.getByRole("textbox", { name: "水分" }).fill("14.5");
   await createEditor.getByRole("textbox", { name: "采购量" }).fill("120");
   await expect(createEditor.getByRole("textbox", { name: "实际成交价" })).toHaveValue(
@@ -246,7 +245,6 @@ test("market writes follow the real draft, review, return, and approval workflow
   await expect(createEditor).toBeHidden();
   await expect(page.getByText("2090.0000", { exact: true })).toBeVisible();
   await expect(page.getByText("新粮采购", { exact: true })).toBeVisible();
-  await expect(page.getByText("龙江产区", { exact: true })).toBeVisible();
   expect(api.recordCount("CORN")).toBe(2);
 
   const beforeRejectedCreate = api.recordCount("CORN");

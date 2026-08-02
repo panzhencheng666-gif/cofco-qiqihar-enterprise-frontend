@@ -1,10 +1,12 @@
+import { createHash } from "node:crypto";
+
 export type MarketProductCode = "CORN" | "SOYBEAN" | "RICE";
 
 export type MarketFactCode = keyof typeof marketFactDefinitions;
 
-export const marketContractVersion = "V21";
+export const marketContractVersion = "V22";
 export const backendMarketContractSha256 =
-  "041cb147446cbd70cffb648b856b9ed71a3b6ec1ee34e8e4141107bcf338d4e0";
+  "0efc5505da3daff584e7af903e2dba0ca58e513aa56c9e5ba5ae4c61a77a7ac2";
 
 export const marketFactDefinitions = {
   MOISTURE: fact("QUALITY", "水分", "%", 10, 1),
@@ -28,6 +30,147 @@ export const marketFactDefinitions = {
   STORAGE_LOSS: fact("INVENTORY", "保管损耗", "吨", 190, 4),
   ENDING_INVENTORY: fact("INVENTORY", "期末库存", "吨", 200, 4),
 } as const;
+
+export const marketCoreFieldDefinitions = [
+  coreDefinition(
+    "MKT_OBJECT_TYPE",
+    "对象类型",
+    "SELECT",
+    10,
+    "OBJECT_TYPE",
+    "OBJECT_TYPE_CONTEXT",
+    true,
+  ),
+  coreDefinition(
+    "MKT_REGION",
+    "地区",
+    "REGION_HIERARCHY",
+    20,
+    "REGION",
+    "GENERIC",
+    true,
+  ),
+  coreDefinition(
+    "MKT_TRADE_DATE",
+    "交易日期",
+    "DATE",
+    30,
+    "TRADE_DATE",
+    "GENERIC",
+    true,
+  ),
+  coreDefinition(
+    "MKT_REPORTED_AT",
+    "填报时间",
+    "READONLY_DATETIME",
+    35,
+    "REPORTED_AT",
+    "GENERIC",
+    false,
+  ),
+  coreDefinition(
+    "MKT_TRADE_DIRECTION",
+    "买卖方向",
+    "SELECT",
+    40,
+    "TRADE_DIRECTION",
+    "PRICE_DIRECTION",
+    true,
+    null,
+    null,
+    [
+      { value: "PURCHASE", label: "采购", sortOrder: 10 },
+      { value: "SALE", label: "销售", sortOrder: 20 },
+    ],
+  ),
+  coreDefinition(
+    "MKT_PURCHASE_BASE_PRICE",
+    "采购基础价",
+    "DECIMAL",
+    50,
+    "PURCHASE_BASE_PRICE",
+    "PURCHASE_BASE_PRICE",
+    false,
+    "元/吨",
+    "采购基础价未包含车板、包装和运费组成",
+  ),
+  coreDefinition(
+    "MKT_SALE_BASE_PRICE",
+    "销售基础价",
+    "DECIMAL",
+    60,
+    "SALE_BASE_PRICE",
+    "SALE_BASE_PRICE",
+    false,
+    "元/吨",
+    "销售基础价未包含车板、包装和运费组成",
+  ),
+  coreDefinition(
+    "MKT_CARRIAGE_BOARD_AMOUNT",
+    "车板组成",
+    "DECIMAL",
+    70,
+    "CARRIAGE_BOARD_AMOUNT",
+    "PRICE_COMPONENT",
+    true,
+    "元/吨",
+  ),
+  coreDefinition(
+    "MKT_PACKAGING_FORM",
+    "包装形态",
+    "SELECT",
+    80,
+    "PACKAGING_FORM",
+    "GENERIC",
+    true,
+    null,
+    null,
+    [
+      { value: "BAGGED", label: "包粮", sortOrder: 10 },
+      { value: "BULK", label: "散粮", sortOrder: 20 },
+    ],
+  ),
+  coreDefinition(
+    "MKT_PACKAGING_AMOUNT",
+    "包装组成",
+    "DECIMAL",
+    90,
+    "PACKAGING_AMOUNT",
+    "PRICE_COMPONENT",
+    true,
+    "元/吨",
+  ),
+  coreDefinition(
+    "MKT_FREIGHT_AMOUNT",
+    "运费组成",
+    "DECIMAL",
+    100,
+    "FREIGHT_AMOUNT",
+    "PRICE_COMPONENT",
+    true,
+    "元/吨",
+  ),
+  coreDefinition(
+    "MKT_SOURCE_NOTE",
+    "来源说明",
+    "TEXT",
+    105,
+    "EXTENSION",
+    "GENERIC",
+    false,
+  ),
+  coreDefinition(
+    "MKT_ACTUAL_TRADE_PRICE",
+    "实际成交价",
+    "READONLY_DECIMAL",
+    110,
+    "ACTUAL_TRADE_PRICE",
+    "ACTUAL_TRADE_PRICE",
+    false,
+    "元/吨",
+    "实际成交价已包含车板、包装和运费组成",
+  ),
+] as const;
 
 const commonFlow = orders(
   ["PURCHASE_VOLUME", 60],
@@ -138,6 +281,54 @@ export const marketProducts = {
   }),
 } as const;
 
+export const canonicalMarketContract = `${[
+  ...Object.entries(marketProducts).flatMap(([productCode, product]) =>
+    Object.entries(product.objects).flatMap(([objectCode, object]) => [
+      `OBJECT|${productCode}|${objectCode}|${object.label}|${object.sortOrder}`,
+      ...object.facts.map((factCode) => {
+        const definition = marketFactDefinitions[factCode];
+        return [
+          "FACT",
+          productCode,
+          objectCode,
+          factCode,
+          definition.category,
+          definition.label,
+          definition.unit,
+          18,
+          definition.scale,
+          object.factSortOrders[factCode],
+        ].join("|");
+      }),
+    ]),
+  ),
+  ...Object.keys(marketProducts).flatMap((productCode) =>
+    marketCoreFieldDefinitions.map((definition) =>
+      [
+        "CORE",
+        productCode,
+        definition.code,
+        definition.label,
+        definition.controlType,
+        definition.unit ?? "",
+        definition.precision ?? "",
+        definition.scale ?? "",
+        definition.sortOrder,
+        definition.domainBinding,
+        definition.capability,
+        definition.required ? "t" : "f",
+        definition.pageSortOrder,
+      ].join("|"),
+    ),
+  ),
+]
+  .sort()
+  .join("\n")}\n`;
+
+export const marketContractSha256 = createHash("sha256")
+  .update(canonicalMarketContract, "utf8")
+  .digest("hex");
+
 function fact(
   category: "QUALITY" | "PURCHASE" | "SALES" | "PROCESSING" | "INVENTORY",
   label: string,
@@ -146,6 +337,55 @@ function fact(
   scale: number,
 ) {
   return { category, label, unit, sortOrder, scale };
+}
+
+function coreDefinition(
+  code: string,
+  label: string,
+  controlType: string,
+  sortOrder: number,
+  domainBinding: string,
+  capability: string,
+  required: boolean,
+  unit: string | null = null,
+  description: string | null = null,
+  options: readonly { value: string; label: string; sortOrder: number }[] = [],
+) {
+  const decimal = controlType.includes("DECIMAL");
+  return {
+    code,
+    label,
+    controlType,
+    unit,
+    description,
+    domainBinding,
+    capability,
+    required,
+    precision: decimal ? 18 : null,
+    scale: decimal ? 4 : null,
+    sortOrder,
+    pageSortOrder: pageSortOrder(code),
+    options,
+  };
+}
+
+function pageSortOrder(code: string) {
+  const orders: Record<string, number> = {
+    MKT_REGION: 10,
+    MKT_OBJECT_TYPE: 20,
+    MKT_TRADE_DATE: 30,
+    MKT_REPORTED_AT: 32,
+    MKT_TRADE_DIRECTION: 35,
+    MKT_PURCHASE_BASE_PRICE: 40,
+    MKT_SALE_BASE_PRICE: 50,
+    MKT_CARRIAGE_BOARD_AMOUNT: 55,
+    MKT_PACKAGING_FORM: 56,
+    MKT_PACKAGING_AMOUNT: 57,
+    MKT_FREIGHT_AMOUNT: 58,
+    MKT_SOURCE_NOTE: 59,
+    MKT_ACTUAL_TRADE_PRICE: 60,
+  };
+  return orders[code];
 }
 
 function orders(...entries: readonly (readonly [MarketFactCode, number])[]) {

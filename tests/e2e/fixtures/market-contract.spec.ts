@@ -2,13 +2,24 @@ import { describe, expect, it } from "vitest";
 
 import * as contract from "./market-contract";
 
-describe("market V21 contract snapshot", () => {
-  it("is pinned to the backend-exported snapshot and exact fact metadata", () => {
+describe("market V22 contract snapshot", () => {
+  it("canonically serializes the complete fixture contract to the backend hash", () => {
     expect(contract).toMatchObject({
-      marketContractVersion: "V21",
+      marketContractVersion: "V22",
       backendMarketContractSha256:
-        "041cb147446cbd70cffb648b856b9ed71a3b6ec1ee34e8e4141107bcf338d4e0",
+        "0efc5505da3daff584e7af903e2dba0ca58e513aa56c9e5ba5ae4c61a77a7ac2",
     });
+    expect(contract.marketContractSha256).toBe(contract.backendMarketContractSha256);
+    expect(contract.canonicalMarketContract).toContain(
+      "CORE|CORN|MKT_SOURCE_NOTE|来源说明|TEXT||||105|EXTENSION|GENERIC|f|59\n",
+    );
+    expect(contract.canonicalMarketContract).not.toContain("MKT_CORN_SOURCE_NOTE");
+    expect(contract.marketCoreFieldDefinitions).toHaveLength(13);
+    expect(
+      contract.marketCoreFieldDefinitions.find(
+        ({ code }) => code === "MKT_SOURCE_NOTE",
+      ),
+    ).toMatchObject({ description: null, domainBinding: "EXTENSION" });
     expect(contract.marketFactDefinitions.PROTEIN).toMatchObject({
       label: "蛋白",
       scale: 1,

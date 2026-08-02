@@ -246,6 +246,7 @@ describe("ProductionMonitoringPage", () => {
 
     await user.click(await screen.findByRole("button", { name: "提交" }));
     const alert = await screen.findByRole("alert");
+    expect(screen.getByRole("button", { name: "提交" })).toBeEnabled();
     await user.click(within(alert).getByRole("button", { name: "重试操作" }));
 
     await waitFor(() => expect(submit).toHaveBeenCalledTimes(2));
@@ -270,6 +271,11 @@ describe("ProductionMonitoringPage", () => {
   it.each(["SAVE", "APPROVE"] as const)(
     "retries only the refresh after a successful %s whose refresh fails",
     expectMutationRefreshRetry,
+  );
+
+  it.each(["CREATE", "SAVE", "SUBMIT", "APPROVE", "RETURN"] as const)(
+    "guards duplicate %s mutations synchronously and until its refresh settles",
+    expectMutationGuard,
   );
 
   it("ignores a deferred NEW definition after switching product context", async () => {
@@ -733,6 +739,99 @@ async function expectMutationRefreshRetry(
   );
   await user.click(within(alert).getByRole("button", { name: "重试操作" }));
   await waitFor(() => expect(search).toHaveBeenCalledTimes(3));
+  expect(mutation).toHaveBeenCalledTimes(1);
+}
+
+async function expectMutationGuard(
+  scenario: "CREATE" | "SAVE" | "SUBMIT" | "APPROVE" | "RETURN",
+) {
+  const user = userEvent.setup();
+  const refresh = deferred<Awaited<ReturnType<ProductionRecordRepository["search"]>>>();
+  const initialAction =
+    scenario === "SAVE" ? "VIEW" : scenario === "CREATE" ? undefined : scenario;
+  const initialPage = initialAction ? rowPage(initialAction) : emptyPage();
+  const search = vi
+    .fn<ProductionRecordRepository["search"]>()
+    .mockResolvedValueOnce(initialPage)
+    .mockReturnValueOnce(refresh.promise);
+  const mutationResult = deferred<ProductionRecordDetail>();
+  const mutation = vi.fn(() => mutationResult.promise);
+  const result = detail(
+    scenario === "SUBMIT"
+      ? "PENDING_REVIEW"
+      : scenario === "APPROVE"
+        ? "APPROVED"
+        : scenario === "RETURN"
+          ? "RETURNED"
+          : "DRAFT",
+    8,
+  );
+  const repository = repositoryFixture({
+    search,
+    ...(scenario === "CREATE" ? { create: mutation } : {}),
+    ...(scenario === "SAVE" ? { saveDraft: mutation } : {}),
+    ...(scenario === "SUBMIT" ? { submit: mutation } : {}),
+    ...(scenario === "APPROVE" ? { approve: mutation } : {}),
+    ...(scenario === "RETURN" ? { returnForCorrection: mutation } : {}),
+  });
+  renderPage(repository);
+
+  let mutationButton: HTMLButtonElement;
+  if (scenario === "CREATE") {
+    await user.click(await screen.findByRole("button", { name: "新建填报" }));
+    mutationButton = within(
+      await screen.findByRole("dialog", { name: "新建产情填报" }),
+    ).getByRole("button", { name: "保存草稿" });
+  } else if (scenario === "SAVE") {
+    await user.click(await screen.findByRole("button", { name: "查看" }));
+    mutationButton = within(
+      await screen.findByRole("dialog", { name: "产情记录详情" }),
+    ).getByRole("button", { name: "保存草稿" });
+  } else if (scenario === "RETURN") {
+    await user.click(await screen.findByRole("button", { name: "退回" }));
+    const dialog = await screen.findByRole("dialog", { name: "退回产情记录" });
+    await user.type(within(dialog).getByLabelText("退回原因"), "重复保护");
+    mutationButton = within(dialog).getByRole("button", { name: "确认退回" });
+  } else {
+    mutationButton = await screen.findByRole("button", {
+      name: scenario === "SUBMIT" ? "提交" : "审核",
+    });
+  }
+
+  await act(async () => {
+    mutationButton.click();
+    mutationButton.click();
+    await Promise.resolve();
+  });
+  expect(mutation).toHaveBeenCalledTimes(1);
+  expect(mutationButton).toBeDisabled();
+  mutationButton.click();
+  expect(mutation).toHaveBeenCalledTimes(1);
+
+  await act(async () => {
+    mutationResult.resolve(result);
+    await mutationResult.promise;
+  });
+  await waitFor(() => expect(search).toHaveBeenCalledTimes(2));
+  expect(screen.getByRole("button", { name: "新建填报" })).toBeDisabled();
+  expect(mutation).toHaveBeenCalledTimes(1);
+
+  await act(async () => {
+    refresh.resolve(initialPage);
+    await refresh.promise;
+  });
+  const actionName =
+    scenario === "CREATE"
+      ? "新建填报"
+      : scenario === "SAVE"
+        ? "查看"
+        : scenario === "SUBMIT"
+          ? "提交"
+          : scenario === "APPROVE"
+            ? "审核"
+            : "退回";
+  const actionButton = await screen.findByRole("button", { name: actionName });
+  await waitFor(() => expect(actionButton).toBeEnabled());
   expect(mutation).toHaveBeenCalledTimes(1);
 }
 
