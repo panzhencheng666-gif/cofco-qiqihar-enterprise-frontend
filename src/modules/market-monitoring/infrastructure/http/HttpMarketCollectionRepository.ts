@@ -38,7 +38,7 @@ const recordSchema = z.object({
   objectTypeName: z.string(),
   regionName: z.string(),
   cultivarName: z.string(),
-  status: z.enum(["填写中", "待审核", "已核定", "需补充"]),
+  status: z.string(),
   values: z.record(z.string(), z.string()),
 });
 const recordListResponseSchema = z.object({ data: z.array(recordSchema) });

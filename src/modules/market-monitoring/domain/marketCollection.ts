@@ -17,7 +17,7 @@ export interface MarketCollectionDefinition {
   fieldGroups: readonly MarketFieldGroupDefinition[];
 }
 
-export type CollectionStatus = "填写中" | "待审核" | "已核定" | "需补充";
+export type CollectionStatus = string;
 
 export interface MarketCollectionRecord {
   id: string;

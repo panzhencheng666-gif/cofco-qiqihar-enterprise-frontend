@@ -296,6 +296,16 @@ select:focus-visible {
   background: #fff;
 }
 
+.region-hierarchy-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.region-hierarchy-filter select {
+  min-width: 148px;
+}
+
 .query-field--date input {
   width: 188px;
 }
@@ -370,6 +380,13 @@ select:focus-visible {
 .ledger-panel {
   border: 1px solid #bcd0dc;
   background: #fff;
+}
+
+.list-workbench-loading {
+  min-height: 120px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
 }
 
 .ledger-toolbar,
@@ -456,6 +473,20 @@ select:focus-visible {
   width: 30px;
   min-height: 30px;
   padding: 0;
+}
+
+.list-workbench-pagination-summary,
+.list-workbench-pagination-summary label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.list-workbench-pagination-summary select {
+  height: 30px;
+  border: 1px solid #b7cbd7;
+  color: #26485b;
+  background: #fff;
 }
 
 @media (max-width: 1450px) {

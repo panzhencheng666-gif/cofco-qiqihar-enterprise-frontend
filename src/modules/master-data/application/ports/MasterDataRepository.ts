@@ -1,4 +1,8 @@
-import type { MasterDataOption, RegionOption } from "../../domain/masterData";
+import type {
+  MasterDataOption,
+  RegionHierarchyNode,
+  RegionOption,
+} from "../../domain/masterData";
 
 export interface MasterDataRepository {
   getCultivars(productCode: string): Promise<readonly MasterDataOption[]>;
@@ -8,4 +12,5 @@ export interface MasterDataRepository {
     productCode: string,
   ): Promise<readonly MasterDataOption[]>;
   getRegionRoots(): Promise<readonly RegionOption[]>;
+  getRegionChildren(parentId?: string): Promise<readonly RegionHierarchyNode[]>;
 }

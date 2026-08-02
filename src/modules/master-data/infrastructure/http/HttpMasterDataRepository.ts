@@ -12,6 +12,15 @@ const regionListSchema = z.object({
     }),
   ),
 });
+const regionHierarchyListSchema = z.object({
+  data: z.array(
+    z.object({
+      id: z.string(),
+      label: z.string(),
+      level: z.enum(["PREFECTURE", "COUNTY", "TOWNSHIP", "VILLAGE"]),
+    }),
+  ),
+});
 
 export class HttpMasterDataRepository implements MasterDataRepository {
   constructor(private readonly http: HttpClient) {}
@@ -45,5 +54,13 @@ export class HttpMasterDataRepository implements MasterDataRepository {
 
   async getRegionRoots() {
     return (await this.http.get("/api/v1/master-data/regions", regionListSchema)).data;
+  }
+
+  async getRegionChildren(parentId?: string) {
+    const path =
+      parentId === undefined
+        ? "/api/v1/regions"
+        : `/api/v1/regions?parentCode=${encodeURIComponent(parentId)}`;
+    return (await this.http.get(path, regionHierarchyListSchema)).data;
   }
 }
