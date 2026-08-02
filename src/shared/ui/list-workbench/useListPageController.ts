@@ -44,10 +44,6 @@ export function useListPageController(options: ListPageControllerOptions) {
   const requestVersion = useRef(0);
   const routeKey = routeFingerprint(options.routeQuery);
 
-  useEffect(() => {
-    queryRef.current = query;
-  }, [query]);
-
   const executeSearch = useCallback(async (next: ListQueryState) => {
     const version = ++requestVersion.current;
     setLoading(true);
@@ -58,10 +54,11 @@ export function useListPageController(options: ListPageControllerOptions) {
       const lastPage = Math.max(0, nextResult.totalPages - 1);
       if (next.pageNumber > lastPage) {
         const normalized = { ...next, pageNumber: lastPage };
-        nextResult = await optionsRef.current.search(normalized);
-        if (version !== requestVersion.current) return;
+        queryRef.current = normalized;
         setQuery(normalized);
         optionsRef.current.onQueryNormalized?.(normalized);
+        nextResult = await optionsRef.current.search(normalized);
+        if (version !== requestVersion.current) return;
       }
       setResult(nextResult);
     } catch {
@@ -77,6 +74,7 @@ export function useListPageController(options: ListPageControllerOptions) {
 
   useEffect(() => {
     let active = true;
+    queryRef.current = undefined;
     requestVersion.current += 1;
     void Promise.resolve()
       .then(() => {
@@ -98,6 +96,7 @@ export function useListPageController(options: ListPageControllerOptions) {
           validated,
           optionsRef.current.routeQuery,
         );
+        queryRef.current = initial;
         setDefinitionState({ contextKey: options.controllerKey, value: validated });
         setQuery(initial);
         setResult(emptyResult(initial));
@@ -128,6 +127,7 @@ export function useListPageController(options: ListPageControllerOptions) {
     if (!definition || !currentQuery) return;
     const restored = normalizeListRouteQuery(definition, optionsRef.current.routeQuery);
     if (sameQuery(restored, currentQuery)) return;
+    queryRef.current = restored;
     requestVersion.current += 1;
     setQuery(restored);
     setResult(emptyResult(restored));
@@ -137,25 +137,28 @@ export function useListPageController(options: ListPageControllerOptions) {
 
   const changeQuery = useCallback(
     (next: ListQueryState) => {
+      const current = queryRef.current;
       const shouldSearch =
-        query !== undefined &&
-        sameValues(query.values, next.values) &&
-        (query.pageNumber !== next.pageNumber || query.pageSize !== next.pageSize);
+        current !== undefined &&
+        sameValues(current.values, next.values) &&
+        (current.pageNumber !== next.pageNumber || current.pageSize !== next.pageSize);
+      queryRef.current = next;
       setQuery(next);
       if (shouldSearch) {
         optionsRef.current.onQueryCommitted?.(next);
         void executeSearch(next);
       }
     },
-    [executeSearch, query],
+    [executeSearch],
   );
 
   const submitSearch = useCallback(() => {
-    if (query) {
-      optionsRef.current.onQueryCommitted?.(query);
-      void executeSearch(query);
+    const latest = queryRef.current;
+    if (latest) {
+      optionsRef.current.onQueryCommitted?.(latest);
+      void executeSearch(latest);
     }
-  }, [executeSearch, query]);
+  }, [executeSearch]);
 
   const refreshLatest = useCallback(async () => {
     const latest = queryRef.current;

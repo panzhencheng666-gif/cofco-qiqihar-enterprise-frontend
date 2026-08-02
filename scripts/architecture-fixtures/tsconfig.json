@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "paths": {
+      "@fixture/ui": ["ui/index.ts"]
+    },
+    "target": "ES2023"
+  },
+  "include": ["**/*.ts"]
+}

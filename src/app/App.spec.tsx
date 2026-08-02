@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
@@ -7,6 +7,8 @@ import type { MarketCollectionCriteria } from "../modules/market-monitoring/doma
 import type { ListPageDefinition } from "../shared/application/page-definition";
 import type { ProductionRecordRepository } from "../modules/production-monitoring/application/ports/ProductionRecordRepository";
 import type { ProductionRecordDetail } from "../modules/production-monitoring/domain/productionRecord";
+
+type ProductionSearchPage = Awaited<ReturnType<ProductionRecordRepository["search"]>>;
 
 describe("App production composition", () => {
   beforeEach(() => {
@@ -281,67 +283,174 @@ describe("App production composition", () => {
     );
   });
 
-  it("refreshes the latest same-product history query after a deferred write settles", async () => {
-    window.history.replaceState(
-      null,
-      "",
-      "#/pages/PRODUCTION/MONITORING/SOYBEAN?pageNumber=0&pageSize=20",
-    );
-    const user = userEvent.setup();
-    const submitResult = deferred<ProductionRecordDetail>();
-    const searches: Array<Record<string, string>> = [];
-    const dependencies = dependenciesFixture(() => Promise.resolve(page([], 0, 20, 0)));
-    dependencies.masterDataRepository.getProducts = () =>
-      Promise.resolve([{ id: "SOYBEAN", name: "大豆" }]);
-    dependencies.pageDefinitionGateway.getDefinition = () =>
-      Promise.resolve(productionDefinitionFixture());
-    dependencies.productionRecordRepository = {
-      search: (criteria) => {
-        searches.push({ ...criteria.values });
-        return Promise.resolve({
-          items: [
-            {
-              id: "record-1",
-              values: { PROD_STATUS: "草稿" },
-              allowedActions: ["SUBMIT"],
-              version: 7,
-            },
-          ],
-          pageNumber: criteria.pageNumber,
-          pageSize: criteria.pageSize,
-          totalElements: 1,
-          totalPages: 1,
-        });
-      },
-      submit: () => submitResult.promise,
-      detail: () => Promise.reject(new Error("not called")),
-      definition: () => Promise.reject(new Error("not called")),
-      create: () => Promise.reject(new Error("not called")),
-      saveDraft: () => Promise.reject(new Error("not called")),
-      approve: () => Promise.reject(new Error("not called")),
-      returnForCorrection: () => Promise.reject(new Error("not called")),
-    };
+  it.each(["create", "saveDraft", "submit", "approve", "return"] as const)(
+    "never refreshes the old query when deferred %s settles inside a pending history restore",
+    async (writeKind) => {
+      window.history.replaceState(
+        null,
+        "",
+        "#/pages/PRODUCTION/MONITORING/SOYBEAN?pageNumber=0&pageSize=20",
+      );
+      const user = userEvent.setup();
+      const writeResult = deferred<ProductionRecordDetail>();
+      const searches: Array<{
+        pageNumber: number;
+        values: Readonly<Record<string, string>>;
+      }> = [];
+      const latestSearches: ReturnType<typeof deferred<ProductionSearchPage>>[] = [];
+      const dependencies = dependenciesFixture(() =>
+        Promise.resolve(page([], 0, 20, 0)),
+      );
+      dependencies.masterDataRepository.getProducts = () =>
+        Promise.resolve([{ id: "SOYBEAN", name: "大豆" }]);
+      dependencies.pageDefinitionGateway.getDefinition = () =>
+        Promise.resolve(productionWriteDefinitionFixture());
+      const create = vi.fn(() => writeResult.promise);
+      const saveDraft = vi.fn(() => writeResult.promise);
+      const submit = vi.fn(() => writeResult.promise);
+      const approve = vi.fn(() => writeResult.promise);
+      const returnForCorrection = vi.fn(() => writeResult.promise);
+      dependencies.productionRecordRepository = {
+        search: (criteria) => {
+          searches.push({
+            pageNumber: criteria.pageNumber,
+            values: { ...criteria.values },
+          });
+          if (
+            criteria.pageNumber === 1 &&
+            criteria.values.objectTypeCode === "FARMER"
+          ) {
+            const pending = deferred<ProductionSearchPage>();
+            latestSearches.push(pending);
+            if (latestSearches.length === 1) {
+              writeResult.resolve(productionDetail("DRAFT", 8));
+            }
+            return pending.promise;
+          }
+          return Promise.resolve({
+            items: [
+              {
+                id: "record-1",
+                values: { PROD_STATUS: "可写记录" },
+                allowedActions: ["VIEW", "SUBMIT", "APPROVE", "RETURN"],
+                version: 7,
+              },
+            ],
+            pageNumber: criteria.pageNumber,
+            pageSize: criteria.pageSize,
+            totalElements: 1,
+            totalPages: 1,
+          });
+        },
+        detail: () =>
+          Promise.resolve({
+            ...productionDetail("DRAFT", 7),
+            allowedActions: ["SAVE"],
+          }),
+        definition: (_productCode, objectTypeCode) =>
+          Promise.resolve(productionFormDefinitionFixture(objectTypeCode ?? null)),
+        create,
+        saveDraft,
+        submit,
+        approve,
+        returnForCorrection,
+      };
 
-    render(<App dependencies={dependencies} />);
-    await user.click(await screen.findByRole("button", { name: "提交" }));
-    act(() => {
+      render(<App dependencies={dependencies} />);
+      if (writeKind === "create") {
+        await user.click(await screen.findByRole("button", { name: "新建填报" }));
+        await user.click(
+          within(await screen.findByRole("dialog", { name: "新建产情填报" })).getByRole(
+            "button",
+            { name: "保存草稿" },
+          ),
+        );
+      } else if (writeKind === "saveDraft") {
+        await user.click(await screen.findByRole("button", { name: "查看" }));
+        await user.click(
+          within(await screen.findByRole("dialog", { name: "产情记录详情" })).getByRole(
+            "button",
+            { name: "保存草稿" },
+          ),
+        );
+      } else if (writeKind === "submit") {
+        await user.click(await screen.findByRole("button", { name: "提交" }));
+      } else if (writeKind === "approve") {
+        await user.click(await screen.findByRole("button", { name: "审核" }));
+      } else {
+        await user.click(await screen.findByRole("button", { name: "退回" }));
+        const dialog = await screen.findByRole("dialog", { name: "退回产情记录" });
+        await user.type(within(dialog).getByLabelText("退回原因"), "历史恢复竞态");
+        await user.click(within(dialog).getByRole("button", { name: "确认退回" }));
+      }
+      const selectedWrite = {
+        create,
+        saveDraft,
+        submit,
+        approve,
+        return: returnForCorrection,
+      }[writeKind];
+      await waitFor(() => expect(selectedWrite).toHaveBeenCalledTimes(1));
+
       window.history.pushState(
         null,
         "",
-        "#/pages/PRODUCTION/MONITORING/SOYBEAN?pageNumber=0&pageSize=20&filter.objectTypeCode=FARMER",
+        "#/pages/PRODUCTION/MONITORING/SOYBEAN?pageNumber=1&pageSize=20&filter.objectTypeCode=FARMER",
       );
-      window.dispatchEvent(new PopStateEvent("popstate"));
-    });
-    await waitFor(() => expect(searches.at(-1)).toEqual({ objectTypeCode: "FARMER" }));
+      window.history.back();
+      await waitFor(() => expect(window.location.hash).toContain("pageNumber=0"));
+      window.history.forward();
 
-    await act(async () => {
-      submitResult.resolve(productionDetail("PENDING_REVIEW", 8));
-      await Promise.resolve();
-    });
+      await waitFor(() => expect(searches).toHaveLength(3));
+      expect(searches.slice(1)).toEqual([
+        { pageNumber: 1, values: { objectTypeCode: "FARMER" } },
+        { pageNumber: 1, values: { objectTypeCode: "FARMER" } },
+      ]);
+      expect(latestSearches).toHaveLength(2);
 
-    await waitFor(() => expect(searches).toHaveLength(3));
-    expect(searches.at(-1)).toEqual({ objectTypeCode: "FARMER" });
-  });
+      await act(async () => {
+        latestSearches[1]!.resolve({
+          items: [
+            {
+              id: "latest",
+              values: { PROD_STATUS: "最新结果" },
+              allowedActions: [],
+              version: 1,
+            },
+          ],
+          pageNumber: 1,
+          pageSize: 20,
+          totalElements: 21,
+          totalPages: 2,
+        });
+        await Promise.resolve();
+      });
+      expect(await screen.findByText("最新结果")).toBeVisible();
+      await act(async () => {
+        latestSearches[0]!.resolve({
+          items: [
+            {
+              id: "stale",
+              values: { PROD_STATUS: "过期恢复结果" },
+              allowedActions: [],
+              version: 1,
+            },
+          ],
+          pageNumber: 1,
+          pageSize: 20,
+          totalElements: 21,
+          totalPages: 2,
+        });
+        await Promise.resolve();
+      });
+
+      expect(screen.getByText("最新结果")).toBeVisible();
+      expect(screen.queryByText("过期恢复结果")).not.toBeInTheDocument();
+      expect(window.location.hash).toBe(
+        "#/pages/PRODUCTION/MONITORING/SOYBEAN?pageNumber=1&pageSize=20&filter.objectTypeCode=FARMER",
+      );
+    },
+  );
 });
 
 function dependenciesFixture(
@@ -448,6 +557,32 @@ function productionDefinitionFixture(): ListPageDefinition {
     ],
     actions: [{ id: "SUBMIT", label: "提交", scope: "row" }],
     pagination: { defaultPageSize: 20, pageSizeOptions: [20] },
+  };
+}
+
+function productionWriteDefinitionFixture(): ListPageDefinition {
+  return {
+    ...productionDefinitionFixture(),
+    actions: [
+      { id: "NEW", label: "新建填报", scope: "page" },
+      { id: "VIEW", label: "查看", scope: "row" },
+      { id: "SUBMIT", label: "提交", scope: "row" },
+      { id: "APPROVE", label: "审核", scope: "row" },
+      { id: "RETURN", label: "退回", scope: "row" },
+    ],
+  };
+}
+
+function productionFormDefinitionFixture(objectTypeCode: string | null) {
+  return {
+    productCode: "SOYBEAN",
+    objectTypeCode,
+    groups: [
+      { category: "QUALITY", label: "质量指标", sortOrder: 10, fields: [] },
+      { category: "COST", label: "生产成本", sortOrder: 20, fields: [] },
+      { category: "INSURANCE", label: "农业保险", sortOrder: 30, fields: [] },
+      { category: "SUBSIDY", label: "农业补贴", sortOrder: 40, fields: [] },
+    ],
   };
 }
 

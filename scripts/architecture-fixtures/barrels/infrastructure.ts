@@ -1,0 +1,1 @@
+export { infrastructureProbe } from "../infrastructure";
