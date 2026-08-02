@@ -25,6 +25,11 @@ export interface ProductionActionIssue {
   retry: () => void;
 }
 
+interface MutationOwner {
+  token: number;
+  requestVersionAtStart: number;
+}
+
 export function useProductionCommands({
   contextKey,
   productCode,
@@ -45,12 +50,13 @@ export function useProductionCommands({
   const [definitionLoading, setDefinitionLoading] = useState(false);
   const [issue, setIssue] = useState<ProductionActionIssue>();
   const requestVersion = useRef(0);
-  const pendingOperations = useRef(new Set<number>());
-  const mutationOwner = useRef<number | undefined>(undefined);
+  const mutationSequence = useRef(0);
+  const pendingRequests = useRef(new Set<number>());
+  const mutationOwner = useRef<MutationOwner | undefined>(undefined);
   const mounted = useRef(false);
 
   useEffect(() => {
-    const operations = pendingOperations.current;
+    const requests = pendingRequests.current;
     mounted.current = true;
     requestVersion.current += 1;
     void Promise.resolve().then(() => {
@@ -59,7 +65,7 @@ export function useProductionCommands({
       setReturning(undefined);
       setReturnReason("");
       setIssue(undefined);
-      operations.clear();
+      requests.clear();
       mutationOwner.current = undefined;
       setLoading(false);
       setDefinitionLoading(false);
@@ -67,7 +73,7 @@ export function useProductionCommands({
     return () => {
       mounted.current = false;
       requestVersion.current += 1;
-      operations.clear();
+      requests.clear();
       mutationOwner.current = undefined;
     };
   }, [contextKey]);
@@ -78,7 +84,7 @@ export function useProductionCommands({
 
   function begin() {
     const version = ++requestVersion.current;
-    pendingOperations.current.add(version);
+    pendingRequests.current.add(version);
     setIssue(undefined);
     setLoading(true);
     return version;
@@ -86,24 +92,48 @@ export function useProductionCommands({
 
   function beginMutation() {
     if (mutationOwner.current !== undefined) return undefined;
-    const version = begin();
-    mutationOwner.current = version;
-    return version;
+    const owner = {
+      token: ++mutationSequence.current,
+      requestVersionAtStart: requestVersion.current,
+    };
+    mutationOwner.current = owner;
+    setIssue(undefined);
+    setLoading(true);
+    return owner;
   }
 
   function finish(version: number) {
-    pendingOperations.current.delete(version);
-    if (mounted.current) setLoading(pendingOperations.current.size > 0);
+    pendingRequests.current.delete(version);
+    if (mounted.current) {
+      setLoading(
+        pendingRequests.current.size > 0 || mutationOwner.current !== undefined,
+      );
+    }
   }
 
-  function finishMutation(owner: number) {
+  function finishMutation(owner: MutationOwner) {
     if (mutationOwner.current !== owner) return;
     mutationOwner.current = undefined;
-    finish(owner);
+    if (mounted.current) setLoading(pendingRequests.current.size > 0);
   }
 
   function fail(version: number, failure: unknown, retry: () => void) {
     if (!active(version)) return;
+    setIssue({ message: actionFailureMessage(failure), retry });
+  }
+
+  function mutationActive(owner: MutationOwner) {
+    return mounted.current && mutationOwner.current === owner;
+  }
+
+  function mutationMayUpdateUi(owner: MutationOwner) {
+    return (
+      mutationActive(owner) && requestVersion.current === owner.requestVersionAtStart
+    );
+  }
+
+  function failMutation(owner: MutationOwner, failure: unknown, retry: () => void) {
+    if (!mutationActive(owner)) return;
     setIssue({ message: actionFailureMessage(failure), retry });
   }
 
@@ -123,11 +153,13 @@ export function useProductionCommands({
     }
   }
 
-  async function refreshAfterMutation(version: number, message: string) {
+  async function refreshAfterMutation(owner: MutationOwner, message: string) {
     try {
-      if (active(version)) await refresh();
+      if (mutationActive(owner)) await refresh();
     } catch {
-      refreshFailed(version, message);
+      if (mutationActive(owner)) {
+        setIssue({ message, retry: () => void retryRefresh(message) });
+      }
     }
   }
 
@@ -135,8 +167,21 @@ export function useProductionCommands({
     const row = records.find((candidate) => candidate.id === rowId);
     if (action !== "NEW" && (!row || !row.allowedActions.includes(action))) return;
     const mutates = action === "SUBMIT" || action === "APPROVE";
-    const version = mutates ? beginMutation() : begin();
-    if (version === undefined) return;
+    if (mutates) {
+      const owner = beginMutation();
+      if (owner === undefined || !row) return;
+      try {
+        if (action === "SUBMIT") await repository.submit(row.id, row.version);
+        else await repository.approve(row.id, row.version);
+        await refreshAfterMutation(owner, "状态已变更，但列表刷新失败，请重试刷新。");
+      } catch (failure) {
+        failMutation(owner, failure, () => void dispatch(action, rowId));
+      } finally {
+        finishMutation(owner);
+      }
+      return;
+    }
+    const version = begin();
     try {
       if (action === "NEW") {
         const definition = requireDefinitionContext(
@@ -167,12 +212,6 @@ export function useProductionCommands({
             allowedActions: detail.allowedActions,
           });
         }
-      } else if (action === "SUBMIT" && row) {
-        await repository.submit(row.id, row.version);
-        await refreshAfterMutation(version, "状态已变更，但列表刷新失败，请重试刷新。");
-      } else if (action === "APPROVE" && row) {
-        await repository.approve(row.id, row.version);
-        await refreshAfterMutation(version, "状态已变更，但列表刷新失败，请重试刷新。");
       } else if (action === "RETURN" && row) {
         const detail = await repository.detail(row.id);
         if (active(version)) setReturning(detail);
@@ -180,8 +219,7 @@ export function useProductionCommands({
     } catch (failure) {
       fail(version, failure, () => void dispatch(action, rowId));
     } finally {
-      if (mutates) finishMutation(version);
-      else finish(version);
+      finish(version);
     }
   }
 
@@ -196,11 +234,10 @@ export function useProductionCommands({
       } else {
         await repository.create(snapshot.draft);
       }
-      if (!active(version)) return;
-      setEditor(undefined);
+      if (mutationMayUpdateUi(version)) setEditor(undefined);
       await refreshAfterMutation(version, "记录已保存，但列表刷新失败，请重试刷新。");
     } catch (failure) {
-      fail(version, failure, () => void save());
+      failMutation(version, failure, () => void save());
     } finally {
       finishMutation(version);
     }
@@ -214,12 +251,13 @@ export function useProductionCommands({
     if (version === undefined) return;
     try {
       await repository.returnForCorrection(detail.id, detail.version, reason);
-      if (!active(version)) return;
-      setReturning(undefined);
-      setReturnReason("");
+      if (mutationMayUpdateUi(version)) {
+        setReturning(undefined);
+        setReturnReason("");
+      }
       await refreshAfterMutation(version, "状态已变更，但列表刷新失败，请重试刷新。");
     } catch (failure) {
-      fail(version, failure, () => void confirmReturn());
+      failMutation(version, failure, () => void confirmReturn());
     } finally {
       finishMutation(version);
     }

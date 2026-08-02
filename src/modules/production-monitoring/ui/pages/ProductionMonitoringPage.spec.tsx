@@ -75,6 +75,14 @@ describe("ProductionMonitoringPage", () => {
         await mutation;
       });
       await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(result.current.editor?.id).toBeUndefined();
+      if (outcome === "resolve") {
+        expect(refresh).toHaveBeenCalledTimes(1);
+        expect(result.current.issue).toBeUndefined();
+      } else {
+        expect(refresh).not.toHaveBeenCalled();
+        expect(result.current.issue?.message).toBe("操作失败，请稍后重试。");
+      }
 
       await act(async () => {
         await result.current.dispatch("SUBMIT", "record-1");

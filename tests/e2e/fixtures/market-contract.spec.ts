@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 
 import * as contract from "./market-contract";
+import { factField } from "./market-api";
 
 describe("market V23 contract snapshot", () => {
   it("canonically serializes the complete fixture contract to the backend hash", () => {
@@ -80,6 +81,31 @@ describe("market V23 contract snapshot", () => {
         description: "水分漂移",
       },
     };
+
+    expect(
+      factField(
+        "MOISTURE",
+        {
+          ...contract.marketFactDefinitions.MOISTURE,
+          label: "水分响应漂移",
+          valueType: "RATIO",
+          unit: "百分比",
+          description: "响应说明漂移",
+          precision: 7,
+          scale: 3,
+        },
+        432,
+      ),
+    ).toEqual({
+      code: "MOISTURE",
+      label: "水分响应漂移",
+      valueType: "RATIO",
+      unit: "百分比",
+      description: "响应说明漂移",
+      precision: 7,
+      scale: 3,
+      sortOrder: 432,
+    });
 
     expect(
       [

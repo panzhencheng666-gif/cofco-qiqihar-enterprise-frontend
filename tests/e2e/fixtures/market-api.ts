@@ -730,18 +730,25 @@ function factGroup(
   };
 }
 
-function factField(
+export function factField(
   code: MarketFactCode,
-  definition: (typeof marketFactDefinitions)[MarketFactCode],
+  definition: {
+    label: string;
+    valueType: string;
+    unit: string | null;
+    description: string | null;
+    precision: number;
+    scale: number;
+  },
   sortOrder: number,
 ) {
   return {
     code,
     label: definition.label,
-    valueType: "DECIMAL",
+    valueType: definition.valueType,
     unit: definition.unit,
-    description: null,
-    precision: 18,
+    description: definition.description,
+    precision: definition.precision,
     scale: definition.scale,
     sortOrder,
   };
