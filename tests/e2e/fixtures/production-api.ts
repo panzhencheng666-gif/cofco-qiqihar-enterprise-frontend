@@ -4,6 +4,20 @@ export type ProductionProductCode = "CORN" | "SOYBEAN" | "RICE";
 export type ProductionObjectTypeCode =
   "FARMER" | "VILLAGE_COMMITTEE" | "AGRICULTURAL_TECH_STATION";
 
+const productionListRequiredKeys = [
+  "productCode",
+  "pageKind",
+  "pageNumber",
+  "pageSize",
+] as const;
+const productionListOptionalKeys = ["filter.objectTypeCode"] as const;
+const productionListAllowedKeys = new Set<string>([
+  ...productionListRequiredKeys,
+  ...productionListOptionalKeys,
+]);
+const javaIntegerMinimum = -2147483648n;
+const javaIntegerMaximum = 2147483647n;
+
 export const productionProducts = {
   CORN: {
     name: "玉米",
@@ -148,6 +162,13 @@ export class ProductionApiRoutes {
 
   private async handleList(route: Route, url: URL) {
     const request = route.request();
+    if (
+      request.method() !== "GET" ||
+      !hasStrictProductionListParameters(url.searchParams)
+    ) {
+      await this.rejectList(route, url);
+      return;
+    }
     const productCode = productCodeOrUndefined(singleValue(url, "productCode"));
     const pageNumber = formalPageNumber(singleValue(url, "pageNumber"));
     const pageSize = formalPageSize(singleValue(url, "pageSize"));
@@ -155,7 +176,6 @@ export class ProductionApiRoutes {
     const objectTypeValue = optionalSingleValue(url, "filter.objectTypeCode");
     const objectTypeCode = objectTypeCodeOrUndefined(objectTypeValue);
     if (
-      request.method() !== "GET" ||
       productCode === undefined ||
       pageKind !== "MONITORING" ||
       pageNumber === undefined ||
@@ -163,13 +183,7 @@ export class ProductionApiRoutes {
       objectTypeValue === null ||
       (objectTypeValue !== undefined && objectTypeCode === undefined)
     ) {
-      this.unexpectedRequests.push(`${request.method()} ${url.pathname}${url.search}`);
-      this.notify();
-      await fulfillJson(
-        route,
-        { error: { code: "INVALID_E2E_PRODUCTION_LIST_QUERY" } },
-        400,
-      );
+      await this.rejectList(route, url);
       return;
     }
     const query: ProductionListQuery = {
@@ -194,6 +208,18 @@ export class ProductionApiRoutes {
     await fulfillJson(
       route,
       listResponse(query, this.listLabel(productCode, pageNumber)),
+    );
+  }
+
+  private async rejectList(route: Route, url: URL) {
+    this.unexpectedRequests.push(
+      `${route.request().method()} ${url.pathname}${url.search}`,
+    );
+    this.notify();
+    await fulfillJson(
+      route,
+      { error: { code: "INVALID_E2E_PRODUCTION_LIST_QUERY" } },
+      400,
     );
   }
 
@@ -384,15 +410,37 @@ function objectTypeCodeOrUndefined(
 }
 
 function formalPageNumber(value: string | undefined) {
-  const parsed = Number(value);
-  return value !== undefined && Number.isSafeInteger(parsed) && parsed >= 0
+  const parsed = javaInteger(value);
+  return parsed !== undefined && parsed >= 0 ? parsed : undefined;
+}
+
+function formalPageSize(value: string | undefined) {
+  const parsed = javaInteger(value);
+  return parsed !== undefined && parsed >= 1 && [20, 50, 100].includes(parsed)
     ? parsed
     : undefined;
 }
 
-function formalPageSize(value: string | undefined) {
-  const parsed = Number(value);
-  return value !== undefined && [20, 50, 100].includes(parsed) ? parsed : undefined;
+function javaInteger(value: string | undefined) {
+  if (value === undefined || !/^[+-]?[0-9]+$/.test(value)) return undefined;
+  const parsed = BigInt(value);
+  return parsed >= javaIntegerMinimum && parsed <= javaIntegerMaximum
+    ? Number(parsed)
+    : undefined;
+}
+
+function hasStrictProductionListParameters(parameters: URLSearchParams) {
+  const counts = new Map<string, number>();
+  for (const [name, value] of parameters) {
+    if (!productionListAllowedKeys.has(name) || value.trim() === "") return false;
+    const count = (counts.get(name) ?? 0) + 1;
+    if (count > 1) return false;
+    counts.set(name, count);
+  }
+  return (
+    productionListRequiredKeys.every((name) => counts.get(name) === 1) &&
+    productionListOptionalKeys.every((name) => (counts.get(name) ?? 0) <= 1)
+  );
 }
 
 function singleValue(url: URL, name: string) {
