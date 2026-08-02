@@ -10,13 +10,15 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 63200 --strictPort",
     "build": "tsc -b && vite build",
+    "e2e": "playwright test",
+    "verify:e2e": "playwright test --project=chromium",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint . --max-warnings 0",
     "architecture": "depcruise src --config .dependency-cruiser.cjs && node --test scripts/verify-architecture-guard.node-test.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify": "npm run format:check && npm run lint && npm run architecture && npm run test && npm run build"
+    "verify": "npm run format:check && npm run lint && npm run architecture && npm run test && npm run build && npm run verify:e2e"
   },
   "dependencies": {
     "@tanstack/react-query": "5.101.4",
@@ -26,6 +28,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@playwright/test": "1.62.1",
     "@testing-library/jest-dom": "7.0.0",
     "@testing-library/react": "16.3.2",
     "@testing-library/user-event": "14.6.1",
