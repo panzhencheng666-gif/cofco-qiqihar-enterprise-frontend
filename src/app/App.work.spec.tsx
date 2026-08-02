@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { App, type AppDependencies } from "./App";
 import type { ListPageDefinition } from "../shared/application/page-definition";
 import type { WorkItemCriteria } from "../modules/work-management/domain/workItem";
+import type { MarketCollectionRepository } from "../modules/market-monitoring/application/ports/MarketCollectionRepository";
 
 describe("App work management composition", () => {
   beforeEach(() =>
@@ -174,10 +175,22 @@ function fixture(
     pageDefinitionGateway: {
       getDefinition: () => Promise.resolve(definition()),
     },
-    marketCollectionRepository: {
-      search: () => Promise.reject(new Error("not called")),
-    },
+    marketCollectionRepository: unusedMarketRepository(),
     workItemRepository: { search },
+  };
+}
+
+function unusedMarketRepository(): MarketCollectionRepository {
+  const unused = () => Promise.reject(new Error("not called"));
+  return {
+    search: unused,
+    detail: unused,
+    definition: unused,
+    create: unused,
+    saveDraft: unused,
+    submit: unused,
+    approve: unused,
+    returnForCorrection: unused,
   };
 }
 

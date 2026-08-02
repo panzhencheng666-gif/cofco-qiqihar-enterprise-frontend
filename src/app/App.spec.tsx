@@ -4,6 +4,7 @@ import { vi } from "vitest";
 
 import { App, type AppDependencies } from "./App";
 import type { MarketCollectionCriteria } from "../modules/market-monitoring/domain/marketCollection";
+import type { MarketCollectionRepository } from "../modules/market-monitoring/application/ports/MarketCollectionRepository";
 import type { ListPageDefinition } from "../shared/application/page-definition";
 import type { ProductionRecordRepository } from "../modules/production-monitoring/application/ports/ProductionRecordRepository";
 import type { ProductionRecordDetail } from "../modules/production-monitoring/domain/productionRecord";
@@ -32,14 +33,14 @@ describe("App production composition", () => {
 
     render(<App dependencies={dependencies} />);
 
-    expect(await screen.findByRole("button", { name: "大豆质量指标" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "稻谷质量指标" })).toBeVisible();
-    expect(screen.queryByText("玉米质量指标")).not.toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "大豆质量指标" })).toBeVisible();
+    expect(await screen.findByRole("button", { name: "大豆市场采集" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "玉米市场采集" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "稻谷市场采集" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "大豆市场采集" })).toBeVisible();
     await waitFor(() => expect(searches).toHaveLength(1));
     expect(searches[0]).toMatchObject({
       productCode: "SOYBEAN_FIXTURE",
-      pageKind: "QUALITY",
+      pageKind: "MONITORING",
       pageNumber: 0,
       pageSize: 20,
     });
@@ -55,11 +56,11 @@ describe("App production composition", () => {
     expect(searches[2]).toMatchObject({ pageNumber: 1 });
     expect(screen.getByText("记录21")).toBeVisible();
 
-    await user.click(screen.getByRole("button", { name: "稻谷质量指标" }));
-    expect(await screen.findByRole("heading", { name: "稻谷质量指标" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "稻谷市场采集" }));
+    expect(await screen.findByRole("heading", { name: "稻谷市场采集" })).toBeVisible();
 
     window.history.back();
-    expect(await screen.findByRole("heading", { name: "大豆质量指标" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "大豆市场采集" })).toBeVisible();
     expect(await screen.findByText("记录21")).toBeVisible();
 
     window.history.back();
@@ -82,11 +83,11 @@ describe("App production composition", () => {
 
     render(<App dependencies={dependencies} />);
 
-    expect(await screen.findByRole("heading", { name: "大豆质量指标" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "大豆市场采集" })).toBeVisible();
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "列表查询失败，请稍后重试。",
     );
-    expect(screen.getByRole("table", { name: "大豆质量指标" })).toBeVisible();
+    expect(screen.getByRole("table", { name: "大豆市场采集" })).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "重试列表查询" }));
     expect(await screen.findByText("记录1")).toBeVisible();
@@ -137,7 +138,7 @@ describe("App production composition", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "页面地址无效，请从业务导航进入。",
     );
-    expect(screen.getByRole("button", { name: "大豆质量指标" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "大豆市场采集" })).toBeVisible();
   });
 
   it("normalizes a valid deep link whose domain does not belong to dynamic navigation", async () => {
@@ -148,8 +149,10 @@ describe("App production composition", () => {
       />,
     );
 
-    expect(await screen.findByRole("heading", { name: "大豆质量指标" })).toBeVisible();
-    expect(window.location.hash).toMatch(/^#\/pages\/MARKET\/QUALITY\/SOYBEAN_FIXTURE/);
+    expect(await screen.findByRole("heading", { name: "大豆市场采集" })).toBeVisible();
+    expect(window.location.hash).toMatch(
+      /^#\/pages\/MARKET\/MONITORING\/SOYBEAN_FIXTURE/,
+    );
   });
 
   it("revalidates filter and page-size state arriving through browser history", async () => {
@@ -233,7 +236,7 @@ describe("App production composition", () => {
       "产品导航加载失败，请稍后重试。",
     );
     await user.click(screen.getByRole("button", { name: "重试产品导航" }));
-    expect(await screen.findByRole("button", { name: "大豆质量指标" })).toBeVisible();
+    expect(await screen.findByRole("button", { name: "大豆市场采集" })).toBeVisible();
     expect(attempts).toBe(2);
   });
 
@@ -467,6 +470,7 @@ function dependenciesFixture(
       getProducts: () =>
         Promise.resolve([
           { id: "SOYBEAN_FIXTURE", name: "大豆" },
+          { id: "CORN_FIXTURE", name: "玉米" },
           { id: "RICE_FIXTURE", name: "稻谷" },
         ]),
       getCultivars: () => Promise.resolve([]),
@@ -478,14 +482,30 @@ function dependenciesFixture(
     },
     pageDefinitionGateway: {
       getDefinition: (key) =>
-        Promise.resolve(definitionFixture(key.productCode ?? "SOYBEAN_FIXTURE")),
+        Promise.resolve(
+          definitionFixture(key.productCode ?? "SOYBEAN_FIXTURE", key.pageKind),
+        ),
     },
-    marketCollectionRepository: {
-      search,
-    },
+    marketCollectionRepository: marketRepository(search),
     workItemRepository: {
       search: () => Promise.reject(new Error("not called")),
     },
+  };
+}
+
+function marketRepository(
+  search: MarketCollectionRepository["search"],
+): MarketCollectionRepository {
+  const unused = () => Promise.reject(new Error("not called"));
+  return {
+    search,
+    detail: unused,
+    definition: unused,
+    create: unused,
+    saveDraft: unused,
+    submit: unused,
+    approve: unused,
+    returnForCorrection: unused,
   };
 }
 
@@ -505,11 +525,19 @@ function productionRepository(
   };
 }
 
-function definitionFixture(productCode: string): ListPageDefinition {
-  const productName = productCode === "RICE_FIXTURE" ? "稻谷" : "大豆";
+function definitionFixture(
+  productCode: string,
+  pageKind = "MONITORING",
+): ListPageDefinition {
+  const productName =
+    productCode === "RICE_FIXTURE"
+      ? "稻谷"
+      : productCode === "CORN_FIXTURE"
+        ? "玉米"
+        : "大豆";
   return {
-    key: { domain: "MARKET", pageKind: "QUALITY", productCode },
-    title: `${productName}质量指标`,
+    key: { domain: "MARKET", pageKind, productCode },
+    title: `${productName}${pageKind === "MONITORING" ? "市场采集" : "质量指标"}`,
     breadcrumbs: [{ id: "market", label: "市场监测" }],
     filters: [
       {
@@ -621,6 +649,8 @@ function records(count: number, first = 1) {
   return Array.from({ length: count }, (_, index) => ({
     id: `record-${String(first + index)}`,
     values: { subjectName: `记录${String(first + index)}` },
+    allowedActions: [],
+    version: 0,
   }));
 }
 

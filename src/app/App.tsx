@@ -60,16 +60,19 @@ interface HashState {
   invalid: boolean;
 }
 
-const defaultPageKey = { domain: "MARKET", pageKind: "QUALITY" } as const;
+const defaultPageKey = { domain: "MARKET", pageKind: "MONITORING" } as const;
 
 function isProductionPage(key?: BusinessPageKey) {
   return key?.domain === "PRODUCTION" && key.pageKind === "MONITORING";
 }
 
 function supportedPageContext(key?: BusinessPageKey) {
-  return isProductionPage(key)
-    ? { domain: "PRODUCTION", pageKind: "MONITORING" }
-    : defaultPageKey;
+  if (isProductionPage(key)) return { domain: "PRODUCTION", pageKind: "MONITORING" };
+  if (key?.domain === "MARKET" && key.pageKind === "MONITORING")
+    return { domain: "MARKET", pageKind: "MONITORING" };
+  if (key?.domain === "MARKET" && key.pageKind === "QUALITY")
+    return { domain: "MARKET", pageKind: "QUALITY" };
+  return defaultPageKey;
 }
 
 function locationFromHash(): HashState {
@@ -300,9 +303,19 @@ export function App({
     <EnterpriseShell
       onProductSelect={selectProduct}
       products={workLocation ? [] : products}
-      productItemSuffix={pageKey?.domain === "PRODUCTION" ? "产情监测" : "质量指标"}
+      productItemSuffix={
+        navigationDomain === "PRODUCTION"
+          ? "产情监测"
+          : navigationPageKind === "MONITORING"
+            ? "市场采集"
+            : "质量指标"
+      }
       productNavigationTitle={
-        pageKey?.domain === "PRODUCTION" ? "产情产品" : "质量指标"
+        navigationDomain === "PRODUCTION"
+          ? "产情产品"
+          : navigationPageKind === "MONITORING"
+            ? "市场采集"
+            : "质量指标"
       }
       {...(pageKey ? { activeProductId: pageKey.productCode } : {})}
     >
@@ -377,11 +390,11 @@ export function App({
           loadRegionPath={(regionId) =>
             dependencies.masterDataRepository.getRegionPath(regionId)
           }
-          marketCollectionRepository={dependencies.marketCollectionRepository}
           onQueryCommitted={commitQuery}
           onQueryNormalized={normalizeQuery}
           pageDefinitionGateway={dependencies.pageDefinitionGateway}
           pageKey={pageKey}
+          repository={dependencies.marketCollectionRepository}
           {...(location ? { routeQuery: location.query } : {})}
         />
       )}

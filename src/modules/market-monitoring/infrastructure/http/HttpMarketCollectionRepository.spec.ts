@@ -13,7 +13,9 @@ describe("HttpMarketCollectionRepository canonical paging contract", () => {
               items: [
                 {
                   id: "record-41",
-                  values: { subjectName: "记录41", score: 41.5, note: null },
+                  values: { subjectName: "记录41", score: "41.5", note: null },
+                  allowedActions: ["VIEW"],
+                  version: 4,
                 },
               ],
               pageNumber: 2,
@@ -28,20 +30,22 @@ describe("HttpMarketCollectionRepository canonical paging contract", () => {
 
     const result = await new HttpMarketCollectionRepository(http).search({
       productCode: "SOYBEAN",
-      pageKind: "QUALITY",
+      pageKind: "MONITORING",
       pageNumber: 2,
       pageSize: 20,
       values: { keyword: "北安" },
     });
 
     expect(paths).toEqual([
-      "/api/v1/market-records?productCode=SOYBEAN&pageKind=QUALITY&pageNumber=2&pageSize=20&filter.keyword=%E5%8C%97%E5%AE%89",
+      "/api/v1/market-records?productCode=SOYBEAN&pageKind=MONITORING&pageNumber=2&pageSize=20&filter.keyword=%E5%8C%97%E5%AE%89",
     ]);
     expect(result).toEqual({
       items: [
         {
           id: "record-41",
-          values: { subjectName: "记录41", score: 41.5, note: null },
+          values: { subjectName: "记录41", score: "41.5", note: null },
+          allowedActions: ["VIEW"],
+          version: 4,
         },
       ],
       pageNumber: 2,
@@ -57,7 +61,7 @@ describe("HttpMarketCollectionRepository canonical paging contract", () => {
         Promise.resolve(
           schema.parse({
             data: {
-              items: [{ id: "record-11", values: {} }],
+              items: [{ id: "record-11", values: {}, allowedActions: [], version: 0 }],
               pageNumber: 1,
               pageSize: 10,
               totalElements: 101,
@@ -69,7 +73,7 @@ describe("HttpMarketCollectionRepository canonical paging contract", () => {
 
     const result = await new HttpMarketCollectionRepository(http).search({
       productCode: "SOYBEAN",
-      pageKind: "QUALITY",
+      pageKind: "MONITORING",
       pageNumber: 1,
       pageSize: 10,
       values: {},
