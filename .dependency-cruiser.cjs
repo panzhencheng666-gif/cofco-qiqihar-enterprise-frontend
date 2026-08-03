@@ -28,7 +28,7 @@ module.exports = {
         path: "^src/(?:modules/[^/]+|shared)/(?:application|domain)/",
       },
       to: {
-        path: "(?:^node_modules/(?:react|react-dom)(?:/|$)|/(?:ui|infrastructure)/)",
+        path: "(?:^node_modules/(?:react|react-dom)(?:/|$)|^node_modules/\\.pnpm/[^/]+/node_modules/(?:react|react-dom)(?:/|$)|/(?:ui|infrastructure)/)",
         reachable: true,
       },
     },

@@ -23,7 +23,7 @@ const serializedViolations = JSON.stringify(report.summary?.violations ?? []);
 const requiredEvidence = [
   "fixture-application-and-domain-must-not-reach-react-ui-or-infrastructure",
   "application/direct-react.ts",
-  "node_modules/react/index.js",
+  "application/direct-react.ts",
   "application/ui-barrel.ts",
   "barrels/ui.ts",
   "domain/transitive-ui.ts",
