@@ -4,6 +4,7 @@ export interface SupplyFormula {
   name: string;
   precision: number;
   scale: number;
+  roundingMode: string;
   tolerance: string;
   differenceCode: string;
   differenceLabel: string;
@@ -23,6 +24,8 @@ export interface SupplySource {
   sourceDomain: string;
   sourceRecordId: string;
   sourceVersion: number;
+  sourceFieldCode: string;
+  unitCode: string;
   approvalState: string;
   approvedAt: string;
   qualityState: string;
@@ -37,7 +40,8 @@ export interface SupplyAccount {
   productCode: string;
   regionCode: string;
   marketingYear: string;
-  version: number;
+  resultVersion: number;
+  decisionVersion: number;
   resultState: string;
   validationCodes: readonly string[];
   totalSupply: string | null;
@@ -48,6 +52,15 @@ export interface SupplyAccount {
   surveyedEndingInventory: string | null;
   inventoryReconciliationDifference: string | null;
   balanced: boolean;
+  publishable: boolean;
+  balanceReason: string;
+  adjustmentAudit: {
+    value: string | null;
+    reason: string | null;
+    actor: string | null;
+    decidedAt: string | null;
+    decisionVersion: number;
+  };
   formula: SupplyFormula;
   sources: readonly SupplySource[];
 }

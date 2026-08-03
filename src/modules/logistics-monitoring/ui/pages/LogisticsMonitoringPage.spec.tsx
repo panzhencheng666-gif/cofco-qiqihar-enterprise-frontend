@@ -21,6 +21,7 @@ describe("LogisticsMonitoringPage", () => {
         }),
     );
     const repository: LogisticsRecordRepository = {
+      definition: () => Promise.resolve(editorDefinition),
       search: () =>
         Promise.resolve({
           items: [draft, pending],
@@ -60,8 +61,100 @@ describe("LogisticsMonitoringPage", () => {
     await waitFor(() =>
       expect(returned).toHaveBeenCalledWith("pending-1", 3, "补充运单依据"),
     );
+    await user.click(screen.getByRole("button", { name: "新建物流记录" }));
+    expect(screen.getByRole("textbox", { name: "运单编号" })).toBeVisible();
+  });
+
+  it("ignores a late field definition after the product context changes", async () => {
+    const user = userEvent.setup();
+    let resolveCorn!: (value: typeof editorDefinition) => void;
+    const corn = new Promise<typeof editorDefinition>((resolve) => {
+      resolveCorn = resolve;
+    });
+    const repository: LogisticsRecordRepository = {
+      definition: (product) =>
+        product === "CORN"
+          ? corn
+          : Promise.resolve({
+              ...editorDefinition,
+              productCode: "SOYBEAN",
+              fields: [
+                {
+                  ...editorDefinition.fields[0]!,
+                  code: "SOY_REFERENCE",
+                  label: "大豆运单",
+                },
+              ],
+            }),
+      search: () =>
+        Promise.resolve({
+          items: [],
+          pageNumber: 0,
+          pageSize: 20,
+          totalElements: 0,
+          totalPages: 0,
+        }),
+      detail: () => Promise.reject(new Error("not called")),
+      create: () => Promise.reject(new Error("not called")),
+      saveDraft: () => Promise.reject(new Error("not called")),
+      submit: () => Promise.reject(new Error("not called")),
+      approve: () => Promise.reject(new Error("not called")),
+      returnForCorrection: () => Promise.reject(new Error("not called")),
+    };
+    const gateway = {
+      getDefinition: (key: typeof definition.key) =>
+        Promise.resolve({
+          ...definition,
+          key,
+          title: key.productCode === "CORN" ? "玉米物流监测" : "大豆物流监测",
+        }),
+    };
+    const view = render(
+      <LogisticsMonitoringPage
+        loadRegionChildren={() => Promise.resolve([])}
+        pageDefinitionGateway={gateway}
+        pageKey={{ domain: "LOGISTICS", pageKind: "MONITORING", productCode: "CORN" }}
+        repository={repository}
+      />,
+    );
+    view.rerender(
+      <LogisticsMonitoringPage
+        loadRegionChildren={() => Promise.resolve([])}
+        pageDefinitionGateway={gateway}
+        pageKey={{
+          domain: "LOGISTICS",
+          pageKind: "MONITORING",
+          productCode: "SOYBEAN",
+        }}
+        repository={repository}
+      />,
+    );
+    expect(await screen.findByRole("heading", { name: "大豆物流监测" })).toBeVisible();
+    resolveCorn(editorDefinition);
+    await user.click(screen.getByRole("button", { name: "新建物流记录" }));
+    expect(screen.getByRole("textbox", { name: "大豆运单" })).toBeVisible();
+    expect(screen.queryByRole("textbox", { name: "运单编号" })).not.toBeInTheDocument();
   });
 });
+
+const editorDefinition = {
+  productCode: "CORN",
+  fields: [
+    {
+      code: "LOG_REFERENCE",
+      label: "运单编号",
+      controlType: "TEXT" as const,
+      unit: null,
+      precision: null,
+      scale: null,
+      required: true,
+      readOnly: false,
+      sortOrder: 10,
+      options: [],
+    },
+  ],
+  actions: [{ code: "NEW", label: "新建物流记录", scope: "PAGE", sortOrder: 10 }],
+};
 
 const draft = {
   id: "draft-1",

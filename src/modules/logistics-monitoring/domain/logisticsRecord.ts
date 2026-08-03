@@ -17,18 +17,32 @@ export interface LogisticsRecord {
 
 export interface LogisticsDraft {
   productCode: string;
-  monitoringPeriodCode: string;
-  collectionDate: string;
-  originNodeId: number;
-  destinationNodeId: number;
-  transportModeCode: string;
-  direction: string;
-  routeVolume: string;
-  volumeUnit: string;
-  freightRate: string;
-  freightUnit: string;
-  transitTime: string;
-  transitUnit: string;
-  sourceOrganization: string;
-  reporter: string;
+  values: Readonly<Record<string, string>>;
+}
+
+export interface LogisticsDefinition {
+  productCode: string;
+  fields: readonly LogisticsFieldDefinition[];
+  actions: readonly LogisticsActionDefinition[];
+}
+
+export interface LogisticsFieldDefinition {
+  code: string;
+  label: string;
+  controlType:
+    "SELECT" | "DATE" | "DECIMAL" | "TEXT" | "READONLY_DATETIME" | "READONLY_STATUS";
+  unit: string | null;
+  precision: number | null;
+  scale: number | null;
+  required: boolean;
+  readOnly: boolean;
+  sortOrder: number;
+  options: readonly { value: string; label: string; sortOrder: number }[];
+}
+
+export interface LogisticsActionDefinition {
+  code: string;
+  label: string;
+  scope: string;
+  sortOrder: number;
 }

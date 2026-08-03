@@ -1,11 +1,13 @@
 import type { PagedResult } from "../../../../shared/application/page-definition";
 import type {
   LogisticsDraft,
+  LogisticsDefinition,
   LogisticsRecord,
   LogisticsRecordCriteria,
 } from "../../domain/logisticsRecord";
 
 export interface LogisticsRecordRepository {
+  definition(productCode: string): Promise<LogisticsDefinition>;
   search(criteria: LogisticsRecordCriteria): Promise<PagedResult<LogisticsRecord>>;
   detail(id: string): Promise<LogisticsRecord>;
   create(draft: LogisticsDraft): Promise<LogisticsRecord>;

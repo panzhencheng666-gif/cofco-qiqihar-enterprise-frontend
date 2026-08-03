@@ -63,6 +63,53 @@ describe("SupplyAccountPage", () => {
     );
     open.mockRestore();
   });
+
+  it("does not let a late account response replace the newly selected product", async () => {
+    let resolveRice!: (value: readonly [typeof account]) => void;
+    const rice = new Promise<readonly [typeof account]>((resolve) => {
+      resolveRice = resolve;
+    });
+    const cornAccount = {
+      ...account,
+      productCode: "CORN",
+      sources: [{ ...account.sources[0], reason: "玉米当前来源" }],
+    } as const;
+    const repository: SupplyAccountRepository = {
+      find: (criteria) =>
+        criteria.productCode === "RICE" ? rice : Promise.resolve([cornAccount]),
+      run: () => Promise.reject(new Error("not called")),
+    };
+    const gateway = {
+      getDefinition: (key: typeof definition.key) =>
+        Promise.resolve({
+          ...definition,
+          key,
+          title: key.productCode === "RICE" ? "稻谷供需账户" : "玉米供需账户",
+        }),
+    };
+    const view = render(
+      <SupplyAccountPage
+        loadRegionChildren={() => Promise.resolve([])}
+        pageDefinitionGateway={gateway}
+        pageKey={{ domain: "SUPPLY", pageKind: "ACCOUNT", productCode: "RICE" }}
+        repository={repository}
+        routeQuery={{ values: { regionCode: "230200", marketingYear: "2026/27" } }}
+      />,
+    );
+    view.rerender(
+      <SupplyAccountPage
+        loadRegionChildren={() => Promise.resolve([])}
+        pageDefinitionGateway={gateway}
+        pageKey={{ domain: "SUPPLY", pageKind: "ACCOUNT", productCode: "CORN" }}
+        repository={repository}
+        routeQuery={{ values: { regionCode: "230200", marketingYear: "2026/27" } }}
+      />,
+    );
+    expect(await screen.findByText("玉米当前来源")).toBeVisible();
+    resolveRice([account]);
+    await waitFor(() => expect(screen.getByText("玉米当前来源")).toBeVisible());
+    expect(screen.queryByText("采用核定物流来源")).not.toBeInTheDocument();
+  });
 });
 
 const account = {
@@ -70,7 +117,8 @@ const account = {
   productCode: "RICE",
   regionCode: "230200",
   marketingYear: "2026/27",
-  version: 1,
+  resultVersion: 1,
+  decisionVersion: 0,
   resultState: "FORMAL",
   validationCodes: [],
   totalSupply: "10.000",
@@ -81,12 +129,22 @@ const account = {
   surveyedEndingInventory: "2.750",
   inventoryReconciliationDifference: "-0.250",
   balanced: true,
+  publishable: true,
+  balanceReason: "WITHIN_TOLERANCE",
+  adjustmentAudit: {
+    value: "1.000",
+    reason: "库存差异经复核",
+    actor: "reviewer",
+    decidedAt: "2026-08-03T00:00:00Z",
+    decisionVersion: 0,
+  },
   formula: {
     code: "SUPPLY_BALANCE",
     version: 1,
     name: "供需平衡账户",
     precision: 18,
     scale: 3,
+    roundingMode: "HALF_UP",
     tolerance: "0.500",
     differenceCode: "INVENTORY_RECONCILIATION_DIFFERENCE",
     differenceLabel: "库存核对差额（调查期末库存－采用后账面期末库存）",
@@ -108,6 +166,8 @@ const account = {
       sourceDomain: "LOGISTICS",
       sourceRecordId: "event-1",
       sourceVersion: 2,
+      sourceFieldCode: "ROUTE_VOLUME",
+      unitCode: "万吨",
       approvalState: "APPROVED",
       approvedAt: "2026-08-03T00:00:00Z",
       qualityState: "PASSED",

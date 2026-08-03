@@ -5,6 +5,7 @@ test("logistics review and supply provenance calculation close one Chromium work
 }) => {
   let logisticsStatus = "DRAFT";
   let logisticsVersion = 7;
+  let logisticsCreateBody: Record<string, unknown> | undefined;
   let runBody: Record<string, unknown> | undefined;
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request();
@@ -27,6 +28,8 @@ test("logistics review and supply provenance calculation close one Chromium work
       });
     if (url.pathname === "/api/v1/page-definitions/LOGISTICS/MONITORING")
       return json(logisticsDefinition);
+    if (url.pathname === "/api/v1/logistics-record-definitions")
+      return json(logisticsEditorDefinition);
     if (url.pathname === "/api/v1/page-definitions/SUPPLY/ACCOUNT")
       return json(supplyDefinition);
     if (url.pathname === "/api/v1/logistics-records" && request.method() === "GET")
@@ -53,6 +56,10 @@ test("logistics review and supply provenance calculation close one Chromium work
           totalPages: 1,
         },
       });
+    if (url.pathname === "/api/v1/logistics-records" && request.method() === "POST") {
+      logisticsCreateBody = request.postDataJSON() as Record<string, unknown>;
+      return json({ data: logisticsRecord }, 201);
+    }
     if (url.pathname.endsWith("/submit") && request.method() === "POST") {
       expect(request.postDataJSON()).toEqual({ version: 7 });
       logisticsStatus = "PENDING_REVIEW";
@@ -81,6 +88,15 @@ test("logistics review and supply provenance calculation close one Chromium work
   await page.goto("/#/pages/LOGISTICS/MONITORING/CORN");
   await expect(page.getByRole("heading", { name: "玉米物流监测" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "铁路" })).toBeVisible();
+  await page.getByRole("button", { name: "新建物流记录" }).click();
+  await page.getByRole("textbox", { name: "运单编号" }).fill("WB-2026-001");
+  await page.getByRole("button", { name: "保存草稿" }).click();
+  await expect
+    .poll(() => logisticsCreateBody)
+    .toEqual({
+      productCode: "CORN",
+      values: { LOG_REFERENCE: "WB-2026-001" },
+    });
   await page.getByRole("button", { name: "提交" }).click();
   await expect(page.getByRole("cell", { name: "待审核" })).toBeVisible();
 
@@ -90,6 +106,8 @@ test("logistics review and supply provenance calculation close one Chromium work
   await expect(page.getByRole("heading", { name: /供需平衡账户/ })).toBeVisible();
   await expect(page.getByText("-0.250")).toBeVisible();
   await expect(page.getByText("采用核定物流来源")).toBeVisible();
+  await expect(page.getByText(/平衡状态：已平衡/)).toBeVisible();
+  await expect(page.getByText(/可发布/)).toBeVisible();
   await page.getByRole("button", { name: "重新计算" }).click();
   await page.getByRole("textbox", { name: "来源采用理由" }).fill("采用本期核定来源");
   await page.getByRole("textbox", { name: "调整理由" }).fill("库存差异经复核");
@@ -100,7 +118,7 @@ test("logistics review and supply provenance calculation close one Chromium work
       productCode: "CORN",
       regionCode: "230200",
       marketingYear: "2026/27",
-      expectedDecisionVersion: 0,
+      expectedDecisionVersion: 4,
       adoptionReason: "采用本期核定来源",
       adjustmentReason: "库存差异经复核",
     });
@@ -150,11 +168,32 @@ const logisticsDefinition = {
       },
     ],
     actions: [
+      { code: "NEW", label: "新建物流记录", scope: "page" },
       { code: "SUBMIT", label: "提交", scope: "row" },
       { code: "APPROVE", label: "审核通过", scope: "row" },
       { code: "RETURN", label: "退回补充", scope: "row" },
     ],
     pagination: { defaultPageSize: 20, pageSizeOptions: [20] },
+  },
+};
+const logisticsEditorDefinition = {
+  data: {
+    productCode: "CORN",
+    fields: [
+      {
+        code: "LOG_REFERENCE",
+        label: "运单编号",
+        controlType: "TEXT",
+        unit: null,
+        precision: null,
+        scale: null,
+        required: true,
+        readOnly: false,
+        sortOrder: 10,
+        options: [],
+      },
+    ],
+    actions: [{ code: "NEW", label: "新建物流记录", scope: "PAGE", sortOrder: 10 }],
   },
 };
 const supplyDefinition = {
@@ -235,7 +274,8 @@ const supplyAccount = {
   productCode: "CORN",
   regionCode: "230200",
   marketingYear: "2026/27",
-  version: 1,
+  resultVersion: 9,
+  decisionVersion: 4,
   resultState: "FORMAL",
   validationCodes: [],
   totalSupply: "10.000",
@@ -246,12 +286,22 @@ const supplyAccount = {
   surveyedEndingInventory: "2.750",
   inventoryReconciliationDifference: "-0.250",
   balanced: true,
+  publishable: true,
+  balanceReason: "WITHIN_TOLERANCE",
+  adjustmentAudit: {
+    value: "1.000",
+    reason: "库存差异经复核",
+    actor: "reviewer",
+    decidedAt: "2026-08-03T00:00:00Z",
+    decisionVersion: 4,
+  },
   formula: {
     code: "SUPPLY_BALANCE",
     version: 1,
     name: "供需平衡账户",
     precision: 18,
     scale: 3,
+    roundingMode: "HALF_UP",
     tolerance: "0.500",
     differenceCode: "INVENTORY_RECONCILIATION_DIFFERENCE",
     differenceLabel: "库存核对差额（调查期末库存－采用后账面期末库存）",
@@ -273,6 +323,8 @@ const supplyAccount = {
       sourceDomain: "LOGISTICS",
       sourceRecordId: "event-1",
       sourceVersion: 2,
+      sourceFieldCode: "ROUTE_VOLUME",
+      unitCode: "万吨",
       approvalState: "APPROVED",
       approvedAt: "2026-08-03T00:00:00Z",
       qualityState: "PASSED",

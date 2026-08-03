@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { SupplyAccountRepository } from "../../application/ports/SupplyAccountRepository";
 import type { SupplyAccount, SupplyRunCommand } from "../../domain/supplyAccount";
@@ -35,10 +35,20 @@ export function SupplyAccountPage({
   routeQuery?: RouteListQuery;
 }) {
   const productCode = requireProduct(pageKey);
-  const [account, setAccount] = useState<SupplyAccount>();
-  const [busy, setBusy] = useState(false);
-  const [issue, setIssue] = useState("");
-  const [runner, setRunner] = useState<SupplyRunCommand>();
+  const productRef = useRef(productCode);
+  const [accountState, setAccount] = useState<SupplyAccount>();
+  const [busyState, setBusyState] = useState({ productCode, value: false });
+  const [issueState, setIssueState] = useState({ productCode, value: "" });
+  const [runnerState, setRunner] = useState<SupplyRunCommand>();
+  const account = accountState?.productCode === productCode ? accountState : undefined;
+  const busy = busyState.productCode === productCode && busyState.value;
+  const issue = issueState.productCode === productCode ? issueState.value : "";
+  const runner = runnerState?.productCode === productCode ? runnerState : undefined;
+  useEffect(() => {
+    productRef.current = productCode;
+  }, [productCode]);
+  const setBusy = (value: boolean) => setBusyState({ productCode, value });
+  const setIssue = (value: string) => setIssueState({ productCode, value });
   const controller = useListPageController({
     controllerKey: `${pageKey.domain}/${pageKey.pageKind}/${productCode}`,
     loadDefinition: () => pageDefinitionGateway.getDefinition(pageKey),
@@ -50,7 +60,7 @@ export function SupplyAccountPage({
       const regionCode = query.values.regionCode;
       const marketingYear = query.values.marketingYear;
       if (!regionCode || !marketingYear) {
-        setAccount(undefined);
+        if (productRef.current === productCode) setAccount(undefined);
         return {
           items: [],
           pageNumber: 0,
@@ -66,7 +76,7 @@ export function SupplyAccountPage({
         ...(query.values.resultState ? { resultState: query.values.resultState } : {}),
       });
       const latest = accounts[0];
-      setAccount(latest);
+      if (productRef.current === productCode) setAccount(latest);
       return {
         items: latest
           ? latest.sources.map((source) => ({
@@ -105,7 +115,7 @@ export function SupplyAccountPage({
       approvedAdjustment: account?.approvedAdjustment ?? "",
       adoptionReason: "",
       adjustmentReason: "",
-      expectedDecisionVersion: Math.max(0, (account?.version ?? 1) - 1),
+      expectedDecisionVersion: account?.decisionVersion ?? 0,
       publish: false,
     });
   }
@@ -117,13 +127,15 @@ export function SupplyAccountPage({
     setIssue("");
     try {
       const result = await repository.run(runner);
+      if (productRef.current !== productCode) return;
       setAccount(result);
       setRunner(undefined);
       await controller.refreshLatest();
     } catch {
-      setIssue("计算或发布失败：请检查核定来源、理由和并发版本。");
+      if (productRef.current === productCode)
+        setIssue("计算或发布失败：请检查核定来源、理由和并发版本。");
     } finally {
-      setBusy(false);
+      if (productRef.current === productCode) setBusy(false);
     }
   }
 
@@ -263,6 +275,17 @@ function SupplySummary({ account }: { account: SupplyAccount }) {
       <p className="supply-sign-rule">
         {account.formula.differenceLabel}：{account.formula.differenceExpression}；容差{" "}
         {account.formula.tolerance}
+      </p>
+      <p>
+        结果版本 V{account.resultVersion}；决策版本 V{account.decisionVersion}；
+        平衡状态：{account.balanced ? "已平衡" : "未平衡"}（{account.balanceReason}）；
+        {account.publishable ? "可发布" : "不可发布"}
+      </p>
+      <p>
+        调整审计：{account.adjustmentAudit.value ?? "—"}；
+        {account.adjustmentAudit.reason ?? "无理由"}；
+        {account.adjustmentAudit.actor ?? "未知执行人"}；
+        {account.adjustmentAudit.decidedAt ?? "无时间"}
       </p>
       <div className="supply-total-grid">
         {totals.map((item) => (

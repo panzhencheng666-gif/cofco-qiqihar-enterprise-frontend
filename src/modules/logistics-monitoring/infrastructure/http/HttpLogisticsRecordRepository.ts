@@ -5,6 +5,7 @@ import { queryString } from "../../../../shared/api/HttpClient";
 import type { LogisticsRecordRepository } from "../../application/ports/LogisticsRecordRepository";
 import type {
   LogisticsDraft,
+  LogisticsDefinition,
   LogisticsRecordCriteria,
 } from "../../domain/logisticsRecord";
 
@@ -27,9 +28,58 @@ const pageSchema = z.object({
     totalPages: z.number().int().nonnegative(),
   }),
 });
+const definitionSchema = z.object({
+  data: z.object({
+    productCode: z.string(),
+    fields: z.array(
+      z.object({
+        code: z.string(),
+        label: z.string(),
+        controlType: z.enum([
+          "SELECT",
+          "DATE",
+          "DECIMAL",
+          "TEXT",
+          "READONLY_DATETIME",
+          "READONLY_STATUS",
+        ]),
+        unit: z.string().nullable(),
+        precision: z.number().int().nullable(),
+        scale: z.number().int().nullable(),
+        required: z.boolean(),
+        readOnly: z.boolean(),
+        sortOrder: z.number().int(),
+        options: z.array(
+          z.object({
+            value: z.string(),
+            label: z.string(),
+            sortOrder: z.number().int(),
+          }),
+        ),
+      }),
+    ),
+    actions: z.array(
+      z.object({
+        code: z.string(),
+        label: z.string(),
+        scope: z.string(),
+        sortOrder: z.number().int(),
+      }),
+    ),
+  }),
+});
 
 export class HttpLogisticsRecordRepository implements LogisticsRecordRepository {
   constructor(private readonly http: HttpClient) {}
+
+  async definition(productCode: string): Promise<LogisticsDefinition> {
+    return (
+      await this.http.get(
+        `/api/v1/logistics-record-definitions${queryString({ productCode })}`,
+        definitionSchema,
+      )
+    ).data;
+  }
 
   async search(criteria: LogisticsRecordCriteria) {
     const filters = Object.fromEntries(
