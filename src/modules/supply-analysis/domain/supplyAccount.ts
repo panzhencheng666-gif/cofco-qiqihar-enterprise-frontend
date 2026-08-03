@@ -51,7 +51,8 @@ export interface SupplyAccount {
   adoptedEndingInventory: string | null;
   surveyedEndingInventory: string | null;
   inventoryReconciliationDifference: string | null;
-  inputSetId: string;
+  inputSetId: string | null;
+  legacyReadOnly: boolean;
   balanced: boolean;
   publishable: boolean;
   balanceReason: string;

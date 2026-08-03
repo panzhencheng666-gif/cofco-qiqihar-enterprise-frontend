@@ -29,6 +29,7 @@ export function SupplySummary({ account }: { account: SupplyAccount }) {
         {account.balanced ? "已平衡" : "未平衡"}（{account.balanceReason}）；
         {account.publishable ? "可发布" : "不可发布"}
       </p>
+      {account.legacyReadOnly && <p>历史运行来源快照仅供只读查看。</p>}
       {account.adjustmentProposal && (
         <p>
           试算调整建议：{account.adjustmentProposal.value}；

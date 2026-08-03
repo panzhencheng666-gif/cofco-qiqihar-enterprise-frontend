@@ -21,7 +21,8 @@ describe("HttpSupplyAccountRepository", () => {
           adoptedEndingInventory: "3.000",
           surveyedEndingInventory: "2.750",
           inventoryReconciliationDifference: "-0.250",
-          inputSetId: "input-set-1",
+          inputSetId: null,
+          legacyReadOnly: true,
           balanced: true,
           publishable: true,
           balanceReason: "WITHIN_TOLERANCE",
@@ -89,6 +90,8 @@ describe("HttpSupplyAccountRepository", () => {
       "SURVEYED_ENDING_INVENTORY - ADOPTED_ENDING_INVENTORY",
     );
     expect(accounts[0]?.inventoryReconciliationDifference).toBe("-0.250");
+    expect(accounts[0]?.inputSetId).toBeNull();
+    expect(accounts[0]?.legacyReadOnly).toBe(true);
     expect(accounts[0]?.sources[0]).toMatchObject({
       approvalState: "APPROVED",
       reason: "采用核定物流来源",

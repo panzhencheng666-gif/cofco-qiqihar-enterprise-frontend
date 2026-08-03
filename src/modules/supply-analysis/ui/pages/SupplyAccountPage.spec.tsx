@@ -152,6 +152,7 @@ const account = {
   surveyedEndingInventory: "2.750",
   inventoryReconciliationDifference: "-0.250",
   inputSetId: "input-set-1",
+  legacyReadOnly: false,
   balanced: true,
   publishable: true,
   balanceReason: "WITHIN_TOLERANCE",

@@ -95,7 +95,7 @@ export function useSupplyAccount({
   function openRunner() {
     const regionCode = controller.query?.values.regionCode;
     const marketingYear = controller.query?.values.marketingYear;
-    if (!regionCode || !marketingYear || !account) {
+    if (!regionCode || !marketingYear || !account || !account.inputSetId || account.legacyReadOnly) {
       setIssueState({ key: currentKey, value: "请先查询具有明确输入集的供需账户。" });
       return;
     }

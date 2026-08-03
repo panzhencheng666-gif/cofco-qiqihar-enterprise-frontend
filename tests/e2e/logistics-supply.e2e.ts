@@ -294,6 +294,7 @@ const supplyAccount = {
   surveyedEndingInventory: "2.750",
   inventoryReconciliationDifference: "-0.250",
   inputSetId: "input-set-9",
+  legacyReadOnly: false,
   balanced: true,
   publishable: true,
   balanceReason: "WITHIN_TOLERANCE",
