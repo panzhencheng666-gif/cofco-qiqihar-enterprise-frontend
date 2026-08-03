@@ -9,7 +9,7 @@ export interface OverviewRepository {
   regions(query: {
     parentCode?: string;
     productCode: string;
-    periodCode: string;
+    periodCode?: string;
   }): Promise<readonly OverviewRegion[]>;
   indicators(query: {
     productCode: string;

@@ -44,7 +44,7 @@ export class HttpOverviewRepository implements OverviewRepository {
   async regions(query: {
     parentCode?: string;
     productCode: string;
-    periodCode: string;
+    periodCode?: string;
   }) {
     return (
       await this.http.get(

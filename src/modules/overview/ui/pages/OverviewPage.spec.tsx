@@ -34,6 +34,24 @@ describe("OverviewPage", () => {
       ),
     );
   });
+
+  it("keeps verified boundary geometry visible while formal periods are not configured", async () => {
+    const regions = vi.fn<OverviewRepository["regions"]>(() =>
+      Promise.resolve([sampleRegion]),
+    );
+    render(
+      <OverviewPage
+        repository={{
+          options: () => Promise.resolve({ products: options.products, periods: [] }),
+          regions,
+          indicators: () => Promise.resolve([]),
+        }}
+      />,
+    );
+    expect(await screen.findByRole("img", { name: "行政区边界地图" })).toBeVisible();
+    expect(screen.getByText("尚未配置正式业务期间", { exact: false })).toBeVisible();
+    await waitFor(() => expect(regions).toHaveBeenCalledWith({ productCode: "CORN" }));
+  });
 });
 
 const options = {
