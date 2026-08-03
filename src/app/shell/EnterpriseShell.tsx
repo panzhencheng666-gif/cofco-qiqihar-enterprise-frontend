@@ -37,13 +37,17 @@ const navigationGroups: readonly NavigationGroup[] = [
   {
     label: "市场监测",
     items: [
-      { label: "物流节点监测", route: "#/市场监测/物流节点监测" },
+      { label: "市场采集", route: "#/market" },
       { label: "市场分析", route: "#/市场监测/市场分析" },
     ],
   },
   {
+    label: "物流监测",
+    items: [{ label: "物流节点监测", route: "#/logistics" }],
+  },
+  {
     label: "供需分析",
-    items: [{ label: "供需平衡", route: "#/供需分析/供需平衡" }],
+    items: [{ label: "供需平衡", route: "#/supply" }],
   },
   {
     label: "报表中心",
@@ -147,12 +151,25 @@ export function EnterpriseShell({
                   const route =
                     item.route === "#/production" && products[0]
                       ? `#/pages/PRODUCTION/MONITORING/${encodeURIComponent(products[0].id)}`
-                      : item.route;
+                      : item.route === "#/market" && products[0]
+                        ? `#/pages/MARKET/MONITORING/${encodeURIComponent(products[0].id)}`
+                        : item.route === "#/logistics" && products[0]
+                          ? `#/pages/LOGISTICS/MONITORING/${encodeURIComponent(products[0].id)}`
+                          : item.route === "#/supply" && products[0]
+                            ? `#/pages/SUPPLY/ACCOUNT/${encodeURIComponent(products[0].id)}`
+                            : item.route;
                   return (
                     <button
                       aria-current={activePath === route ? "page" : undefined}
                       className={activePath === route ? "is-active" : ""}
-                      disabled={item.route === "#/production" && !products[0]}
+                      disabled={
+                        [
+                          "#/production",
+                          "#/market",
+                          "#/logistics",
+                          "#/supply",
+                        ].includes(item.route) && !products[0]
+                      }
                       key={item.route}
                       onClick={() => navigate(route)}
                       type="button"

@@ -141,7 +141,7 @@ describe("App production composition", () => {
     expect(screen.getByRole("button", { name: "大豆市场采集" })).toBeVisible();
   });
 
-  it("normalizes a valid deep link whose domain does not belong to dynamic navigation", async () => {
+  it("rejects an unsupported logistics page kind", async () => {
     window.history.replaceState(null, "", "#/pages/LOGISTICS/QUALITY/SOYBEAN_FIXTURE");
     render(
       <App
@@ -149,10 +149,8 @@ describe("App production composition", () => {
       />,
     );
 
-    expect(await screen.findByRole("heading", { name: "大豆市场采集" })).toBeVisible();
-    expect(window.location.hash).toMatch(
-      /^#\/pages\/MARKET\/MONITORING\/SOYBEAN_FIXTURE/,
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("页面地址无效");
+    expect(window.location.hash).toBe("#/pages/LOGISTICS/QUALITY/SOYBEAN_FIXTURE");
   });
 
   it("revalidates filter and page-size state arriving through browser history", async () => {

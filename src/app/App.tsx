@@ -9,6 +9,12 @@ import { MarketCollectionPage } from "../modules/market-monitoring/ui/pages/Mark
 import type { ProductionRecordRepository } from "../modules/production-monitoring/application/ports/ProductionRecordRepository";
 import { HttpProductionRecordRepository } from "../modules/production-monitoring/infrastructure/http/HttpProductionRecordRepository";
 import { ProductionMonitoringPage } from "../modules/production-monitoring/ui/pages/ProductionMonitoringPage";
+import type { LogisticsRecordRepository } from "../modules/logistics-monitoring/application/ports/LogisticsRecordRepository";
+import { HttpLogisticsRecordRepository } from "../modules/logistics-monitoring/infrastructure/http/HttpLogisticsRecordRepository";
+import { LogisticsMonitoringPage } from "../modules/logistics-monitoring/ui/pages/LogisticsMonitoringPage";
+import type { SupplyAccountRepository } from "../modules/supply-analysis/application/ports/SupplyAccountRepository";
+import { HttpSupplyAccountRepository } from "../modules/supply-analysis/infrastructure/http/HttpSupplyAccountRepository";
+import { SupplyAccountPage } from "../modules/supply-analysis/ui/pages/SupplyAccountPage";
 import type { WorkItemRepository } from "../modules/work-management/application/ports/WorkItemRepository";
 import { HttpWorkItemRepository } from "../modules/work-management/infrastructure/http/HttpWorkItemRepository";
 import { WorkItemsPage } from "../modules/work-management/ui/pages/WorkItemsPage";
@@ -26,6 +32,8 @@ const masterDataRepository = new HttpMasterDataRepository(httpClient);
 const pageDefinitionGateway = new HttpPageDefinitionGateway(httpClient);
 const marketCollectionRepository = new HttpMarketCollectionRepository(httpClient);
 const productionRecordRepository = new HttpProductionRecordRepository(httpClient);
+const logisticsRecordRepository = new HttpLogisticsRecordRepository(httpClient);
+const supplyAccountRepository = new HttpSupplyAccountRepository(httpClient);
 const workItemRepository = new HttpWorkItemRepository(httpClient);
 
 export interface AppDependencies {
@@ -33,6 +41,8 @@ export interface AppDependencies {
   pageDefinitionGateway: PageDefinitionGateway;
   marketCollectionRepository: MarketCollectionRepository;
   productionRecordRepository?: ProductionRecordRepository;
+  logisticsRecordRepository?: LogisticsRecordRepository;
+  supplyAccountRepository?: SupplyAccountRepository;
   workItemRepository: WorkItemRepository;
 }
 
@@ -41,6 +51,8 @@ const productionDependencies: AppDependencies = {
   pageDefinitionGateway,
   marketCollectionRepository,
   productionRecordRepository,
+  logisticsRecordRepository,
+  supplyAccountRepository,
   workItemRepository,
 };
 
@@ -66,8 +78,18 @@ function isProductionPage(key?: BusinessPageKey) {
   return key?.domain === "PRODUCTION" && key.pageKind === "MONITORING";
 }
 
+function isLogisticsPage(key?: BusinessPageKey) {
+  return key?.domain === "LOGISTICS" && key.pageKind === "MONITORING";
+}
+
+function isSupplyPage(key?: BusinessPageKey) {
+  return key?.domain === "SUPPLY" && key.pageKind === "ACCOUNT";
+}
+
 function supportedPageContext(key?: BusinessPageKey) {
   if (isProductionPage(key)) return { domain: "PRODUCTION", pageKind: "MONITORING" };
+  if (isLogisticsPage(key)) return { domain: "LOGISTICS", pageKind: "MONITORING" };
+  if (isSupplyPage(key)) return { domain: "SUPPLY", pageKind: "ACCOUNT" };
   if (key?.domain === "MARKET" && key.pageKind === "MONITORING")
     return { domain: "MARKET", pageKind: "MONITORING" };
   if (key?.domain === "MARKET" && key.pageKind === "QUALITY")
@@ -131,7 +153,11 @@ function locationFromHash(): HashState {
       pageKind: decodeURIComponent(match[2]!),
       productCode: decodeURIComponent(match[3]!),
     };
-    if (key.domain === "PRODUCTION" && !isProductionPage(key)) {
+    if (
+      (key.domain === "PRODUCTION" && !isProductionPage(key)) ||
+      (key.domain === "LOGISTICS" && !isLogisticsPage(key)) ||
+      (key.domain === "SUPPLY" && !isSupplyPage(key))
+    ) {
       return { invalid: true };
     }
     return {
@@ -306,16 +332,24 @@ export function App({
       productItemSuffix={
         navigationDomain === "PRODUCTION"
           ? "产情监测"
-          : navigationPageKind === "MONITORING"
-            ? "市场采集"
-            : "质量指标"
+          : navigationDomain === "LOGISTICS"
+            ? "物流监测"
+            : navigationDomain === "SUPPLY"
+              ? "供需账户"
+              : navigationPageKind === "MONITORING"
+                ? "市场采集"
+                : "质量指标"
       }
       productNavigationTitle={
         navigationDomain === "PRODUCTION"
           ? "产情产品"
-          : navigationPageKind === "MONITORING"
-            ? "市场采集"
-            : "质量指标"
+          : navigationDomain === "LOGISTICS"
+            ? "物流产品"
+            : navigationDomain === "SUPPLY"
+              ? "供需产品"
+              : navigationPageKind === "MONITORING"
+                ? "市场采集"
+                : "质量指标"
       }
       {...(pageKey ? { activeProductId: pageKey.productCode } : {})}
     >
@@ -380,6 +414,38 @@ export function App({
           repository={
             dependencies.productionRecordRepository ?? productionRecordRepository
           }
+          {...(location ? { routeQuery: location.query } : {})}
+        />
+      ) : isLogisticsPage(pageKey) ? (
+        <LogisticsMonitoringPage
+          loadRegionChildren={(parentId) =>
+            dependencies.masterDataRepository.getRegionChildren(parentId)
+          }
+          loadRegionPath={(regionId) =>
+            dependencies.masterDataRepository.getRegionPath(regionId)
+          }
+          onQueryCommitted={commitQuery}
+          onQueryNormalized={normalizeQuery}
+          pageDefinitionGateway={dependencies.pageDefinitionGateway}
+          pageKey={pageKey}
+          repository={
+            dependencies.logisticsRecordRepository ?? logisticsRecordRepository
+          }
+          {...(location ? { routeQuery: location.query } : {})}
+        />
+      ) : isSupplyPage(pageKey) ? (
+        <SupplyAccountPage
+          loadRegionChildren={(parentId) =>
+            dependencies.masterDataRepository.getRegionChildren(parentId)
+          }
+          loadRegionPath={(regionId) =>
+            dependencies.masterDataRepository.getRegionPath(regionId)
+          }
+          onQueryCommitted={commitQuery}
+          onQueryNormalized={normalizeQuery}
+          pageDefinitionGateway={dependencies.pageDefinitionGateway}
+          pageKey={pageKey}
+          repository={dependencies.supplyAccountRepository ?? supplyAccountRepository}
           {...(location ? { routeQuery: location.query } : {})}
         />
       ) : (
