@@ -13,6 +13,7 @@ const recordSchema = z.object({
   id: z.string(),
   productCode: z.string(),
   values: z.record(z.string(), z.string().nullable()),
+  displayValues: z.record(z.string(), z.string().nullable()),
   status: z.string(),
   returnReason: z.string().nullable(),
   allowedActions: z.array(z.string()),

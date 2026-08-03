@@ -9,6 +9,7 @@ export interface LogisticsRecord {
   id: string;
   productCode: string;
   values: Readonly<Record<string, string | null>>;
+  displayValues: Readonly<Record<string, string | null>>;
   status: string;
   returnReason: string | null;
   allowedActions: readonly string[];

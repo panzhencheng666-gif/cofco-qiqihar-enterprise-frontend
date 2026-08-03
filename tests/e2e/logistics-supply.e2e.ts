@@ -42,6 +42,10 @@ test("logistics review and supply provenance calculation close one Chromium work
               version: logisticsVersion,
               values: {
                 ...logisticsRecord.values,
+                LOG_STATUS: logisticsStatus,
+              },
+              displayValues: {
+                ...logisticsRecord.displayValues,
                 LOG_STATUS: logisticsStatus === "DRAFT" ? "草稿" : "待审核",
               },
               allowedActions:
@@ -109,8 +113,7 @@ test("logistics review and supply provenance calculation close one Chromium work
   await expect(page.getByText(/平衡状态：已平衡/)).toBeVisible();
   await expect(page.getByText(/可发布/)).toBeVisible();
   await page.getByRole("button", { name: "重新计算" }).click();
-  await page.getByRole("textbox", { name: "来源采用理由" }).fill("采用本期核定来源");
-  await page.getByRole("textbox", { name: "调整理由" }).fill("库存差异经复核");
+  await page.getByRole("textbox", { name: "调整建议理由" }).fill("库存差异经复核");
   await page.getByRole("button", { name: "执行计算" }).click();
   await expect
     .poll(() => runBody)
@@ -118,9 +121,9 @@ test("logistics review and supply provenance calculation close one Chromium work
       productCode: "CORN",
       regionCode: "230200",
       marketingYear: "2026/27",
+      inputSetId: "input-set-9",
       expectedDecisionVersion: 4,
-      adoptionReason: "采用本期核定来源",
-      adjustmentReason: "库存差异经复核",
+      adjustmentProposalReason: "库存差异经复核",
     });
 });
 
@@ -260,6 +263,11 @@ const logisticsRecord = {
   id: "event-1",
   productCode: "CORN",
   values: {
+    LOG_TRANSPORT_MODE: "RAIL",
+    LOG_ROUTE_VOLUME: "10.000",
+    LOG_STATUS: "DRAFT",
+  },
+  displayValues: {
     LOG_TRANSPORT_MODE: "铁路",
     LOG_ROUTE_VOLUME: "10.000 吨",
     LOG_STATUS: "草稿",
@@ -285,9 +293,11 @@ const supplyAccount = {
   adoptedEndingInventory: "3.000",
   surveyedEndingInventory: "2.750",
   inventoryReconciliationDifference: "-0.250",
+  inputSetId: "input-set-9",
   balanced: true,
   publishable: true,
   balanceReason: "WITHIN_TOLERANCE",
+  adjustmentProposal: null,
   adjustmentAudit: {
     value: "1.000",
     reason: "库存差异经复核",

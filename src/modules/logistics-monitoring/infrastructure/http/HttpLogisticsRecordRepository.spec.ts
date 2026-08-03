@@ -8,7 +8,8 @@ describe("HttpLogisticsRecordRepository", () => {
       data: {
         id: "event-1",
         productCode: "RICE",
-        values: { LOG_TRANSPORT_MODE: "铁路" },
+        values: { LOG_TRANSPORT_MODE: "RAIL" },
+        displayValues: { LOG_TRANSPORT_MODE: "铁路" },
         status: "DRAFT",
         returnReason: null,
         allowedActions: ["VIEW", "SUBMIT"],

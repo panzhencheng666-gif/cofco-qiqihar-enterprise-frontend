@@ -135,6 +135,44 @@ describe("LogisticsMonitoringPage", () => {
     expect(screen.getByRole("textbox", { name: "大豆运单" })).toBeVisible();
     expect(screen.queryByRole("textbox", { name: "运单编号" })).not.toBeInTheDocument();
   });
+
+  it("retries the logistics field definition independently after a failure", async () => {
+    const user = userEvent.setup();
+    const definitionCall = vi
+      .fn<LogisticsRecordRepository["definition"]>()
+      .mockRejectedValueOnce(new Error("temporary"))
+      .mockResolvedValue(editorDefinition);
+    const repository: LogisticsRecordRepository = {
+      definition: definitionCall,
+      search: () =>
+        Promise.resolve({
+          items: [],
+          pageNumber: 0,
+          pageSize: 20,
+          totalElements: 0,
+          totalPages: 0,
+        }),
+      detail: () => Promise.reject(new Error("not called")),
+      create: () => Promise.reject(new Error("not called")),
+      saveDraft: () => Promise.reject(new Error("not called")),
+      submit: () => Promise.reject(new Error("not called")),
+      approve: () => Promise.reject(new Error("not called")),
+      returnForCorrection: () => Promise.reject(new Error("not called")),
+    };
+    render(
+      <LogisticsMonitoringPage
+        loadRegionChildren={() => Promise.resolve([])}
+        pageDefinitionGateway={{ getDefinition: () => Promise.resolve(definition) }}
+        pageKey={{ domain: "LOGISTICS", pageKind: "MONITORING", productCode: "CORN" }}
+        repository={repository}
+      />,
+    );
+
+    expect(await screen.findByText("物流字段定义加载失败，请重试。")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "重试页面定义" }));
+    expect(await screen.findByRole("heading", { name: "玉米物流监测" })).toBeVisible();
+    expect(definitionCall).toHaveBeenCalledTimes(2);
+  });
 });
 
 const editorDefinition = {
@@ -160,6 +198,11 @@ const draft = {
   id: "draft-1",
   productCode: "CORN",
   values: {
+    LOG_TRANSPORT_MODE: "RAIL",
+    LOG_ROUTE_VOLUME: "10.000",
+    LOG_STATUS: "DRAFT",
+  },
+  displayValues: {
     LOG_TRANSPORT_MODE: "铁路",
     LOG_ROUTE_VOLUME: "10.000 吨",
     LOG_STATUS: "草稿",
@@ -173,6 +216,11 @@ const pending = {
   id: "pending-1",
   productCode: "CORN",
   values: {
+    LOG_TRANSPORT_MODE: "ROAD",
+    LOG_ROUTE_VOLUME: "8.000",
+    LOG_STATUS: "PENDING_REVIEW",
+  },
+  displayValues: {
     LOG_TRANSPORT_MODE: "公路",
     LOG_ROUTE_VOLUME: "8.000 吨",
     LOG_STATUS: "待审核",

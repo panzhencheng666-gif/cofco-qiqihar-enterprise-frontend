@@ -31,6 +31,8 @@ describe("SupplyAccountPage", () => {
     expect(screen.getByText("-0.250")).toBeVisible();
     expect(screen.getByText("采用核定物流来源")).toBeVisible();
     expect(screen.getByText("APPROVED / PASSED")).toBeVisible();
+    expect(screen.getByText(/正式批准调整/)).toBeVisible();
+    expect(screen.queryByText(/试算调整建议/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "查看来源" }));
     expect(open).toHaveBeenCalledWith(
       "/api/v1/logistics-records/event-1",
@@ -41,11 +43,7 @@ describe("SupplyAccountPage", () => {
     await user.click(screen.getByRole("button", { name: "重新计算" }));
     expect(screen.getByRole("button", { name: "执行计算" })).toBeDisabled();
     await user.type(
-      screen.getByRole("textbox", { name: "来源采用理由" }),
-      "采用核定来源",
-    );
-    await user.type(
-      screen.getByRole("textbox", { name: "调整理由" }),
+      screen.getByRole("textbox", { name: "调整建议理由" }),
       "库存差异经复核",
     );
     await user.click(screen.getByRole("button", { name: "执行计算" }));
@@ -55,8 +53,8 @@ describe("SupplyAccountPage", () => {
           productCode: "RICE",
           regionCode: "230200",
           marketingYear: "2026/27",
-          adoptionReason: "采用核定来源",
-          adjustmentReason: "库存差异经复核",
+          inputSetId: "input-set-1",
+          adjustmentProposalReason: "库存差异经复核",
           expectedDecisionVersion: 0,
         }),
       ),
@@ -65,6 +63,7 @@ describe("SupplyAccountPage", () => {
   });
 
   it("does not let a late account response replace the newly selected product", async () => {
+    const user = userEvent.setup();
     let resolveRice!: (value: readonly [typeof account]) => void;
     const rice = new Promise<readonly [typeof account]>((resolve) => {
       resolveRice = resolve;
@@ -72,12 +71,19 @@ describe("SupplyAccountPage", () => {
     const cornAccount = {
       ...account,
       productCode: "CORN",
+      regionCode: "230201",
+      marketingYear: "2027/28",
+      inputSetId: "input-set-corn",
+      decisionVersion: 5,
       sources: [{ ...account.sources[0], reason: "玉米当前来源" }],
     } as const;
+    const run = vi.fn<SupplyAccountRepository["run"]>(() =>
+      Promise.resolve(cornAccount),
+    );
     const repository: SupplyAccountRepository = {
       find: (criteria) =>
         criteria.productCode === "RICE" ? rice : Promise.resolve([cornAccount]),
-      run: () => Promise.reject(new Error("not called")),
+      run,
     };
     const gateway = {
       getDefinition: (key: typeof definition.key) =>
@@ -102,13 +108,30 @@ describe("SupplyAccountPage", () => {
         pageDefinitionGateway={gateway}
         pageKey={{ domain: "SUPPLY", pageKind: "ACCOUNT", productCode: "CORN" }}
         repository={repository}
-        routeQuery={{ values: { regionCode: "230200", marketingYear: "2026/27" } }}
+        routeQuery={{ values: { regionCode: "230201", marketingYear: "2027/28" } }}
       />,
     );
     expect(await screen.findByText("玉米当前来源")).toBeVisible();
     resolveRice([account]);
     await waitFor(() => expect(screen.getByText("玉米当前来源")).toBeVisible());
     expect(screen.queryByText("采用核定物流来源")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "重新计算" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "调整建议理由" }),
+      "玉米本期调整建议",
+    );
+    await user.click(screen.getByRole("button", { name: "执行计算" }));
+    await waitFor(() =>
+      expect(run).toHaveBeenCalledWith(
+        expect.objectContaining({
+          productCode: "CORN",
+          regionCode: "230201",
+          marketingYear: "2027/28",
+          inputSetId: "input-set-corn",
+          expectedDecisionVersion: 5,
+        }),
+      ),
+    );
   });
 });
 
@@ -128,9 +151,11 @@ const account = {
   adoptedEndingInventory: "3.000",
   surveyedEndingInventory: "2.750",
   inventoryReconciliationDifference: "-0.250",
+  inputSetId: "input-set-1",
   balanced: true,
   publishable: true,
   balanceReason: "WITHIN_TOLERANCE",
+  adjustmentProposal: null,
   adjustmentAudit: {
     value: "1.000",
     reason: "库存差异经复核",

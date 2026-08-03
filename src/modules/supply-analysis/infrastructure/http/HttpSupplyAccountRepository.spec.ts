@@ -21,9 +21,11 @@ describe("HttpSupplyAccountRepository", () => {
           adoptedEndingInventory: "3.000",
           surveyedEndingInventory: "2.750",
           inventoryReconciliationDifference: "-0.250",
+          inputSetId: "input-set-1",
           balanced: true,
           publishable: true,
           balanceReason: "WITHIN_TOLERANCE",
+          adjustmentProposal: null,
           adjustmentAudit: {
             value: "1.000",
             reason: "库存差异经复核",

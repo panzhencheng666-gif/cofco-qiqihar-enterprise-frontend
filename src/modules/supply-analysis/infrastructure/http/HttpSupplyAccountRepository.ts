@@ -58,16 +58,27 @@ const accountSchema = z.object({
   adoptedEndingInventory: z.string().nullable(),
   surveyedEndingInventory: z.string().nullable(),
   inventoryReconciliationDifference: z.string().nullable(),
+  inputSetId: z.string(),
   balanced: z.boolean(),
   publishable: z.boolean(),
   balanceReason: z.string(),
-  adjustmentAudit: z.object({
-    value: z.string().nullable(),
-    reason: z.string().nullable(),
-    actor: z.string().nullable(),
-    decidedAt: z.string().nullable(),
-    decisionVersion: z.number().int(),
-  }),
+  adjustmentProposal: z
+    .object({
+      value: z.string(),
+      reason: z.string(),
+      requestedBy: z.string(),
+      requestedAt: z.string(),
+    })
+    .nullable(),
+  adjustmentAudit: z
+    .object({
+      value: z.string().nullable(),
+      reason: z.string().nullable(),
+      actor: z.string().nullable(),
+      decidedAt: z.string().nullable(),
+      decisionVersion: z.number().int(),
+    })
+    .nullable(),
   formula: formulaSchema,
   sources: z.array(sourceSchema),
 });

@@ -35,6 +35,7 @@ export function useLogisticsMonitoring({
     useState<ContextValue<LogisticsDefinition>>();
   const [definitionIssueState, setDefinitionIssueState] =
     useState<ContextValue<string>>();
+  const [definitionAttempt, setDefinitionAttempt] = useState(0);
   const [busyState, setBusyState] = useState<ContextValue<boolean>>({
     productCode,
     value: false,
@@ -56,7 +57,16 @@ export function useLogisticsMonitoring({
     onQueryNormalized,
     pageKey,
     routeQuery,
-    search: (query) => repository.search({ productCode, ...query }),
+    search: async (query) => {
+      const result = await repository.search({ productCode, ...query });
+      return {
+        ...result,
+        items: result.items.map((record) => ({
+          ...record,
+          values: record.displayValues,
+        })),
+      };
+    },
   });
   const records = (controller.result?.items ?? []) as readonly LogisticsRecord[];
   const definition = inContext(definitionState, productCode);
@@ -85,7 +95,7 @@ export function useLogisticsMonitoring({
     return () => {
       active = false;
     };
-  }, [productCode, repository]);
+  }, [definitionAttempt, productCode, repository]);
 
   const current = () => currentProduct.current === productCode;
   const setBusy = (value: boolean) => setBusyState({ productCode, value });
@@ -181,6 +191,10 @@ export function useLogisticsMonitoring({
     issue,
     returning,
     returnReason,
+    retryDefinition: () => {
+      setDefinitionIssueState({ productCode, value: "" });
+      setDefinitionAttempt((attempt) => attempt + 1);
+    },
     save,
     setReturnReason: (value: string) => setReturnReasonState({ productCode, value }),
   };

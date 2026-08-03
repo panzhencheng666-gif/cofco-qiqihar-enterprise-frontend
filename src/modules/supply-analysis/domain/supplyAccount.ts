@@ -51,16 +51,23 @@ export interface SupplyAccount {
   adoptedEndingInventory: string | null;
   surveyedEndingInventory: string | null;
   inventoryReconciliationDifference: string | null;
+  inputSetId: string;
   balanced: boolean;
   publishable: boolean;
   balanceReason: string;
+  adjustmentProposal: {
+    value: string;
+    reason: string;
+    requestedBy: string;
+    requestedAt: string;
+  } | null;
   adjustmentAudit: {
     value: string | null;
     reason: string | null;
     actor: string | null;
     decidedAt: string | null;
     decisionVersion: number;
-  };
+  } | null;
   formula: SupplyFormula;
   sources: readonly SupplySource[];
 }
@@ -69,9 +76,9 @@ export interface SupplyRunCommand {
   productCode: string;
   regionCode: string;
   marketingYear: string;
-  approvedAdjustment: string;
-  adoptionReason: string;
-  adjustmentReason: string;
+  inputSetId: string;
+  adjustmentProposalValue: string;
+  adjustmentProposalReason: string;
   expectedDecisionVersion: number;
   publish: boolean;
 }

@@ -1,7 +1,4 @@
-import { useEffect, useRef, useState } from "react";
-
 import type { SupplyAccountRepository } from "../../application/ports/SupplyAccountRepository";
-import type { SupplyAccount, SupplyRunCommand } from "../../domain/supplyAccount";
 import type {
   BusinessPageKey,
   ListQueryState,
@@ -10,21 +7,12 @@ import type {
   PageDefinitionGateway,
   RouteListQuery,
 } from "../../../../shared/application/page-definition";
-import {
-  ListWorkbench,
-  useListPageController,
-} from "../../../../shared/ui/list-workbench";
+import { SupplyLedger } from "../components/SupplyLedger";
+import { SupplyRunner } from "../components/SupplyRunner";
+import { SupplySummary } from "../components/SupplySummary";
+import { useSupplyAccount } from "../hooks/useSupplyAccount";
 
-export function SupplyAccountPage({
-  loadRegionChildren,
-  loadRegionPath,
-  onQueryCommitted,
-  onQueryNormalized,
-  pageDefinitionGateway,
-  pageKey,
-  repository,
-  routeQuery,
-}: {
+export function SupplyAccountPage(props: {
   loadRegionChildren: LoadRegionChildren;
   loadRegionPath?: LoadRegionPath;
   onQueryCommitted?: (query: ListQueryState) => void;
@@ -34,111 +22,8 @@ export function SupplyAccountPage({
   repository: SupplyAccountRepository;
   routeQuery?: RouteListQuery;
 }) {
-  const productCode = requireProduct(pageKey);
-  const productRef = useRef(productCode);
-  const [accountState, setAccount] = useState<SupplyAccount>();
-  const [busyState, setBusyState] = useState({ productCode, value: false });
-  const [issueState, setIssueState] = useState({ productCode, value: "" });
-  const [runnerState, setRunner] = useState<SupplyRunCommand>();
-  const account = accountState?.productCode === productCode ? accountState : undefined;
-  const busy = busyState.productCode === productCode && busyState.value;
-  const issue = issueState.productCode === productCode ? issueState.value : "";
-  const runner = runnerState?.productCode === productCode ? runnerState : undefined;
-  useEffect(() => {
-    productRef.current = productCode;
-  }, [productCode]);
-  const setBusy = (value: boolean) => setBusyState({ productCode, value });
-  const setIssue = (value: string) => setIssueState({ productCode, value });
-  const controller = useListPageController({
-    controllerKey: `${pageKey.domain}/${pageKey.pageKind}/${productCode}`,
-    loadDefinition: () => pageDefinitionGateway.getDefinition(pageKey),
-    onQueryCommitted,
-    onQueryNormalized,
-    pageKey,
-    routeQuery,
-    search: async (query) => {
-      const regionCode = query.values.regionCode;
-      const marketingYear = query.values.marketingYear;
-      if (!regionCode || !marketingYear) {
-        if (productRef.current === productCode) setAccount(undefined);
-        return {
-          items: [],
-          pageNumber: 0,
-          pageSize: query.pageSize,
-          totalElements: 0,
-          totalPages: 0,
-        };
-      }
-      const accounts = await repository.find({
-        productCode,
-        regionCode,
-        marketingYear,
-        ...(query.values.resultState ? { resultState: query.values.resultState } : {}),
-      });
-      const latest = accounts[0];
-      if (productRef.current === productCode) setAccount(latest);
-      return {
-        items: latest
-          ? latest.sources.map((source) => ({
-              id: `${latest.id}:${source.roleCode}`,
-              values: {
-                SUP_GROUP: source.groupCode,
-                SUP_ITEM: source.roleLabel,
-                SUP_SOURCE_VALUE: source.sourceValue,
-                SUP_ADOPTED_VALUE: source.adoptedValue,
-                SUP_REASON: source.reason,
-                SUP_SOURCE_STATUS: `${source.approvalState} / ${source.qualityState}`,
-                SUP_RESULT_STATE: latest.resultState,
-              },
-              allowedActions: ["VIEW_SOURCE"],
-            }))
-          : [],
-        pageNumber: 0,
-        pageSize: query.pageSize,
-        totalElements: latest?.sources.length ?? 0,
-        totalPages: latest ? 1 : 0,
-      };
-    },
-  });
-
-  function openRunner() {
-    const regionCode = controller.query?.values.regionCode;
-    const marketingYear = controller.query?.values.marketingYear;
-    if (!regionCode || !marketingYear) {
-      setIssue("请先选择地区并填写营销年度。");
-      return;
-    }
-    setRunner({
-      productCode,
-      regionCode,
-      marketingYear,
-      approvedAdjustment: account?.approvedAdjustment ?? "",
-      adoptionReason: "",
-      adjustmentReason: "",
-      expectedDecisionVersion: account?.decisionVersion ?? 0,
-      publish: false,
-    });
-  }
-
-  async function run() {
-    if (!runner || !runner.adoptionReason.trim() || !runner.adjustmentReason.trim())
-      return;
-    setBusy(true);
-    setIssue("");
-    try {
-      const result = await repository.run(runner);
-      if (productRef.current !== productCode) return;
-      setAccount(result);
-      setRunner(undefined);
-      await controller.refreshLatest();
-    } catch {
-      if (productRef.current === productCode)
-        setIssue("计算或发布失败：请检查核定来源、理由和并发版本。");
-    } finally {
-      if (productRef.current === productCode) setBusy(false);
-    }
-  }
-
+  const state = useSupplyAccount(props);
+  const { controller } = state;
   if (controller.definitionError)
     return (
       <div className="page-alert" role="alert">
@@ -148,169 +33,28 @@ export function SupplyAccountPage({
     );
   if (!controller.definition || !controller.query || !controller.result)
     return <div className="ledger-panel list-workbench-loading">正在加载页面定义</div>;
-
   return (
     <>
-      {issue && (
+      {state.issue && (
         <div className="page-alert" role="alert">
-          {issue}
+          {state.issue}
         </div>
       )}
-      {account && <SupplySummary account={account} />}
-      <ListWorkbench
-        actionsDisabled={busy}
-        definition={controller.definition}
-        errorMessage={controller.listError}
-        loadRegionChildren={loadRegionChildren}
-        {...(loadRegionPath ? { loadRegionPath } : {})}
-        loading={controller.loading}
-        onAction={(action, rowId) => {
-          if (action === "RUN" || action === "ADJUST") openRunner();
-          if (action === "VIEW_SOURCE" && rowId && account) {
-            const role = rowId.slice(rowId.lastIndexOf(":") + 1);
-            const source = account.sources.find(
-              (candidate) => candidate.roleCode === role,
-            );
-            if (source)
-              window.open(source.drillDownRoute, "_blank", "noopener,noreferrer");
-          }
-        }}
-        onQueryChange={controller.changeQuery}
-        onRetry={() => void controller.executeSearch(controller.query!)}
-        onSearch={controller.submitSearch}
-        query={controller.query}
-        result={controller.result}
+      {state.account && <SupplySummary account={state.account} />}
+      <SupplyLedger
+        loadRegionChildren={props.loadRegionChildren}
+        {...(props.loadRegionPath ? { loadRegionPath: props.loadRegionPath } : {})}
+        state={state}
       />
-      {runner && (
-        <div
-          aria-labelledby="supply-run-title"
-          className="production-dialog supply-run-dialog"
-          role="dialog"
-        >
-          <h2 id="supply-run-title">声明采用值并重新计算</h2>
-          <label>
-            批准调整值
-            <input
-              aria-label="批准调整值"
-              value={runner.approvedAdjustment}
-              onChange={(event) =>
-                setRunner({ ...runner, approvedAdjustment: event.target.value })
-              }
-            />
-          </label>
-          <label>
-            来源采用理由
-            <textarea
-              aria-label="来源采用理由"
-              value={runner.adoptionReason}
-              onChange={(event) =>
-                setRunner({ ...runner, adoptionReason: event.target.value })
-              }
-            />
-          </label>
-          <label>
-            调整理由
-            <textarea
-              aria-label="调整理由"
-              value={runner.adjustmentReason}
-              onChange={(event) =>
-                setRunner({ ...runner, adjustmentReason: event.target.value })
-              }
-            />
-          </label>
-          <label>
-            <input
-              checked={runner.publish}
-              onChange={(event) =>
-                setRunner({ ...runner, publish: event.target.checked })
-              }
-              type="checkbox"
-            />
-            发布为正式结果
-          </label>
-          <button
-            disabled={
-              busy ||
-              !runner.approvedAdjustment.trim() ||
-              !runner.adoptionReason.trim() ||
-              !runner.adjustmentReason.trim()
-            }
-            onClick={() => void run()}
-          >
-            执行计算
-          </button>
-          <button onClick={() => setRunner(undefined)}>取消</button>
-        </div>
+      {state.runner && (
+        <SupplyRunner
+          busy={state.busy}
+          command={state.runner}
+          onCancel={state.closeRunner}
+          onChange={state.setRunner}
+          onRun={() => void state.run()}
+        />
       )}
     </>
   );
-}
-
-function SupplySummary({ account }: { account: SupplyAccount }) {
-  const totals = account.formula.expressions.map((expression) => {
-    const key: Readonly<Record<string, SupplyResultField>> = {
-      TOTAL_SUPPLY: "totalSupply",
-      TOTAL_USE: "totalUse",
-      CALCULATED_ENDING_INVENTORY: "calculatedEndingInventory",
-      ADOPTED_ENDING_INVENTORY: "adoptedEndingInventory",
-      INVENTORY_RECONCILIATION_DIFFERENCE: "inventoryReconciliationDifference",
-    };
-    return {
-      ...expression,
-      value: key[expression.resultCode] ? account[key[expression.resultCode]!] : null,
-    };
-  });
-  return (
-    <section aria-label="供需计算说明" className="supply-summary ledger-panel">
-      <header>
-        <h1>
-          {account.formula.name} <small>V{account.formula.version}</small>
-        </h1>
-        <span
-          className={`supply-state supply-state--${account.resultState.toLowerCase()}`}
-        >
-          {account.resultState}
-        </span>
-      </header>
-      <p className="supply-sign-rule">
-        {account.formula.differenceLabel}：{account.formula.differenceExpression}；容差{" "}
-        {account.formula.tolerance}
-      </p>
-      <p>
-        结果版本 V{account.resultVersion}；决策版本 V{account.decisionVersion}；
-        平衡状态：{account.balanced ? "已平衡" : "未平衡"}（{account.balanceReason}）；
-        {account.publishable ? "可发布" : "不可发布"}
-      </p>
-      <p>
-        调整审计：{account.adjustmentAudit.value ?? "—"}；
-        {account.adjustmentAudit.reason ?? "无理由"}；
-        {account.adjustmentAudit.actor ?? "未知执行人"}；
-        {account.adjustmentAudit.decidedAt ?? "无时间"}
-      </p>
-      <div className="supply-total-grid">
-        {totals.map((item) => (
-          <article key={item.resultCode}>
-            <span>{item.label}</span>
-            <strong>{item.value ?? "—"}</strong>
-            <small>{item.expression}</small>
-          </article>
-        ))}
-      </div>
-      {account.validationCodes.length > 0 && (
-        <div className="page-alert">{account.validationCodes.join("；")}</div>
-      )}
-    </section>
-  );
-}
-
-type SupplyResultField =
-  | "totalSupply"
-  | "totalUse"
-  | "calculatedEndingInventory"
-  | "adoptedEndingInventory"
-  | "inventoryReconciliationDifference";
-
-function requireProduct(key: BusinessPageKey) {
-  if (!key.productCode) throw new Error("Supply account page requires product context");
-  return key.productCode;
 }

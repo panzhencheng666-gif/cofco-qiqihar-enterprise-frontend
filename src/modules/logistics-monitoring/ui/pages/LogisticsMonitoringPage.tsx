@@ -28,7 +28,15 @@ export function LogisticsMonitoringPage(props: {
     return (
       <div className="page-alert" role="alert">
         {controller.definitionError || state.definitionIssue}
-        <button onClick={controller.retryDefinition}>重试页面定义</button>
+        <button
+          onClick={
+            controller.definitionError
+              ? controller.retryDefinition
+              : state.retryDefinition
+          }
+        >
+          重试页面定义
+        </button>
       </div>
     );
   if (
