@@ -68,8 +68,8 @@ select:focus-visible {
 }
 
 .enterprise-brand {
-  width: 220px;
-  flex: 0 0 220px;
+  width: 230px;
+  flex: 0 0 230px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -94,7 +94,7 @@ select:focus-visible {
 }
 
 .enterprise-brand strong {
-  max-width: 158px;
+  max-width: 170px;
   font-size: 14px;
   line-height: 1.1;
 }
@@ -115,8 +115,8 @@ select:focus-visible {
 }
 
 .enterprise-top-nav button {
-  min-width: 76px;
-  padding: 0 10px;
+  min-width: 96px;
+  padding: 0 16px;
   font-size: 13px;
   font-weight: 650;
 }
@@ -127,8 +127,8 @@ select:focus-visible {
 }
 
 .enterprise-unit {
-  min-width: 100px;
-  padding: 0 8px;
+  min-width: 116px;
+  padding: 0 10px;
   font-weight: 650;
 }
 
@@ -137,8 +137,8 @@ select:focus-visible {
 }
 
 .enterprise-global-search {
-  min-width: 160px;
-  flex: 1 1 160px;
+  min-width: 230px;
+  flex: 1 1 340px;
   display: flex;
   align-items: center;
   padding: 0 10px;
@@ -170,7 +170,7 @@ select:focus-visible {
 
 .enterprise-user-tools button {
   position: relative;
-  padding: 0 6px;
+  padding: 0 9px;
   white-space: nowrap;
 }
 
@@ -928,10 +928,11 @@ select:focus-visible {
 
 @media (max-width: 1450px) {
   .enterprise-top-nav button {
-    min-width: 76px;
+    min-width: 82px;
     padding-inline: 10px;
   }
-  .enterprise-global-search {
+  .enterprise-user-tools button:nth-child(3),
+  .enterprise-user-tools button:nth-child(4) {
     display: none;
   }
   .query-actions {
