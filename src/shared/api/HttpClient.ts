@@ -4,6 +4,13 @@ export interface HttpClient {
   get<T>(path: string, schema: ZodType<T>): Promise<T>;
   post?<T>(path: string, body: unknown, schema: ZodType<T>): Promise<T>;
   put?<T>(path: string, body: unknown, schema: ZodType<T>): Promise<T>;
+  download?(path: string): Promise<HttpDownload>;
+}
+
+export interface HttpDownload {
+  filename: string;
+  contentType: string;
+  content: Blob;
 }
 
 export class HttpError extends Error {
@@ -30,6 +37,22 @@ export class FetchHttpClient implements HttpClient {
     return this.request("PUT", path, body, schema);
   }
 
+  async download(path: string): Promise<HttpDownload> {
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      credentials: "same-origin",
+      headers: { Accept: "application/octet-stream" },
+    });
+    if (!response.ok) {
+      throw new HttpError(response.status, `下载失败：${response.status}`);
+    }
+    return {
+      filename:
+        filenameFrom(response.headers.get("Content-Disposition")) ?? "report-export",
+      contentType: response.headers.get("Content-Type") ?? "application/octet-stream",
+      content: await response.blob(),
+    };
+  }
+
   private async request<T>(
     method: string,
     path: string,
@@ -50,6 +73,12 @@ export class FetchHttpClient implements HttpClient {
     }
     return schema.parse(await response.json());
   }
+}
+
+function filenameFrom(contentDisposition: string | null): string | undefined {
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(contentDisposition ?? "")?.[1];
+  if (encoded) return decodeURIComponent(encoded);
+  return /filename="?([^";]+)"?/i.exec(contentDisposition ?? "")?.[1];
 }
 
 export function queryString(

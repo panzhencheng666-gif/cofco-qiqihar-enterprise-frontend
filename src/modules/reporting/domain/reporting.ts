@@ -48,6 +48,11 @@ export interface ReportExport {
   contentType: string;
   requestedAt: string;
 }
+export interface ReportExportFile {
+  filename: string;
+  contentType: string;
+  content: Blob;
+}
 export interface ReportPublication {
   id: string;
   previewId: string;

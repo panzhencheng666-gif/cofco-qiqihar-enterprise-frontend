@@ -82,6 +82,12 @@ export class HttpReportingRepository implements ReportingRepository {
       )
     ).data;
   }
+  async download(exportTaskId: string) {
+    if (!this.http.download) throw new Error("HTTP client does not support downloads");
+    return this.http.download(
+      `/api/v1/reports/exports/${encodeURIComponent(exportTaskId)}/content`,
+    );
+  }
   async publish(previewId: string, exportTaskId: string, expectedVersion: number) {
     if (!this.http.post) throw new Error("HTTP client does not support writes");
     return (

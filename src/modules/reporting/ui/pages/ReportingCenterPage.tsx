@@ -71,6 +71,19 @@ export function ReportingCenterPage({
       setBusy(false);
     }
   }
+  async function downloadExport() {
+    if (!exportId) return;
+    setBusy(true);
+    try {
+      const file = await repository.download(exportId);
+      saveFile(file);
+      setIssue("已开始下载正式导出文件。");
+    } catch {
+      setIssue("下载失败：请重新生成导出文件。");
+    } finally {
+      setBusy(false);
+    }
+  }
   async function publish() {
     if (!preview || !exportId) return;
     setBusy(true);
@@ -111,7 +124,7 @@ export function ReportingCenterPage({
         <h1>业务报告</h1>
         <span>所有参数、核定数据与输出格式均由正式后端提供。</span>
       </header>
-      <section className="ledger-panel">
+      <section className="ledger-panel reporting-parameters">
         <div className="reporting-parameter-grid">
           {select(
             "报告定义",
@@ -125,9 +138,17 @@ export function ReportingCenterPage({
           {select("期间", "periodCode", options.periods)}
           {select("输出格式", "formatCode", options.formats)}
         </div>
-        <button type="button" disabled={busy} onClick={createPreview}>
-          生成核定数据预览
-        </button>
+        {definition && (
+          <p className="reporting-definition-note">
+            {definition.frequencyCode} / {definition.businessDomain} /{" "}
+            {definition.businessSubtype}
+          </p>
+        )}
+        <div className="reporting-actions">
+          <button type="button" disabled={busy} onClick={createPreview}>
+            生成核定数据预览
+          </button>
+        </div>
       </section>
       {issue && (
         <p className="page-alert" role="alert">
@@ -135,48 +156,70 @@ export function ReportingCenterPage({
         </p>
       )}
       {preview && (
-        <section className="ledger-panel">
-          <h2>{preview.title}</h2>
-          <p>
-            数据截止：{preview.dataCutoffLabel}；预览有效至：
-            {new Date(preview.expiresAt).toLocaleString("zh-CN")}
-          </p>
-          <table>
-            <thead>
-              <tr>
-                <th>指标</th>
-                <th>数值</th>
-                <th>说明</th>
-              </tr>
-            </thead>
-            <tbody>
-              {preview.lines.map((line) => (
-                <tr key={line.label}>
-                  <td>{line.label}</td>
-                  <td>{line.value}</td>
-                  <td>{line.note}</td>
+        <section className="ledger-panel reporting-preview">
+          <header>
+            <h2>{preview.title}</h2>
+            <p>
+              数据截止：{preview.dataCutoffLabel}；预览有效至：
+              {new Date(preview.expiresAt).toLocaleString("zh-CN")}
+            </p>
+          </header>
+          <div className="ledger-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>指标</th>
+                  <th>数值</th>
+                  <th>说明</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {preview.lines.map((line) => (
+                  <tr key={line.label}>
+                    <td>{line.label}</td>
+                    <td>{line.value}</td>
+                    <td>{line.note}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           {preview.sections.map((section) => (
             <article key={section.code}>
               <h3>{section.title}</h3>
               <p>{section.body}</p>
             </article>
           ))}
-          <button
-            type="button"
-            disabled={busy || !values.formatCode}
-            onClick={exportCsv}
-          >
-            导出预览
-          </button>
-          <button type="button" disabled={busy || !exportId} onClick={publish}>
-            发布报告
-          </button>
+          <div className="reporting-actions">
+            <button
+              type="button"
+              disabled={busy || !values.formatCode}
+              onClick={exportCsv}
+            >
+              导出预览
+            </button>
+            <button type="button" disabled={busy || !exportId} onClick={downloadExport}>
+              下载已生成文件
+            </button>
+            <button type="button" disabled={busy || !exportId} onClick={publish}>
+              发布报告
+            </button>
+          </div>
         </section>
       )}
     </main>
   );
+}
+
+function saveFile(file: { filename: string; content: Blob }) {
+  if (typeof URL.createObjectURL !== "function") return;
+  const href = URL.createObjectURL(file.content);
+  const anchor = document.createElement("a");
+  anchor.href = href;
+  anchor.download = file.filename;
+  anchor.style.display = "none";
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(href);
 }
