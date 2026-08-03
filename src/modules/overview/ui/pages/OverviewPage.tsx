@@ -624,7 +624,11 @@ function StaticBoundaryMap({
       <rect fill="url(#overview-radar-glow)" height="640" width="1000" />
       <g aria-hidden="true" className="overview-boundary-depth">
         {features.map(({ region, geometry }) => (
-          <path d={toPath(geometry, bounds)} key={region.code} transform="translate(0 26)" />
+          <path
+            d={toPath(geometry, bounds)}
+            key={region.code}
+            transform="translate(0 26)"
+          />
         ))}
       </g>
       {features.map(({ region, geometry }) => (
