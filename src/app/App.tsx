@@ -15,6 +15,9 @@ import { LogisticsMonitoringPage } from "../modules/logistics-monitoring/ui/page
 import type { SupplyAccountRepository } from "../modules/supply-analysis/application/ports/SupplyAccountRepository";
 import { HttpSupplyAccountRepository } from "../modules/supply-analysis/infrastructure/http/HttpSupplyAccountRepository";
 import { SupplyAccountPage } from "../modules/supply-analysis/ui/pages/SupplyAccountPage";
+import type { ReportingRepository } from "../modules/reporting/application/ports/ReportingRepository";
+import { HttpReportingRepository } from "../modules/reporting/infrastructure/http/HttpReportingRepository";
+import { ReportingCenterPage } from "../modules/reporting/ui/pages/ReportingCenterPage";
 import type { WorkItemRepository } from "../modules/work-management/application/ports/WorkItemRepository";
 import { HttpWorkItemRepository } from "../modules/work-management/infrastructure/http/HttpWorkItemRepository";
 import { WorkItemsPage } from "../modules/work-management/ui/pages/WorkItemsPage";
@@ -34,6 +37,7 @@ const marketCollectionRepository = new HttpMarketCollectionRepository(httpClient
 const productionRecordRepository = new HttpProductionRecordRepository(httpClient);
 const logisticsRecordRepository = new HttpLogisticsRecordRepository(httpClient);
 const supplyAccountRepository = new HttpSupplyAccountRepository(httpClient);
+const reportingRepository = new HttpReportingRepository(httpClient);
 const workItemRepository = new HttpWorkItemRepository(httpClient);
 
 export interface AppDependencies {
@@ -43,6 +47,7 @@ export interface AppDependencies {
   productionRecordRepository?: ProductionRecordRepository;
   logisticsRecordRepository?: LogisticsRecordRepository;
   supplyAccountRepository?: SupplyAccountRepository;
+  reportingRepository?: ReportingRepository;
   workItemRepository: WorkItemRepository;
 }
 
@@ -53,6 +58,7 @@ const productionDependencies: AppDependencies = {
   productionRecordRepository,
   logisticsRecordRepository,
   supplyAccountRepository,
+  reportingRepository,
   workItemRepository,
 };
 
@@ -222,6 +228,7 @@ export function App({
   const [hashState, setHashState] = useState<HashState>(() => locationFromHash());
   const [navigationError, setNavigationError] = useState(false);
   const [navigationAttempt, setNavigationAttempt] = useState(0);
+  const reportingRoute = window.location.hash.startsWith("#/报表中心");
   const { domain: navigationDomain, pageKind: navigationPageKind } =
     supportedPageContext(hashState.location?.key);
 
@@ -353,7 +360,11 @@ export function App({
       }
       {...(pageKey ? { activeProductId: pageKey.productCode } : {})}
     >
-      {workLocation ? (
+      {reportingRoute ? (
+        <ReportingCenterPage
+          repository={dependencies.reportingRepository ?? reportingRepository}
+        />
+      ) : workLocation ? (
         <WorkItemsPage
           key={workLocation.scope}
           loadRegionChildren={(parentId) =>
