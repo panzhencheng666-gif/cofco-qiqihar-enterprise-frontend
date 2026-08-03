@@ -58,7 +58,9 @@ export function useSupplyAccount({
           : {}),
       });
       const latest = accounts[0];
-      if (token === requestVersion.current) setAccountState({ key, account: latest });
+      if (token === requestVersion.current) {
+        setAccountState(latest ? { key, account: latest } : { key });
+      }
       return {
         items: latest
           ? latest.sources.map((source) => ({

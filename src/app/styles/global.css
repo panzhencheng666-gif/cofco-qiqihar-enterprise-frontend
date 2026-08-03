@@ -68,8 +68,8 @@ select:focus-visible {
 }
 
 .enterprise-brand {
-  width: 230px;
-  flex: 0 0 230px;
+  width: 220px;
+  flex: 0 0 220px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -94,7 +94,7 @@ select:focus-visible {
 }
 
 .enterprise-brand strong {
-  max-width: 170px;
+  max-width: 158px;
   font-size: 14px;
   line-height: 1.1;
 }
@@ -115,8 +115,8 @@ select:focus-visible {
 }
 
 .enterprise-top-nav button {
-  min-width: 96px;
-  padding: 0 16px;
+  min-width: 76px;
+  padding: 0 10px;
   font-size: 13px;
   font-weight: 650;
 }
@@ -127,8 +127,8 @@ select:focus-visible {
 }
 
 .enterprise-unit {
-  min-width: 116px;
-  padding: 0 10px;
+  min-width: 100px;
+  padding: 0 8px;
   font-weight: 650;
 }
 
@@ -137,8 +137,8 @@ select:focus-visible {
 }
 
 .enterprise-global-search {
-  min-width: 230px;
-  flex: 1 1 340px;
+  min-width: 160px;
+  flex: 1 1 160px;
   display: flex;
   align-items: center;
   padding: 0 10px;
@@ -170,7 +170,7 @@ select:focus-visible {
 
 .enterprise-user-tools button {
   position: relative;
-  padding: 0 9px;
+  padding: 0 6px;
   white-space: nowrap;
 }
 
@@ -254,6 +254,172 @@ select:focus-visible {
   min-width: 0;
   padding: 10px 14px 28px;
   overflow: hidden;
+}
+
+.overview-page {
+  min-width: 0;
+}
+
+.overview-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px 16px;
+  padding: 12px;
+}
+
+.overview-filter-bar label {
+  display: grid;
+  gap: 5px;
+  color: #294b60;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.overview-filter-bar select,
+.overview-filter-bar input {
+  min-width: 180px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #b8ccd8;
+  color: #28495c;
+  background: #fff;
+}
+
+.overview-period-note {
+  padding-bottom: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.overview-workspace {
+  display: grid;
+  grid-template-columns: minmax(520px, 1.25fr) minmax(420px, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.overview-map-panel,
+.overview-indicator-panel {
+  min-width: 0;
+}
+
+.overview-map-panel > header,
+.overview-indicator-panel > header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px 0;
+}
+
+.overview-map-panel h2,
+.overview-indicator-panel h2 {
+  margin: 0;
+  color: var(--navy);
+  font-size: 16px;
+}
+
+.overview-map-panel header p,
+.overview-indicator-panel header p {
+  margin: 5px 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.overview-map-panel header button {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid #b7cbd7;
+  color: #26485b;
+  background: #fff;
+  cursor: pointer;
+}
+
+.overview-boundary-map {
+  display: block;
+  width: 100%;
+  height: 390px;
+  padding: 6px 12px;
+  background: #f4fafc;
+}
+
+.overview-boundary-map path {
+  fill: #b9d9e7;
+  stroke: #4d859f;
+  stroke-width: 1.25;
+  vector-effect: non-scaling-stroke;
+  cursor: pointer;
+  transition: fill 120ms ease;
+}
+
+.overview-boundary-map path:hover,
+.overview-boundary-map path.is-selected {
+  fill: #2d91bd;
+  stroke: #123f5c;
+}
+
+.overview-region-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 6px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.overview-region-list button {
+  min-height: 48px;
+  padding: 7px 9px;
+  border: 1px solid var(--line-soft);
+  color: var(--text);
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.overview-region-list button[aria-pressed="true"] {
+  border-color: var(--blue);
+  background: #edf8fc;
+}
+
+.overview-region-list strong,
+.overview-region-list span {
+  display: block;
+}
+
+.overview-region-list span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.overview-indicator-panel table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.overview-indicator-panel th,
+.overview-indicator-panel td {
+  padding: 10px 12px;
+  border-top: 1px solid var(--line-soft);
+  text-align: left;
+}
+
+.overview-indicator-panel th {
+  color: #fff;
+  background: #2c82b5;
+  font-weight: 650;
+}
+
+.overview-indicator-panel td strong {
+  color: var(--navy);
+}
+
+.overview-empty {
+  padding: 24px 14px;
+  color: var(--muted);
+  text-align: center;
 }
 
 .page-breadcrumb {
@@ -762,11 +928,10 @@ select:focus-visible {
 
 @media (max-width: 1450px) {
   .enterprise-top-nav button {
-    min-width: 82px;
+    min-width: 76px;
     padding-inline: 10px;
   }
-  .enterprise-user-tools button:nth-child(3),
-  .enterprise-user-tools button:nth-child(4) {
+  .enterprise-global-search {
     display: none;
   }
   .query-actions {

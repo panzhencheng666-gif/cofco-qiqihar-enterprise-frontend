@@ -21,6 +21,9 @@ import { ReportingCenterPage } from "../modules/reporting/ui/pages/ReportingCent
 import type { WorkItemRepository } from "../modules/work-management/application/ports/WorkItemRepository";
 import { HttpWorkItemRepository } from "../modules/work-management/infrastructure/http/HttpWorkItemRepository";
 import { WorkItemsPage } from "../modules/work-management/ui/pages/WorkItemsPage";
+import type { OverviewRepository } from "../modules/overview/application/ports/OverviewRepository";
+import { HttpOverviewRepository } from "../modules/overview/infrastructure/http/HttpOverviewRepository";
+import { OverviewPage } from "../modules/overview/ui/pages/OverviewPage";
 import type { WorkItemScope } from "../modules/work-management/domain/workItem";
 import type {
   BusinessPageKey,
@@ -39,6 +42,7 @@ const logisticsRecordRepository = new HttpLogisticsRecordRepository(httpClient);
 const supplyAccountRepository = new HttpSupplyAccountRepository(httpClient);
 const reportingRepository = new HttpReportingRepository(httpClient);
 const workItemRepository = new HttpWorkItemRepository(httpClient);
+const overviewRepository = new HttpOverviewRepository(httpClient);
 
 export interface AppDependencies {
   masterDataRepository: MasterDataRepository;
@@ -48,6 +52,7 @@ export interface AppDependencies {
   logisticsRecordRepository?: LogisticsRecordRepository;
   supplyAccountRepository?: SupplyAccountRepository;
   reportingRepository?: ReportingRepository;
+  overviewRepository?: OverviewRepository;
   workItemRepository: WorkItemRepository;
 }
 
@@ -59,6 +64,7 @@ const productionDependencies: AppDependencies = {
   logisticsRecordRepository,
   supplyAccountRepository,
   reportingRepository,
+  overviewRepository,
   workItemRepository,
 };
 
@@ -229,11 +235,12 @@ export function App({
   const [navigationError, setNavigationError] = useState(false);
   const [navigationAttempt, setNavigationAttempt] = useState(0);
   const reportingRoute = window.location.hash.startsWith("#/报表中心");
+  const overviewRoute = window.location.hash === "#/overview";
   const { domain: navigationDomain, pageKind: navigationPageKind } =
     supportedPageContext(hashState.location?.key);
 
   useEffect(() => {
-    if (hashState.workLocation) {
+    if (hashState.workLocation || overviewRoute) {
       return;
     }
     let active = true;
@@ -278,6 +285,7 @@ export function App({
     navigationDomain,
     navigationPageKind,
     hashState.workLocation,
+    overviewRoute,
     navigationAttempt,
   ]);
 
@@ -335,7 +343,7 @@ export function App({
   return (
     <EnterpriseShell
       onProductSelect={selectProduct}
-      products={workLocation ? [] : products}
+      products={workLocation || overviewRoute ? [] : products}
       productItemSuffix={
         navigationDomain === "PRODUCTION"
           ? "产情监测"
@@ -360,7 +368,11 @@ export function App({
       }
       {...(pageKey ? { activeProductId: pageKey.productCode } : {})}
     >
-      {reportingRoute ? (
+      {overviewRoute ? (
+        <OverviewPage
+          repository={dependencies.overviewRepository ?? overviewRepository}
+        />
+      ) : reportingRoute ? (
         <ReportingCenterPage
           repository={dependencies.reportingRepository ?? reportingRepository}
         />

@@ -21,6 +21,10 @@ const topApplications = [
 
 const navigationGroups: readonly NavigationGroup[] = [
   {
+    label: "总览监测",
+    items: [{ label: "粮食商情总览", route: "#/overview" }],
+  },
+  {
     label: "我的工作",
     items: [
       { label: "待办任务", route: "#/work/pending" },

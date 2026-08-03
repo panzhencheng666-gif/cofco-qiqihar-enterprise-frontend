@@ -47,7 +47,7 @@ export function ReportingCenterPage({
       const created = await repository.preview({
         definitionCode: values.definitionCode,
         productCode: values.productCode,
-        cultivarCode: values.cultivarCode || undefined,
+        ...(values.cultivarCode ? { cultivarCode: values.cultivarCode } : {}),
         regionLevel: values.regionLevel,
         regionCode: values.regionCode,
         periodCode: values.periodCode,
@@ -145,7 +145,13 @@ export function ReportingCenterPage({
           </p>
         )}
         <div className="reporting-actions">
-          <button type="button" disabled={busy} onClick={createPreview}>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              void createPreview();
+            }}
+          >
             生成核定数据预览
           </button>
         </div>
@@ -194,14 +200,28 @@ export function ReportingCenterPage({
             <button
               type="button"
               disabled={busy || !values.formatCode}
-              onClick={exportCsv}
+              onClick={() => {
+                void exportCsv();
+              }}
             >
               导出预览
             </button>
-            <button type="button" disabled={busy || !exportId} onClick={downloadExport}>
+            <button
+              type="button"
+              disabled={busy || !exportId}
+              onClick={() => {
+                void downloadExport();
+              }}
+            >
               下载已生成文件
             </button>
-            <button type="button" disabled={busy || !exportId} onClick={publish}>
+            <button
+              type="button"
+              disabled={busy || !exportId}
+              onClick={() => {
+                void publish();
+              }}
+            >
               发布报告
             </button>
           </div>
