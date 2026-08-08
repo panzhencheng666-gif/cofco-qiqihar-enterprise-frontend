@@ -1,5 +1,19 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
+import type { ProxyOptions } from "vite";
+
+export const localDevelopmentActor = "wang-yang";
+
+export const localApiProxy: ProxyOptions = {
+  target: "http://127.0.0.1:8090",
+  changeOrigin: true,
+  configure(proxy) {
+    proxy.on("proxyReq", (proxyRequest) => {
+      proxyRequest.removeHeader("x-actor");
+      proxyRequest.setHeader("X-Actor", localDevelopmentActor);
+    });
+  },
+};
 
 export default defineConfig({
   plugins: [react()],
@@ -8,7 +22,7 @@ export default defineConfig({
     port: 63200,
     strictPort: true,
     proxy: {
-      "/api": "http://127.0.0.1:8090",
+      "/api": localApiProxy,
     },
   },
   test: {
