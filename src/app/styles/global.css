@@ -1226,6 +1226,156 @@ select:focus-visible {
   display: block;
   width: 100%;
 }
+.supply-input-dialog {
+  inset: 4vh 4vw auto;
+  max-height: 92vh;
+  padding: 0;
+}
+
+.supply-input-header,
+.supply-input-footer {
+  position: sticky;
+  z-index: 2;
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 18px 22px;
+  background: #fff;
+}
+
+.supply-input-header {
+  top: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.supply-input-header h2,
+.supply-input-role h3,
+.supply-source-release h3 {
+  margin: 0;
+}
+
+.supply-input-header p,
+.supply-source-release p {
+  margin: 5px 0 0;
+  color: var(--muted);
+}
+
+.supply-source-release {
+  margin: 18px 22px;
+  padding: 16px;
+  border-left: 4px solid var(--table-blue);
+  background: #f3f9fc;
+}
+
+.supply-source-release-fields {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  gap: 10px;
+  align-items: end;
+  margin-top: 14px;
+}
+
+.supply-source-release-fields label,
+.supply-input-role label,
+.supply-manual-input label,
+.supply-input-footer label {
+  display: grid;
+  gap: 5px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.supply-source-release-fields input,
+.supply-source-release-fields select,
+.supply-input-role input,
+.supply-input-role select,
+.supply-input-footer textarea {
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+
+.supply-input-role-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0 22px 20px;
+}
+
+.supply-input-role {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line-soft);
+  background: #fbfdfe;
+}
+
+.supply-input-role-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.supply-input-role-title span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.supply-manual-input {
+  margin-top: 10px;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 9px;
+}
+
+.supply-manual-input summary {
+  cursor: pointer;
+  color: var(--table-blue);
+  font-weight: 650;
+}
+
+.supply-manual-input > p,
+.supply-input-role__empty {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.supply-manual-input__fields {
+  display: grid;
+  grid-template-columns: minmax(100px, 0.7fr) minmax(180px, 1.3fr) auto;
+  gap: 8px;
+  align-items: end;
+  margin-top: 10px;
+}
+
+.supply-input-footer {
+  bottom: 0;
+  align-items: end;
+  border-top: 1px solid var(--line);
+}
+
+.supply-input-footer label {
+  flex: 1;
+}
+
+.supply-input-footer textarea {
+  min-height: 58px;
+  resize: vertical;
+}
+
+@media (max-width: 1280px) {
+  .supply-source-release-fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .supply-input-role-list {
+    grid-template-columns: 1fr;
+  }
+}
+
 
 @media (max-width: 1450px) {
   .enterprise-top-nav button {

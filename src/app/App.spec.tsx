@@ -465,6 +465,8 @@ function dependenciesFixture(
 ): AppDependencies {
   return {
     masterDataRepository: {
+      getBusinessPeriods: () => Promise.resolve([]),
+      getSupplySurveyPeriods: () => Promise.resolve([]),
       getProducts: () =>
         Promise.resolve([
           { id: "SOYBEAN_FIXTURE", name: "大豆" },

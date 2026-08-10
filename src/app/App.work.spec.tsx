@@ -164,6 +164,8 @@ function fixture(
 ): AppDependencies {
   return {
     masterDataRepository: {
+      getBusinessPeriods: () => Promise.resolve([]),
+      getSupplySurveyPeriods: () => Promise.resolve([]),
       getProducts: () => Promise.resolve([]),
       getCultivars: () => Promise.resolve([]),
       getMarketObjectTypes: () => Promise.resolve([]),

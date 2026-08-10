@@ -1,3 +1,6 @@
+import { useMemo } from "react";
+
+import type { MasterDataRepository } from "../../../master-data/application/ports/MasterDataRepository";
 import type { SupplyAccountRepository } from "../../application/ports/SupplyAccountRepository";
 import type {
   BusinessPageKey,
@@ -8,6 +11,7 @@ import type {
   RouteListQuery,
 } from "../../../../shared/application/page-definition";
 import { SupplyLedger } from "../components/SupplyLedger";
+import { SupplyInputManager } from "../components/SupplyInputManager";
 import { SupplyRunner } from "../components/SupplyRunner";
 import { SupplySummary } from "../components/SupplySummary";
 import { useSupplyAccount } from "../hooks/useSupplyAccount";
@@ -18,11 +22,37 @@ export function SupplyAccountPage(props: {
   onQueryCommitted?: (query: ListQueryState) => void;
   onQueryNormalized?: (query: ListQueryState) => void;
   pageDefinitionGateway: PageDefinitionGateway;
+  periodRepository: Pick<MasterDataRepository, "getSupplySurveyPeriods">;
   pageKey: BusinessPageKey;
   repository: SupplyAccountRepository;
   routeQuery?: RouteListQuery;
 }) {
-  const state = useSupplyAccount(props);
+  const pageDefinitionGateway = useMemo<PageDefinitionGateway>(
+    () => ({
+      getDefinition: async (key) => {
+        const [definition, periods] = await Promise.all([
+          props.pageDefinitionGateway.getDefinition(key),
+          props.periodRepository.getSupplySurveyPeriods(),
+        ]);
+        return {
+          ...definition,
+          filters: definition.filters.map((filter) =>
+            filter.id === "periodCode"
+              ? {
+                  ...filter,
+                  options: periods.map((period) => ({
+                    value: period.id,
+                    label: `${period.name}（${period.marketingYearName}）`,
+                  })),
+                }
+              : filter,
+          ),
+        };
+      },
+    }),
+    [props.pageDefinitionGateway, props.periodRepository],
+  );
+  const state = useSupplyAccount({ ...props, pageDefinitionGateway });
   const { controller } = state;
   if (controller.definitionError)
     return (
@@ -40,7 +70,13 @@ export function SupplyAccountPage(props: {
           {state.issue}
         </div>
       )}
-      {state.account && <SupplySummary account={state.account} />}
+      {state.account && (
+        <SupplySummary
+          account={state.account}
+          accounts={state.accounts}
+          onVersionChange={state.selectVersion}
+        />
+      )}
       <SupplyLedger
         loadRegionChildren={props.loadRegionChildren}
         {...(props.loadRegionPath ? { loadRegionPath: props.loadRegionPath } : {})}
@@ -55,6 +91,7 @@ export function SupplyAccountPage(props: {
           onRun={() => void state.run()}
         />
       )}
+      {state.manager && <SupplyInputManager state={state} />}
     </>
   );
 }

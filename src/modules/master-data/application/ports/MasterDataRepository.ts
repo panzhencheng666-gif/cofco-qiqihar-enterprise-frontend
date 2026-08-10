@@ -1,10 +1,14 @@
 import type {
+  BusinessPeriodOption,
   MasterDataOption,
   RegionHierarchyNode,
   RegionOption,
+  SupplySurveyPeriodOption,
 } from "../../domain/masterData";
 
 export interface MasterDataRepository {
+  getBusinessPeriods(): Promise<readonly BusinessPeriodOption[]>;
+  getSupplySurveyPeriods(): Promise<readonly SupplySurveyPeriodOption[]>;
   getProducts(domain?: string, pageKind?: string): Promise<readonly MasterDataOption[]>;
   getCultivars(productCode: string): Promise<readonly MasterDataOption[]>;
   getMarketObjectTypes(productCode: string): Promise<readonly MasterDataOption[]>;

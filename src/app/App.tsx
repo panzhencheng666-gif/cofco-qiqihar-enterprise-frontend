@@ -468,6 +468,7 @@ export function App({
           onQueryNormalized={normalizeQuery}
           pageDefinitionGateway={dependencies.pageDefinitionGateway}
           pageKey={pageKey}
+          periodRepository={dependencies.masterDataRepository}
           repository={dependencies.supplyAccountRepository ?? supplyAccountRepository}
           {...(location ? { routeQuery: location.query } : {})}
         />

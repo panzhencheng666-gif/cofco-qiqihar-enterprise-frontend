@@ -24,10 +24,17 @@ export function SupplyLedger({
       {...(loadRegionPath ? { loadRegionPath } : {})}
       loading={controller.loading}
       onAction={(action, rowId) => {
-        if (action === "RUN" || action === "ADJUST") state.openRunner();
+        if (action === "RUN") state.openRunner();
+        if (action === "ADJUST") state.openInputManager();
         if (action === "VIEW_SOURCE" && rowId) state.viewSource(rowId);
       }}
-      onQueryChange={controller.changeQuery}
+      onQueryChange={(query) =>
+        controller.changeQuery(
+          query.values.periodCode !== controller.query?.values.periodCode
+            ? { ...query, values: { ...query.values, version: "" } }
+            : query,
+        )
+      }
       onRetry={() => void controller.executeSearch(controller.query!)}
       onSearch={controller.submitSearch}
       query={controller.query!}
