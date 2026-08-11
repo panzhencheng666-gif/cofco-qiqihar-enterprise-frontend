@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import process from "node:process";
-import { URL } from "node:url";
+import { fileURLToPath, URL } from "node:url";
 import { promisify } from "node:util";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -38,7 +38,7 @@ test("architecture probes are stable, read-only, and safe to run concurrently", 
 });
 
 function runGuard() {
-  return exec(process.execPath, [guardScript.pathname], {
+  return exec(process.execPath, [fileURLToPath(guardScript)], {
     cwd: projectRoot,
     encoding: "utf8",
   });

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -8,21 +8,23 @@ import { OverviewSamplePointPanel } from "./OverviewSamplePointPanel";
 const list = {
   regionCode: "230202997001",
   totalCount: 1,
-  unresolvedSourceCount: 1,
+  validCoordinateCount: 1,
+  dataQualityIssueCount: 0,
+  correctionSourceCount: 0,
+  unresolvedSourceCount: 0,
   categories: [
     {
       code: "PRODUCTION" as const,
       name: "产情类",
       count: 1,
-      types: [{ code: "FARMER", name: "农户", count: 1 }],
+      types: [{ code: "FARMER", name: "农户", iconKey: "farmer", count: 1 }],
     },
     {
       code: "MARKET" as const,
       name: "市场类",
       count: 1,
-      types: [{ code: "TRADER", name: "贸易商", count: 1 }],
+      types: [{ code: "TRADER", name: "贸易商", iconKey: "trader", count: 1 }],
     },
-    { code: "LOGISTICS" as const, name: "物流节点", count: 0, types: [] },
   ],
   items: [
     {
@@ -31,11 +33,13 @@ const list = {
       regionCode: "230202997001",
       regionName: "契约测试村",
       locationState: "VALID",
+      dataQualityReason: null,
       categories: [{ code: "PRODUCTION" as const, name: "产情类" }],
-      types: [{ code: "FARMER", name: "农户" }],
+      types: [{ code: "FARMER", name: "农户", iconKey: "farmer" }],
       products: [{ code: "CORN", name: "玉米" }],
     },
   ],
+  correctionSources: [],
 };
 
 describe("OverviewSamplePointPanel", () => {
@@ -72,10 +76,96 @@ describe("OverviewSamplePointPanel", () => {
 
     expect(await screen.findByRole("button", { name: "产情类 1" })).toBeVisible();
     expect(screen.queryByText("同一跨产品样本点")).not.toBeInTheDocument();
-    expect(screen.getByText("请选择分类后查看样本点")).toBeVisible();
+    expect(
+      screen.getByText("请选择分类后逐条查看 1 个实体及坐标质量原因"),
+    ).toBeVisible();
     expect(repository.icons).not.toHaveBeenCalled();
     expect(repository.detail).not.toHaveBeenCalled();
     expect(onIconsChange).toHaveBeenCalledWith([]);
+  });
+
+  it("explains blocked coordinates before classification and keeps each entity in the correction list", async () => {
+    const qualityItems = (
+      [
+        ["94000000-0000-0000-0000-000000000011", "贸易商甲", "TRADER", "贸易商"],
+        ["94000000-0000-0000-0000-000000000012", "贸易商乙", "TRADER", "贸易商"],
+        ["94000000-0000-0000-0000-000000000013", "饲料厂丙", "FEED_MILL", "饲料厂"],
+      ] as const
+    ).map(([samplePointId, name, code, typeName]) => ({
+      samplePointId,
+      name,
+      regionCode: "230208",
+      regionName: "梅里斯达斡尔族区",
+      locationState: "VALID",
+      dataQualityReason: "DUPLICATE_COORDINATE_UNVERIFIED",
+      categories: [{ code: "MARKET" as const, name: "市场类" }],
+      types: [
+        { code, name: typeName, iconKey: code === "TRADER" ? "trader" : "feed-mill" },
+      ],
+      products: [{ code: "CORN", name: "玉米" }],
+    }));
+    const qualityList = {
+      ...list,
+      totalCount: 3,
+      validCoordinateCount: 0,
+      dataQualityIssueCount: 3,
+      correctionSourceCount: 0,
+      unresolvedSourceCount: 3,
+      categories: [
+        { code: "PRODUCTION" as const, name: "产情类", count: 0, types: [] },
+        {
+          code: "MARKET" as const,
+          name: "市场类",
+          count: 3,
+          types: [
+            { code: "TRADER", name: "贸易商", iconKey: "trader", count: 2 },
+            { code: "FEED_MILL", name: "饲料厂", iconKey: "feed-mill", count: 1 },
+          ],
+        },
+      ],
+      items: qualityItems,
+    };
+    const repository = repositoryStub();
+    repository.list.mockResolvedValue(qualityList);
+    repository.icons.mockResolvedValue([]);
+    repository.detail.mockResolvedValue({
+      samplePointId: qualityItems[0]!.samplePointId,
+      name: qualityItems[0]!.name,
+      regionCode: "230208",
+      regionName: "梅里斯达斡尔族区",
+      locationState: "VALID",
+      dataQualityReason: "DUPLICATE_COORDINATE_UNVERIFIED",
+      associations: [],
+    });
+
+    render(
+      <OverviewSamplePointPanel
+        onIconsChange={vi.fn()}
+        year={2026}
+        region={{ code: "230208", level: "COUNTY", name: "梅里斯达斡尔族区" }}
+        repository={repository}
+      />,
+    );
+
+    expect(
+      await screen.findByText(
+        "实体核对：可显示图标 0 个 + 坐标待纠正 3 个 = 共 3 个。",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByText("请选择分类后逐条查看 3 个实体及坐标质量原因"),
+    ).toBeVisible();
+
+    await userEvent.click(screen.getByRole("button", { name: "市场类 3" }));
+    expect(await screen.findByText("贸易商甲")).toBeVisible();
+    expect(screen.getByText("贸易商乙")).toBeVisible();
+    expect(screen.getByText("饲料厂丙")).toBeVisible();
+    await userEvent.click(screen.getByText("贸易商甲"));
+    expect(
+      await within(screen.getByLabelText("所选样本点详情")).findByText(
+        "坐标质量：重复坐标尚未核实",
+      ),
+    ).toBeVisible();
   });
 
   it.each([
@@ -280,7 +370,8 @@ function repositoryStub() {
       {
         samplePointId: "94000000-0000-0000-0000-000000000001",
         name: "同一跨产品样本点",
-        types: [{ code: "FARMER", name: "农户" }],
+        iconKey: "farmer",
+        types: [{ code: "FARMER", name: "农户", iconKey: "farmer" }],
         longitude: 123.9,
         latitude: 47.3,
       },
@@ -291,6 +382,7 @@ function repositoryStub() {
       regionCode: "230202997001",
       regionName: "契约测试村",
       locationState: "VALID",
+      dataQualityReason: null,
       associations: [
         {
           categoryCode: "PRODUCTION",

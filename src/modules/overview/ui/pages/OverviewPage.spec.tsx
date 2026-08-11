@@ -410,6 +410,59 @@ describe("OverviewPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("loads the prefecture sample-point drawer without requesting concrete icons", async () => {
+    const list = vi.fn<OverviewSamplePointRepository["list"]>(() =>
+      Promise.resolve(samplePointList),
+    );
+    const icons = vi.fn<OverviewSamplePointRepository["icons"]>(() =>
+      Promise.resolve(samplePointIcons),
+    );
+    render(
+      <OverviewPage
+        repository={{
+          mapScope: () => Promise.resolve(sampleMapScope),
+          options: () => Promise.resolve(options),
+          regions: () => Promise.resolve([sampleRegion]),
+          locations: () => Promise.resolve([]),
+          indicators: () => Promise.resolve([]),
+          dashboard: () => Promise.resolve(emptyDashboard),
+        }}
+        samplePointRepository={{
+          aggregates: () =>
+            Promise.resolve([
+              {
+                regionCode: sampleRegion.code,
+                regionName: sampleRegion.name,
+                regionLevel: "PREFECTURE",
+                samplePointCount: 1,
+                validCoordinateCount: 1,
+                dataQualityIssueCount: 0,
+                correctionSourceCount: 0,
+                unresolvedSourceCount: 0,
+              },
+            ]),
+          list,
+          icons,
+          detail: () => Promise.resolve(samplePointDetail),
+        }}
+      />,
+    );
+
+    await userEvent.setup().click(
+      await screen.findByRole("button", {
+        name: "齐齐哈尔市，已核定 1 个样本点",
+      }),
+    );
+
+    expect(await screen.findByRole("button", { name: "产情类 1" })).toBeVisible();
+    expect(screen.queryByText("样本点数据不可用")).not.toBeInTheDocument();
+    expect(list).toHaveBeenCalledWith({ regionCode: "230200", year: 2026 });
+
+    await userEvent.click(screen.getByRole("button", { name: "产情类 1" }));
+    expect(await screen.findByText("同一跨产品样本点")).toBeVisible();
+    expect(icons).not.toHaveBeenCalled();
+  });
+
   it("shows aggregates only for prefectures and counties across all five map levels", async () => {
     const county = {
       ...sampleRegion,
@@ -447,6 +500,9 @@ describe("OverviewPage", () => {
             regionName: "齐齐哈尔市",
             regionLevel: "PREFECTURE",
             samplePointCount: 4,
+            validCoordinateCount: 4,
+            dataQualityIssueCount: 0,
+            correctionSourceCount: 0,
             unresolvedSourceCount: 0,
           },
         ]);
@@ -463,6 +519,9 @@ describe("OverviewPage", () => {
           regionName: child.region.name,
           regionLevel: child.region.level,
           samplePointCount: child.count,
+          validCoordinateCount: child.count,
+          dataQualityIssueCount: 0,
+          correctionSourceCount: 0,
           unresolvedSourceCount: 0,
         },
       ]);
@@ -513,7 +572,7 @@ describe("OverviewPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("renders concrete sample points as non-interactive map symbols and resets them with the drawer", async () => {
+  it("renders concrete sample points as inspectable map symbols and resets them with the drawer", async () => {
     const county = {
       ...sampleRegion,
       code: "230231",
@@ -543,6 +602,9 @@ describe("OverviewPage", () => {
                 regionName: query.parentCode ? county.name : sampleRegion.name,
                 regionLevel: query.parentCode ? "COUNTY" : "PREFECTURE",
                 samplePointCount: 1,
+                validCoordinateCount: 1,
+                dataQualityIssueCount: 0,
+                correctionSourceCount: 0,
                 unresolvedSourceCount: 0,
               },
             ]),
@@ -571,22 +633,28 @@ describe("OverviewPage", () => {
       .click(await screen.findByRole("button", { name: "产情类 1" }));
 
     const symbol = await screen.findByRole("img", {
-      name: "同一跨产品样本点，农户，地图位置",
+      name: "同一跨产品样本点，农户，真实坐标 123.500000，47.500000",
     });
     fireEvent.click(symbol);
     expect(detail).not.toHaveBeenCalled();
 
     await userEvent.setup().click(screen.getByRole("button", { name: "关闭地区详情" }));
     expect(
-      screen.queryByRole("img", { name: "同一跨产品样本点，农户，地图位置" }),
+      screen.queryByRole("img", {
+        name: "同一跨产品样本点，农户，真实坐标 123.500000，47.500000",
+      }),
     ).not.toBeInTheDocument();
 
     await userEvent
       .setup()
       .click(await screen.findByRole("button", { name: "拜泉县，已核定 1 个样本点" }));
-    expect(screen.getByText("请选择分类后查看样本点")).toBeVisible();
     expect(
-      screen.queryByRole("img", { name: "同一跨产品样本点，农户，地图位置" }),
+      screen.getByText("请选择分类后逐条查看 1 个实体及坐标质量原因"),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("img", {
+        name: "同一跨产品样本点，农户，真实坐标 123.500000，47.500000",
+      }),
     ).not.toBeInTheDocument();
   });
 
@@ -632,6 +700,9 @@ describe("OverviewPage", () => {
                 regionName: query.parentCode ? county.name : sampleRegion.name,
                 regionLevel: query.parentCode ? "COUNTY" : "PREFECTURE",
                 samplePointCount: 1,
+                validCoordinateCount: 1,
+                dataQualityIssueCount: 0,
+                correctionSourceCount: 0,
                 unresolvedSourceCount: 0,
               },
             ]),
@@ -651,7 +722,7 @@ describe("OverviewPage", () => {
     await userEvent.type(screen.getByLabelText("搜索样本点"), "跨产品");
     expect(
       await screen.findByRole("img", {
-        name: "同一跨产品样本点，农户，地图位置",
+        name: "同一跨产品样本点，农户，真实坐标 123.500000，47.500000",
       }),
     ).toBeVisible();
     const listCalls = list.mock.calls.length;
@@ -665,7 +736,9 @@ describe("OverviewPage", () => {
     expect(screen.getByLabelText("搜索样本点")).toHaveValue("跨产品");
     expect(screen.getByText("同一跨产品样本点")).toBeVisible();
     expect(
-      screen.getByRole("img", { name: "同一跨产品样本点，农户，地图位置" }),
+      screen.getByRole("img", {
+        name: "同一跨产品样本点，农户，真实坐标 123.500000，47.500000",
+      }),
     ).toBeVisible();
     expect(list).toHaveBeenCalledTimes(listCalls);
     expect(icons).toHaveBeenCalledTimes(iconCalls);
@@ -1201,16 +1274,18 @@ const sampleIndicator = {
 const samplePointList = {
   regionCode: "230231",
   totalCount: 1,
+  validCoordinateCount: 1,
+  dataQualityIssueCount: 0,
+  correctionSourceCount: 0,
   unresolvedSourceCount: 0,
   categories: [
     {
       code: "PRODUCTION" as const,
       name: "产情类",
       count: 1,
-      types: [{ code: "FARMER", name: "农户", count: 1 }],
+      types: [{ code: "FARMER", name: "农户", iconKey: "farmer", count: 1 }],
     },
     { code: "MARKET" as const, name: "市场类", count: 0, types: [] },
-    { code: "LOGISTICS" as const, name: "物流节点", count: 0, types: [] },
   ],
   items: [
     {
@@ -1219,17 +1294,20 @@ const samplePointList = {
       regionCode: "230231100201",
       regionName: "众兴村",
       locationState: "VALID",
+      dataQualityReason: null,
       categories: [{ code: "PRODUCTION" as const, name: "产情类" }],
-      types: [{ code: "FARMER", name: "农户" }],
+      types: [{ code: "FARMER", name: "农户", iconKey: "farmer" }],
       products: [{ code: "CORN", name: "玉米" }],
     },
   ],
+  correctionSources: [],
 };
 const samplePointIcons = [
   {
     samplePointId: "94000000-0000-0000-0000-000000000001",
     name: "同一跨产品样本点",
-    types: [{ code: "FARMER", name: "农户" }],
+    iconKey: "farmer",
+    types: [{ code: "FARMER", name: "农户", iconKey: "farmer" }],
     longitude: 123.5,
     latitude: 47.5,
   },
@@ -1240,6 +1318,7 @@ const samplePointDetail = {
   regionCode: "230231100201",
   regionName: "众兴村",
   locationState: "VALID",
+  dataQualityReason: null,
   associations: [],
 };
 const sampleMapScope = {

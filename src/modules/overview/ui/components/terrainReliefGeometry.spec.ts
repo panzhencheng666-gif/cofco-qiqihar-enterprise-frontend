@@ -115,6 +115,9 @@ describe("projectReliefScene", () => {
           regionName: county.region.name,
           regionLevel: "COUNTY",
           samplePointCount: 17,
+          validCoordinateCount: 17,
+          dataQualityIssueCount: 0,
+          correctionSourceCount: 0,
           unresolvedSourceCount: 0,
         },
         {
@@ -122,20 +125,18 @@ describe("projectReliefScene", () => {
           regionName: village.region.name,
           regionLevel: "VILLAGE",
           samplePointCount: 3,
+          validCoordinateCount: 3,
+          dataQualityIssueCount: 0,
+          correctionSourceCount: 0,
           unresolvedSourceCount: 0,
         },
       ],
     });
 
-    expect(projection.samplePointAggregates).toEqual([
-      expect.objectContaining({
-        aggregate: expect.objectContaining({ samplePointCount: 17 }),
-        point: expect.objectContaining({
-          x: expect.any(Number),
-          y: expect.any(Number),
-        }),
-      }),
-    ]);
+    expect(projection.samplePointAggregates).toHaveLength(1);
+    expect(projection.samplePointAggregates[0]?.aggregate.samplePointCount).toBe(17);
+    expect(typeof projection.samplePointAggregates[0]?.point.x).toBe("number");
+    expect(typeof projection.samplePointAggregates[0]?.point.y).toBe("number");
     expect(projection.samplePointAggregates[0]?.point).toEqual(
       projection.features[0]?.anchor,
     );
@@ -166,6 +167,9 @@ describe("projectReliefScene", () => {
           regionName: county.region.name,
           regionLevel: "COUNTY",
           samplePointCount: 17,
+          validCoordinateCount: 17,
+          dataQualityIssueCount: 0,
+          correctionSourceCount: 0,
           unresolvedSourceCount: 0,
         },
       ],
@@ -210,24 +214,80 @@ describe("projectReliefScene", () => {
         {
           samplePointId: "94000000-0000-0000-0000-000000000001",
           name: "契约测试样本点",
-          types: [{ code: "FARMER", name: "农户" }],
+          iconKey: "farmer",
+          types: [{ code: "FARMER", name: "农户", iconKey: "farmer" }],
           longitude: 123.5,
           latitude: 47.5,
         },
       ],
     });
 
-    expect(projection.samplePointIcons).toEqual([
-      expect.objectContaining({
-        icon: expect.objectContaining({
-          samplePointId: "94000000-0000-0000-0000-000000000001",
-        }),
-        point: expect.objectContaining({
-          x: expect.any(Number),
-          y: expect.any(Number),
-        }),
-      }),
+    expect(projection.samplePointIcons).toHaveLength(1);
+    expect(projection.samplePointIcons[0]?.icon.samplePointId).toBe(
+      "94000000-0000-0000-0000-000000000001",
+    );
+    expect(typeof projection.samplePointIcons[0]?.point.x).toBe("number");
+    expect(typeof projection.samplePointIcons[0]?.point.y).toBe("number");
+  });
+
+  it("expands verified colocated entities without changing their true anchor", () => {
+    const samplePointFrame = overviewReliefFrame(false);
+    const shared = {
+      name: "并址主体",
+      iconKey: "trader",
+      types: [{ code: "TRADER", name: "贸易商", iconKey: "trader" }],
+      longitude: 123.5,
+      latitude: 47.5,
+    };
+    const projection = projectReliefScene({
+      features: [
+        polygonFeature(
+          "230202997001",
+          [
+            [123, 47],
+            [124, 47],
+            [124, 48],
+            [123, 48],
+            [123, 47],
+          ],
+          "VILLAGE",
+        ),
+      ],
+      frame: samplePointFrame,
+      points: [],
+      samplePointIcons: [
+        { ...shared, samplePointId: "94000000-0000-0000-0000-000000000011" },
+        { ...shared, samplePointId: "94000000-0000-0000-0000-000000000012" },
+        { ...shared, samplePointId: "94000000-0000-0000-0000-000000000013" },
+      ],
+    });
+
+    expect(
+      new Set(projection.samplePointIcons.map(({ point }) => `${point.x}:${point.y}`))
+        .size,
+    ).toBe(3);
+    projection.samplePointIcons.forEach((projected) => {
+      expect(projected).toHaveProperty("anchorPoint");
+      expect(projected.icon.longitude).toBe(123.5);
+      expect(projected.icon.latitude).toBe(47.5);
+    });
+  });
+
+  it("provides one non-reused professional SVG path for every retained object type", () => {
+    const iconPaths = reliefRuntime.samplePointIconPathData;
+    expect(iconPaths).toBeDefined();
+    expect(Object.keys(iconPaths ?? {})).toEqual([
+      "farmer",
+      "village-committee",
+      "agricultural-tech-station",
+      "trader",
+      "deep-processor",
+      "wholesale-market",
+      "reserve-enterprise",
+      "breeding-factory",
+      "feed-mill",
     ]);
+    expect(new Set(Object.values(iconPaths ?? {})).size).toBe(9);
   });
   it("hides only the raised component's stationary ground outline", () => {
     expect(shouldShowGroundOutlineSegment(["230200"], "")).toBe(true);
@@ -1195,6 +1255,9 @@ describe("polygon-contained relief overlay layout", () => {
                 regionName: target.region.name,
                 regionLevel: level,
                 samplePointCount: 7,
+                validCoordinateCount: 7,
+                dataQualityIssueCount: 0,
+                correctionSourceCount: 0,
                 unresolvedSourceCount: 0,
               },
             ];
@@ -1331,6 +1394,9 @@ describe("polygon-contained relief overlay layout", () => {
             regionName: target.region.name,
             regionLevel: target.region.level,
             samplePointCount: 7,
+            validCoordinateCount: 7,
+            dataQualityIssueCount: 0,
+            correctionSourceCount: 0,
             unresolvedSourceCount: 0,
           },
         ],

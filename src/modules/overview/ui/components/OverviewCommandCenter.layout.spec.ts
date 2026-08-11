@@ -25,12 +25,12 @@ describe("Overview command center navigation layout", () => {
     expect(markerRule?.[1]).toMatch(/transform:\s*translate\(-50%,\s*-50%\)/);
   });
 
-  it("keeps concrete map symbols visually present but non-interactive", () => {
+  it("keeps concrete map symbols keyboard inspectable for collision disclosure", () => {
     const css = readFileSync(resolve("src/app/styles/global.css"), "utf8");
     const iconRule = css.match(/\.overview-sample-point-map-icon\s*\{([^}]*)\}/s);
 
-    expect(iconRule?.[1]).toMatch(/pointer-events:\s*none/);
-    expect(iconRule?.[1]).toMatch(/cursor:\s*default/);
+    expect(iconRule?.[1]).toMatch(/pointer-events:\s*auto/);
+    expect(iconRule?.[1]).toMatch(/cursor:\s*help/);
   });
 
   it("does not let a renderer rebuild cancel the independently owned details-frame transition", () => {

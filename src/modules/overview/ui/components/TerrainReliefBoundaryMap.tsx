@@ -57,6 +57,28 @@ const BACKGROUND_Z = -900;
 // makes internal boundaries render through the parent's vertical wall.
 const OVERLAY_Z = 4;
 
+/**
+ * Presentation assets keyed only by the authoritative object-type iconKey.
+ * The object-type matrix itself remains backend governed; unknown keys fail
+ * closed instead of silently receiving a generic building or text badge.
+ */
+export const samplePointIconPathData: Readonly<Record<string, string>> = {
+  farmer:
+    "M12 21V7m0 5C8.2 11.7 6 9.3 6 6c3.7 0 6 2.4 6 6Zm0 4c3.8-.3 6-2.7 6-6-3.7 0-6 2.4-6 6ZM8 21h8",
+  "village-committee": "M3 9 12 4l9 5M5 10h14M6 10v8m4-8v8m4-8v8m4-8v8M4 21h16M9 7h6",
+  "agricultural-tech-station":
+    "M9 3h6m-5 0v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3m-6 12h8m-5 2c2-3 4-3 6-2",
+  trader:
+    "M4 5h16l1 5a3 3 0 0 1-5 2 3 3 0 0 1-4 0 3 3 0 0 1-4 0 3 3 0 0 1-5-2l1-5Zm1 8v8h14v-8m-9 8v-5h4v5",
+  "deep-processor": "M3 21V10l6 4v-4l6 4V7h5v14H3Zm13-17h3v3h-3M6 18h2m3 0h2m3 0h2",
+  "wholesale-market":
+    "M3 9h18l-2-5H5L3 9Zm1 0a3 3 0 0 0 5 2 3 3 0 0 0 6 0 3 3 0 0 0 5-2v11H4V9Zm4 7h3v4m3-4h3v4",
+  "reserve-enterprise":
+    "M6 21V8a6 4 0 0 1 12 0v13M6 8h12M8 12h8m-8 4h8m-8 4h8M3 21h18M12 3v5",
+  "breeding-factory": "M3 21V9l9-6 9 6v12M7 21v-8h10v8M9 13l3 3 3-3M6 8h12M5 21h14",
+  "feed-mill": "M7 3h10l-1 7-4 5-4-5-1-7Zm5 12v6m-4 0h8M5 10h14M9 7h6m-1 10h4l2 4",
+};
+
 function commandStageWidth() {
   const scale = Math.min(1, window.innerHeight / STAGE_HEIGHT);
   return Math.max(1280, window.innerWidth / Math.max(scale, 0.001));
@@ -1033,17 +1055,43 @@ export default function TerrainReliefBoundaryMap({
               </button>
             );
           })}
-        {activeProjection.samplePointIcons.map(({ icon, point }) => (
-          <span
-            aria-label={`${icon.name}，${icon.types.map((type) => type.name).join("、")}，地图位置`}
-            className={`overview-sample-point-map-icon is-${samplePointSymbolKind(icon)}`}
-            key={icon.samplePointId}
-            role="img"
-            style={{ left: point.x, top: point.y }}
-          >
-            <SamplePointMapSymbol kind={samplePointSymbolKind(icon)} />
-          </span>
-        ))}
+        {activeProjection.samplePointIcons.map(({ anchorPoint, icon, point }) => {
+          const expanded =
+            Math.abs(anchorPoint.x - point.x) > 0.01 ||
+            Math.abs(anchorPoint.y - point.y) > 0.01;
+          const distance = Math.hypot(point.x - anchorPoint.x, point.y - anchorPoint.y);
+          const angle =
+            (Math.atan2(point.y - anchorPoint.y, point.x - anchorPoint.x) * 180) /
+            Math.PI;
+          return (
+            <Fragment key={icon.samplePointId}>
+              {expanded && (
+                <span
+                  aria-hidden="true"
+                  className="overview-sample-point-map-leader"
+                  style={{
+                    left: anchorPoint.x,
+                    top: anchorPoint.y,
+                    transform: `rotate(${angle}deg)`,
+                    width: distance,
+                  }}
+                />
+              )}
+              <span
+                aria-label={`${icon.name}，${icon.types.map((type) => type.name).join("、")}，真实坐标 ${icon.longitude.toFixed(6)}，${icon.latitude.toFixed(6)}`}
+                className={`overview-sample-point-map-icon is-${icon.iconKey ?? "unknown"}`}
+                data-anchor-latitude={icon.latitude}
+                data-anchor-longitude={icon.longitude}
+                role="img"
+                style={{ left: point.x, top: point.y }}
+                tabIndex={0}
+                title={`真实坐标：${icon.longitude.toFixed(6)}, ${icon.latitude.toFixed(6)}`}
+              >
+                <SamplePointMapSymbol iconKey={icon.iconKey} />
+              </span>
+            </Fragment>
+          );
+        })}
         {!activeProjection.backdrop &&
           !activeProjection.features.length &&
           activeProjection.points.length > 0 && (
@@ -1084,52 +1132,12 @@ function reliefRegionLabel({
   return `${region.name}，已核定 ${count} 个样本点，${action}`;
 }
 
-type SamplePointSymbolKind = "agriculture" | "civic" | "facility" | "rail" | "road";
-
-function samplePointSymbolKind(icon: OverviewSamplePointIcon): SamplePointSymbolKind {
-  const identity = icon.types
-    .flatMap(({ code, name }) => [code, name])
-    .join(" ")
-    .toUpperCase();
-  if (/RAIL|TRAIN|铁路|火车/.test(identity)) return "rail";
-  if (/ROAD|HIGHWAY|TRUCK|公路|物流/.test(identity)) return "road";
-  if (/VILLAGE|COMMITTEE|GOV|村委/.test(identity)) return "civic";
-  if (/FARMER|AGRI|农户|农技/.test(identity)) return "agriculture";
-  return "facility";
-}
-
-function SamplePointMapSymbol({ kind }: { kind: SamplePointSymbolKind }) {
-  if (kind === "agriculture") {
-    return (
-      <svg aria-hidden="true" viewBox="0 0 24 24">
-        <path d="M12 21V6m0 5C8 10 6.5 7.5 6.5 5 10 5 12 7.3 12 11Zm0 4c4-1 5.5-3.5 5.5-6-3.5 0-5.5 2.3-5.5 6Z" />
-      </svg>
-    );
-  }
-  if (kind === "civic") {
-    return (
-      <svg aria-hidden="true" viewBox="0 0 24 24">
-        <path d="m4 9 8-5 8 5M6 10v8m4-8v8m4-8v8m4-8v8M4 20h16" />
-      </svg>
-    );
-  }
-  if (kind === "rail") {
-    return (
-      <svg aria-hidden="true" viewBox="0 0 24 24">
-        <path d="M7 4h10a2 2 0 0 1 2 2v10a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V6a2 2 0 0 1 2-2Zm-2 8h14M8 22l2-3m6 3-2-3M8 8h2m4 0h2" />
-      </svg>
-    );
-  }
-  if (kind === "road") {
-    return (
-      <svg aria-hidden="true" viewBox="0 0 24 24">
-        <path d="M3 8h11v9H3V8Zm11 3h4l3 3v3h-7v-6ZM7 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm10 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" />
-      </svg>
-    );
-  }
+function SamplePointMapSymbol({ iconKey }: { iconKey: string | undefined }) {
+  const pathData = iconKey ? samplePointIconPathData[iconKey] : undefined;
+  if (!pathData) return null;
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path d="M5 21V7l7-4 7 4v14M9 10h2m2 0h2m-6 4h2m2 0h2m-6 4h6" />
+      <path d={pathData} />
     </svg>
   );
 }
@@ -1776,6 +1784,7 @@ export function reframeReliefScene(
     })),
     samplePointIcons: source.samplePointIcons.map((samplePoint) => ({
       ...samplePoint,
+      anchorPoint: point(samplePoint.anchorPoint),
       point: point(samplePoint.point),
     })),
   };

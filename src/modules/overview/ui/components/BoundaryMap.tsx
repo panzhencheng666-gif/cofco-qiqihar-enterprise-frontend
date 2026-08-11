@@ -186,7 +186,7 @@ function BoundaryMapAccessibility({
       ))}
       {samplePointIcons.map((icon) => (
         <span
-          aria-label={`${icon.name}，${icon.types.map((type) => type.name).join("、")}，地图位置`}
+          aria-label={`${icon.name}，${icon.types.map((type) => type.name).join("、")}，真实坐标 ${icon.longitude.toFixed(6)}，${icon.latitude.toFixed(6)}`}
           key={`accessible-sample-point-${icon.samplePointId}`}
           role="img"
         />

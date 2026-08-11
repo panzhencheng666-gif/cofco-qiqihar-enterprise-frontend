@@ -124,14 +124,18 @@ export function OverviewSamplePointPanel({
         setResultState("unavailable");
         setResultIssue("样本点列表加载失败，请稍后重试。");
       });
-    repository
-      .icons(filters)
-      .then((icons) => active && onIconsChange(icons))
-      .catch(() => {
-        if (!active) return;
-        onIconsChange([]);
-        setIconIssue("样本点图标加载失败，请稍后重试。");
-      });
+    if (region.level === "PREFECTURE") {
+      onIconsChange([]);
+    } else {
+      repository
+        .icons(filters)
+        .then((icons) => active && onIconsChange(icons))
+        .catch(() => {
+          if (!active) return;
+          onIconsChange([]);
+          setIconIssue("样本点图标加载失败，请稍后重试。");
+        });
+    }
     return () => {
       active = false;
     };
@@ -141,6 +145,7 @@ export function OverviewSamplePointPanel({
     query,
     refreshSequence,
     region.code,
+    region.level,
     repository,
     typeCode,
     year,
@@ -223,6 +228,7 @@ export function OverviewSamplePointPanel({
   const selectedCategory = catalog?.categories.find(
     (category) => category.code === categoryCode,
   );
+  const qualityScope = result ?? catalog;
   const issue = detailIssue ?? iconIssue ?? resultIssue ?? catalogIssue;
 
   return (
@@ -293,15 +299,40 @@ export function OverviewSamplePointPanel({
           />
         </label>
 
-        {result?.unresolvedSourceCount ? (
+        {qualityScope && qualityScope.totalCount > 0 ? (
+          <div className="overview-sample-point-quality-summary" role="status">
+            <strong>
+              {region.level === "PREFECTURE"
+                ? `实体核对：有效坐标 ${qualityScope.validCoordinateCount} 个 + 坐标待纠正 ${qualityScope.dataQualityIssueCount} 个 = 共 ${qualityScope.totalCount} 个。`
+                : `实体核对：可显示图标 ${qualityScope.validCoordinateCount} 个 + 坐标待纠正 ${qualityScope.dataQualityIssueCount} 个 = 共 ${qualityScope.totalCount} 个。`}
+            </strong>
+            {qualityScope.dataQualityIssueCount > 0 ? (
+              <span>
+                {categoryCode
+                  ? "待纠正实体保留在下方清单，当前不显示地图图标。"
+                  : "当前不显示待纠正实体的地图图标；请选择分类进入坐标纠错清单。"}
+              </span>
+            ) : null}
+            {region.level === "PREFECTURE" ? (
+              <span>市级聚合层不显示具体样本点图标，请进入区县查看。</span>
+            ) : null}
+          </div>
+        ) : null}
+        {qualityScope?.correctionSourceCount ? (
           <p role="status">
-            {result.unresolvedSourceCount}{" "}
-            条正式来源缺少或存在异常坐标，已计数但不显示图标。
+            {qualityScope.correctionSourceCount}{" "}
+            条正式来源尚未关联稳定主体，已进入纠错清单。
           </p>
         ) : null}
 
         <div aria-label="样本点列表" className="overview-sample-point-list">
-          {!categoryCode ? <p>请选择分类后查看样本点</p> : null}
+          {!categoryCode ? (
+            <p>
+              {catalog
+                ? `请选择分类后逐条查看 ${catalog.totalCount} 个实体及坐标质量原因`
+                : "请选择分类后查看样本点"}
+            </p>
+          ) : null}
           {result?.items.map((item) => (
             <button
               aria-pressed={selectedId === item.samplePointId}
@@ -312,6 +343,9 @@ export function OverviewSamplePointPanel({
               <strong>{item.name}</strong>
               <span>{item.types.map((type) => type.name).join(" / ")}</span>
               <small>{item.products.map((product) => product.name).join("、")}</small>
+              {item.dataQualityReason ? (
+                <em>{dataQualityLabel(item.dataQualityReason)}</em>
+              ) : null}
             </button>
           ))}
           {result && !result.items.length ? <p>当前条件下暂无样本点。</p> : null}
@@ -337,6 +371,11 @@ export function OverviewSamplePointPanel({
               <h4>{detail.name}</h4>
               <span>{detail.regionName}</span>
             </header>
+            {detail.dataQualityReason ? (
+              <p className="overview-sample-point-detail-quality" role="status">
+                {dataQualityLabel(detail.dataQualityReason)}
+              </p>
+            ) : null}
             {detail.associations.map((association, index) => (
               <article
                 key={`${association.categoryCode}-${association.typeCode}-${association.productCode}-${association.sourceRole}-${association.occurrenceDate}-${index}`}
@@ -377,4 +416,18 @@ function loadStateLabel(state: LoadState) {
   if (state === "loading") return "同步中";
   if (state === "unavailable") return "不可用";
   return "⌃";
+}
+
+function dataQualityLabel(reason: string) {
+  const labels: Readonly<Record<string, string>> = {
+    COORDINATE_OUT_OF_RANGE: "经纬度超出范围",
+    CONTAINMENT_EVIDENCE_STALE: "行政边界校验已失效",
+    DUPLICATE_COORDINATE_UNVERIFIED: "重复坐标尚未核实",
+    LOCATION_INVALID: "坐标无效",
+    LOCATION_MISSING: "缺少坐标",
+    LOCATION_OUTSIDE_REGION: "坐标超出所属地区",
+    OUTSIDE_VALIDITY_WINDOW: "坐标不在有效期内",
+    REGION_MISSING: "所属地区缺失",
+  };
+  return `坐标质量：${labels[reason] ?? reason}`;
 }

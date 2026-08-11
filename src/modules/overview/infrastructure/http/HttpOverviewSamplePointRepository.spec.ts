@@ -11,6 +11,9 @@ describe("HttpOverviewSamplePointRepository", () => {
         regionName: "契约测试村",
         regionLevel: "VILLAGE",
         samplePointCount: 3,
+        validCoordinateCount: 2,
+        dataQualityIssueCount: 1,
+        correctionSourceCount: 0,
         unresolvedSourceCount: 1,
       },
     ]);
@@ -34,6 +37,9 @@ describe("HttpOverviewSamplePointRepository", () => {
       regionName: "契约测试村",
       regionLevel: "VILLAGE",
       samplePointCount: 3,
+      validCoordinateCount: 2,
+      dataQualityIssueCount: 1,
+      correctionSourceCount: 0,
       unresolvedSourceCount: 1,
     });
     expect(result[0]).not.toHaveProperty("longitude");
@@ -43,13 +49,16 @@ describe("HttpOverviewSamplePointRepository", () => {
     const get = respondingWith({
       regionCode: "230202997001",
       totalCount: 1,
+      validCoordinateCount: 0,
+      dataQualityIssueCount: 1,
+      correctionSourceCount: 1,
       unresolvedSourceCount: 1,
       categories: [
         {
           code: "PRODUCTION",
           name: "产情类",
           count: 1,
-          types: [{ code: "FARMER", name: "农户", count: 1 }],
+          types: [{ code: "FARMER", name: "农户", iconKey: "farmer", count: 1 }],
         },
       ],
       items: [
@@ -59,9 +68,18 @@ describe("HttpOverviewSamplePointRepository", () => {
           regionCode: "230202997001",
           regionName: "契约测试村",
           locationState: "VALID",
+          dataQualityReason: "MISSING_COORDINATE",
           categories: [{ code: "PRODUCTION", name: "产情类" }],
-          types: [{ code: "FARMER", name: "农户" }],
+          types: [{ code: "FARMER", name: "农户", iconKey: "farmer" }],
           products: [{ code: "CORN", name: "玉米" }],
+        },
+      ],
+      correctionSources: [
+        {
+          categoryCode: "PRODUCTION",
+          sourceRecordId: "source-1",
+          sourceRole: "SURVEY",
+          dataQualityReason: "SUBJECT_IDENTITY_MISSING",
         },
       ],
     });
@@ -92,7 +110,8 @@ describe("HttpOverviewSamplePointRepository", () => {
       {
         samplePointId: "94000000-0000-0000-0000-000000000001",
         name: "同一跨产品样本点",
-        types: [{ code: "FARMER", name: "农户" }],
+        iconKey: "farmer",
+        types: [{ code: "FARMER", name: "农户", iconKey: "farmer" }],
         longitude: 123.9,
         latitude: 47.3,
       },
@@ -124,6 +143,7 @@ describe("HttpOverviewSamplePointRepository", () => {
       regionCode: "230202997001",
       regionName: "契约测试村",
       locationState: "VALID",
+      dataQualityReason: null,
       associations: [
         {
           categoryCode: "PRODUCTION",

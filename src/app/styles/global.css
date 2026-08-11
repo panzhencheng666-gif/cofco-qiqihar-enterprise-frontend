@@ -3256,9 +3256,17 @@ select:focus-visible {
   box-shadow:
     0 0 0 3px rgb(32 211 234 / 14%),
     0 7px 16px rgb(0 28 48 / 46%);
-  cursor: default;
-  pointer-events: none;
+  cursor: help;
+  pointer-events: auto;
   transform: translate(-50%, -100%) rotate(-45deg);
+}
+.overview-sample-point-map-leader {
+  position: absolute;
+  z-index: 0;
+  height: 1px;
+  border-top: 1px dashed rgb(177 243 255 / 72%);
+  pointer-events: none;
+  transform-origin: 0 0;
 }
 .overview-sample-point-map-icon svg {
   width: 100%;
@@ -3270,18 +3278,29 @@ select:focus-visible {
   stroke-width: 1.8;
   transform: rotate(45deg);
 }
-.overview-sample-point-map-icon.is-agriculture {
+.overview-sample-point-map-icon.is-farmer,
+.overview-sample-point-map-icon.is-agricultural-tech-station {
   color: #fff3a3;
   background: rgb(74 103 24 / 96%);
 }
-.overview-sample-point-map-icon.is-civic {
+.overview-sample-point-map-icon.is-village-committee,
+.overview-sample-point-map-icon.is-wholesale-market {
   color: #d8f8ff;
   background: rgb(20 82 132 / 96%);
 }
-.overview-sample-point-map-icon.is-rail,
-.overview-sample-point-map-icon.is-road {
+.overview-sample-point-map-icon.is-trader,
+.overview-sample-point-map-icon.is-reserve-enterprise {
   color: #ffe6b1;
   background: rgb(125 72 20 / 96%);
+}
+.overview-sample-point-map-icon.is-deep-processor,
+.overview-sample-point-map-icon.is-feed-mill {
+  color: #d9f7ff;
+  background: rgb(38 70 105 / 96%);
+}
+.overview-sample-point-map-icon.is-breeding-factory {
+  color: #ffe0c6;
+  background: rgb(111 57 68 / 96%);
 }
 .overview-sample-point-map-icon:hover,
 .overview-sample-point-map-icon:focus-visible {
@@ -4053,6 +4072,23 @@ select:focus-visible {
   color: #ffe2a0;
   font-size: 9px;
 }
+.overview-sample-point-quality-summary {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 3px;
+  margin: 0 10px 7px;
+  padding: 7px 9px;
+  border: 1px solid rgb(255 220 126 / 46%);
+  border-radius: 7px;
+  color: #ffe8aa;
+  background: rgb(100 65 14 / 28%);
+  font-size: 9px;
+  line-height: 1.45;
+}
+.overview-sample-point-quality-summary strong {
+  color: #fff4c8;
+  font-size: 10px;
+}
 .overview-sample-point-list {
   display: grid;
   flex: 1 1 0;
@@ -4100,6 +4136,15 @@ select:focus-visible {
 .overview-sample-point-detail h5,
 .overview-sample-point-detail p {
   margin: 0 0 4px;
+}
+.overview-sample-point-detail .overview-sample-point-detail-quality {
+  margin-bottom: 8px;
+  padding: 5px 7px;
+  border: 1px solid rgb(255 220 126 / 36%);
+  border-radius: 6px;
+  color: #ffe4a1;
+  background: rgb(100 65 14 / 20%);
+  font-size: 9px;
 }
 .overview-sample-point-detail dl > div {
   display: flex;

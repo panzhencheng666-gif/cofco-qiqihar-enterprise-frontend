@@ -5,12 +5,16 @@ import type { OverviewSamplePointCategoryCode } from "../../domain/overviewSampl
 import type { HttpClient } from "../../../../shared/api/HttpClient";
 import { queryString } from "../../../../shared/api/HttpClient";
 
-const categoryCodeSchema = z.enum(["PRODUCTION", "MARKET", "LOGISTICS"]);
+const categoryCodeSchema = z.enum(["PRODUCTION", "MARKET"]);
 const regionLevelSchema = z.enum(["PREFECTURE", "COUNTY", "TOWNSHIP", "VILLAGE"]);
 const uuidTextSchema = z
   .string()
   .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
-const typeRefSchema = z.object({ code: z.string(), name: z.string() });
+const typeRefSchema = z.object({
+  code: z.string(),
+  name: z.string(),
+  iconKey: z.string().min(1),
+});
 
 const aggregatesSchema = z.object({
   data: z.array(
@@ -19,6 +23,9 @@ const aggregatesSchema = z.object({
       regionName: z.string(),
       regionLevel: regionLevelSchema,
       samplePointCount: z.number(),
+      validCoordinateCount: z.number(),
+      dataQualityIssueCount: z.number(),
+      correctionSourceCount: z.number(),
       unresolvedSourceCount: z.number(),
     }),
   ),
@@ -28,6 +35,9 @@ const listSchema = z.object({
   data: z.object({
     regionCode: z.string(),
     totalCount: z.number(),
+    validCoordinateCount: z.number(),
+    dataQualityIssueCount: z.number(),
+    correctionSourceCount: z.number(),
     unresolvedSourceCount: z.number(),
     categories: z.array(
       z.object({
@@ -44,9 +54,18 @@ const listSchema = z.object({
         regionCode: z.string(),
         regionName: z.string(),
         locationState: z.string(),
+        dataQualityReason: z.string().nullable(),
         categories: z.array(z.object({ code: categoryCodeSchema, name: z.string() })),
         types: z.array(typeRefSchema),
         products: z.array(z.object({ code: z.string(), name: z.string() })),
+      }),
+    ),
+    correctionSources: z.array(
+      z.object({
+        categoryCode: categoryCodeSchema,
+        sourceRecordId: z.string(),
+        sourceRole: z.enum(["SURVEY", "ORIGIN", "DESTINATION"]),
+        dataQualityReason: z.string(),
       }),
     ),
   }),
@@ -57,6 +76,7 @@ const iconsSchema = z.object({
     z.object({
       samplePointId: uuidTextSchema,
       name: z.string(),
+      iconKey: z.string().min(1),
       types: z.array(typeRefSchema),
       longitude: z.number(),
       latitude: z.number(),
@@ -71,6 +91,7 @@ const detailSchema = z.object({
     regionCode: z.string(),
     regionName: z.string(),
     locationState: z.string(),
+    dataQualityReason: z.string().nullable(),
     associations: z.array(
       z.object({
         categoryCode: categoryCodeSchema,

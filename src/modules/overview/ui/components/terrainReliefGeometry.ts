@@ -82,6 +82,7 @@ export interface ReliefLocationPoint {
 }
 
 export interface ReliefSamplePointIcon {
+  anchorPoint: ReliefPoint;
   icon: OverviewSamplePointIcon;
   point: ReliefPoint;
 }
@@ -267,10 +268,15 @@ export function projectReliefScene({
     point: project(position),
     region,
   }));
-  const projectedSamplePointIcons = samplePointIcons.map((icon) => ({
-    icon,
-    point: project([icon.longitude, icon.latitude]),
-  }));
+  const projectedSamplePointIcons = expandColocatedSamplePointIcons(
+    samplePointIcons.map((icon) => {
+      const anchorPoint = project([icon.longitude, icon.latitude]);
+      return { anchorPoint, icon, point: anchorPoint };
+    }),
+    [projectedBackdrop, ...projectedFeatures].filter(
+      (surface): surface is ReliefSurface => Boolean(surface),
+    ),
+  );
   // One administrative region is one map entity even when its source geometry
   // is a MultiPolygon. A single canonical label selects the complete boundary;
   // detached components must never become independently raised overlays.
@@ -337,6 +343,91 @@ export function projectReliefScene({
     samplePointAggregates: projectedSamplePointAggregates,
     samplePointIcons: projectedSamplePointIcons,
   };
+}
+
+/**
+ * Exact co-location is a presentation collision, never an entity merge or a
+ * coordinate rewrite. One marker remains on the governed anchor and the other
+ * markers expand to nearby in-polygon display points. Every result retains its
+ * immutable anchor so the UI can draw a leader and expose the true longitude
+ * and latitude to assistive technology.
+ */
+function expandColocatedSamplePointIcons(
+  icons: readonly ReliefSamplePointIcon[],
+  surfaces: readonly ReliefSurface[],
+) {
+  const groups = new Map<string, ReliefSamplePointIcon[]>();
+  icons.forEach((icon) => {
+    const key = `${icon.icon.longitude.toFixed(12)}:${icon.icon.latitude.toFixed(12)}`;
+    const group = groups.get(key) ?? [];
+    group.push(icon);
+    groups.set(key, group);
+  });
+
+  groups.forEach((group) => {
+    if (group.length < 2) return;
+    const anchor = group[0]?.anchorPoint;
+    if (!anchor) return;
+    const polygon = surfaces
+      .flatMap(({ polygons }) => polygons)
+      .find((candidate) => pointInReliefPolygon(anchor, candidate));
+    if (!polygon) return;
+
+    const occupied = new Set([reliefPointKey(anchor)]);
+    [...group]
+      .sort((left, right) =>
+        left.icon.samplePointId.localeCompare(right.icon.samplePointId),
+      )
+      .slice(1)
+      .forEach((entry, index) => {
+        const expanded = colocatedDisplayPoint(
+          anchor,
+          polygon,
+          index + 1,
+          group.length,
+          occupied,
+        );
+        entry.point = expanded;
+        occupied.add(reliefPointKey(expanded));
+      });
+  });
+  return icons;
+}
+
+function colocatedDisplayPoint(
+  anchor: ReliefPoint,
+  polygon: ReliefPolygon,
+  ordinal: number,
+  count: number,
+  occupied: ReadonlySet<string>,
+) {
+  const preferredAngle = -Math.PI / 2 + (Math.PI * 2 * ordinal) / count;
+  const radii = [30, 24, 18, 14, 10, 7, 4, 2, 1, 0.5];
+  const angleOffsets = Array.from({ length: 48 }, (_, index) => {
+    if (index === 0) return 0;
+    const step = Math.ceil(index / 2);
+    return ((index % 2 ? step : -step) * Math.PI) / 24;
+  });
+  for (const radius of radii) {
+    for (const angleOffset of angleOffsets) {
+      const angle = preferredAngle + angleOffset;
+      const candidate = {
+        x: anchor.x + Math.cos(angle) * radius,
+        y: anchor.y + Math.sin(angle) * radius,
+      };
+      if (
+        pointInReliefPolygon(candidate, polygon) &&
+        !occupied.has(reliefPointKey(candidate))
+      ) {
+        return candidate;
+      }
+    }
+  }
+  return anchor;
+}
+
+function reliefPointKey(point: ReliefPoint) {
+  return `${point.x.toFixed(6)}:${point.y.toFixed(6)}`;
 }
 
 function projectSurface(

@@ -1,16 +1,20 @@
-export type OverviewSamplePointCategoryCode = "PRODUCTION" | "MARKET" | "LOGISTICS";
+export type OverviewSamplePointCategoryCode = "PRODUCTION" | "MARKET";
 
 export interface OverviewSamplePointAggregate {
   regionCode: string;
   regionName: string;
   regionLevel: "PREFECTURE" | "COUNTY" | "TOWNSHIP" | "VILLAGE";
   samplePointCount: number;
+  validCoordinateCount: number;
+  dataQualityIssueCount: number;
+  correctionSourceCount: number;
   unresolvedSourceCount: number;
 }
 
 export interface OverviewSamplePointTypeRef {
   code: string;
   name: string;
+  iconKey: string;
 }
 
 export interface OverviewSamplePointCategoryRef {
@@ -38,6 +42,7 @@ export interface OverviewSamplePointListItem {
   regionCode: string;
   regionName: string;
   locationState: string;
+  dataQualityReason: string | null;
   categories: readonly OverviewSamplePointCategoryRef[];
   types: readonly OverviewSamplePointTypeRef[];
   products: readonly OverviewSamplePointProductRef[];
@@ -46,14 +51,26 @@ export interface OverviewSamplePointListItem {
 export interface OverviewSamplePointList {
   regionCode: string;
   totalCount: number;
+  validCoordinateCount: number;
+  dataQualityIssueCount: number;
+  correctionSourceCount: number;
   unresolvedSourceCount: number;
   categories: readonly OverviewSamplePointCategoryCount[];
   items: readonly OverviewSamplePointListItem[];
+  correctionSources: readonly OverviewSamplePointCorrectionSource[];
+}
+
+export interface OverviewSamplePointCorrectionSource {
+  categoryCode: OverviewSamplePointCategoryCode;
+  sourceRecordId: string;
+  sourceRole: "SURVEY" | "ORIGIN" | "DESTINATION";
+  dataQualityReason: string;
 }
 
 export interface OverviewSamplePointIcon {
   samplePointId: string;
   name: string;
+  iconKey: string;
   types: readonly OverviewSamplePointTypeRef[];
   longitude: number;
   latitude: number;
@@ -84,5 +101,6 @@ export interface OverviewSamplePointDetail {
   regionCode: string;
   regionName: string;
   locationState: string;
+  dataQualityReason: string | null;
   associations: readonly OverviewSamplePointAssociation[];
 }

@@ -677,7 +677,6 @@ export function OverviewPage({
         {...(samplePointRepository &&
         year !== undefined &&
         selectedRegion &&
-        selectedRegion.level !== "PREFECTURE" &&
         !selectedRegion.mapContextOnly
           ? {
               samplePoints: (
