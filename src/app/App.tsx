@@ -387,9 +387,7 @@ export function App({
     return (
       <OverviewPage
         repository={dependencies.overviewRepository ?? overviewRepository}
-        realtimeStream={
-          dependencies.overviewRealtimeStream ?? overviewRealtimeStream
-        }
+        realtimeStream={dependencies.overviewRealtimeStream ?? overviewRealtimeStream}
         samplePointRepository={
           dependencies.overviewSamplePointRepository ?? overviewSamplePointRepository
         }

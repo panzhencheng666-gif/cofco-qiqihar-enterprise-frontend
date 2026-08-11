@@ -278,10 +278,14 @@ describe("SupplyAccountPage", () => {
         />,
       );
 
-    const first = renderPage({ values: { regionCode: "230200", periodCode: "2026-Q3" } });
+    const first = renderPage({
+      values: { regionCode: "230200", periodCode: "2026-Q3" },
+    });
     expect(await screen.findByText("-0.125")).toBeVisible();
     expect(screen.getByRole("option", { name: /2026年第三季度/ })).toBeVisible();
-    expect(screen.getByText(/当前范围：产品 RICE；调查期间 2026年 Q3；营销年度2026\/27/)).toBeVisible();
+    expect(
+      screen.getByText(/当前范围：产品 RICE；调查期间 2026年 Q3；营销年度2026\/27/),
+    ).toBeVisible();
 
     await user.selectOptions(screen.getByLabelText("历史结果版本"), "q3-v1");
     expect(await screen.findByText("-1.250")).toBeVisible();

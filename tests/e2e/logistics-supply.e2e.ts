@@ -20,6 +20,20 @@ test("logistics review and supply provenance calculation close one Chromium work
       return json({
         data: products.map((product) => ({ ...product, code: product.id })),
       });
+    if (url.pathname === "/api/v1/master-data/supply-survey-periods")
+      return json({
+        data: [
+          {
+            code: "2026-Q3",
+            name: "2026年第三季度",
+            surveyYear: 2026,
+            surveyQuarter: "Q3",
+            precision: "QUARTER",
+            marketingYearCode: "2026/27",
+            marketingYearName: "2026/27营销年度",
+          },
+        ],
+      });
     if (url.pathname === "/api/v1/regions")
       return json({
         data: [{ id: "230200", label: "齐齐哈尔市", level: "PREFECTURE" }],
@@ -112,7 +126,7 @@ test("logistics review and supply provenance calculation close one Chromium work
   await expect(page.getByRole("cell", { name: "待审核" })).toBeVisible();
 
   await page.goto(
-    "/#/pages/SUPPLY/ACCOUNT/CORN?filter.regionCode=230200&filter.marketingYear=2026%2F27",
+    "/#/pages/SUPPLY/ACCOUNT/CORN?filter.regionCode=230200&filter.periodCode=2026-Q3",
   );
   await expect(page.getByRole("heading", { name: /供需平衡账户/ })).toBeVisible();
   await expect(page.getByText("-0.250")).toBeVisible();
@@ -127,7 +141,7 @@ test("logistics review and supply provenance calculation close one Chromium work
     .toMatchObject({
       productCode: "CORN",
       regionCode: "230200",
-      marketingYear: "2026/27",
+      periodCode: "2026-Q3",
       inputSetId: "input-set-9",
       expectedDecisionVersion: 4,
       adjustmentProposalReason: "库存差异经复核",
@@ -222,10 +236,10 @@ const supplyDefinition = {
         options: [],
       },
       {
-        code: "marketingYear",
-        label: "营销年度",
-        control: "text",
-        placeholder: "请输入营销年度",
+        code: "periodCode",
+        label: "调查期间",
+        control: "select",
+        placeholder: "请选择调查年度或季度",
         options: [],
       },
     ],
@@ -288,10 +302,16 @@ const supplyAccount = {
   id: "run-1",
   productCode: "CORN",
   regionCode: "230200",
+  periodCode: "2026-Q3",
+  surveyYear: 2026,
+  surveyQuarter: "Q3",
+  periodPrecision: "QUARTER",
   marketingYear: "2026/27",
   resultVersion: 9,
+  supersedesResultVersion: null,
   decisionVersion: 4,
   resultState: "FORMAL",
+  temporalGovernanceState: "CONFIRMED",
   validationCodes: [],
   totalSupply: "10.000",
   totalUse: "8.000",
@@ -356,6 +376,10 @@ const supplyAccount = {
 const supplyInputWorkspace = {
   productCode: "CORN",
   regionCode: "230200",
+  periodCode: "2026-Q3",
+  surveyYear: 2026,
+  surveyQuarter: "Q3",
+  periodPrecision: "QUARTER",
   marketingYear: "2026/27",
   inputSetVersion: 9,
   latestInputSetId: "input-set-9",

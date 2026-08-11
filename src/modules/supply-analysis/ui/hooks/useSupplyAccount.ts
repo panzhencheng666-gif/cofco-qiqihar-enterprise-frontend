@@ -79,7 +79,9 @@ export function useSupplyAccount({
         ? accounts.find((account) => account.id === requestedVersion)
         : accounts[0];
       if (token === requestVersion.current) {
-        setAccountState(latest ? { key, account: latest, accounts } : { key, accounts });
+        setAccountState(
+          latest ? { key, account: latest, accounts } : { key, accounts },
+        );
         setWorkspaceState({ key, workspace });
         setSelectionState((current) => ({
           key,
@@ -120,7 +122,7 @@ export function useSupplyAccount({
 
   function openInputManager() {
     if (!workspace || !context()) {
-        setIssueState({ key: currentKey, value: "请先选择地区和调查期间并执行查询。" });
+      setIssueState({ key: currentKey, value: "请先选择地区和调查期间并执行查询。" });
       return;
     }
     setManagerState({

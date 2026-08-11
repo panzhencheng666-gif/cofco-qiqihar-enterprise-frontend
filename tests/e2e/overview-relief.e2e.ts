@@ -147,6 +147,7 @@ async function installOverviewFixture(page: Page) {
               startsOn: "2026-07-01",
             },
           ],
+          years: [2026],
         }
       : pathname.endsWith("/map-scope")
         ? {

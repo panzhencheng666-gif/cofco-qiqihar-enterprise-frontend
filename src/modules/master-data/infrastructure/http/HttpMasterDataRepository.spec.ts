@@ -23,7 +23,9 @@ describe("HttpMasterDataRepository region hierarchy", () => {
       },
     };
 
-    await expect(new HttpMasterDataRepository(http).getBusinessPeriods()).resolves.toEqual([
+    await expect(
+      new HttpMasterDataRepository(http).getBusinessPeriods(),
+    ).resolves.toEqual([
       expect.objectContaining({ id: "2026-Q3", marketingYearCode: "2026/27" }),
     ]);
   });

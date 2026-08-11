@@ -18,14 +18,14 @@
 
 ## Change to Risk to Minimum Verification
 
-| Change | Primary risk | Minimum verification |
-| --- | --- | --- |
-| V87 temporal/history migration | loss or guessed annual/quarter assignment; migration fails on empty/existing databases | Flyway empty replay plus an existing-V86 ambiguous fixture; assert data retained, governance flags, nullable quarter, precision, and replay idempotence |
-| Survey-period append-only repository/service | annual/quarter overwrite, mutable published row, broken version chain | `SupplyAccountRestIntegrationTest` with annual, Q3, Q4 and two Q3 versions; assert year expansion, quarter exact read, predecessor link, immutable update rejection |
-| Period/version HTTP contract | clients omit or invent period, lifecycle values drift | targeted backend MockMvc test and both HTTP repository contract tests |
-| Formal frontend period switch | wrong period response shown, refresh loses selected historical context | targeted `SupplyAccountPage.spec.tsx` using two periods and delayed responses |
-| Prototype frontend period switch | marketing year fallback/hardcode, summary omits scope, history replaced | targeted `RealtimeSupplyBalancePanel.spec.tsx` with two backend periods and two version lists |
-| Real stack behavior | unit mocks hide PostgreSQL/HTTP/browser mismatch | one bounded PostgreSQL + HTTP + Chromium supply scenario covering two periods/two versions and console/HTTP errors |
+| Change                                       | Primary risk                                                                           | Minimum verification                                                                                                                                                |
+| -------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V87 temporal/history migration               | loss or guessed annual/quarter assignment; migration fails on empty/existing databases | Flyway empty replay plus an existing-V86 ambiguous fixture; assert data retained, governance flags, nullable quarter, precision, and replay idempotence             |
+| Survey-period append-only repository/service | annual/quarter overwrite, mutable published row, broken version chain                  | `SupplyAccountRestIntegrationTest` with annual, Q3, Q4 and two Q3 versions; assert year expansion, quarter exact read, predecessor link, immutable update rejection |
+| Period/version HTTP contract                 | clients omit or invent period, lifecycle values drift                                  | targeted backend MockMvc test and both HTTP repository contract tests                                                                                               |
+| Formal frontend period switch                | wrong period response shown, refresh loses selected historical context                 | targeted `SupplyAccountPage.spec.tsx` using two periods and delayed responses                                                                                       |
+| Prototype frontend period switch             | marketing year fallback/hardcode, summary omits scope, history replaced                | targeted `RealtimeSupplyBalancePanel.spec.tsx` with two backend periods and two version lists                                                                       |
+| Real stack behavior                          | unit mocks hide PostgreSQL/HTTP/browser mismatch                                       | one bounded PostgreSQL + HTTP + Chromium supply scenario covering two periods/two versions and console/HTTP errors                                                  |
 
 ## Task 1: Temporal Migration and Backend Contract
 
