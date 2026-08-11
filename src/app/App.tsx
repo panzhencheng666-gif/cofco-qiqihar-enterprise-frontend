@@ -18,11 +18,19 @@ import { SupplyAccountPage } from "../modules/supply-analysis/ui/pages/SupplyAcc
 import type { ReportingRepository } from "../modules/reporting/application/ports/ReportingRepository";
 import { HttpReportingRepository } from "../modules/reporting/infrastructure/http/HttpReportingRepository";
 import { ReportingCenterPage } from "../modules/reporting/ui/pages/ReportingCenterPage";
+import { AccountPage } from "../modules/user-portal/ui/pages/AccountPage";
+import { HelpPage } from "../modules/user-portal/ui/pages/HelpPage";
+import { NotificationsPage } from "../modules/user-portal/ui/pages/NotificationsPage";
+import { SettingsPage } from "../modules/user-portal/ui/pages/SettingsPage";
 import type { WorkItemRepository } from "../modules/work-management/application/ports/WorkItemRepository";
 import { HttpWorkItemRepository } from "../modules/work-management/infrastructure/http/HttpWorkItemRepository";
 import { WorkItemsPage } from "../modules/work-management/ui/pages/WorkItemsPage";
 import type { OverviewRepository } from "../modules/overview/application/ports/OverviewRepository";
+import type { OverviewRealtimeStream } from "../modules/overview/application/ports/OverviewRealtimeStream";
+import type { OverviewSamplePointRepository } from "../modules/overview/application/ports/OverviewSamplePointRepository";
 import { HttpOverviewRepository } from "../modules/overview/infrastructure/http/HttpOverviewRepository";
+import { HttpOverviewSamplePointRepository } from "../modules/overview/infrastructure/http/HttpOverviewSamplePointRepository";
+import { BrowserOverviewRealtimeStream } from "../modules/overview/infrastructure/realtime/BrowserOverviewRealtimeStream";
 import { OverviewPage } from "../modules/overview/ui/pages/OverviewPage";
 import type { WorkItemScope } from "../modules/work-management/domain/workItem";
 import type {
@@ -32,6 +40,11 @@ import type {
 } from "../shared/application/page-definition";
 import { FetchHttpClient } from "../shared/api/HttpClient";
 import { HttpPageDefinitionGateway } from "../shared/infrastructure/page-definition/HttpPageDefinitionGateway";
+import {
+  classifyNavigationFailure,
+  navigationFailureMessage,
+  type NavigationFailureKind,
+} from "./navigation/navigationFailure";
 
 const httpClient = new FetchHttpClient();
 const masterDataRepository = new HttpMasterDataRepository(httpClient);
@@ -43,6 +56,8 @@ const supplyAccountRepository = new HttpSupplyAccountRepository(httpClient);
 const reportingRepository = new HttpReportingRepository(httpClient);
 const workItemRepository = new HttpWorkItemRepository(httpClient);
 const overviewRepository = new HttpOverviewRepository(httpClient);
+const overviewSamplePointRepository = new HttpOverviewSamplePointRepository(httpClient);
+const overviewRealtimeStream = new BrowserOverviewRealtimeStream();
 
 export interface AppDependencies {
   masterDataRepository: MasterDataRepository;
@@ -53,6 +68,8 @@ export interface AppDependencies {
   supplyAccountRepository?: SupplyAccountRepository;
   reportingRepository?: ReportingRepository;
   overviewRepository?: OverviewRepository;
+  overviewRealtimeStream?: OverviewRealtimeStream;
+  overviewSamplePointRepository?: OverviewSamplePointRepository;
   workItemRepository: WorkItemRepository;
 }
 
@@ -65,6 +82,8 @@ const productionDependencies: AppDependencies = {
   supplyAccountRepository,
   reportingRepository,
   overviewRepository,
+  overviewRealtimeStream,
+  overviewSamplePointRepository,
   workItemRepository,
 };
 
@@ -81,7 +100,16 @@ interface WorkLocation {
 interface HashState {
   location?: AppLocation;
   workLocation?: WorkLocation;
+  utilityRoute?: "help" | "settings" | "account" | "notifications";
   invalid: boolean;
+}
+
+function safeDecodedHash(rawHash: string) {
+  try {
+    return decodeURIComponent(rawHash);
+  } catch {
+    return rawHash;
+  }
 }
 
 const defaultPageKey = { domain: "MARKET", pageKind: "MONITORING" } as const;
@@ -110,9 +138,21 @@ function supportedPageContext(key?: BusinessPageKey) {
 }
 
 function locationFromHash(): HashState {
-  const workMatch = /^#\/work\/(pending|completed)(?:\?(.*))?$/.exec(
-    window.location.hash,
-  );
+  const currentHash = safeDecodedHash(window.location.hash);
+  if (currentHash === "#/help") {
+    return { invalid: false, utilityRoute: "help" };
+  }
+  if (currentHash === "#/settings") {
+    return { invalid: false, utilityRoute: "settings" };
+  }
+  if (currentHash === "#/account") {
+    return { invalid: false, utilityRoute: "account" };
+  }
+  if (currentHash === "#/notifications") {
+    return { invalid: false, utilityRoute: "notifications" };
+  }
+
+  const workMatch = /^#\/work\/(pending|completed)(?:\?(.*))?$/.exec(currentHash);
   if (workMatch) {
     try {
       decodeURIComponent(workMatch[2] ?? "");
@@ -145,10 +185,8 @@ function locationFromHash(): HashState {
       return { invalid: true };
     }
   }
-  const match = /^#\/pages\/([^/]+)\/([^/]+)\/([^?]+)(?:\?(.*))?$/.exec(
-    window.location.hash,
-  );
-  if (!match) return { invalid: window.location.hash.length > 0 };
+  const match = /^#\/pages\/([^/]+)\/([^/]+)\/([^?]+)(?:\?(.*))?$/.exec(currentHash);
+  if (!match) return { invalid: currentHash.length > 0 };
   try {
     decodeURIComponent(match[4] ?? "");
     const parameters = new URLSearchParams(match[4] ?? "");
@@ -232,15 +270,17 @@ export function App({
 }) {
   const [products, setProducts] = useState<readonly { id: string; name: string }[]>([]);
   const [hashState, setHashState] = useState<HashState>(() => locationFromHash());
-  const [navigationError, setNavigationError] = useState(false);
+  const [navigationFailure, setNavigationFailure] = useState<NavigationFailureKind>();
   const [navigationAttempt, setNavigationAttempt] = useState(0);
-  const reportingRoute = window.location.hash.startsWith("#/报表中心");
-  const overviewRoute = window.location.hash === "#/overview";
+  const normalizedHash = safeDecodedHash(window.location.hash);
+  const overviewRoute = normalizedHash === "#/overview";
+  const reportingRoute = normalizedHash.startsWith("#/报表中心");
   const { domain: navigationDomain, pageKind: navigationPageKind } =
     supportedPageContext(hashState.location?.key);
+  const utilityRoute = hashState.utilityRoute;
 
   useEffect(() => {
-    if (hashState.workLocation || overviewRoute) {
+    if (hashState.workLocation || hashState.utilityRoute || overviewRoute) {
       return;
     }
     let active = true;
@@ -249,7 +289,7 @@ export function App({
       .then((loadedProducts) => {
         if (!active) return;
         setProducts(loadedProducts);
-        setNavigationError(false);
+        setNavigationFailure(undefined);
         setHashState((current) => {
           if (current.invalid) return current;
           if (
@@ -276,7 +316,9 @@ export function App({
           return { invalid: false, location: next };
         });
       })
-      .catch(() => active && setNavigationError(true));
+      .catch(
+        (failure) => active && setNavigationFailure(classifyNavigationFailure(failure)),
+      );
     return () => {
       active = false;
     };
@@ -285,6 +327,7 @@ export function App({
     navigationDomain,
     navigationPageKind,
     hashState.workLocation,
+    hashState.utilityRoute,
     overviewRoute,
     navigationAttempt,
   ]);
@@ -340,6 +383,20 @@ export function App({
     });
   }
 
+  if (overviewRoute) {
+    return (
+      <OverviewPage
+        repository={dependencies.overviewRepository ?? overviewRepository}
+        realtimeStream={
+          dependencies.overviewRealtimeStream ?? overviewRealtimeStream
+        }
+        samplePointRepository={
+          dependencies.overviewSamplePointRepository ?? overviewSamplePointRepository
+        }
+      />
+    );
+  }
+
   return (
     <EnterpriseShell
       onProductSelect={selectProduct}
@@ -368,14 +425,18 @@ export function App({
       }
       {...(pageKey ? { activeProductId: pageKey.productCode } : {})}
     >
-      {overviewRoute ? (
-        <OverviewPage
-          repository={dependencies.overviewRepository ?? overviewRepository}
-        />
-      ) : reportingRoute ? (
+      {reportingRoute ? (
         <ReportingCenterPage
           repository={dependencies.reportingRepository ?? reportingRepository}
         />
+      ) : utilityRoute === "help" ? (
+        <HelpPage />
+      ) : utilityRoute === "settings" ? (
+        <SettingsPage />
+      ) : utilityRoute === "account" ? (
+        <AccountPage />
+      ) : utilityRoute === "notifications" ? (
+        <NotificationsPage />
       ) : workLocation ? (
         <WorkItemsPage
           key={workLocation.scope}
@@ -399,9 +460,9 @@ export function App({
           routeQuery={workLocation.query}
           scope={workLocation.scope}
         />
-      ) : navigationError ? (
+      ) : navigationFailure ? (
         <div className="page-alert" role="alert">
-          产品导航加载失败，请稍后重试。
+          {navigationFailureMessage(navigationFailure)}
           <button
             onClick={() => setNavigationAttempt((value) => value + 1)}
             type="button"

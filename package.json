@@ -8,6 +8,8 @@
     "npm": ">=11.6.0 <12"
   },
   "scripts": {
+    "predev": "node scripts/prepare-cesium-assets.mjs",
+    "prebuild": "node scripts/prepare-cesium-assets.mjs",
     "dev": "vite --host 127.0.0.1 --port 63200 --strictPort",
     "build": "tsc -b && vite build",
     "e2e": "playwright test",
@@ -22,9 +24,13 @@
   },
   "dependencies": {
     "@tanstack/react-query": "5.101.4",
+    "@turf/helpers": "^7.4.0",
+    "@turf/union": "^7.4.0",
+    "cesium": "1.143.0",
     "maplibre-gl": "6.1.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "three": "^0.184.0",
     "zod": "4.4.3"
   },
   "devDependencies": {
@@ -36,6 +42,7 @@
     "@types/node": "24.13.3",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
+    "@types/three": "^0.185.3",
     "@vitejs/plugin-react": "6.0.4",
     "dependency-cruiser": "18.1.0",
     "eslint": "10.8.0",

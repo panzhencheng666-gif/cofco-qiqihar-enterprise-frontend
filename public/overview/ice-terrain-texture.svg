@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="768" viewBox="0 0 768 768">
+  <defs>
+    <linearGradient id="ice" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f9fdff"/>
+      <stop offset="0.45" stop-color="#d7ebf7"/>
+      <stop offset="1" stop-color="#a8cce3"/>
+    </linearGradient>
+    <filter id="terrain" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency=".012 .026" numOctaves="5" seed="21" result="noise"/>
+      <feColorMatrix in="noise" values="1 0 0 0 .42  0 1 0 0 .55  0 0 1 0 .68  0 0 0 .52 0" result="relief"/>
+      <feBlend in="SourceGraphic" in2="relief" mode="multiply"/>
+      <feSpecularLighting in="noise" surfaceScale="5" specularConstant=".58" specularExponent="22" lighting-color="#ffffff" result="light">
+        <feDistantLight azimuth="228" elevation="58"/>
+      </feSpecularLighting>
+      <feComposite in="light" in2="SourceGraphic" operator="in" result="spec"/>
+      <feBlend in="SourceGraphic" in2="spec" mode="screen"/>
+    </filter>
+    <pattern id="contours" width="96" height="96" patternUnits="userSpaceOnUse">
+      <path d="M-8 62 C18 35 37 82 64 44 S106 30 116 56" fill="none" stroke="#5f9fc8" stroke-opacity=".22" stroke-width="1"/>
+      <path d="M-18 79 C13 47 43 94 74 57 S113 48 126 70" fill="none" stroke="#ffffff" stroke-opacity=".48" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="768" height="768" fill="url(#ice)" filter="url(#terrain)"/>
+  <rect width="768" height="768" fill="url(#contours)"/>
+</svg>

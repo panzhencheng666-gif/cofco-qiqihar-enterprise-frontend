@@ -1,5 +1,7 @@
 node_modules/
+.idea/
 dist/
+/public/Cesium/
 coverage/
 playwright-report/
 test-results/

@@ -3,6 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import viteConfig, { localDevelopmentActor, localApiProxy } from "./vite.config";
 
 describe("local overview API development proxy", () => {
+  it("serves every map document and asset below the business platform gateway prefix", () => {
+    expect(viteConfig.base).toBe("/overview-monitoring/");
+  });
+
   it("binds the default development server to numeric loopback", () => {
     expect(viteConfig.server).toMatchObject({ host: "127.0.0.1", port: 63200 });
   });

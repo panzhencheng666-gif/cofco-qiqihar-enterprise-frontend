@@ -17,7 +17,9 @@ test("logistics review and supply provenance calculation close one Chromium work
         body: JSON.stringify(body),
       });
     if (url.pathname === "/api/v1/master-data/products")
-      return json({ data: products });
+      return json({
+        data: products.map((product) => ({ ...product, code: product.id })),
+      });
     if (url.pathname === "/api/v1/regions")
       return json({
         data: [{ id: "230200", label: "齐齐哈尔市", level: "PREFECTURE" }],
@@ -80,6 +82,11 @@ test("logistics review and supply provenance calculation close one Chromium work
     if (url.pathname === "/api/v1/supply-accounts" && request.method() === "GET")
       return json({ data: [supplyAccount] });
     if (
+      url.pathname === "/api/v1/supply-input-workspaces" &&
+      request.method() === "GET"
+    )
+      return json({ data: supplyInputWorkspace });
+    if (
       url.pathname === "/api/v1/supply-accounts/runs" &&
       request.method() === "POST"
     ) {
@@ -128,9 +135,9 @@ test("logistics review and supply provenance calculation close one Chromium work
 });
 
 const products = [
-  { id: "CORN", name: "玉米" },
-  { id: "SOYBEAN", name: "大豆" },
-  { id: "RICE", name: "稻谷" },
+  { id: "CORN", code: "CORN", name: "玉米" },
+  { id: "SOYBEAN", code: "SOYBEAN", name: "大豆" },
+  { id: "RICE", code: "RICE", name: "稻谷" },
 ];
 const logisticsDefinition = {
   data: {
@@ -343,6 +350,39 @@ const supplyAccount = {
       adoptedValue: "1.0000",
       reason: "采用核定物流来源",
       drillDownRoute: "/api/v1/logistics-records/event-1",
+    },
+  ],
+};
+const supplyInputWorkspace = {
+  productCode: "CORN",
+  regionCode: "230200",
+  marketingYear: "2026/27",
+  inputSetVersion: 9,
+  latestInputSetId: "input-set-9",
+  decisionVersion: 4,
+  roles: [
+    {
+      code: "EXTERNAL_INFLOW",
+      label: "区域外流入",
+      groupCode: "SUPPLY",
+      required: true,
+      sortOrder: 30,
+      manualAllowed: true,
+      manualDecisionVersion: 0,
+      selectedReleaseId: "release-1",
+      releases: [
+        {
+          id: "release-1",
+          sourceDomain: "LOGISTICS",
+          sourceRecordId: "event-1",
+          sourceVersion: 2,
+          sourceFieldCode: "ROUTE_VOLUME",
+          value: "1.0000",
+          unitCode: "万吨",
+          qualityState: "PASSED",
+          approvedAt: "2026-08-03T00:00:00Z",
+        },
+      ],
     },
   ],
 };

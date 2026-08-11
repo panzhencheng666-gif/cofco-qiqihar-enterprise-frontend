@@ -96,8 +96,8 @@ export class MarketApiRoutes {
         url.pathname === "/api/v1/master-data/products"
       ) {
         await json(route, {
-          data: Object.entries(marketProducts).map(([id, item]) => ({
-            id,
+          data: Object.entries(marketProducts).map(([code, item]) => ({
+            code,
             name: item.name,
           })),
         });

@@ -16,11 +16,13 @@ export const localApiProxy: ProxyOptions = {
 };
 
 export default defineConfig({
+  base: "/overview-monitoring/",
   plugins: [react()],
   server: {
     host: "127.0.0.1",
     port: 63200,
     strictPort: true,
+    allowedHosts: ["all"],
     proxy: {
       "/api": localApiProxy,
     },

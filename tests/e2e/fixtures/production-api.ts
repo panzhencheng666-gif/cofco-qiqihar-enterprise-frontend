@@ -83,8 +83,8 @@ export class ProductionApiRoutes {
         url.pathname === "/api/v1/master-data/products"
       ) {
         await fulfillJson(route, {
-          data: Object.entries(productionProducts).map(([id, product]) => ({
-            id,
+          data: Object.entries(productionProducts).map(([code, product]) => ({
+            code,
             name: product.name,
           })),
         });
@@ -92,7 +92,7 @@ export class ProductionApiRoutes {
       }
       if (request.method() === "GET" && cultivarsMatch) {
         await fulfillJson(route, {
-          data: [{ id: `${cultivarsMatch[1]}-DEFAULT`, name: "默认品种" }],
+          data: [{ code: `${cultivarsMatch[1]}-DEFAULT`, name: "默认品种" }],
         });
         return;
       }

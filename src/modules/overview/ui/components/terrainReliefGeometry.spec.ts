@@ -1,0 +1,1375 @@
+import { describe, expect, it } from "vitest";
+import * as THREE from "three";
+
+import type { OverviewRegion } from "../../domain/overview";
+import type { MapFeature, MapPointFeature } from "./boundaryGeometry";
+import {
+  createReliefOverlayLayout,
+  OVERVIEW_DETAILS_MAP_SAFE_GAP,
+  OVERVIEW_RELIEF_DEPTH,
+  overviewDetailsPanelLeft,
+  overviewReliefFrame,
+  overviewSelectionConnector,
+  projectReliefScene,
+  reliefCircleInsidePolygon,
+  reliefRectInsidePolygon,
+  type ReliefFrame,
+} from "./terrainReliefGeometry";
+import {
+  applyReliefLayoutMatrix,
+  createMovableComponentGeometries,
+  COMPONENT_HIGHLIGHT_LIFT,
+  createVisibleWallGeometries,
+  measureWallCompleteness,
+  reframeReliefScene,
+  RELIEF_LAYER_Z,
+  reliefComponentKey,
+  selectReliefRenderBodies,
+  shouldShowGroundOutlineSegment,
+} from "./TerrainReliefBoundaryMap";
+import * as TerrainReliefBoundaryMapModule from "./TerrainReliefBoundaryMap";
+import {
+  createGeologicalWallMaterial,
+  createTerrainSurfaceMaterial,
+} from "./terrainReliefMaterials";
+
+const frame: ReliefFrame = { x: 190, y: 188, width: 985, height: 510 };
+
+const reliefRuntime =
+  TerrainReliefBoundaryMapModule as typeof TerrainReliefBoundaryMapModule & {
+    compactAdministrativeName?: (name: string) => string;
+    createRetryableResourceLoader?: <T>(load: () => Promise<T>) => () => Promise<T>;
+  };
+
+function region(
+  code: string,
+  name: string,
+  level: OverviewRegion["level"],
+): OverviewRegion {
+  return { code, name, level, approvedRecordCount: 0 };
+}
+
+function polygonFeature(
+  code: string,
+  coordinates: [number, number][],
+  level: OverviewRegion["level"] = "COUNTY",
+): MapFeature {
+  return {
+    region: region(code, code, level),
+    geometry: {
+      type: "Polygon",
+      coordinates: [coordinates],
+    },
+  };
+}
+
+describe("projectReliefScene", () => {
+  it("clears a rejected terrain resource promise so the next load can retry", async () => {
+    const createRetryableResourceLoader = reliefRuntime.createRetryableResourceLoader;
+    expect(createRetryableResourceLoader).toBeTypeOf("function");
+    if (!createRetryableResourceLoader) return;
+
+    let attempts = 0;
+    const load = createRetryableResourceLoader(() => {
+      attempts += 1;
+      return attempts === 1
+        ? Promise.reject(new Error("terrain unavailable"))
+        : Promise.resolve("terrain ready");
+    });
+
+    await expect(load()).rejects.toThrow("terrain unavailable");
+    await expect(load()).resolves.toBe("terrain ready");
+    expect(attempts).toBe(2);
+  });
+
+  it("projects only non-village aggregates from an independently computed interior anchor", () => {
+    const county = polygonFeature(
+      "230225",
+      [
+        [123, 47],
+        [125, 47],
+        [125, 49],
+        [123, 49],
+        [123, 47],
+      ],
+      "COUNTY",
+    );
+    const village = polygonFeature(
+      "230225204201",
+      [
+        [123.2, 47.2],
+        [123.8, 47.2],
+        [123.8, 47.8],
+        [123.2, 47.8],
+        [123.2, 47.2],
+      ],
+      "VILLAGE",
+    );
+    const projection = projectReliefScene({
+      features: [county, village],
+      frame,
+      points: [],
+      samplePointAggregates: [
+        {
+          regionCode: county.region.code,
+          regionName: county.region.name,
+          regionLevel: "COUNTY",
+          samplePointCount: 17,
+          unresolvedSourceCount: 0,
+        },
+        {
+          regionCode: village.region.code,
+          regionName: village.region.name,
+          regionLevel: "VILLAGE",
+          samplePointCount: 3,
+          unresolvedSourceCount: 0,
+        },
+      ],
+    });
+
+    expect(projection.samplePointAggregates).toEqual([
+      expect.objectContaining({
+        aggregate: expect.objectContaining({ samplePointCount: 17 }),
+        point: expect.objectContaining({
+          x: expect.any(Number),
+          y: expect.any(Number),
+        }),
+      }),
+    ]);
+    expect(projection.samplePointAggregates[0]?.point).toEqual(
+      projection.features[0]?.anchor,
+    );
+    expect(projection.samplePointAggregates[0]?.point).not.toBe(
+      projection.features[0]?.anchor,
+    );
+  });
+
+  it("reframes an aggregate with its region surface when the detail frame opens", () => {
+    const county = polygonFeature(
+      "230225",
+      [
+        [123, 47],
+        [125, 47],
+        [125, 49],
+        [123, 49],
+        [123, 47],
+      ],
+      "COUNTY",
+    );
+    const fullProjection = projectReliefScene({
+      features: [county],
+      frame: overviewReliefFrame(false),
+      points: [],
+      samplePointAggregates: [
+        {
+          regionCode: county.region.code,
+          regionName: county.region.name,
+          regionLevel: "COUNTY",
+          samplePointCount: 17,
+          unresolvedSourceCount: 0,
+        },
+      ],
+    });
+
+    const detailProjection = reframeReliefScene(
+      fullProjection,
+      overviewReliefFrame(true),
+    );
+
+    expect(detailProjection.samplePointAggregates).toHaveLength(1);
+    expect(detailProjection.samplePointAggregates[0]?.point).toEqual(
+      detailProjection.features[0]?.anchor,
+    );
+    expect(detailProjection.samplePointAggregates[0]?.point).toEqual(
+      detailProjection.labels[0]?.point,
+    );
+    expect(detailProjection.samplePointAggregates[0]?.point).not.toEqual(
+      fullProjection.samplePointAggregates[0]?.point,
+    );
+  });
+
+  it("projects village sample-point icons through the same immutable map frame", () => {
+    const samplePointFrame = overviewReliefFrame(false);
+    const projection = projectReliefScene({
+      features: [
+        polygonFeature(
+          "230202997001",
+          [
+            [123, 47],
+            [124, 47],
+            [124, 48],
+            [123, 48],
+            [123, 47],
+          ],
+          "VILLAGE",
+        ),
+      ],
+      frame: samplePointFrame,
+      points: [],
+      samplePointIcons: [
+        {
+          samplePointId: "94000000-0000-0000-0000-000000000001",
+          name: "契约测试样本点",
+          types: [{ code: "FARMER", name: "农户" }],
+          longitude: 123.5,
+          latitude: 47.5,
+        },
+      ],
+    });
+
+    expect(projection.samplePointIcons).toEqual([
+      expect.objectContaining({
+        icon: expect.objectContaining({
+          samplePointId: "94000000-0000-0000-0000-000000000001",
+        }),
+        point: expect.objectContaining({
+          x: expect.any(Number),
+          y: expect.any(Number),
+        }),
+      }),
+    ]);
+  });
+  it("hides only the raised component's stationary ground outline", () => {
+    expect(shouldShowGroundOutlineSegment(["230200"], "")).toBe(true);
+    expect(shouldShowGroundOutlineSegment(["230200"], "230200")).toBe(false);
+    expect(shouldShowGroundOutlineSegment(["150700"], "230200")).toBe(true);
+    expect(shouldShowGroundOutlineSegment(["230200", "150700"], "230200")).toBe(false);
+  });
+
+  it("uses the approved compact names for long administrative labels", () => {
+    expect(reliefRuntime.compactAdministrativeName?.("梅里斯达斡尔族区")).toBe(
+      "梅里斯区",
+    );
+    expect(reliefRuntime.compactAdministrativeName?.("莫力达瓦达斡尔族自治旗")).toBe(
+      "莫旗",
+    );
+    expect(
+      reliefRuntime.compactAdministrativeName?.("友谊达斡尔族满族柯尔克孜族乡"),
+    ).toBe("友谊乡");
+  });
+
+  it("uses a safe presentation frame for every overlay state", () => {
+    const openFrame = overviewReliefFrame(false);
+    const detailsFrame = overviewReliefFrame(true);
+
+    expect(openFrame.y).toBeGreaterThanOrEqual(220);
+    expect(openFrame.y + openFrame.height).toBeLessThanOrEqual(770);
+    expect(openFrame.x + openFrame.width).toBeLessThanOrEqual(1780);
+    expect(detailsFrame.y).toBe(openFrame.y);
+    expect(detailsFrame.height).toBe(openFrame.height);
+    expect(detailsFrame.x + detailsFrame.width).toBeLessThanOrEqual(1320);
+  });
+
+  it("reserves vertical room for the whole earth wall above the analysis band", () => {
+    [overviewReliefFrame(false), overviewReliefFrame(true)].forEach((safeFrame) => {
+      expect(
+        safeFrame.y + safeFrame.height + OVERVIEW_RELIEF_DEPTH,
+      ).toBeLessThanOrEqual(800);
+    });
+  });
+
+  it("fits polygon geometry wholly inside the visual safe frame", () => {
+    const feature = polygonFeature("A", [
+      [0, 0],
+      [8, 0],
+      [8, 4],
+      [0, 4],
+      [0, 0],
+    ]);
+
+    const scene = projectReliefScene({ features: [feature], points: [], frame });
+    const positions = scene.features.flatMap((item) =>
+      item.polygons.flatMap((shape) => shape.rings.flatMap((ring) => ring.points)),
+    );
+
+    expect(positions.length).toBeGreaterThan(0);
+    expect(Math.min(...positions.map((point) => point.x))).toBeGreaterThanOrEqual(
+      frame.x,
+    );
+    expect(Math.max(...positions.map((point) => point.x))).toBeLessThanOrEqual(
+      frame.x + frame.width,
+    );
+    expect(Math.min(...positions.map((point) => point.y))).toBeGreaterThanOrEqual(
+      frame.y,
+    );
+    expect(Math.max(...positions.map((point) => point.y))).toBeLessThanOrEqual(
+      frame.y + frame.height,
+    );
+  });
+
+  it("keeps lower-level point locations inside both open and detail safe frames", () => {
+    const points: MapPointFeature[] = [
+      {
+        position: [0, 0],
+        region: region("A", "西南村", "VILLAGE"),
+      },
+      {
+        position: [12, 8],
+        region: region("B", "东北村", "VILLAGE"),
+      },
+    ];
+
+    [overviewReliefFrame(false), overviewReliefFrame(true)].forEach((safeFrame) => {
+      const scene = projectReliefScene({ features: [], points, frame: safeFrame });
+      expect(scene.points).toHaveLength(2);
+      scene.points.forEach(({ point }) => {
+        expect(point.x).toBeGreaterThanOrEqual(safeFrame.x);
+        expect(point.x).toBeLessThanOrEqual(safeFrame.x + safeFrame.width);
+        expect(point.y).toBeGreaterThanOrEqual(safeFrame.y);
+        expect(point.y).toBeLessThanOrEqual(safeFrame.y + safeFrame.height);
+      });
+    });
+  });
+
+  it("preserves every polygon and ring from MultiPolygon geometry", () => {
+    const feature: MapFeature = {
+      region: region("M", "多区", "PREFECTURE"),
+      geometry: {
+        type: "MultiPolygon",
+        coordinates: [
+          [
+            [
+              [0, 0],
+              [4, 0],
+              [4, 4],
+              [0, 4],
+              [0, 0],
+            ],
+          ],
+          [
+            [
+              [6, 1],
+              [8, 1],
+              [8, 3],
+              [6, 3],
+              [6, 1],
+            ],
+          ],
+        ],
+      },
+    };
+
+    const scene = projectReliefScene({ features: [feature], points: [], frame });
+
+    expect(scene.features[0]?.polygons).toHaveLength(2);
+    expect(scene.features[0]?.polygons.every((shape) => shape.rings.length === 1)).toBe(
+      true,
+    );
+    expect(
+      scene.labels
+        .filter(({ kind }) => kind === "region")
+        .map(({ componentId }) => componentId),
+    ).toEqual([0]);
+  });
+
+  it("keeps one recessed parent substrate beneath the movable child caps", () => {
+    const parent = polygonFeature("P", [
+      [0, 0],
+      [12, 0],
+      [12, 8],
+      [0, 8],
+      [0, 0],
+    ]);
+    const multipartChild: MapFeature = {
+      region: region("T", "多片区乡镇", "TOWNSHIP"),
+      geometry: {
+        type: "MultiPolygon",
+        coordinates: [
+          [
+            [
+              [0, 0],
+              [8, 0],
+              [8, 8],
+              [0, 8],
+              [0, 0],
+            ],
+          ],
+          [
+            [
+              [8, 0],
+              [12, 0],
+              [12, 8],
+              [8, 8],
+              [8, 0],
+            ],
+          ],
+        ],
+      },
+    };
+
+    const scene = projectReliefScene({
+      backdrop: parent,
+      features: [multipartChild],
+      points: [],
+      frame,
+    });
+    const bodies = selectReliefRenderBodies(scene);
+
+    expect(bodies.tops).toEqual([scene.backdrop]);
+    expect(bodies.outlines).toHaveLength(1);
+    expect(bodies.outlines[0]?.polygons).toHaveLength(2);
+    expect(bodies.outlines[0]?.region.code).toBe("T");
+    expect(bodies.outlines.some(({ region }) => region.code === "P")).toBe(false);
+    expect(bodies.walls).toEqual([scene.backdrop]);
+  });
+
+  it("uses passive map context as a seamless cap without drawing another administrative outline", () => {
+    const parent = polygonFeature("P", [
+      [0, 0],
+      [12, 0],
+      [12, 8],
+      [0, 8],
+      [0, 0],
+    ]);
+    const township = polygonFeature(
+      "T",
+      [
+        [0, 0],
+        [7, 0],
+        [7, 8],
+        [0, 8],
+        [0, 0],
+      ],
+      "TOWNSHIP",
+    );
+    const passiveContext = polygonFeature(
+      "CTX",
+      [
+        [7, 0],
+        [12, 0],
+        [12, 8],
+        [7, 8],
+        [7, 0],
+      ],
+      "TOWNSHIP",
+    );
+    passiveContext.region.mapContextOnly = true;
+
+    const scene = projectReliefScene({
+      backdrop: parent,
+      features: [township, passiveContext],
+      points: [],
+      frame,
+    });
+    const bodies = selectReliefRenderBodies(scene);
+
+    expect(scene.features.map(({ region }) => region.code)).toEqual(["T", "CTX"]);
+    expect(bodies.outlines.map(({ region }) => region.code)).toEqual(["T"]);
+    expect(bodies.tops).toEqual([scene.backdrop]);
+    expect(bodies.walls).toEqual([scene.backdrop]);
+  });
+
+  it("keeps the terrain texture visible while the exact hovered region lifts", () => {
+    const texture = new THREE.Texture();
+    const surface = createTerrainSurfaceMaterial(texture, "hover");
+    const selectedSurface = createTerrainSurfaceMaterial(texture, "selected");
+    const wall = createGeologicalWallMaterial(texture, "hover");
+
+    expect((surface.uniforms.surfaceTint?.value as THREE.Color).getHex()).toBe(
+      0xf2c94c,
+    );
+    expect(surface.uniforms.surfaceTintStrength?.value).toBeCloseTo(0.12);
+    expect(selectedSurface.uniforms.surfaceTintStrength?.value).toBeCloseTo(0.16);
+    expect((wall.uniforms.wallTop?.value as THREE.Color).getHex()).toBe(0xffd76a);
+    expect(wall.side).toBe(THREE.FrontSide);
+    expect(COMPONENT_HIGHLIGHT_LIFT).toBeGreaterThanOrEqual(20);
+
+    surface.dispose();
+    selectedSurface.dispose();
+    wall.dispose();
+    texture.dispose();
+  });
+
+  it("raises one exact component with its own short wall", () => {
+    const feature = polygonFeature(
+      "T",
+      [
+        [0, 0],
+        [8, 0],
+        [8, 6],
+        [0, 6],
+        [0, 0],
+      ],
+      "TOWNSHIP",
+    );
+    const scene = projectReliefScene({ features: [feature], points: [], frame });
+    const surface = scene.features[0];
+
+    expect(surface).toBeDefined();
+    const movableComponent = createMovableComponentGeometries(surface!);
+    expect(movableComponent.tops).toHaveLength(1);
+    expect(movableComponent.walls).toHaveLength(1);
+
+    const positions = movableComponent.walls[0]!.getAttribute("position");
+    const top = {
+      x: positions.getX(0),
+      y: positions.getY(0),
+      z: positions.getZ(0),
+    };
+    const bottom = {
+      x: positions.getX(1),
+      y: positions.getY(1),
+      z: positions.getZ(1),
+    };
+
+    // The administrative footprint stays fixed in x/y. Relief is a real
+    // vertical extrusion from the map ground, never a translated 2-D curtain.
+    expect(bottom.x).toBe(top.x);
+    expect(bottom.y).toBe(top.y);
+    expect(top.z).toBe(0);
+    expect(bottom.z).toBe(-COMPONENT_HIGHLIGHT_LIFT);
+  });
+
+  it("composes details-layout fitting with z elevation in one canvas matrix", () => {
+    const root = new THREE.Group();
+    root.matrixAutoUpdate = false;
+    applyReliefLayoutMatrix(root, {
+      scaleX: 0.62,
+      scaleY: 0.71,
+      screenOffsetX: 0,
+      screenOffsetY: 0,
+      uvOffsetX: 0,
+      uvOffsetY: 0,
+      worldOffsetX: -180,
+      worldOffsetY: 36,
+    });
+
+    const ground = new THREE.Vector3(220, -90, 0).applyMatrix4(root.matrix);
+    const raised = new THREE.Vector3(220, -90, COMPONENT_HIGHLIGHT_LIFT).applyMatrix4(
+      root.matrix,
+    );
+
+    expect(ground.x).toBeCloseTo(220 * 0.62 - 180, 6);
+    expect(ground.y).toBeCloseTo(-90 * 0.71 + 36, 6);
+    expect(raised.x).toBeCloseTo(ground.x, 6);
+    expect(raised.y - ground.y).toBeCloseTo(COMPONENT_HIGHLIGHT_LIFT * 0.71, 6);
+    expect(ground.z).toBeCloseTo(90 * 0.71, 6);
+    expect(raised.z - ground.z).toBeCloseTo(COMPONENT_HIGHLIGHT_LIFT, 6);
+  });
+
+  it("keeps the ground outline behind the raised interaction cap", () => {
+    expect(RELIEF_LAYER_Z.baseOutline).toBeGreaterThan(RELIEF_LAYER_Z.baseTop);
+    expect(RELIEF_LAYER_Z.baseOutline).toBeLessThan(RELIEF_LAYER_Z.interactionTop);
+    expect(RELIEF_LAYER_Z.interactionOutline).toBeGreaterThan(
+      RELIEF_LAYER_Z.interactionTop,
+    );
+  });
+
+  it("keeps every server-governed boundary vertex for the visible relief", () => {
+    const denseEdge = Array.from(
+      { length: 101 },
+      (_, index) => [index / 10, 0] as [number, number],
+    );
+    const feature = polygonFeature("D", [...denseEdge, [10, 5], [0, 5], [0, 0]]);
+
+    const scene = projectReliefScene({ features: [feature], points: [], frame });
+    const points = scene.features[0]?.polygons[0]?.rings[0]?.points ?? [];
+
+    expect(points).toHaveLength(feature.geometry.coordinates[0]?.length ?? 0);
+    expect(points[0]).toEqual(points.at(-1));
+  });
+
+  it("uses the exact visible polygon for pointer hit testing", () => {
+    const curvedEdge = Array.from({ length: 401 }, (_, index) => {
+      const x = index / 20;
+      return [x, Math.sin(x * 1.7) * 0.12] as [number, number];
+    });
+    const feature = polygonFeature("H", [
+      ...curvedEdge,
+      [20, 5],
+      [0, 5],
+      curvedEdge[0] as [number, number],
+    ]);
+
+    const scene = projectReliefScene({ features: [feature], points: [], frame });
+    const visible = scene.features[0]?.polygons[0]?.rings[0]?.points ?? [];
+    const hit = scene.features[0]?.hitPolygons[0]?.rings[0]?.points ?? [];
+
+    expect(hit).toEqual(visible);
+    expect(hit[0]).toEqual(hit.at(-1));
+    expect(scene.features[0]?.polygons).toBe(scene.features[0]?.hitPolygons);
+  });
+
+  it("does not cut narrow bays into false holes or detached wall fragments", () => {
+    const feature = polygonFeature("N", [
+      [0, 0],
+      [12, 0],
+      [12, 7],
+      [8.2, 7],
+      [8.2, 2.2],
+      [7.8, 2.2],
+      [7.8, 7],
+      [4.2, 7],
+      [4.2, 2.2],
+      [3.8, 2.2],
+      [3.8, 7],
+      [0, 7],
+      [0, 0],
+    ]);
+
+    const scene = projectReliefScene({ features: [feature], points: [], frame });
+    const ring = scene.features[0]?.polygons[0]?.rings[0]?.points ?? [];
+
+    expect(ring).toHaveLength(13);
+    expect(new Set(ring.map(({ x, y }) => `${x}:${y}`)).size).toBe(12);
+  });
+
+  it("marks only the parent surface as side-wall geometry", () => {
+    const parent = polygonFeature(
+      "P",
+      [
+        [0, 0],
+        [10, 0],
+        [10, 7],
+        [0, 7],
+        [0, 0],
+      ],
+      "PREFECTURE",
+    );
+    const child = polygonFeature("C", [
+      [1, 1],
+      [4, 1],
+      [4, 4],
+      [1, 4],
+      [1, 1],
+    ]);
+
+    const scene = projectReliefScene({
+      backdrop: parent,
+      features: [child],
+      points: [],
+      frame,
+    });
+
+    expect(scene.backdrop?.hasSideWall).toBe(true);
+    expect(scene.backdrop?.wallPolygons).toHaveLength(1);
+    expect(scene.features[0]?.hasSideWall).toBe(false);
+  });
+
+  it("keeps every detached component flat except the governed primary shell", () => {
+    const parent: MapFeature = {
+      region: region("P", "碎片化乡镇", "TOWNSHIP"),
+      geometry: {
+        type: "MultiPolygon",
+        coordinates: [
+          [
+            [
+              [0, 0],
+              [8, 0],
+              [8, 6],
+              [0, 6],
+              [0, 0],
+            ],
+          ],
+          [
+            [
+              [9, 1],
+              [10, 1],
+              [10, 2],
+              [9, 2],
+              [9, 1],
+            ],
+          ],
+          [
+            [
+              [11, 3],
+              [11.2, 3],
+              [11.2, 3.2],
+              [11, 3.2],
+              [11, 3],
+            ],
+          ],
+        ],
+      },
+    };
+
+    const scene = projectReliefScene({
+      backdrop: parent,
+      features: [],
+      points: [],
+      frame,
+    });
+    const walls = scene.backdrop
+      ? createVisibleWallGeometries([scene.backdrop], OVERVIEW_RELIEF_DEPTH)
+      : [];
+
+    expect(scene.backdrop?.polygons).toHaveLength(3);
+    expect(scene.backdrop?.hitPolygons).toHaveLength(3);
+    expect(scene.backdrop?.wallPolygons).toHaveLength(1);
+    expect(walls).toHaveLength(1);
+  });
+
+  it("keeps a real-feature solid fallback without rebuilding a client-side union", () => {
+    const north = polygonFeature("N", [
+      [0, 5],
+      [10, 5],
+      [10, 10],
+      [0, 10],
+      [0, 5],
+    ]);
+    const south = polygonFeature("S", [
+      [0, 0],
+      [10, 0],
+      [10, 5],
+      [0, 5],
+      [0, 0],
+    ]);
+
+    const scene = projectReliefScene({
+      features: [north, south],
+      points: [],
+      frame,
+    });
+    const walls = createVisibleWallGeometries(scene.features, OVERVIEW_RELIEF_DEPTH);
+    const wallVertexCount = walls.reduce(
+      (count, wall) => count + wall.getAttribute("position").count,
+      0,
+    );
+
+    expect(scene.platform).toBeUndefined();
+    expect(scene.features.every(({ hasSideWall }) => !hasSideWall)).toBe(true);
+    expect(walls).toHaveLength(0);
+    expect(wallVertexCount).toBe(0);
+  });
+
+  it("builds a closed complete outer wall without turning holes into walls", () => {
+    const feature: MapFeature = {
+      region: region("H", "凹形含孔地区", "TOWNSHIP"),
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [0, 0],
+            [8, 0],
+            [8, 2],
+            [4, 2],
+            [4, 6],
+            [0, 6],
+            [0, 0],
+          ],
+          [
+            [1, 1],
+            [2, 1],
+            [2, 2],
+            [1, 2],
+            [1, 1],
+          ],
+        ],
+      },
+    };
+    const scene = projectReliefScene({
+      backdrop: feature,
+      features: [],
+      points: [],
+      frame,
+    });
+    const surface = scene.backdrop;
+    expect(surface).toBeDefined();
+    if (!surface) return;
+
+    const metrics = measureWallCompleteness(surface);
+    expect(metrics.expectedEdgeCount).toBeGreaterThanOrEqual(1);
+    expect(metrics.generatedEdgeCount).toBe(metrics.expectedEdgeCount);
+    expect(metrics.generatedPerimeter).toBeCloseTo(metrics.expectedPerimeter, 5);
+    expect(metrics.completeness).toBeCloseTo(1, 6);
+    expect(metrics.holeWallEdgeCount).toBe(0);
+    expect(metrics.zeroLengthEdgeCount).toBe(0);
+  });
+
+  it("gives the outside wall directional shading instead of a flat pasted strip", () => {
+    const feature = polygonFeature("W", [
+      [0, 0],
+      [4, -2],
+      [9, 0],
+      [9, 3],
+      [6, 3],
+      [4, 7],
+      [0, 5],
+      [0, 0],
+    ]);
+    const scene = projectReliefScene({
+      backdrop: feature,
+      features: [],
+      points: [],
+      frame,
+    });
+    const walls = scene.backdrop
+      ? createVisibleWallGeometries([scene.backdrop], OVERVIEW_RELIEF_DEPTH)
+      : [];
+    const shade = walls[0]?.getAttribute("wallShade");
+    const values = shade ? Array.from(shade.array as ArrayLike<number>) : [];
+
+    expect(values.length).toBeGreaterThan(0);
+    expect(Math.max(...values) - Math.min(...values)).toBeGreaterThan(0.05);
+  });
+
+  it("interpolates wall light continuously across shared boundary vertices", () => {
+    const feature = polygonFeature("S", [
+      [0, 0],
+      [5, -3],
+      [10, 0],
+      [9, 6],
+      [3, 8],
+      [0, 0],
+    ]);
+    const scene = projectReliefScene({
+      backdrop: feature,
+      features: [],
+      points: [],
+      frame,
+    });
+    const geometry = scene.backdrop
+      ? createVisibleWallGeometries([scene.backdrop], OVERVIEW_RELIEF_DEPTH)[0]
+      : undefined;
+    expect(geometry).toBeDefined();
+    if (!geometry) return;
+
+    const positions = geometry.getAttribute("position");
+    const shades = geometry.getAttribute("wallShade");
+    const shadesByPosition = new Map<string, number[]>();
+    for (let index = 0; index < positions.count; index += 1) {
+      const key = `${positions.getX(index).toFixed(3)}:${positions
+        .getY(index)
+        .toFixed(3)}:${positions.getZ(index).toFixed(3)}`;
+      const values = shadesByPosition.get(key) ?? [];
+      values.push(shades.getX(index));
+      shadesByPosition.set(key, values);
+    }
+    const discontinuities = [...shadesByPosition.values()].filter(
+      (values) => Math.max(...values) - Math.min(...values) > 0.0001,
+    );
+    expect(discontinuities).toHaveLength(0);
+  });
+
+  it("extrudes only the exact foreground boundary without inventing a silhouette", () => {
+    const feature = polygonFeature("F", [
+      [0, 0],
+      [10, 0],
+      [10, 8],
+      [0, 8],
+      [0, 0],
+    ]);
+    const scene = projectReliefScene({
+      backdrop: feature,
+      features: [],
+      points: [],
+      frame,
+    });
+    const geometry = scene.backdrop
+      ? createVisibleWallGeometries([scene.backdrop], OVERVIEW_RELIEF_DEPTH)[0]
+      : undefined;
+    expect(geometry).toBeDefined();
+    const positionCount = geometry?.getAttribute("position").count ?? 0;
+    expect(positionCount).toBe(4);
+    expect(geometry?.getIndex()?.count).toBe(6);
+  });
+
+  it("keeps wall face orientation stable when source ring winding differs", () => {
+    const wallNormal = (points: readonly { x: number; y: number }[]) => {
+      const geometry = createVisibleWallGeometries(
+        [{ polygons: [{ rings: [{ isHole: false, points }] }] }],
+        OVERVIEW_RELIEF_DEPTH,
+      )[0];
+      expect(geometry).toBeDefined();
+      const position = geometry!.getAttribute("position");
+      const index = geometry!.getIndex();
+      expect(index).not.toBeNull();
+      const vertices = [0, 1, 2].map((offset) => {
+        const vertexIndex = index!.getX(offset);
+        return new THREE.Vector3(
+          position.getX(vertexIndex),
+          position.getY(vertexIndex),
+          position.getZ(vertexIndex),
+        );
+      });
+      return new THREE.Vector3()
+        .subVectors(vertices[1]!, vertices[0]!)
+        .cross(new THREE.Vector3().subVectors(vertices[2]!, vertices[0]!))
+        .normalize();
+    };
+    const clockwise = [
+      { x: 0, y: 0 },
+      { x: 0, y: 10 },
+      { x: 10, y: 10 },
+      { x: 10, y: 0 },
+      { x: 0, y: 0 },
+    ];
+    const counterClockwise = [...clockwise].reverse();
+
+    expect(wallNormal(counterClockwise).dot(wallNormal(clockwise))).toBeCloseTo(1, 6);
+  });
+
+  it("does not bridge the geological wall across detached map components", () => {
+    const rectangle = (left: number, right: number) => ({
+      rings: [
+        {
+          isHole: false,
+          points: [
+            { x: left, y: 0 },
+            { x: right, y: 0 },
+            { x: right, y: 10 },
+            { x: left, y: 10 },
+            { x: left, y: 0 },
+          ],
+        },
+      ],
+    });
+    const geometry = createVisibleWallGeometries(
+      [{ polygons: [rectangle(0, 10), rectangle(20, 30)] }],
+      OVERVIEW_RELIEF_DEPTH,
+    )[0];
+
+    expect(geometry).toBeDefined();
+    if (!geometry) return;
+    const positions = geometry.getAttribute("position");
+    const indices = geometry.getIndex();
+    expect(indices).not.toBeNull();
+    if (!indices) return;
+
+    const wallSpans: number[] = [];
+    for (let offset = 0; offset < indices.count; offset += 6) {
+      const startIndex = indices.getX(offset);
+      const endIndex = indices.getX(offset + 2);
+      wallSpans.push(Math.abs(positions.getX(endIndex) - positions.getX(startIndex)));
+    }
+    expect(Math.max(...wallSpans)).toBeLessThanOrEqual(10.01);
+    expect(wallSpans).not.toContain(20);
+  });
+
+  it("keeps dense real boundary chains continuous in the geological wall", () => {
+    const denseForeground = Array.from({ length: 61 }, (_, index) => ({
+      x: 60 - index,
+      y: 10 + Math.sin(index * 0.35) * 0.08,
+    }));
+    const geometry = createVisibleWallGeometries(
+      [
+        {
+          polygons: [
+            {
+              rings: [
+                {
+                  isHole: false,
+                  points: [
+                    { x: 0, y: 0 },
+                    { x: 60, y: 0 },
+                    ...denseForeground,
+                    { x: 0, y: 0 },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      OVERVIEW_RELIEF_DEPTH,
+    )[0];
+
+    expect(geometry).toBeDefined();
+    expect((geometry?.getIndex()?.count ?? 0) / 6).toBe(60);
+  });
+
+  it("does not turn shared polygons inside one administrative region into walls", () => {
+    const north = polygonFeature("N", [
+      [0, 4],
+      [10, 4],
+      [10, 8],
+      [0, 8],
+      [0, 4],
+    ]);
+    const south = polygonFeature("S", [
+      [0, 0],
+      [10, 0],
+      [10, 4],
+      [0, 4],
+      [0, 0],
+    ]);
+    const scene = projectReliefScene({ features: [north, south], points: [], frame });
+    const geometry = createVisibleWallGeometries(
+      [{ polygons: scene.features.flatMap(({ polygons }) => polygons) }],
+      OVERVIEW_RELIEF_DEPTH,
+    )[0];
+    const outerScene = projectReliefScene({
+      features: [
+        polygonFeature("O", [
+          [0, 0],
+          [10, 0],
+          [10, 8],
+          [0, 8],
+          [0, 0],
+        ]),
+      ],
+      points: [],
+      frame,
+    });
+    const outerGeometry = createVisibleWallGeometries(
+      [{ polygons: outerScene.features.flatMap(({ polygons }) => polygons) }],
+      OVERVIEW_RELIEF_DEPTH,
+    )[0];
+
+    expect(geometry).toBeDefined();
+    expect((geometry?.getIndex()?.count ?? 0) / 6).toBe(1);
+    expect((outerGeometry?.getIndex()?.count ?? 0) / 6).toBe(1);
+  });
+
+  it("keeps every detached polygon inside one regional lift entity", () => {
+    const feature: MapFeature = {
+      region: region("M", "离散行政区", "VILLAGE"),
+      geometry: {
+        type: "MultiPolygon",
+        coordinates: [
+          [
+            [
+              [0, 0],
+              [6, 0],
+              [6, 5],
+              [0, 5],
+              [0, 0],
+            ],
+          ],
+          [
+            [
+              [20, 10],
+              [24, 10],
+              [24, 14],
+              [20, 14],
+              [20, 10],
+            ],
+          ],
+        ],
+      },
+    };
+    const scene = projectReliefScene({
+      backdrop: feature,
+      features: [],
+      points: [],
+      frame,
+    });
+    const surface = scene.backdrop;
+    expect(surface).toBeDefined();
+    if (!surface) return;
+
+    const entity = createMovableComponentGeometries(surface);
+    expect(entity.tops).toHaveLength(2);
+    expect(entity.walls).toHaveLength(1);
+    expect(surface.raiseablePolygonIndices).toEqual([0, 1]);
+    expect(reliefComponentKey({ regionCode: "M", componentId: 0 })).toBe("M::0");
+  });
+
+  it.each(["PREFECTURE", "COUNTY", "TOWNSHIP"] as const)(
+    "uses one complete regional entity at the %s level",
+    (level) => {
+      const feature: MapFeature = {
+        region: region(`R-${level}`, `${level}测试地区`, level),
+        geometry: {
+          type: "MultiPolygon",
+          coordinates: [
+            [
+              [
+                [0, 0],
+                [8, 0],
+                [8, 6],
+                [0, 6],
+                [0, 0],
+              ],
+            ],
+            [
+              [
+                [10, 2],
+                [12, 2],
+                [12, 4],
+                [10, 4],
+                [10, 2],
+              ],
+            ],
+          ],
+        },
+      };
+      const scene = projectReliefScene({ features: [feature], points: [], frame });
+      const surface = scene.features[0];
+      expect(surface).toBeDefined();
+      if (!surface) return;
+
+      expect(scene.labels.filter(({ kind }) => kind === "region")).toHaveLength(1);
+      expect(createMovableComponentGeometries(surface).tops).toHaveLength(2);
+    },
+  );
+
+  it("keeps every real point while density-limiting labels", () => {
+    const parent = polygonFeature(
+      "P",
+      [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+        [0, 10],
+        [0, 0],
+      ],
+      "PREFECTURE",
+    );
+    const points: MapPointFeature[] = Array.from({ length: 40 }, (_, index) => ({
+      position: [(index % 10) + 0.25, Math.floor(index / 10) + 0.25] as const,
+      region: region(`V${index}`, `行政村${index}`, "VILLAGE"),
+    }));
+
+    const scene = projectReliefScene({ backdrop: parent, features: [], points, frame });
+
+    expect(scene.points).toHaveLength(40);
+    expect(scene.labels.filter((label) => label.kind === "point")).toHaveLength(0);
+  });
+
+  it("labels administrative villages when the governed township view is readable", () => {
+    const parent = polygonFeature(
+      "P",
+      [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+        [0, 10],
+        [0, 0],
+      ],
+      "TOWNSHIP",
+    );
+    const points: MapPointFeature[] = Array.from({ length: 8 }, (_, index) => ({
+      position: [index + 0.5, 5] as const,
+      region: region(`V${index}`, `行政村${index}`, "VILLAGE"),
+    }));
+
+    const scene = projectReliefScene({ backdrop: parent, features: [], points, frame });
+
+    expect(scene.labels.filter((label) => label.kind === "point")).toHaveLength(8);
+  });
+});
+
+describe("polygon-contained relief overlay layout", () => {
+  const views = [
+    ["总揽", "PREFECTURE"],
+    ["地级市", "COUNTY"],
+    ["区县", "TOWNSHIP"],
+    ["乡镇", "VILLAGE"],
+    ["行政村", "VILLAGE"],
+  ] as const;
+
+  it.each(views)(
+    "%s在右栏关闭、打开、关闭回位时约束完整 label bbox 与 aggregate footprint",
+    (_view, level) => {
+      const backdrop = polygonFeature(
+        `parent-${level}`,
+        [
+          [0, 0],
+          [20, 0],
+          [20, 10],
+          [0, 10],
+          [0, 0],
+        ],
+        level === "PREFECTURE" ? "PREFECTURE" : "COUNTY",
+      );
+      const target = polygonFeature(
+        `target-${level}`,
+        [
+          [1, 1],
+          [2.5, 1],
+          [2.5, 4],
+          [1, 4],
+          [1, 1],
+        ],
+        level,
+      );
+      target.region.name = "测试区";
+      const neighbor = polygonFeature(
+        `neighbor-${level}`,
+        [
+          [4, 1],
+          [18, 1],
+          [18, 9],
+          [4, 9],
+          [4, 1],
+        ],
+        level,
+      );
+      const aggregates =
+        level === "VILLAGE"
+          ? []
+          : [
+              {
+                regionCode: target.region.code,
+                regionName: target.region.name,
+                regionLevel: level,
+                samplePointCount: 7,
+                unresolvedSourceCount: 0,
+              },
+            ];
+      const full = projectReliefScene({
+        backdrop,
+        features: [target, neighbor],
+        frame: overviewReliefFrame(false),
+        points: [],
+        samplePointAggregates: aggregates,
+      });
+      const details = reframeReliefScene(full, overviewReliefFrame(true));
+      const states = [
+        { name: "closed", scene: full, selectedCode: "" },
+        { name: "open", scene: details, selectedCode: target.region.code },
+        { name: "returned", scene: full, selectedCode: "" },
+      ] as const;
+      const layouts = states.map(({ scene, selectedCode }) =>
+        createReliefOverlayLayout(scene, selectedCode),
+      );
+
+      states.forEach(({ name, scene }, stateIndex) => {
+        const surface = scene.features.find(
+          ({ region: item }) => item.code === target.region.code,
+        );
+        const polygon = surface?.polygons[surface.primaryPolygonIndex];
+        const label = layouts[stateIndex]?.labels.find(
+          ({ region }) => region.code === target.region.code,
+        );
+        expect(polygon, `${name} polygon`).toBeDefined();
+        expect(label, `${name} label`).toBeDefined();
+        expect(label?.visible, `${name} label visibility`).toBe(true);
+        if (polygon && label?.visible) {
+          expect(
+            reliefRectInsidePolygon(
+              label.point,
+              {
+                height: label.footprint.height * label.scale,
+                width: label.footprint.width * label.scale,
+              },
+              polygon,
+            ),
+            `${name} complete label bbox`,
+          ).toBe(true);
+        }
+
+        const aggregate = layouts[stateIndex]?.samplePointAggregates.find(
+          ({ aggregate: item }) => item.regionCode === target.region.code,
+        );
+        if (level === "VILLAGE") {
+          expect(aggregate).toBeUndefined();
+        } else {
+          expect(aggregate?.visible, `${name} aggregate visibility`).toBe(true);
+          if (polygon && aggregate?.visible) {
+            expect(
+              reliefCircleInsidePolygon(
+                aggregate.point,
+                aggregate.radius * aggregate.scale,
+                polygon,
+              ),
+              `${name} aggregate ring`,
+            ).toBe(true);
+          }
+        }
+      });
+
+      expect(layouts[2]).toEqual(layouts[0]);
+    },
+  );
+
+  it("hides a label instead of pushing its bbox outside a surface too small to contain it", () => {
+    const tiny = polygonFeature(
+      "tiny",
+      [
+        [0, 0],
+        [0.08, 0],
+        [0.08, 0.08],
+        [0, 0.08],
+        [0, 0],
+      ],
+      "VILLAGE",
+    );
+    tiny.region.name = "无法容纳的行政村名称";
+    const context = polygonFeature(
+      "context",
+      [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+        [0, 10],
+        [0, 0],
+      ],
+      "TOWNSHIP",
+    );
+    const scene = projectReliefScene({
+      backdrop: context,
+      features: [tiny],
+      frame: overviewReliefFrame(true),
+      points: [],
+    });
+
+    expect(createReliefOverlayLayout(scene, "").labels[0]?.visible).toBe(false);
+  });
+
+  it.each([
+    { height: 985, name: "formal screenshot", width: 1480 },
+    { height: 1080, name: "1920×1080", width: 1920 },
+    { height: 1080, name: "2048×1080", width: 2048 },
+  ])(
+    "$name keeps every details surface and overlay outside the fixed details panel",
+    ({ height, width }) => {
+      const stageScale = Math.min(1, height / 1080);
+      const stageWidth = width / stageScale;
+      const panelLeft = overviewDetailsPanelLeft(stageWidth);
+      const panelSafeGap = OVERVIEW_DETAILS_MAP_SAFE_GAP;
+      const target = polygonFeature(
+        "responsive-target",
+        [
+          [0, 0],
+          [20, 0],
+          [20, 10],
+          [0, 10],
+          [0, 0],
+        ],
+        "PREFECTURE",
+      );
+      target.region.name = "响应式验收地区";
+      const full = projectReliefScene({
+        features: [target],
+        frame: overviewReliefFrame(false),
+        points: [],
+        samplePointAggregates: [
+          {
+            regionCode: target.region.code,
+            regionName: target.region.name,
+            regionLevel: target.region.level,
+            samplePointCount: 7,
+            unresolvedSourceCount: 0,
+          },
+        ],
+      });
+      // The second argument is the live command-stage width. Before the
+      // responsive safe-frame fix the function ignored it and left the map
+      // under the fixed 540 px details panel at the formal screenshot ratio.
+      const details = reframeReliefScene(full, overviewReliefFrame(true, stageWidth));
+      const layout = createReliefOverlayLayout(details, target.region.code);
+      const surfacePoints = details.features.flatMap(({ polygons }) =>
+        polygons.flatMap(({ rings }) => rings.flatMap(({ points }) => points)),
+      );
+      const surfaceRight = Math.max(...surfacePoints.map(({ x }) => x));
+
+      expect(panelLeft - surfaceRight).toBeGreaterThanOrEqual(panelSafeGap);
+
+      layout.labels
+        .filter(({ visible }) => visible)
+        .forEach(({ footprint, point, scale }) => {
+          expect(
+            panelLeft - (point.x + (footprint.width * scale) / 2),
+          ).toBeGreaterThanOrEqual(panelSafeGap);
+        });
+      layout.samplePointAggregates
+        .filter(({ visible }) => visible)
+        .forEach(({ point, radius, scale }) => {
+          expect(panelLeft - (point.x + radius * scale)).toBeGreaterThanOrEqual(
+            panelSafeGap,
+          );
+        });
+
+      const connector = overviewSelectionConnector({
+        height: 1080,
+        width: stageWidth,
+        x: layout.labels[0]?.point.x ?? 0,
+        y: layout.labels[0]?.point.y ?? 0,
+      });
+      expect(connector.panelX).toBeLessThan(panelLeft);
+      expect(connector.panelX).toBe(panelLeft - 7);
+    },
+  );
+});

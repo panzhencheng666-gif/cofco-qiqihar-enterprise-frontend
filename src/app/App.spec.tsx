@@ -8,6 +8,7 @@ import type { MarketCollectionRepository } from "../modules/market-monitoring/ap
 import type { ListPageDefinition } from "../shared/application/page-definition";
 import type { ProductionRecordRepository } from "../modules/production-monitoring/application/ports/ProductionRecordRepository";
 import type { ProductionRecordDetail } from "../modules/production-monitoring/domain/productionRecord";
+import { HttpError } from "../shared/api/HttpClient";
 
 type ProductionSearchPage = Awaited<ReturnType<ProductionRecordRepository["search"]>>;
 
@@ -153,6 +154,30 @@ describe("App production composition", () => {
     expect(window.location.hash).toBe("#/pages/LOGISTICS/QUALITY/SOYBEAN_FIXTURE");
   });
 
+  it("renders account, settings, notifications, and help utility routes", async () => {
+    const dependencies = dependenciesFixture(() => Promise.resolve(page([], 0, 20, 0)));
+
+    window.history.replaceState(null, "", "#/account");
+    render(<App dependencies={dependencies} />);
+    expect(
+      await screen.findByRole("heading", { name: "账号与个人资料" }),
+    ).toBeVisible();
+
+    window.history.replaceState(null, "", "#/settings");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    expect(await screen.findByRole("heading", { name: "系统设置" })).toBeVisible();
+
+    window.history.replaceState(null, "", "#/notifications");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    expect(
+      await screen.findByRole("heading", { name: "待办与系统通知" }),
+    ).toBeVisible();
+
+    window.history.replaceState(null, "", "#/help");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    expect(await screen.findByRole("heading", { name: "平台使用手册" })).toBeVisible();
+  });
+
   it("revalidates filter and page-size state arriving through browser history", async () => {
     const searches: Array<Record<string, unknown>> = [];
     render(
@@ -237,6 +262,25 @@ describe("App production composition", () => {
     expect(await screen.findByRole("button", { name: "大豆市场采集" })).toBeVisible();
     expect(attempts).toBe(2);
   });
+
+  it.each([
+    [401, "业务平台需要登录授权，请完成统一身份认证后重试。"],
+    [403, "当前账户没有访问业务导航的权限，请联系管理员。"],
+  ])(
+    "surfaces an actionable navigation message for HTTP %s",
+    async (status, message) => {
+      const dependencies = dependenciesFixture(() =>
+        Promise.resolve(page([], 0, 20, 0)),
+      );
+      dependencies.masterDataRepository.getProducts = () =>
+        Promise.reject(new HttpError(status, `request failed: ${status}`));
+
+      render(<App dependencies={dependencies} />);
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(message);
+      expect(screen.getByRole("button", { name: "重试产品导航" })).toBeVisible();
+    },
+  );
 
   it.each([
     ["CORN", "玉米产情监测"],

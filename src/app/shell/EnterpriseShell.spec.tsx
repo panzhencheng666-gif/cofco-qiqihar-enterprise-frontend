@@ -67,4 +67,45 @@ describe("EnterpriseShell", () => {
     expect(workApplication).toHaveClass("is-active");
     expect(workApplication).toHaveAttribute("aria-current", "page");
   });
+
+  it("navigates top applications and user tools through stable hash routes", async () => {
+    const user = userEvent.setup();
+    render(
+      <EnterpriseShell products={[{ id: "SOYBEAN", name: "大豆" }]}>
+        业务内容
+      </EnterpriseShell>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "报表中心" }));
+    expect(decodeURIComponent(window.location.hash)).toBe("#/报表中心");
+    expect(screen.queryByRole("button", { name: "综合报告" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "我的工作" }));
+    expect(window.location.hash).toBe("#/work/pending");
+
+    await user.click(screen.getByRole("button", { name: "产情监测" }));
+    expect(window.location.hash).toBe("#/pages/PRODUCTION/MONITORING/SOYBEAN");
+    await user.click(screen.getByRole("button", { name: "待办" }));
+    expect(window.location.hash).toBe("#/work/pending");
+    await user.click(screen.getByRole("button", { name: /^通知/ }));
+    expect(window.location.hash).toBe("#/notifications");
+    await user.click(screen.getByRole("button", { name: "帮助" }));
+    expect(window.location.hash).toBe("#/help");
+    await user.click(screen.getByRole("button", { name: "系统设置" }));
+    expect(window.location.hash).toBe("#/settings");
+    await user.click(screen.getByRole("button", { name: "个人账户：王洋" }));
+    expect(window.location.hash).toBe("#/account");
+  });
+
+  it("returns to overview when clicking the brand", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "#/pages/MARKET/MONITORING/SOYBEAN");
+    render(
+      <EnterpriseShell products={[{ id: "SOYBEAN", name: "大豆" }]}>
+        业务内容
+      </EnterpriseShell>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "返回市场采集首页" }));
+    expect(window.location.hash).toBe("#/overview");
+  });
 });

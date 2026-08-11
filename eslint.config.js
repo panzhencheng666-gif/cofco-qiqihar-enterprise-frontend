@@ -4,7 +4,9 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", "coverage", "scripts/architecture-fixtures"] },
+  {
+    ignores: ["dist", "coverage", "public/Cesium", "scripts/architecture-fixtures"],
+  },
   js.configs.recommended,
   {
     files: ["**/*.{ts,tsx}"],
