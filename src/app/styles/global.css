@@ -3256,8 +3256,8 @@ select:focus-visible {
   box-shadow:
     0 0 0 3px rgb(32 211 234 / 14%),
     0 7px 16px rgb(0 28 48 / 46%);
-  cursor: pointer;
-  pointer-events: auto;
+  cursor: default;
+  pointer-events: none;
   transform: translate(-50%, -100%) rotate(-45deg);
 }
 .overview-sample-point-map-icon svg {

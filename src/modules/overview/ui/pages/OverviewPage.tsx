@@ -69,7 +69,20 @@ export function OverviewPage({
   const [samplePointIcons, setSamplePointIcons] = useState<
     readonly OverviewSamplePointIcon[]
   >([]);
-  const [selectedSamplePointId, setSelectedSamplePointId] = useState<string>();
+  const aggregateParentLevel = parentCode
+    ? mapContextRegion?.code === parentCode
+      ? mapContextRegion.level
+      : rootRegions.find((region) => region.code === parentCode)?.level
+    : undefined;
+  const aggregateSelectionLevel = [...regions, ...rootRegions].find(
+    (region) => region.code === selectedRegionCode,
+  )?.level;
+  const hasDeepRegionSelection =
+    aggregateSelectionLevel === "COUNTY" ||
+    aggregateSelectionLevel === "TOWNSHIP" ||
+    aggregateSelectionLevel === "VILLAGE";
+  const showSamplePointAggregates =
+    (!parentCode || aggregateParentLevel === "PREFECTURE") && !hasDeepRegionSelection;
   const refreshSequence = useOverviewRealtimeRefresh(
     realtimeStream ?? NOOP_REALTIME_STREAM,
   );
@@ -83,11 +96,6 @@ export function OverviewPage({
   const updateSamplePointIcons = useCallback(
     (icons: readonly OverviewSamplePointIcon[]) => {
       setSamplePointIcons(icons);
-      setSelectedSamplePointId((current) =>
-        current && icons.some(({ samplePointId }) => samplePointId === current)
-          ? current
-          : undefined,
-      );
     },
     [],
   );
@@ -97,7 +105,6 @@ export function OverviewPage({
     void Promise.resolve().then(() => {
       if (!active) return;
       setSamplePointIcons([]);
-      setSelectedSamplePointId(undefined);
     });
     return () => {
       active = false;
@@ -127,6 +134,17 @@ export function OverviewPage({
   useEffect(() => {
     if (!samplePointRepository || !productCode) return;
     let active = true;
+    if (!showSamplePointAggregates) {
+      void Promise.resolve().then(() => {
+        if (!active) return;
+        setSamplePointAggregates([]);
+        setSamplePointAggregateStatus("hidden");
+        setSamplePointAggregateIssue(undefined);
+      });
+      return () => {
+        active = false;
+      };
+    }
     void Promise.resolve().then(() => {
       if (!active) return;
       setSamplePointAggregates([]);
@@ -150,7 +168,13 @@ export function OverviewPage({
     return () => {
       active = false;
     };
-  }, [parentCode, productCode, refreshSequence, samplePointRepository]);
+  }, [
+    parentCode,
+    productCode,
+    refreshSequence,
+    samplePointRepository,
+    showSamplePointAggregates,
+  ]);
 
   useEffect(() => {
     if (!productCode) return;
@@ -498,7 +522,6 @@ export function OverviewPage({
             samplePointIcons={samplePointIcons}
             selectedCode={selectedRegionCode}
             onSelect={selectRegion}
-            onSamplePointSelect={setSelectedSamplePointId}
             onSelectionPosition={updateMapSelectionPoint}
             onDrill={drillDown}
           />
@@ -533,16 +556,16 @@ export function OverviewPage({
         {...(samplePointRepository &&
         productCode &&
         selectedRegion &&
+        selectedRegion.level !== "PREFECTURE" &&
         !selectedRegion.mapContextOnly
           ? {
               samplePoints: (
                 <OverviewSamplePointPanel
+                  key={`${productCode}:${selectedRegion.code}`}
                   onIconsChange={updateSamplePointIcons}
-                  onSamplePointSelect={setSelectedSamplePointId}
                   productCode={productCode}
                   region={selectedRegion}
                   repository={samplePointRepository}
-                  {...(selectedSamplePointId ? { selectedSamplePointId } : {})}
                 />
               ),
             }

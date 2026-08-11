@@ -18,7 +18,7 @@ const TerrainReliefBoundaryMap = lazy(() => import("./TerrainReliefBoundaryMap")
 export { toMapFeature, toMapPointFeature } from "./boundaryGeometry";
 export type { OverviewMapCommand, OverviewMapSelectionPoint } from "./boundaryGeometry";
 
-export type SamplePointAggregateStatus = "loading" | "ready" | "unavailable";
+export type SamplePointAggregateStatus = "hidden" | "loading" | "ready" | "unavailable";
 
 const EMPTY_SAMPLE_POINT_AGGREGATES: readonly OverviewSamplePointAggregate[] = [];
 const EMPTY_SAMPLE_POINT_ICONS: readonly OverviewSamplePointIcon[] = [];
@@ -27,7 +27,6 @@ export function BoundaryMap({
   backdrop,
   features,
   onDrill,
-  onSamplePointSelect,
   onSelect,
   onSelectionPosition,
   points,
@@ -40,7 +39,6 @@ export function BoundaryMap({
   backdrop?: MapFeature;
   features: readonly MapFeature[];
   onDrill: (region: OverviewRegion) => void;
-  onSamplePointSelect?: (samplePointId: string) => void;
   onSelect: (region: OverviewRegion) => void;
   onSelectionPosition?: (position: OverviewMapSelectionPoint | undefined) => void;
   points: readonly MapPointFeature[];
@@ -91,6 +89,7 @@ export function BoundaryMap({
           features={features}
           points={points}
           samplePointAggregates={samplePointAggregates}
+          samplePointIcons={samplePointIcons}
           {...(samplePointAggregateStatus ? { samplePointAggregateStatus } : {})}
           onDrill={onDrill}
           onSelect={onSelect}
@@ -107,6 +106,7 @@ export function BoundaryMap({
             features={features}
             points={points}
             samplePointAggregates={samplePointAggregates}
+            samplePointIcons={samplePointIcons}
             {...(samplePointAggregateStatus ? { samplePointAggregateStatus } : {})}
             onDrill={onDrill}
             onSelect={onSelect}
@@ -125,7 +125,6 @@ export function BoundaryMap({
         selectedCode={selectedCode}
         onDrill={onDrill}
         onSelect={onSelect}
-        {...(onSamplePointSelect ? { onSamplePointSelect } : {})}
         {...(onSelectionPosition ? { onSelectionPosition } : {})}
         onUnavailable={activateFallback}
         onReady={confirmSceneReady}
@@ -147,6 +146,7 @@ function BoundaryMapAccessibility({
   features,
   points,
   samplePointAggregates,
+  samplePointIcons,
   samplePointAggregateStatus,
   onDrill,
   onSelect,
@@ -154,6 +154,7 @@ function BoundaryMapAccessibility({
   features: readonly MapFeature[];
   points: readonly MapPointFeature[];
   samplePointAggregates: readonly OverviewSamplePointAggregate[];
+  samplePointIcons: readonly OverviewSamplePointIcon[];
   samplePointAggregateStatus?: SamplePointAggregateStatus;
   onDrill: (region: OverviewRegion) => void;
   onSelect: (region: OverviewRegion) => void;
@@ -183,6 +184,13 @@ function BoundaryMapAccessibility({
           type="button"
         />
       ))}
+      {samplePointIcons.map((icon) => (
+        <span
+          aria-label={`${icon.name}，${icon.types.map((type) => type.name).join("、")}，地图位置`}
+          key={`accessible-sample-point-${icon.samplePointId}`}
+          role="img"
+        />
+      ))}
     </div>
   );
 }
@@ -193,6 +201,7 @@ function accessibleRegionLabel(
   status?: SamplePointAggregateStatus,
 ) {
   if (!status) return `${region.name}，已核定 ${region.approvedRecordCount} 条`;
+  if (status === "hidden") return region.name;
   if (status === "loading") return `${region.name}，样本点聚合数据加载中`;
   if (status === "unavailable") return `${region.name}，样本点聚合数据不可用`;
   const aggregate = aggregates.find(({ regionCode }) => regionCode === region.code);

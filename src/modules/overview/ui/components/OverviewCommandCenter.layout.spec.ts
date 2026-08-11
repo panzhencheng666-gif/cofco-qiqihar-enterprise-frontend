@@ -25,6 +25,14 @@ describe("Overview command center navigation layout", () => {
     expect(markerRule?.[1]).toMatch(/transform:\s*translate\(-50%,\s*-50%\)/);
   });
 
+  it("keeps concrete map symbols visually present but non-interactive", () => {
+    const css = readFileSync(resolve("src/app/styles/global.css"), "utf8");
+    const iconRule = css.match(/\.overview-sample-point-map-icon\s*\{([^}]*)\}/s);
+
+    expect(iconRule?.[1]).toMatch(/pointer-events:\s*none/);
+    expect(iconRule?.[1]).toMatch(/cursor:\s*default/);
+  });
+
   it("does not let a renderer rebuild cancel the independently owned details-frame transition", () => {
     const source = readFileSync(
       resolve("src/modules/overview/ui/components/TerrainReliefBoundaryMap.tsx"),

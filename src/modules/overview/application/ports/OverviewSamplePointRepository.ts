@@ -23,10 +23,13 @@ export interface OverviewSamplePointRepository {
     regionCode: string;
     categoryCode: OverviewSamplePointCategoryCode;
     typeCode?: string;
+    query?: string;
   }): Promise<readonly OverviewSamplePointIcon[]>;
-  detail(
-    samplePointId: string,
-    regionCode: string,
-    productCode: string,
-  ): Promise<OverviewSamplePointDetail>;
+  detail(query: {
+    samplePointId: string;
+    productCode: string;
+    regionCode: string;
+    categoryCode: OverviewSamplePointCategoryCode;
+    typeCode?: string;
+  }): Promise<OverviewSamplePointDetail>;
 }

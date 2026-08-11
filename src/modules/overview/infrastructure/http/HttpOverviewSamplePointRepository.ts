@@ -131,6 +131,7 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
     regionCode: string;
     categoryCode: OverviewSamplePointCategoryCode;
     typeCode?: string;
+    query?: string;
   }) {
     return (
       await this.http.get(
@@ -140,10 +141,22 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
     ).data;
   }
 
-  async detail(samplePointId: string, regionCode: string, productCode: string) {
+  async detail(query: {
+    samplePointId: string;
+    productCode: string;
+    regionCode: string;
+    categoryCode: OverviewSamplePointCategoryCode;
+    typeCode?: string;
+  }) {
+    const parameters = {
+      productCode: query.productCode,
+      regionCode: query.regionCode,
+      categoryCode: query.categoryCode,
+      ...(query.typeCode ? { typeCode: query.typeCode } : {}),
+    };
     return (
       await this.http.get(
-        `/api/v1/overview/sample-points/${encodeURIComponent(samplePointId)}${queryString({ productCode, regionCode })}`,
+        `/api/v1/overview/sample-points/${encodeURIComponent(query.samplePointId)}${queryString(parameters)}`,
         detailSchema,
       )
     ).data;

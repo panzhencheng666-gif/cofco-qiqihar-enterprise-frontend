@@ -79,7 +79,7 @@ describe("HttpOverviewSamplePointRepository", () => {
     expect(result.items[0]).not.toHaveProperty("latitude");
   });
 
-  it("reads village icons only through the categorized icon resource", async () => {
+  it("reads county-and-deeper icons through the full categorized query", async () => {
     const get = respondingWith([
       {
         samplePointId: "94000000-0000-0000-0000-000000000001",
@@ -93,13 +93,14 @@ describe("HttpOverviewSamplePointRepository", () => {
 
     const result = await repository.icons({
       productCode: "CORN",
-      regionCode: "230202997001",
+      regionCode: "230202",
       categoryCode: "PRODUCTION",
       typeCode: "FARMER",
+      query: "同一",
     });
 
     expect(get.mock.calls[0]?.[0]).toBe(
-      "/api/v1/overview/sample-point-icons?productCode=CORN&regionCode=230202997001&categoryCode=PRODUCTION&typeCode=FARMER",
+      "/api/v1/overview/sample-point-icons?productCode=CORN&regionCode=230202&categoryCode=PRODUCTION&typeCode=FARMER&query=%E5%90%8C%E4%B8%80",
     );
     expect(result[0]?.longitude).toBe(123.9);
   });
@@ -130,14 +131,16 @@ describe("HttpOverviewSamplePointRepository", () => {
     });
     const repository = repositoryWith(get);
 
-    const result = await repository.detail(
-      "94000000-0000-0000-0000-000000000001",
-      "230202997001",
-      "CORN",
-    );
+    const result = await repository.detail({
+      samplePointId: "94000000-0000-0000-0000-000000000001",
+      regionCode: "230202",
+      productCode: "CORN",
+      categoryCode: "PRODUCTION",
+      typeCode: "FARMER",
+    });
 
     expect(get.mock.calls[0]?.[0]).toBe(
-      "/api/v1/overview/sample-points/94000000-0000-0000-0000-000000000001?productCode=CORN&regionCode=230202997001",
+      "/api/v1/overview/sample-points/94000000-0000-0000-0000-000000000001?productCode=CORN&regionCode=230202&categoryCode=PRODUCTION&typeCode=FARMER",
     );
     expect(result.associations[0]?.businessValues.CONTACT?.value).toBe("13900000000");
     expect(result).not.toHaveProperty("pointGeometry");

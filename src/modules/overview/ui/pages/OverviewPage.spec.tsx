@@ -262,6 +262,186 @@ describe("OverviewPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows aggregates only for prefectures and counties across all five map levels", async () => {
+    const county = {
+      ...sampleRegion,
+      code: "230231",
+      name: "拜泉县",
+      level: "COUNTY" as const,
+      parentCode: "230200",
+    };
+    const township = {
+      ...sampleRegion,
+      code: "230231100",
+      name: "兴农镇",
+      level: "TOWNSHIP" as const,
+      parentCode: "230231",
+    };
+    const village = {
+      ...sampleRegion,
+      code: "230231100201",
+      name: "众兴村",
+      level: "VILLAGE" as const,
+      parentCode: "230231100",
+    };
+    const regions = vi.fn<OverviewRepository["regions"]>((query) => {
+      if (!query.parentCode) return Promise.resolve([sampleRegion]);
+      if (query.parentCode === "230200") return Promise.resolve([county]);
+      if (query.parentCode === "230231") return Promise.resolve([township]);
+      if (query.parentCode === "230231100") return Promise.resolve([village]);
+      return Promise.resolve([]);
+    });
+    const aggregates = vi.fn<OverviewSamplePointRepository["aggregates"]>((query) => {
+      if (!query.parentCode) {
+        return Promise.resolve([
+          {
+            regionCode: "230200",
+            regionName: "齐齐哈尔市",
+            regionLevel: "PREFECTURE",
+            samplePointCount: 4,
+            unresolvedSourceCount: 0,
+          },
+        ]);
+      }
+      const child =
+        query.parentCode === "230200"
+          ? { region: county, count: 3 }
+          : query.parentCode === "230231"
+            ? { region: township, count: 2 }
+            : { region: village, count: 1 };
+      return Promise.resolve([
+        {
+          regionCode: child.region.code,
+          regionName: child.region.name,
+          regionLevel: child.region.level,
+          samplePointCount: child.count,
+          unresolvedSourceCount: 0,
+        },
+      ]);
+    });
+
+    render(
+      <OverviewPage
+        repository={{
+          mapScope: () => Promise.resolve(sampleMapScope),
+          options: () => Promise.resolve(options),
+          regions,
+          locations: () => Promise.resolve([]),
+          indicators: () => Promise.resolve([]),
+          dashboard: () => Promise.resolve(emptyDashboard),
+        }}
+        samplePointRepository={{
+          aggregates,
+          list: () => Promise.resolve(samplePointList),
+          icons: () => Promise.resolve([]),
+          detail: () => Promise.reject(new Error("not selected")),
+        }}
+      />,
+    );
+
+    fireEvent.doubleClick(
+      await screen.findByRole("button", {
+        name: "齐齐哈尔市，已核定 4 个样本点",
+      }),
+    );
+    fireEvent.doubleClick(
+      await screen.findByRole("button", { name: "拜泉县，已核定 3 个样本点" }),
+    );
+    const mapRegion = screen.getByLabelText("粮食商情总览地图");
+    fireEvent.doubleClick(
+      await within(mapRegion).findByRole("button", { name: "兴农镇" }),
+    );
+    expect(
+      await within(mapRegion).findByRole("button", { name: "众兴村" }),
+    ).toBeVisible();
+    expect(aggregates).toHaveBeenCalledTimes(2);
+    expect(aggregates).toHaveBeenNthCalledWith(1, { productCode: "CORN" });
+    expect(aggregates).toHaveBeenNthCalledWith(2, {
+      productCode: "CORN",
+      parentCode: "230200",
+    });
+    expect(
+      screen.queryByText("1", { selector: ".overview-sample-point-aggregate-marker" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders concrete sample points as non-interactive map symbols and resets them with the drawer", async () => {
+    const county = {
+      ...sampleRegion,
+      code: "230231",
+      name: "拜泉县",
+      level: "COUNTY" as const,
+      parentCode: "230200",
+    };
+    const detail = vi.fn<OverviewSamplePointRepository["detail"]>(() =>
+      Promise.resolve(samplePointDetail),
+    );
+    render(
+      <OverviewPage
+        repository={{
+          mapScope: () => Promise.resolve(sampleMapScope),
+          options: () => Promise.resolve(options),
+          regions: (query) =>
+            Promise.resolve(query.parentCode === "230200" ? [county] : [sampleRegion]),
+          locations: () => Promise.resolve([]),
+          indicators: () => Promise.resolve([]),
+          dashboard: () => Promise.resolve(emptyDashboard),
+        }}
+        samplePointRepository={{
+          aggregates: (query) =>
+            Promise.resolve([
+              {
+                regionCode: query.parentCode ? county.code : sampleRegion.code,
+                regionName: query.parentCode ? county.name : sampleRegion.name,
+                regionLevel: query.parentCode ? "COUNTY" : "PREFECTURE",
+                samplePointCount: 1,
+                unresolvedSourceCount: 0,
+              },
+            ]),
+          list: () => Promise.resolve(samplePointList),
+          icons: () => Promise.resolve(samplePointIcons),
+          detail,
+        }}
+      />,
+    );
+
+    await screen.findByRole("option", { name: "齐齐哈尔市" });
+    await userEvent.setup().selectOptions(screen.getByLabelText("区域范围"), "230200");
+    await userEvent
+      .setup()
+      .click(await screen.findByRole("button", { name: "拜泉县，已核定 1 个样本点" }));
+    expect(
+      await within(screen.getByLabelText("粮食商情总览地图")).findByRole("button", {
+        name: "拜泉县",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("1", { selector: ".overview-sample-point-aggregate-marker" }),
+    ).not.toBeInTheDocument();
+    await userEvent
+      .setup()
+      .click(await screen.findByRole("button", { name: "产情类 1" }));
+
+    const symbol = await screen.findByRole("img", {
+      name: "同一跨产品样本点，农户，地图位置",
+    });
+    fireEvent.click(symbol);
+    expect(detail).not.toHaveBeenCalled();
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "关闭地区详情" }));
+    expect(
+      screen.queryByRole("img", { name: "同一跨产品样本点，农户，地图位置" }),
+    ).not.toBeInTheDocument();
+
+    await userEvent
+      .setup()
+      .click(await screen.findByRole("button", { name: "拜泉县，已核定 1 个样本点" }));
+    expect(screen.getByText("请选择分类后查看样本点")).toBeVisible();
+    expect(
+      screen.queryByRole("img", { name: "同一跨产品样本点，农户，地图位置" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("does not load or render the retired region hierarchy inside the drawer", async () => {
     const locations = vi.fn<OverviewRepository["locations"]>(() => Promise.resolve([]));
     render(
@@ -786,6 +966,50 @@ const sampleIndicator = {
   sourceDomain: "PRODUCTION" as const,
   sourceCount: 1,
   sourcePath: "/api/v1/production-records",
+};
+const samplePointList = {
+  regionCode: "230231",
+  totalCount: 1,
+  unresolvedSourceCount: 0,
+  categories: [
+    {
+      code: "PRODUCTION" as const,
+      name: "产情类",
+      count: 1,
+      types: [{ code: "FARMER", name: "农户", count: 1 }],
+    },
+    { code: "MARKET" as const, name: "市场类", count: 0, types: [] },
+    { code: "LOGISTICS" as const, name: "物流节点", count: 0, types: [] },
+  ],
+  items: [
+    {
+      samplePointId: "94000000-0000-0000-0000-000000000001",
+      name: "同一跨产品样本点",
+      regionCode: "230231100201",
+      regionName: "众兴村",
+      locationState: "VALID",
+      categories: [{ code: "PRODUCTION" as const, name: "产情类" }],
+      types: [{ code: "FARMER", name: "农户" }],
+      products: [{ code: "CORN", name: "玉米" }],
+    },
+  ],
+};
+const samplePointIcons = [
+  {
+    samplePointId: "94000000-0000-0000-0000-000000000001",
+    name: "同一跨产品样本点",
+    types: [{ code: "FARMER", name: "农户" }],
+    longitude: 123.5,
+    latitude: 47.5,
+  },
+];
+const samplePointDetail = {
+  samplePointId: "94000000-0000-0000-0000-000000000001",
+  name: "同一跨产品样本点",
+  regionCode: "230231100201",
+  regionName: "众兴村",
+  locationState: "VALID",
+  associations: [],
 };
 const sampleMapScope = {
   scopeCode: "FORMAL_BUSINESS",

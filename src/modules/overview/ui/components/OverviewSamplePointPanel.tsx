@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
 import type {
-  OverviewSamplePointAggregate,
   OverviewSamplePointCategoryCode,
   OverviewSamplePointDetail,
   OverviewSamplePointIcon,
@@ -10,146 +9,184 @@ import type {
 } from "../../domain/overviewSamplePoint";
 
 type RegionLevel = "PREFECTURE" | "COUNTY" | "TOWNSHIP" | "VILLAGE";
+type LoadState = "idle" | "loading" | "ready" | "unavailable";
 
 export function OverviewSamplePointPanel({
-  onAggregatesChange,
   onIconsChange,
-  onSamplePointSelect,
-  parentCode,
   productCode,
   region,
   repository,
-  selectedSamplePointId,
 }: {
-  onAggregatesChange?: (aggregates: readonly OverviewSamplePointAggregate[]) => void;
   onIconsChange: (icons: readonly OverviewSamplePointIcon[]) => void;
-  onSamplePointSelect?: (samplePointId: string) => void;
-  parentCode?: string;
   productCode: string;
   region: { code: string; level: RegionLevel; name: string };
   repository: OverviewSamplePointRepository;
-  selectedSamplePointId?: string;
 }) {
   const [categoryCode, setCategoryCode] = useState<OverviewSamplePointCategoryCode>();
   const [typeCode, setTypeCode] = useState<string>();
   const [query, setQuery] = useState("");
-  const [list, setList] = useState<OverviewSamplePointList>();
+  const [catalog, setCatalog] = useState<OverviewSamplePointList>();
+  const [result, setResult] = useState<OverviewSamplePointList>();
   const [detail, setDetail] = useState<OverviewSamplePointDetail>();
   const [selectedId, setSelectedId] = useState<string>();
-  const [issue, setIssue] = useState<string>();
-  const [listState, setListState] = useState<"loading" | "ready" | "unavailable">(
-    "loading",
-  );
+  const [catalogState, setCatalogState] = useState<LoadState>("loading");
+  const [resultState, setResultState] = useState<LoadState>("idle");
   const [detailUnavailable, setDetailUnavailable] = useState(false);
-
-  useEffect(() => {
-    setSelectedId(selectedSamplePointId);
-  }, [productCode, region.code, selectedSamplePointId]);
-
-  useEffect(() => {
-    if (!onAggregatesChange) return;
-    let active = true;
-    repository
-      .aggregates({ productCode, ...(parentCode ? { parentCode } : {}) })
-      .then((aggregates) => active && onAggregatesChange(aggregates))
-      .catch(() => {
-        if (!active) return;
-        onAggregatesChange([]);
-        setIssue("样本点行政统计加载失败，请稍后重试。");
-      });
-    return () => {
-      active = false;
-    };
-  }, [onAggregatesChange, parentCode, productCode, repository]);
+  const [catalogIssue, setCatalogIssue] = useState<string>();
+  const [resultIssue, setResultIssue] = useState<string>();
+  const [iconIssue, setIconIssue] = useState<string>();
+  const [detailIssue, setDetailIssue] = useState<string>();
 
   useEffect(() => {
     let active = true;
-    setDetail(undefined);
-    setListState("loading");
+    void Promise.resolve().then(() => {
+      if (!active) return;
+      setCategoryCode(undefined);
+      setTypeCode(undefined);
+      setQuery("");
+      setCatalog(undefined);
+      setResult(undefined);
+      setDetail(undefined);
+      setSelectedId(undefined);
+      setCatalogState("loading");
+      setResultState("idle");
+      setCatalogIssue(undefined);
+      setResultIssue(undefined);
+      setIconIssue(undefined);
+      setDetailIssue(undefined);
+      setDetailUnavailable(false);
+    });
+    onIconsChange([]);
     repository
-      .list({
-        productCode,
-        regionCode: region.code,
-        ...(categoryCode ? { categoryCode } : {}),
-        ...(typeCode ? { typeCode } : {}),
-        ...(query.trim() ? { query: query.trim() } : {}),
-      })
+      .list({ productCode, regionCode: region.code })
       .then((next) => {
         if (!active) return;
-        setList(next);
-        setListState("ready");
-        setIssue(undefined);
+        setCatalog(next);
+        setCatalogState("ready");
       })
       .catch(() => {
         if (!active) return;
-        setList(undefined);
-        setListState("unavailable");
-        setIssue("样本点列表加载失败，请稍后重试。");
+        setCatalog(undefined);
+        setCatalogState("unavailable");
+        setCatalogIssue("样本点分类加载失败，请稍后重试。");
       });
     return () => {
       active = false;
     };
-  }, [categoryCode, productCode, query, region.code, repository, typeCode]);
+  }, [onIconsChange, productCode, region.code, repository]);
 
   useEffect(() => {
-    if (region.level !== "VILLAGE" || !categoryCode) {
+    if (!categoryCode) {
       onIconsChange([]);
       return;
     }
     let active = true;
+    const filters = {
+      productCode,
+      regionCode: region.code,
+      categoryCode,
+      ...(typeCode ? { typeCode } : {}),
+      ...(query.trim() ? { query: query.trim() } : {}),
+    };
+    onIconsChange([]);
     repository
-      .icons({
+      .list(filters)
+      .then((next) => {
+        if (!active) return;
+        setResult(next);
+        setResultState("ready");
+      })
+      .catch(() => {
+        if (!active) return;
+        setResult(undefined);
+        setResultState("unavailable");
+        setResultIssue("样本点列表加载失败，请稍后重试。");
+      });
+    repository
+      .icons(filters)
+      .then((icons) => active && onIconsChange(icons))
+      .catch(() => {
+        if (!active) return;
+        onIconsChange([]);
+        setIconIssue("样本点图标加载失败，请稍后重试。");
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    categoryCode,
+    onIconsChange,
+    productCode,
+    query,
+    region.code,
+    repository,
+    typeCode,
+  ]);
+
+  useEffect(() => {
+    if (!selectedId || !categoryCode) {
+      return;
+    }
+    let active = true;
+    repository
+      .detail({
+        samplePointId: selectedId,
         productCode,
         regionCode: region.code,
         categoryCode,
         ...(typeCode ? { typeCode } : {}),
       })
-      .then((icons) => active && onIconsChange(icons))
-      .catch(() => {
-        if (!active) return;
-        onIconsChange([]);
-        setIssue("行政村样本点图标加载失败，请稍后重试。");
-      });
-    return () => {
-      active = false;
-    };
-  }, [categoryCode, onIconsChange, productCode, region.code, region.level, repository, typeCode]);
-
-  useEffect(() => {
-    if (!selectedId) {
-      setDetail(undefined);
-      setDetailUnavailable(false);
-      return;
-    }
-    let active = true;
-    setDetailUnavailable(false);
-    setIssue(undefined);
-    repository
-      .detail(selectedId, region.code, productCode)
       .then((next) => active && setDetail(next))
       .catch(() => {
         if (!active) return;
         setDetailUnavailable(true);
-        setIssue("样本点业务信息加载失败，请稍后重试。");
+        setDetailIssue("样本点业务信息加载失败，请稍后重试。");
       });
     return () => {
       active = false;
     };
-  }, [productCode, region.code, repository, selectedId]);
+  }, [categoryCode, productCode, region.code, repository, selectedId, typeCode]);
+
+  function clearConcreteResults() {
+    setResult(undefined);
+    setResultState("idle");
+    setDetail(undefined);
+    setSelectedId(undefined);
+    setDetailUnavailable(false);
+    setResultIssue(undefined);
+    setIconIssue(undefined);
+    setDetailIssue(undefined);
+    onIconsChange([]);
+  }
 
   function selectCategory(next: OverviewSamplePointCategoryCode) {
+    clearConcreteResults();
     setCategoryCode((current) => (current === next ? undefined : next));
     setTypeCode(undefined);
+    setQuery("");
+  }
+
+  function selectType(next: string) {
+    clearConcreteResults();
+    setTypeCode((current) => (current === next ? undefined : next));
+  }
+
+  function changeQuery(next: string) {
+    clearConcreteResults();
+    setQuery(next);
   }
 
   function selectItem(samplePointId: string) {
+    setDetail(undefined);
+    setDetailUnavailable(false);
+    setDetailIssue(undefined);
     setSelectedId(samplePointId);
-    onSamplePointSelect?.(samplePointId);
   }
 
-  const selectedCategory = list?.categories.find(
+  const selectedCategory = catalog?.categories.find(
     (category) => category.code === categoryCode,
   );
+  const issue = detailIssue ?? iconIssue ?? resultIssue ?? catalogIssue;
 
   return (
     <section aria-label="样本点业务信息" className="overview-sample-point-panel">
@@ -160,12 +197,12 @@ export function OverviewSamplePointPanel({
           <span aria-hidden="true">◆</span>
           样本点分类
           <i aria-hidden="true">
-            {list ? `${list.totalCount} 个` : listStateLabel(listState)}
+            {catalog ? `${catalog.totalCount} 个` : loadStateLabel(catalogState)}
           </i>
         </h3>
-        {list ? (
+        {catalog ? (
           <nav aria-label="样本点分类">
-            {list.categories.map((category) => (
+            {catalog.categories.map((category) => (
               <button
                 aria-label={`${category.name} ${category.count}`}
                 aria-pressed={categoryCode === category.code}
@@ -181,7 +218,7 @@ export function OverviewSamplePointPanel({
           </nav>
         ) : (
           <p className="overview-sample-point-state">
-            {listState === "unavailable" ? "样本点数据不可用" : "正在同步样本点分类"}
+            {catalogState === "unavailable" ? "样本点数据不可用" : "正在同步样本点分类"}
           </p>
         )}
         <div aria-label="样本点细分类型">
@@ -190,18 +227,14 @@ export function OverviewSamplePointPanel({
               <button
                 aria-pressed={typeCode === type.code}
                 key={type.code}
-                onClick={() =>
-                  setTypeCode((current) =>
-                    current === type.code ? undefined : type.code,
-                  )
-                }
+                onClick={() => selectType(type.code)}
                 type="button"
               >
                 {type.name} <strong>{type.count}</strong>
               </button>
             ))
           ) : (
-            <p>{list ? "选择分类后查看细分类型" : "细分类型数据不可用"}</p>
+            <p>{catalog ? "选择分类后查看细分类型" : "细分类型数据不可用"}</p>
           )}
         </div>
       </section>
@@ -215,23 +248,24 @@ export function OverviewSamplePointPanel({
         <label>
           <span>搜索样本点</span>
           <input
-            disabled={!list}
-            onChange={(event) => setQuery(event.target.value)}
+            disabled={!catalog || !categoryCode}
+            onChange={(event) => changeQuery(event.target.value)}
             placeholder="输入样本点名称、地区或联系方式"
             type="search"
             value={query}
           />
         </label>
 
-        {list?.unresolvedSourceCount ? (
+        {result?.unresolvedSourceCount ? (
           <p role="status">
-            {list.unresolvedSourceCount}{" "}
+            {result.unresolvedSourceCount}{" "}
             条正式来源缺少或存在异常坐标，已计数但不显示图标。
           </p>
         ) : null}
 
         <div aria-label="样本点列表" className="overview-sample-point-list">
-          {list?.items.map((item) => (
+          {!categoryCode ? <p>请选择分类后查看样本点</p> : null}
+          {result?.items.map((item) => (
             <button
               aria-pressed={selectedId === item.samplePointId}
               key={item.samplePointId}
@@ -243,10 +277,10 @@ export function OverviewSamplePointPanel({
               <small>{item.products.map((product) => product.name).join("、")}</small>
             </button>
           ))}
-          {list && !list.items.length ? <p>当前条件下暂无样本点。</p> : null}
-          {!list ? (
+          {result && !result.items.length ? <p>当前条件下暂无样本点。</p> : null}
+          {categoryCode && !result ? (
             <p>
-              {listState === "unavailable"
+              {resultState === "unavailable"
                 ? "样本点列表数据不可用"
                 : "正在同步样本点列表"}
             </p>
@@ -302,7 +336,7 @@ export function OverviewSamplePointPanel({
   );
 }
 
-function listStateLabel(state: "loading" | "ready" | "unavailable") {
+function loadStateLabel(state: LoadState) {
   if (state === "loading") return "同步中";
   if (state === "unavailable") return "不可用";
   return "⌃";

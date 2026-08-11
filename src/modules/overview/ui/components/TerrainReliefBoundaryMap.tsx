@@ -121,7 +121,6 @@ export default function TerrainReliefBoundaryMap({
   features,
   onDrill,
   onReady,
-  onSamplePointSelect,
   onSelect,
   onSelectionPosition,
   onUnavailable,
@@ -136,13 +135,12 @@ export default function TerrainReliefBoundaryMap({
   features: readonly MapFeature[];
   onDrill: (region: OverviewRegion) => void;
   onReady: () => void;
-  onSamplePointSelect?: (samplePointId: string) => void;
   onSelect: (region: OverviewRegion) => void;
   onSelectionPosition?: (position: OverviewMapSelectionPoint | undefined) => void;
   onUnavailable: (reason: string) => void;
   points: readonly MapPointFeature[];
   samplePointAggregates?: readonly OverviewSamplePointAggregate[];
-  samplePointAggregateStatus?: "loading" | "ready" | "unavailable";
+  samplePointAggregateStatus?: "hidden" | "loading" | "ready" | "unavailable";
   samplePointIcons?: readonly OverviewSamplePointIcon[];
   selectedCode: string;
 }) {
@@ -1036,16 +1034,15 @@ export default function TerrainReliefBoundaryMap({
             );
           })}
         {activeProjection.samplePointIcons.map(({ icon, point }) => (
-          <button
-            aria-label={`${icon.name}，${icon.types.map((type) => type.name).join("、")}，点击查看业务信息`}
+          <span
+            aria-label={`${icon.name}，${icon.types.map((type) => type.name).join("、")}，地图位置`}
             className={`overview-sample-point-map-icon is-${samplePointSymbolKind(icon)}`}
             key={icon.samplePointId}
-            onClick={() => onSamplePointSelect?.(icon.samplePointId)}
+            role="img"
             style={{ left: point.x, top: point.y }}
-            type="button"
           >
             <SamplePointMapSymbol kind={samplePointSymbolKind(icon)} />
-          </button>
+          </span>
         ))}
         {!activeProjection.backdrop &&
           !activeProjection.features.length &&
@@ -1068,12 +1065,13 @@ function reliefRegionLabel({
   aggregateCount: number | undefined;
   isLeaf: boolean;
   region: OverviewRegion;
-  status: "loading" | "ready" | "unavailable" | undefined;
+  status: "hidden" | "loading" | "ready" | "unavailable" | undefined;
 }) {
   if (region.mapContextOnly) {
     return `${region.name}，点击查看非监测地图参考区域`;
   }
   const action = isLeaf ? "点击查看行政村详情" : "点击选中，双击进入下一级";
+  if (status === "hidden") return `${region.name}，${action}`;
   if (status === "loading") return `${region.name}，样本点聚合数据加载中，${action}`;
   if (
     status === "unavailable" ||

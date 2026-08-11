@@ -5,14 +5,6 @@ import { describe, expect, it, vi } from "vitest";
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
 import { OverviewSamplePointPanel } from "./OverviewSamplePointPanel";
 
-const aggregate = {
-  regionCode: "230202997001",
-  regionName: "契约测试村",
-  regionLevel: "VILLAGE" as const,
-  samplePointCount: 3,
-  unresolvedSourceCount: 1,
-};
-
 const list = {
   regionCode: "230202997001",
   totalCount: 1,
@@ -24,7 +16,12 @@ const list = {
       count: 1,
       types: [{ code: "FARMER", name: "农户", count: 1 }],
     },
-    { code: "MARKET" as const, name: "市场类", count: 0, types: [] },
+    {
+      code: "MARKET" as const,
+      name: "市场类",
+      count: 1,
+      types: [{ code: "TRADER", name: "贸易商", count: 1 }],
+    },
     { code: "LOGISTICS" as const, name: "物流节点", count: 0, types: [] },
   ],
   items: [
@@ -60,54 +57,45 @@ describe("OverviewSamplePointPanel", () => {
     );
   });
 
-  it("keeps aggregate counts independent while filtering a township list", async () => {
+  it("shows category counts but no concrete result before a category is selected", async () => {
     const repository = repositoryStub();
-    const onAggregatesChange = vi.fn();
     const onIconsChange = vi.fn();
 
     render(
       <OverviewSamplePointPanel
-        onAggregatesChange={onAggregatesChange}
         onIconsChange={onIconsChange}
-        parentCode="230202997"
         productCode="CORN"
-        region={{ code: "230202997", level: "TOWNSHIP", name: "契约测试乡" }}
+        region={{ code: "230202", level: "COUNTY", name: "龙沙区" }}
         repository={repository}
       />,
     );
 
-    await screen.findByText("同一跨产品样本点");
-    await userEvent.click(screen.getByRole("button", { name: "产情类 1" }));
-
-    await waitFor(() =>
-      expect(repository.list).toHaveBeenLastCalledWith({
-        productCode: "CORN",
-        regionCode: "230202997",
-        categoryCode: "PRODUCTION",
-      }),
-    );
-    expect(repository.aggregates).toHaveBeenCalledTimes(1);
-    expect(onAggregatesChange).toHaveBeenCalledWith([aggregate]);
+    expect(await screen.findByRole("button", { name: "产情类 1" })).toBeVisible();
+    expect(screen.queryByText("同一跨产品样本点")).not.toBeInTheDocument();
+    expect(screen.getByText("请选择分类后查看样本点")).toBeVisible();
     expect(repository.icons).not.toHaveBeenCalled();
-    expect(onIconsChange).toHaveBeenLastCalledWith([]);
+    expect(repository.detail).not.toHaveBeenCalled();
+    expect(onIconsChange).toHaveBeenCalledWith([]);
   });
 
-  it("publishes icons only after a village category is selected", async () => {
+  it.each([
+    ["COUNTY", "230202", "龙沙区"],
+    ["TOWNSHIP", "230202997", "契约测试乡"],
+    ["VILLAGE", "230202997001", "契约测试村"],
+  ] as const)("publishes categorized icons at %s level", async (level, code, name) => {
     const repository = repositoryStub();
     const onIconsChange = vi.fn();
 
     render(
       <OverviewSamplePointPanel
-        onAggregatesChange={vi.fn()}
         onIconsChange={onIconsChange}
-        parentCode="230202997"
         productCode="CORN"
-        region={{ code: "230202997001", level: "VILLAGE", name: "契约测试村" }}
+        region={{ code, level, name }}
         repository={repository}
       />,
     );
 
-    await screen.findByText("同一跨产品样本点");
+    await screen.findByRole("button", { name: "产情类 1" });
     expect(repository.icons).not.toHaveBeenCalled();
 
     await userEvent.click(screen.getByRole("button", { name: "产情类 1" }));
@@ -115,7 +103,7 @@ describe("OverviewSamplePointPanel", () => {
     await waitFor(() =>
       expect(repository.icons).toHaveBeenCalledWith({
         productCode: "CORN",
-        regionCode: "230202997001",
+        regionCode: code,
         categoryCode: "PRODUCTION",
       }),
     );
@@ -124,81 +112,125 @@ describe("OverviewSamplePointPanel", () => {
     ]);
   });
 
+  it("uses one category, type, and search query for the list and icons", async () => {
+    const repository = repositoryStub();
+    render(
+      <OverviewSamplePointPanel
+        onIconsChange={vi.fn()}
+        productCode="CORN"
+        region={{ code: "230202", level: "COUNTY", name: "龙沙区" }}
+        repository={repository}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "产情类 1" }));
+    await userEvent.click(await screen.findByRole("button", { name: "农户 1" }));
+    await userEvent.type(screen.getByLabelText("搜索样本点"), "同一");
+
+    await waitFor(() =>
+      expect(repository.list).toHaveBeenLastCalledWith({
+        productCode: "CORN",
+        regionCode: "230202",
+        categoryCode: "PRODUCTION",
+        typeCode: "FARMER",
+        query: "同一",
+      }),
+    );
+    expect(repository.icons).toHaveBeenLastCalledWith({
+      productCode: "CORN",
+      regionCode: "230202",
+      categoryCode: "PRODUCTION",
+      typeCode: "FARMER",
+      query: "同一",
+    });
+  });
+
+  it("clears the old list, icons, and detail immediately when a category is cancelled", async () => {
+    const repository = repositoryStub();
+    const onIconsChange = vi.fn();
+    render(
+      <OverviewSamplePointPanel
+        onIconsChange={onIconsChange}
+        productCode="CORN"
+        region={{ code: "230202", level: "COUNTY", name: "龙沙区" }}
+        repository={repository}
+      />,
+    );
+
+    const category = await screen.findByRole("button", { name: "产情类 1" });
+    await userEvent.click(category);
+    await userEvent.click(await screen.findByText("同一跨产品样本点"));
+    expect(await screen.findByText("13900000000")).toBeVisible();
+
+    await userEvent.click(category);
+
+    expect(screen.queryByText("同一跨产品样本点")).not.toBeInTheDocument();
+    expect(screen.queryByText("13900000000")).not.toBeInTheDocument();
+    expect(onIconsChange).toHaveBeenLastCalledWith([]);
+  });
+
   it("loads stable-id business detail without map geometry", async () => {
     const repository = repositoryStub();
     render(
       <OverviewSamplePointPanel
-        onAggregatesChange={vi.fn()}
         onIconsChange={vi.fn()}
-        parentCode="230202997"
         productCode="CORN"
-        region={{ code: "230202997001", level: "VILLAGE", name: "契约测试村" }}
+        region={{ code: "230202", level: "COUNTY", name: "龙沙区" }}
         repository={repository}
       />,
     );
 
+    await userEvent.click(await screen.findByRole("button", { name: "产情类 1" }));
     await userEvent.click(await screen.findByText("同一跨产品样本点"));
 
     expect(await screen.findByText("13900000000")).toBeInTheDocument();
-    expect(repository.detail).toHaveBeenCalledWith(
-      "94000000-0000-0000-0000-000000000001",
-      "230202997001",
-      "CORN",
-    );
+    expect(repository.detail).toHaveBeenCalledWith({
+      samplePointId: "94000000-0000-0000-0000-000000000001",
+      regionCode: "230202",
+      productCode: "CORN",
+      categoryCode: "PRODUCTION",
+    });
     expect(screen.queryByText("123.9")).not.toBeInTheDocument();
   });
 
-  it("loads the same stable-id detail when a village map icon is selected", async () => {
+  it("does not load detail from an external map-icon selection", async () => {
     const repository = repositoryStub();
 
-    const { rerender } = render(
+    render(
       <OverviewSamplePointPanel
         onIconsChange={vi.fn()}
         productCode="CORN"
         region={{ code: "230202997001", level: "VILLAGE", name: "契约测试村" }}
         repository={repository}
+        {...({
+          selectedSamplePointId: "94000000-0000-0000-0000-000000000001",
+        } as Record<string, string>)}
       />,
     );
 
-    rerender(
-      <OverviewSamplePointPanel
-        onIconsChange={vi.fn()}
-        productCode="CORN"
-        region={{ code: "230202997001", level: "VILLAGE", name: "契约测试村" }}
-        repository={repository}
-        selectedSamplePointId="94000000-0000-0000-0000-000000000001"
-      />,
-    );
-
-    expect(await screen.findByText("13900000000")).toBeInTheDocument();
-    expect(repository.detail).toHaveBeenCalledWith(
-      "94000000-0000-0000-0000-000000000001",
-      "230202997001",
-      "CORN",
-    );
+    await screen.findByRole("button", { name: "产情类 1" });
+    expect(repository.detail).not.toHaveBeenCalled();
+    expect(screen.queryByText("13900000000")).not.toBeInTheDocument();
   });
 });
 
-function repositoryStub(): OverviewSamplePointRepository & {
-  aggregates: ReturnType<typeof vi.fn>;
-  detail: ReturnType<typeof vi.fn>;
-  icons: ReturnType<typeof vi.fn>;
-  list: ReturnType<typeof vi.fn>;
-} {
+function repositoryStub() {
   return {
-    aggregates: vi.fn().mockResolvedValue([aggregate]),
-    list: vi.fn().mockResolvedValue(list),
-    icons: vi.fn().mockResolvedValue([
+    aggregates: vi
+      .fn<OverviewSamplePointRepository["aggregates"]>()
+      .mockResolvedValue([]),
+    list: vi.fn<OverviewSamplePointRepository["list"]>().mockResolvedValue(list),
+    icons: vi.fn<OverviewSamplePointRepository["icons"]>().mockResolvedValue([
       {
-        samplePointId: list.items[0]?.samplePointId,
+        samplePointId: "94000000-0000-0000-0000-000000000001",
         name: "同一跨产品样本点",
         types: [{ code: "FARMER", name: "农户" }],
         longitude: 123.9,
         latitude: 47.3,
       },
     ]),
-    detail: vi.fn().mockResolvedValue({
-      samplePointId: list.items[0]?.samplePointId,
+    detail: vi.fn<OverviewSamplePointRepository["detail"]>().mockResolvedValue({
+      samplePointId: "94000000-0000-0000-0000-000000000001",
       name: "同一跨产品样本点",
       regionCode: "230202997001",
       regionName: "契约测试村",
