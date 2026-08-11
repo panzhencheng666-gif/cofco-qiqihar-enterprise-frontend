@@ -1080,6 +1080,7 @@ function reliefRegionLabel({
     return `${region.name}，样本点聚合数据不可用，${action}`;
   }
   const count = status === "ready" ? aggregateCount : region.approvedRecordCount;
+  if (count === null) return `${region.name}，年度业务统计加载中，${action}`;
   return `${region.name}，已核定 ${count} 个样本点，${action}`;
 }
 

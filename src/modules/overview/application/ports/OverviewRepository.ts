@@ -13,24 +13,22 @@ export interface OverviewRepository {
   regions(query: {
     parentCode?: string;
     productCode: string;
-    periodCode?: string;
+    year: number;
   }): Promise<readonly OverviewRegion[]>;
   locations(query: {
     ancestorCode?: string;
     level: "TOWNSHIP" | "VILLAGE";
     productCode: string;
-    periodCode?: string;
+    year: number;
   }): Promise<readonly OverviewRegion[]>;
   indicators(query: {
     productCode: string;
     regionCode: string;
-    periodCode: string;
-    marketingYear?: string;
+    year: number;
   }): Promise<readonly OverviewIndicator[]>;
   dashboard(query: {
-    marketingYear?: string;
-    periodCode?: string;
     productCode: string;
     regionCode?: string;
+    year: number;
   }): Promise<OverviewDashboard>;
 }

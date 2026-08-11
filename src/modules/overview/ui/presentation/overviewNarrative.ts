@@ -58,7 +58,8 @@ export function buildOverviewTranscript(context: {
   return `${introduction}${period}${chapters}`;
 }
 
-export function formatIndicatorValue(value: string) {
+export function formatIndicatorValue(value: string | null) {
+  if (value === null) return "暂无可靠数据";
   const numericValue = Number(value);
   return Number.isFinite(numericValue)
     ? new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 }).format(numericValue)

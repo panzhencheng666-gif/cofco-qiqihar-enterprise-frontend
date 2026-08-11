@@ -452,18 +452,40 @@ function regionSurplusMetric(value: OverviewDashboardMetric | undefined) {
     value?.coverageStatus === "AVAILABLE" &&
     value.sourceCount > 0 &&
     value.value !== null;
+  const missing = !value || value.coverageStatus === "NO_APPROVED_SOURCES";
   return {
     label: "地区余粮",
     sourceLabel: available
       ? `${value.sourceCount} 条审核来源${value.dataCutoff ? ` · 截止 ${value.dataCutoff}` : ""}`
-      : "后端可靠性校验未通过",
+      : missing
+        ? "暂无审核来源"
+        : regionSurplusReliabilityLabel(value.coverageStatus),
     tone: "surplus",
     unit: value?.unitCode ?? "吨",
     value:
       available && value?.value !== null && value?.value !== undefined
         ? formatNumber(value.value)
-        : "暂无可靠数据",
+        : missing
+          ? "暂无审核数据"
+          : "暂无可靠数据",
   };
+}
+
+function regionSurplusReliabilityLabel(
+  status: OverviewDashboardMetric["coverageStatus"],
+) {
+  switch (status) {
+    case "INSUFFICIENT_COVERAGE":
+      return "审核来源覆盖不足";
+    case "CUTOFF_MISMATCH":
+      return "审核来源统计截止日不一致";
+    case "UNRELIABLE_SOURCE_CONTRACT":
+      return "审核来源契约不可靠";
+    case "MUTUAL_EXCLUSIVITY_VIOLATION":
+      return "审核来源存在重复归属";
+    default:
+      return "后端可靠性校验未通过";
+  }
 }
 
 function linePoints(values: readonly number[], width: number, height: number) {

@@ -43,7 +43,7 @@ describe("OverviewSamplePointPanel", () => {
     render(
       <OverviewSamplePointPanel
         onIconsChange={vi.fn()}
-        productCode="CORN"
+        year={2026}
         region={{ code: "230202997", level: "TOWNSHIP", name: "契约测试乡" }}
         repository={repositoryStub()}
       />,
@@ -64,7 +64,7 @@ describe("OverviewSamplePointPanel", () => {
     render(
       <OverviewSamplePointPanel
         onIconsChange={onIconsChange}
-        productCode="CORN"
+        year={2026}
         region={{ code: "230202", level: "COUNTY", name: "龙沙区" }}
         repository={repository}
       />,
@@ -89,7 +89,7 @@ describe("OverviewSamplePointPanel", () => {
     render(
       <OverviewSamplePointPanel
         onIconsChange={onIconsChange}
-        productCode="CORN"
+        year={2026}
         region={{ code, level, name }}
         repository={repository}
       />,
@@ -102,9 +102,9 @@ describe("OverviewSamplePointPanel", () => {
 
     await waitFor(() =>
       expect(repository.icons).toHaveBeenCalledWith({
-        productCode: "CORN",
         regionCode: code,
         categoryCode: "PRODUCTION",
+        year: 2026,
       }),
     );
     expect(onIconsChange).toHaveBeenLastCalledWith([
@@ -117,7 +117,7 @@ describe("OverviewSamplePointPanel", () => {
     render(
       <OverviewSamplePointPanel
         onIconsChange={vi.fn()}
-        productCode="CORN"
+        year={2026}
         region={{ code: "230202", level: "COUNTY", name: "龙沙区" }}
         repository={repository}
       />,
@@ -129,19 +129,19 @@ describe("OverviewSamplePointPanel", () => {
 
     await waitFor(() =>
       expect(repository.list).toHaveBeenLastCalledWith({
-        productCode: "CORN",
         regionCode: "230202",
         categoryCode: "PRODUCTION",
         typeCode: "FARMER",
         query: "同一",
+        year: 2026,
       }),
     );
     expect(repository.icons).toHaveBeenLastCalledWith({
-      productCode: "CORN",
       regionCode: "230202",
       categoryCode: "PRODUCTION",
       typeCode: "FARMER",
       query: "同一",
+      year: 2026,
     });
   });
 
@@ -151,7 +151,7 @@ describe("OverviewSamplePointPanel", () => {
     render(
       <OverviewSamplePointPanel
         onIconsChange={onIconsChange}
-        productCode="CORN"
+        year={2026}
         region={{ code: "230202", level: "COUNTY", name: "龙沙区" }}
         repository={repository}
       />,
@@ -174,7 +174,7 @@ describe("OverviewSamplePointPanel", () => {
     render(
       <OverviewSamplePointPanel
         onIconsChange={vi.fn()}
-        productCode="CORN"
+        year={2026}
         region={{ code: "230202", level: "COUNTY", name: "龙沙区" }}
         repository={repository}
       />,
@@ -187,10 +187,66 @@ describe("OverviewSamplePointPanel", () => {
     expect(repository.detail).toHaveBeenCalledWith({
       samplePointId: "94000000-0000-0000-0000-000000000001",
       regionCode: "230202",
-      productCode: "CORN",
       categoryCode: "PRODUCTION",
+      year: 2026,
     });
     expect(screen.queryByText("123.9")).not.toBeInTheDocument();
+  });
+
+  it("refreshes the open classification, list, icons, and detail without losing filters", async () => {
+    const repository = repositoryStub();
+    const onIconsChange = vi.fn();
+    const region = { code: "230202", level: "COUNTY" as const, name: "龙沙区" };
+    const { rerender } = render(
+      <OverviewSamplePointPanel
+        onIconsChange={onIconsChange}
+        refreshSequence={0}
+        year={2026}
+        region={region}
+        repository={repository}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "产情类 1" }));
+    await userEvent.click(await screen.findByText("同一跨产品样本点"));
+    expect(await screen.findByText("13900000000")).toBeVisible();
+    repository.list.mockClear();
+    repository.icons.mockClear();
+    repository.detail.mockClear();
+
+    rerender(
+      <OverviewSamplePointPanel
+        onIconsChange={onIconsChange}
+        refreshSequence={1}
+        year={2026}
+        region={region}
+        repository={repository}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(repository.list).toHaveBeenCalledWith({
+        regionCode: "230202",
+        year: 2026,
+      });
+      expect(repository.list).toHaveBeenCalledWith({
+        regionCode: "230202",
+        categoryCode: "PRODUCTION",
+        year: 2026,
+      });
+      expect(repository.icons).toHaveBeenCalledWith({
+        regionCode: "230202",
+        categoryCode: "PRODUCTION",
+        year: 2026,
+      });
+      expect(repository.detail).toHaveBeenCalledWith({
+        samplePointId: "94000000-0000-0000-0000-000000000001",
+        regionCode: "230202",
+        categoryCode: "PRODUCTION",
+        year: 2026,
+      });
+    });
+    expect(await screen.findByText("13900000000")).toBeVisible();
   });
 
   it("does not load detail from an external map-icon selection", async () => {
@@ -199,7 +255,7 @@ describe("OverviewSamplePointPanel", () => {
     render(
       <OverviewSamplePointPanel
         onIconsChange={vi.fn()}
-        productCode="CORN"
+        year={2026}
         region={{ code: "230202997001", level: "VILLAGE", name: "契约测试村" }}
         repository={repository}
         {...({

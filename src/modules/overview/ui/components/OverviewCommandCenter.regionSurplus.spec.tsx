@@ -33,6 +33,16 @@ describe("OverviewCommandCenter region surplus", () => {
     const card = screen.getByRole("article", { name: /地区余粮/ });
     expect(within(card).getByText("暂无可靠数据")).toBeVisible();
     expect(within(card).queryByText("0")).not.toBeInTheDocument();
+    expect(within(card).getByText("审核来源统计截止日不一致")).toBeVisible();
+  });
+
+  it("distinguishes missing approved sources from unreliable sources", () => {
+    renderCenter(dashboardWithSurplus(null, "NO_APPROVED_SOURCES", 0));
+
+    const card = screen.getByRole("article", { name: /地区余粮/ });
+    expect(within(card).getByText("暂无审核数据")).toBeVisible();
+    expect(within(card).getByText("暂无审核来源")).toBeVisible();
+    expect(within(card).queryByText("暂无可靠数据")).not.toBeInTheDocument();
   });
 });
 
@@ -52,7 +62,7 @@ function renderCenter(dashboard: OverviewDashboard) {
 
 function dashboardWithSurplus(
   value: string | null,
-  coverageStatus: "AVAILABLE" | "CUTOFF_MISMATCH",
+  coverageStatus: "AVAILABLE" | "NO_APPROVED_SOURCES" | "CUTOFF_MISMATCH",
   sourceCount: number,
 ): OverviewDashboard {
   return {

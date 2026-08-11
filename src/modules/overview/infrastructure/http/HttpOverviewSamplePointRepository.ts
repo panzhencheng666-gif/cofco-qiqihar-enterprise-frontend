@@ -98,9 +98,9 @@ const detailSchema = z.object({
 export class HttpOverviewSamplePointRepository implements OverviewSamplePointRepository {
   constructor(private readonly http: HttpClient) {}
 
-  async aggregates(query: { productCode: string; parentCode?: string }) {
+  async aggregates(query: { year: number; parentCode?: string }) {
     const parameters = {
-      productCode: query.productCode,
+      year: query.year,
       ...(query.parentCode ? { parentCode: query.parentCode } : {}),
     };
     return (
@@ -112,8 +112,8 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
   }
 
   async list(query: {
-    productCode: string;
     regionCode: string;
+    year: number;
     categoryCode?: OverviewSamplePointCategoryCode;
     typeCode?: string;
     query?: string;
@@ -127,8 +127,8 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
   }
 
   async icons(query: {
-    productCode: string;
     regionCode: string;
+    year: number;
     categoryCode: OverviewSamplePointCategoryCode;
     typeCode?: string;
     query?: string;
@@ -143,13 +143,13 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
 
   async detail(query: {
     samplePointId: string;
-    productCode: string;
     regionCode: string;
+    year: number;
     categoryCode: OverviewSamplePointCategoryCode;
     typeCode?: string;
   }) {
     const parameters = {
-      productCode: query.productCode,
+      year: query.year,
       regionCode: query.regionCode,
       categoryCode: query.categoryCode,
       ...(query.typeCode ? { typeCode: query.typeCode } : {}),

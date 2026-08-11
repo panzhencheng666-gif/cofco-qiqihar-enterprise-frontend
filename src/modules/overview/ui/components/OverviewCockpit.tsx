@@ -429,7 +429,8 @@ function metricCard(
       : "暂无审核来源",
     tone,
     unit: metric?.unitCode ?? "",
-    value: metric?.sourceCount && metric.value !== null ? formatNumber(metric.value) : "—",
+    value:
+      metric?.sourceCount && metric.value !== null ? formatNumber(metric.value) : "—",
   };
 }
 
@@ -438,19 +439,39 @@ function regionSurplusCard(metric: OverviewDashboardMetric | undefined) {
     metric?.coverageStatus === "AVAILABLE" &&
     metric.sourceCount > 0 &&
     metric.value !== null;
+  const missing = !metric || metric.coverageStatus === "NO_APPROVED_SOURCES";
   return {
     icon: "余",
     label: "地区余粮",
     sourceLabel: available
       ? `${metric.sourceCount} 条审核来源${metric.dataCutoff ? ` · 截止 ${metric.dataCutoff}` : ""}`
-      : "后端可靠性校验未通过",
+      : missing
+        ? "暂无审核来源"
+        : reliabilityLabel(metric.coverageStatus),
     tone: "surplus",
     unit: metric?.unitCode ?? "吨",
     value:
       available && metric?.value !== null && metric?.value !== undefined
         ? formatNumber(metric.value)
-        : "暂无可靠数据",
+        : missing
+          ? "暂无审核数据"
+          : "暂无可靠数据",
   };
+}
+
+function reliabilityLabel(status: OverviewDashboardMetric["coverageStatus"]) {
+  switch (status) {
+    case "INSUFFICIENT_COVERAGE":
+      return "审核来源覆盖不足";
+    case "CUTOFF_MISMATCH":
+      return "审核来源统计截止日不一致";
+    case "UNRELIABLE_SOURCE_CONTRACT":
+      return "审核来源契约不可靠";
+    case "MUTUAL_EXCLUSIVITY_VIOLATION":
+      return "审核来源存在重复归属";
+    default:
+      return "后端可靠性校验未通过";
+  }
 }
 
 function scopeCard(
@@ -478,7 +499,8 @@ function indicatorSource(
   );
 }
 
-function formatNumber(value: string) {
+function formatNumber(value: string | null) {
+  if (value === null) return "暂无可靠数据";
   const number = Number(value);
   return Number.isFinite(number)
     ? new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2 }).format(number)

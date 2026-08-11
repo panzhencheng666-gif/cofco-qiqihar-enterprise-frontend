@@ -11,6 +11,7 @@ export interface OverviewPeriodOption extends OverviewOption {
 export interface OverviewOptions {
   products: readonly OverviewOption[];
   periods: readonly OverviewPeriodOption[];
+  years: readonly number[];
 }
 
 export interface OverviewMapScope {
@@ -29,7 +30,7 @@ export interface OverviewRegion {
   name: string;
   parentCode?: string;
   level: "PREFECTURE" | "COUNTY" | "TOWNSHIP" | "VILLAGE";
-  approvedRecordCount: number;
+  approvedRecordCount: number | null;
   boundaryGeoJson?: string;
   locationGeoJson?: string;
   locationReviewStatus?: string;
@@ -49,7 +50,7 @@ export interface OverviewIndicator {
   code: string;
   name: string;
   unitCode: string;
-  value: string;
+  value: string | null;
   sourceDomain: "PRODUCTION" | "MARKET" | "LOGISTICS" | "SUPPLY";
   sourceCount: number;
   sourcePath: string;
@@ -77,12 +78,12 @@ export interface OverviewRegionSurplusAuditSource {
   sourceDomain: "PRODUCTION" | "MARKET";
   sourceRecordId: string;
   sourceVersion: number;
-  subjectKey: string;
+  subjectKey: string | null;
   inventoryHolderKey?: string;
-  cargoOwnerKey: string;
-  ownershipType: "PRODUCTION_SURPLUS" | "OWNED" | "CUSTODIAL";
-  regionCode: string;
-  dataCutoff: string;
+  cargoOwnerKey: string | null;
+  ownershipType: "PRODUCTION_SURPLUS" | "OWNED" | "CUSTODIAL" | null;
+  regionCode: string | null;
+  dataCutoff: string | null;
   valueTonnes: number;
   approvedAt: string;
   adopted: boolean;
@@ -121,8 +122,8 @@ export interface OverviewAlert {
 export interface OverviewYoYComparison {
   regionCode: string;
   regionName: string;
-  currentValue: string;
-  previousValue: string;
+  currentValue: string | null;
+  previousValue: string | null;
   unitCode: string;
   currentSourceCount: number;
   previousSourceCount: number;

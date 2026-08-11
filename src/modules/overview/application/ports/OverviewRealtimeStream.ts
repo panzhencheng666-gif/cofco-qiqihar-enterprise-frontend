@@ -1,5 +1,11 @@
+export interface OverviewBusinessChange {
+  productCode?: string;
+  regionCodes: readonly string[];
+  surveyYear?: number;
+}
+
 export interface OverviewRealtimeCallbacks {
-  onBusinessChange: () => void;
+  onBusinessChange: (change: OverviewBusinessChange) => void;
   onConnected: () => void;
   onDisconnected: () => void;
 }

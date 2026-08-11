@@ -10,10 +10,35 @@ import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
 import type { OverviewRepository } from "../../application/ports/OverviewRepository";
+import type {
+  OverviewRealtimeCallbacks,
+  OverviewRealtimeStream,
+} from "../../application/ports/OverviewRealtimeStream";
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
+import type { OverviewRegion } from "../../domain/overview";
 import { OverviewPage } from "./OverviewPage";
 
 describe("OverviewPage", () => {
+  it("renders an explicit failure instead of perpetual loading when options fail", async () => {
+    render(
+      <OverviewPage
+        repository={{
+          mapScope: () => Promise.resolve(sampleMapScope),
+          options: () => Promise.reject(new Error("options unavailable")),
+          regions: () => Promise.resolve([]),
+          locations: () => Promise.resolve([]),
+          indicators: () => Promise.resolve([]),
+          dashboard: () => Promise.resolve(emptyDashboard),
+        }}
+      />,
+    );
+
+    expect(
+      await screen.findByText("总览筛选条件加载失败，请稍后重试。"),
+    ).toHaveAttribute("role", "alert");
+    expect(screen.queryByText("正在读取粮食商情业务数据")).not.toBeInTheDocument();
+  });
+
   it("renders the approved cockpit layout from repository data without embedding preview values", async () => {
     const dashboard = vi.fn(() =>
       Promise.resolve({
@@ -136,9 +161,132 @@ describe("OverviewPage", () => {
     expect(screen.getByRole("heading", { name: "各地区总产量同比" })).toBeVisible();
     await waitFor(() =>
       expect(dashboard).toHaveBeenCalledWith(
-        expect.objectContaining({ productCode: "CORN", periodCode: "2026-Q3" }),
+        expect.objectContaining({ productCode: "CORN", year: 2026 }),
       ),
     );
+  });
+
+  it("clears the prior year instead of displaying stale values when the selected year fails", async () => {
+    const dashboard = vi.fn<OverviewRepository["dashboard"]>(({ year }) =>
+      year === 2026
+        ? Promise.resolve({
+            ...emptyDashboard,
+            metrics: [
+              {
+                code: "PRODUCTION_CULTIVATED_AREA",
+                name: "粮食播种面积",
+                sourceCount: 1,
+                unitCode: "亩",
+                value: "120",
+              },
+            ],
+          })
+        : Promise.reject(new Error("annual dashboard unavailable")),
+    );
+    render(
+      <OverviewPage
+        repository={{
+          mapScope: () => Promise.resolve(sampleMapScope),
+          options: () => Promise.resolve(options),
+          regions: () => Promise.resolve([sampleRegion]),
+          locations: () => Promise.resolve([]),
+          indicators: () => Promise.resolve([]),
+          dashboard,
+        }}
+      />,
+    );
+
+    expect(await screen.findByText("120")).toBeVisible();
+    await userEvent.setup().selectOptions(screen.getByLabelText("年度"), "2025");
+
+    expect(
+      await screen.findByText("总揽业务聚合数据加载失败，请稍后重试。"),
+    ).toHaveAttribute("role", "alert");
+    expect(screen.queryByText("120")).not.toBeInTheDocument();
+    expect(screen.getAllByText("暂无审核数据").length).toBeGreaterThan(0);
+  });
+
+  it("does not retain prior-year region counts or hide a region failure behind dashboard success", async () => {
+    const regions = vi.fn<OverviewRepository["regions"]>(({ year }) =>
+      year === 2026
+        ? Promise.resolve([sampleRegion])
+        : Promise.reject(new Error("annual regions unavailable")),
+    );
+    render(
+      <OverviewPage
+        repository={{
+          mapScope: () => Promise.resolve(sampleMapScope),
+          options: () => Promise.resolve(options),
+          regions,
+          locations: () => Promise.resolve([]),
+          indicators: () => Promise.resolve([]),
+          dashboard: () => Promise.resolve(emptyDashboard),
+        }}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "齐齐哈尔市，已核定 1 条" }),
+    ).toBeVisible();
+    await userEvent.setup().selectOptions(screen.getByLabelText("年度"), "2025");
+
+    expect(
+      await screen.findByText("总览正式地区范围加载失败，请重试。"),
+    ).toHaveAttribute("role", "alert");
+    expect(
+      screen.queryByRole("button", { name: "齐齐哈尔市，已核定 1 条" }),
+    ).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByText("总览正式地区范围加载失败，请重试。")).toBeVisible(),
+    );
+  });
+
+  it("marks annual region counts stale while a matching realtime refresh fails", async () => {
+    let realtimeCallbacks: OverviewRealtimeCallbacks | undefined;
+    const realtimeStream: OverviewRealtimeStream = {
+      subscribe: (callbacks) => {
+        realtimeCallbacks = callbacks;
+        return () => undefined;
+      },
+    };
+    const regions = vi
+      .fn<OverviewRepository["regions"]>()
+      .mockResolvedValueOnce([sampleRegion])
+      .mockRejectedValueOnce(new Error("realtime annual regions unavailable"));
+    render(
+      <OverviewPage
+        realtimeStream={realtimeStream}
+        repository={{
+          mapScope: () => Promise.resolve(sampleMapScope),
+          options: () => Promise.resolve(options),
+          regions,
+          locations: () => Promise.resolve([]),
+          indicators: () => Promise.resolve([]),
+          dashboard: () => Promise.resolve(emptyDashboard),
+        }}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "齐齐哈尔市，已核定 1 条" }),
+    ).toBeVisible();
+    act(() =>
+      realtimeCallbacks?.onBusinessChange({
+        productCode: "CORN",
+        regionCodes: ["230200"],
+        surveyYear: 2026,
+      }),
+    );
+
+    expect(
+      await screen.findByText("总览正式地区范围加载失败，请重试。"),
+    ).toHaveAttribute("role", "alert");
+    expect(
+      screen.getByRole("button", { name: "齐齐哈尔市，年度业务统计加载中" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "齐齐哈尔市，已核定 1 条" }),
+    ).not.toBeInTheDocument();
   });
 
   it("removes the retired map toolbar while preserving the legend and region selector", async () => {
@@ -192,7 +340,7 @@ describe("OverviewPage", () => {
 
     await userEvent
       .setup()
-      .click(screen.getByRole("button", { name: "齐齐哈尔市，已核定 1 条" }));
+      .click(await screen.findByRole("button", { name: "齐齐哈尔市，已核定 1 条" }));
 
     const drawer = await screen.findByRole("complementary", {
       name: "所选地区样本点详情",
@@ -355,10 +503,10 @@ describe("OverviewPage", () => {
       await within(mapRegion).findByRole("button", { name: "众兴村" }),
     ).toBeVisible();
     expect(aggregates).toHaveBeenCalledTimes(2);
-    expect(aggregates).toHaveBeenNthCalledWith(1, { productCode: "CORN" });
+    expect(aggregates).toHaveBeenNthCalledWith(1, { year: 2026 });
     expect(aggregates).toHaveBeenNthCalledWith(2, {
-      productCode: "CORN",
       parentCode: "230200",
+      year: 2026,
     });
     expect(
       screen.queryByText("1", { selector: ".overview-sample-point-aggregate-marker" }),
@@ -442,6 +590,87 @@ describe("OverviewPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("keeps an open sample drawer, filters, list, and icons unchanged during product reload", async () => {
+    const county = {
+      ...sampleRegion,
+      code: "230231",
+      name: "拜泉县",
+      level: "COUNTY" as const,
+      parentCode: "230200",
+    };
+    const regions = vi.fn<OverviewRepository["regions"]>((query) => {
+      if (query.productCode === "SOYBEAN") {
+        return new Promise<readonly OverviewRegion[]>(() => undefined);
+      }
+      return Promise.resolve(query.parentCode === "230200" ? [county] : [sampleRegion]);
+    });
+    const list = vi.fn<OverviewSamplePointRepository["list"]>(() =>
+      Promise.resolve(samplePointList),
+    );
+    const icons = vi.fn<OverviewSamplePointRepository["icons"]>(() =>
+      Promise.resolve(samplePointIcons),
+    );
+    render(
+      <OverviewPage
+        repository={{
+          mapScope: () => Promise.resolve(sampleMapScope),
+          options: () =>
+            Promise.resolve({
+              ...options,
+              products: [...options.products, { code: "SOYBEAN", label: "大豆" }],
+            }),
+          regions,
+          locations: () => Promise.resolve([]),
+          indicators: () => Promise.resolve([]),
+          dashboard: () => Promise.resolve(emptyDashboard),
+        }}
+        samplePointRepository={{
+          aggregates: (query) =>
+            Promise.resolve([
+              {
+                regionCode: query.parentCode ? county.code : sampleRegion.code,
+                regionName: query.parentCode ? county.name : sampleRegion.name,
+                regionLevel: query.parentCode ? "COUNTY" : "PREFECTURE",
+                samplePointCount: 1,
+                unresolvedSourceCount: 0,
+              },
+            ]),
+          list,
+          icons,
+          detail: () => Promise.resolve(samplePointDetail),
+        }}
+      />,
+    );
+
+    await screen.findByRole("option", { name: "齐齐哈尔市" });
+    await userEvent.setup().selectOptions(screen.getByLabelText("区域范围"), "230200");
+    await userEvent
+      .setup()
+      .click(await screen.findByRole("button", { name: "拜泉县，已核定 1 个样本点" }));
+    await userEvent.click(await screen.findByRole("button", { name: "产情类 1" }));
+    await userEvent.type(screen.getByLabelText("搜索样本点"), "跨产品");
+    expect(
+      await screen.findByRole("img", {
+        name: "同一跨产品样本点，农户，地图位置",
+      }),
+    ).toBeVisible();
+    const listCalls = list.mock.calls.length;
+    const iconCalls = icons.mock.calls.length;
+
+    await userEvent.setup().selectOptions(screen.getByLabelText("产品"), "SOYBEAN");
+
+    expect(
+      screen.getByRole("complementary", { name: "所选地区样本点详情" }),
+    ).toBeVisible();
+    expect(screen.getByLabelText("搜索样本点")).toHaveValue("跨产品");
+    expect(screen.getByText("同一跨产品样本点")).toBeVisible();
+    expect(
+      screen.getByRole("img", { name: "同一跨产品样本点，农户，地图位置" }),
+    ).toBeVisible();
+    expect(list).toHaveBeenCalledTimes(listCalls);
+    expect(icons).toHaveBeenCalledTimes(iconCalls);
+  });
+
   it("does not load or render the retired region hierarchy inside the drawer", async () => {
     const locations = vi.fn<OverviewRepository["locations"]>(() => Promise.resolve([]));
     render(
@@ -502,15 +731,15 @@ describe("OverviewPage", () => {
     );
     expect(screen.getByRole("heading", { name: "样本点分类" })).toBeVisible();
     expect(screen.queryByText("核定播种面积")).not.toBeInTheDocument();
-    await userEvent.setup().type(screen.getByLabelText("市场年度"), "2026/27");
+    await userEvent.setup().selectOptions(screen.getByLabelText("年度"), "2025");
     await waitFor(() =>
       expect(indicators).toHaveBeenLastCalledWith(
-        expect.objectContaining({ marketingYear: "2026/27" }),
+        expect.objectContaining({ year: 2025 }),
       ),
     );
   });
 
-  it("keeps verified boundary geometry visible while formal periods are not configured", async () => {
+  it("keeps verified boundary geometry visible while approved years are unavailable", async () => {
     const regions = vi.fn<OverviewRepository["regions"]>(() =>
       Promise.resolve([sampleRegion]),
     );
@@ -518,7 +747,8 @@ describe("OverviewPage", () => {
       <OverviewPage
         repository={{
           mapScope: () => Promise.resolve(sampleMapScope),
-          options: () => Promise.resolve({ products: options.products, periods: [] }),
+          options: () =>
+            Promise.resolve({ products: options.products, periods: [], years: [] }),
           regions,
           locations: () => Promise.resolve([]),
           indicators: () => Promise.resolve([]),
@@ -528,9 +758,9 @@ describe("OverviewPage", () => {
     );
     expect(await screen.findByRole("img", { name: "行政区边界地图" })).toBeVisible();
     expect(
-      screen.getByText("尚未配置正式业务期间", { exact: false }),
+      screen.getByText("尚无审核正式年度数据", { exact: false }),
     ).toBeInTheDocument();
-    await waitFor(() => expect(regions).toHaveBeenCalledWith({ productCode: "CORN" }));
+    expect(regions).not.toHaveBeenCalled();
   });
 
   it("keeps Qiqihar, Heihe, and Hulunbuir available in the formal region selector", async () => {
@@ -923,6 +1153,7 @@ const options = {
       endsOn: "2026-09-30",
     },
   ],
+  years: [2026, 2025],
 } as const;
 const emptyDashboard = {
   scope: {

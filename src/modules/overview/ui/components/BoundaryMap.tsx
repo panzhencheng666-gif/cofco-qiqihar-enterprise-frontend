@@ -73,7 +73,7 @@ export function BoundaryMap({
     return () => window.clearTimeout(timeout);
   }, [activateFallback, sceneReady, webGlEnabled]);
   const bounds = mapBounds(features, points, backdrop);
-  if ((!features.length && !points.length) || !bounds) {
+  if ((!features.length && !points.length && !backdrop) || !bounds) {
     return (
       <p className="overview-empty">当前范围尚无可显示的经核验行政区边界或来源点位。</p>
     );
@@ -200,7 +200,11 @@ function accessibleRegionLabel(
   aggregates: readonly OverviewSamplePointAggregate[],
   status?: SamplePointAggregateStatus,
 ) {
-  if (!status) return `${region.name}，已核定 ${region.approvedRecordCount} 条`;
+  if (!status) {
+    return region.approvedRecordCount === null
+      ? `${region.name}，年度业务统计加载中`
+      : `${region.name}，已核定 ${region.approvedRecordCount} 条`;
+  }
   if (status === "hidden") return region.name;
   if (status === "loading") return `${region.name}，样本点聚合数据加载中`;
   if (status === "unavailable") return `${region.name}，样本点聚合数据不可用`;

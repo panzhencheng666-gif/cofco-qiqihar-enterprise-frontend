@@ -16,13 +16,17 @@ describe("HttpOverviewSamplePointRepository", () => {
     ]);
     const repository = repositoryWith(get);
 
-    const result = await repository.aggregates({
+    const result = await (
+      repository.aggregates as unknown as (
+        query: unknown,
+      ) => Promise<readonly unknown[]>
+    )({
       parentCode: "230202997",
-      productCode: "CORN",
+      year: 2026,
     });
 
     expect(get).toHaveBeenCalledWith(
-      "/api/v1/overview/sample-point-aggregates?productCode=CORN&parentCode=230202997",
+      "/api/v1/overview/sample-point-aggregates?year=2026&parentCode=230202997",
       expect.anything(),
     );
     expect(result[0]).toEqual({
@@ -63,8 +67,12 @@ describe("HttpOverviewSamplePointRepository", () => {
     });
     const repository = repositoryWith(get);
 
-    const result = await repository.list({
-      productCode: "CORN",
+    const result = await (
+      repository.list as unknown as (
+        query: unknown,
+      ) => Promise<Awaited<ReturnType<typeof repository.list>>>
+    )({
+      year: 2026,
       regionCode: "230202997001",
       categoryCode: "PRODUCTION",
       typeCode: "FARMER",
@@ -72,7 +80,7 @@ describe("HttpOverviewSamplePointRepository", () => {
     });
 
     expect(get.mock.calls[0]?.[0]).toBe(
-      "/api/v1/overview/sample-points?productCode=CORN&regionCode=230202997001&categoryCode=PRODUCTION&typeCode=FARMER&query=%E5%90%8C%E4%B8%80",
+      "/api/v1/overview/sample-points?year=2026&regionCode=230202997001&categoryCode=PRODUCTION&typeCode=FARMER&query=%E5%90%8C%E4%B8%80",
     );
     expect(result.totalCount).toBe(1);
     expect(result.items[0]).not.toHaveProperty("longitude");
@@ -91,8 +99,12 @@ describe("HttpOverviewSamplePointRepository", () => {
     ]);
     const repository = repositoryWith(get);
 
-    const result = await repository.icons({
-      productCode: "CORN",
+    const result = await (
+      repository.icons as unknown as (
+        query: unknown,
+      ) => Promise<Awaited<ReturnType<typeof repository.icons>>>
+    )({
+      year: 2026,
       regionCode: "230202",
       categoryCode: "PRODUCTION",
       typeCode: "FARMER",
@@ -100,7 +112,7 @@ describe("HttpOverviewSamplePointRepository", () => {
     });
 
     expect(get.mock.calls[0]?.[0]).toBe(
-      "/api/v1/overview/sample-point-icons?productCode=CORN&regionCode=230202&categoryCode=PRODUCTION&typeCode=FARMER&query=%E5%90%8C%E4%B8%80",
+      "/api/v1/overview/sample-point-icons?year=2026&regionCode=230202&categoryCode=PRODUCTION&typeCode=FARMER&query=%E5%90%8C%E4%B8%80",
     );
     expect(result[0]?.longitude).toBe(123.9);
   });
@@ -131,16 +143,20 @@ describe("HttpOverviewSamplePointRepository", () => {
     });
     const repository = repositoryWith(get);
 
-    const result = await repository.detail({
+    const result = await (
+      repository.detail as unknown as (
+        query: unknown,
+      ) => Promise<Awaited<ReturnType<typeof repository.detail>>>
+    )({
       samplePointId: "94000000-0000-0000-0000-000000000001",
       regionCode: "230202",
-      productCode: "CORN",
+      year: 2026,
       categoryCode: "PRODUCTION",
       typeCode: "FARMER",
     });
 
     expect(get.mock.calls[0]?.[0]).toBe(
-      "/api/v1/overview/sample-points/94000000-0000-0000-0000-000000000001?productCode=CORN&regionCode=230202&categoryCode=PRODUCTION&typeCode=FARMER",
+      "/api/v1/overview/sample-points/94000000-0000-0000-0000-000000000001?year=2026&regionCode=230202&categoryCode=PRODUCTION&typeCode=FARMER",
     );
     expect(result.associations[0]?.businessValues.CONTACT?.value).toBe("13900000000");
     expect(result).not.toHaveProperty("pointGeometry");

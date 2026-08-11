@@ -13,14 +13,16 @@ type LoadState = "idle" | "loading" | "ready" | "unavailable";
 
 export function OverviewSamplePointPanel({
   onIconsChange,
-  productCode,
+  refreshSequence = 0,
   region,
   repository,
+  year,
 }: {
   onIconsChange: (icons: readonly OverviewSamplePointIcon[]) => void;
-  productCode: string;
+  refreshSequence?: number;
   region: { code: string; level: RegionLevel; name: string };
   repository: OverviewSamplePointRepository;
+  year: number;
 }) {
   const [categoryCode, setCategoryCode] = useState<OverviewSamplePointCategoryCode>();
   const [typeCode, setTypeCode] = useState<string>();
@@ -57,8 +59,21 @@ export function OverviewSamplePointPanel({
       setDetailUnavailable(false);
     });
     onIconsChange([]);
+    return () => {
+      active = false;
+    };
+  }, [onIconsChange, region.code, repository, year]);
+
+  useEffect(() => {
+    let active = true;
+    void Promise.resolve().then(() => {
+      if (!active) return;
+      setCatalog(undefined);
+      setCatalogState("loading");
+      setCatalogIssue(undefined);
+    });
     repository
-      .list({ productCode, regionCode: region.code })
+      .list({ regionCode: region.code, year })
       .then((next) => {
         if (!active) return;
         setCatalog(next);
@@ -73,7 +88,7 @@ export function OverviewSamplePointPanel({
     return () => {
       active = false;
     };
-  }, [onIconsChange, productCode, region.code, repository]);
+  }, [refreshSequence, region.code, repository, year]);
 
   useEffect(() => {
     if (!categoryCode) {
@@ -82,13 +97,20 @@ export function OverviewSamplePointPanel({
     }
     let active = true;
     const filters = {
-      productCode,
       regionCode: region.code,
+      year,
       categoryCode,
       ...(typeCode ? { typeCode } : {}),
       ...(query.trim() ? { query: query.trim() } : {}),
     };
-    onIconsChange([]);
+    void Promise.resolve().then(() => {
+      if (!active) return;
+      setResult(undefined);
+      setResultState("loading");
+      setResultIssue(undefined);
+      setIconIssue(undefined);
+      onIconsChange([]);
+    });
     repository
       .list(filters)
       .then((next) => {
@@ -116,11 +138,12 @@ export function OverviewSamplePointPanel({
   }, [
     categoryCode,
     onIconsChange,
-    productCode,
     query,
+    refreshSequence,
     region.code,
     repository,
     typeCode,
+    year,
   ]);
 
   useEffect(() => {
@@ -128,11 +151,17 @@ export function OverviewSamplePointPanel({
       return;
     }
     let active = true;
+    void Promise.resolve().then(() => {
+      if (!active) return;
+      setDetail(undefined);
+      setDetailUnavailable(false);
+      setDetailIssue(undefined);
+    });
     repository
       .detail({
         samplePointId: selectedId,
-        productCode,
         regionCode: region.code,
+        year,
         categoryCode,
         ...(typeCode ? { typeCode } : {}),
       })
@@ -145,7 +174,15 @@ export function OverviewSamplePointPanel({
     return () => {
       active = false;
     };
-  }, [categoryCode, productCode, region.code, repository, selectedId, typeCode]);
+  }, [
+    categoryCode,
+    refreshSequence,
+    region.code,
+    repository,
+    selectedId,
+    typeCode,
+    year,
+  ]);
 
   function clearConcreteResults() {
     setResult(undefined);

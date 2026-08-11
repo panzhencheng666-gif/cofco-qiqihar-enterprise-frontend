@@ -13,8 +13,8 @@ describe("HttpOverviewRepository realtime invalidation", () => {
     });
     const query = {
       productCode: "CORN",
-      periodCode: "2026-Q3",
       regionCode: "230200",
+      year: 2026,
     };
 
     await repository.indicators(query);
@@ -26,7 +26,7 @@ describe("HttpOverviewRepository realtime invalidation", () => {
 
     expect(get).toHaveBeenCalledTimes(2);
     expect(get.mock.calls[1]?.[0]).toBe(
-      "/api/v1/overview/indicators?productCode=CORN&periodCode=2026-Q3&regionCode=230200",
+      "/api/v1/overview/indicators?productCode=CORN&regionCode=230200&year=2026",
     );
   });
 });

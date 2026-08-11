@@ -9,6 +9,7 @@ const optionsSchema = z.object({
   data: z.object({
     products: z.array(optionSchema),
     periods: z.array(optionSchema.extend({ startsOn: z.string(), endsOn: z.string() })),
+    years: z.array(z.number().int()),
   }),
 });
 const mapScopeSchema = z.object({
@@ -41,7 +42,7 @@ const indicatorsSchema = z.object({
       code: z.string(),
       name: z.string(),
       unitCode: z.string(),
-      value: z.string(),
+      value: z.string().nullable(),
       sourceDomain: z.enum(["PRODUCTION", "MARKET", "LOGISTICS", "SUPPLY"]),
       sourceCount: z.number(),
       sourcePath: z.string(),
@@ -83,12 +84,14 @@ const dashboardSchema = z.object({
               sourceDomain: z.enum(["PRODUCTION", "MARKET"]),
               sourceRecordId: z.string(),
               sourceVersion: z.number(),
-              subjectKey: z.string(),
+              subjectKey: z.string().nullable(),
               inventoryHolderKey: z.string().nullable().optional(),
-              cargoOwnerKey: z.string(),
-              ownershipType: z.enum(["PRODUCTION_SURPLUS", "OWNED", "CUSTODIAL"]),
-              regionCode: z.string(),
-              dataCutoff: z.string(),
+              cargoOwnerKey: z.string().nullable(),
+              ownershipType: z
+                .enum(["PRODUCTION_SURPLUS", "OWNED", "CUSTODIAL"])
+                .nullable(),
+              regionCode: z.string().nullable(),
+              dataCutoff: z.string().nullable(),
               valueTonnes: z.number(),
               approvedAt: z.string(),
               adopted: z.boolean(),
@@ -136,8 +139,8 @@ const dashboardSchema = z.object({
       z.object({
         regionCode: z.string(),
         regionName: z.string(),
-        currentValue: z.string(),
-        previousValue: z.string(),
+        currentValue: z.string().nullable(),
+        previousValue: z.string().nullable(),
         unitCode: z.string(),
         currentSourceCount: z.number(),
         previousSourceCount: z.number(),
@@ -147,8 +150,8 @@ const dashboardSchema = z.object({
       z.object({
         regionCode: z.string(),
         regionName: z.string(),
-        currentValue: z.string(),
-        previousValue: z.string(),
+        currentValue: z.string().nullable(),
+        previousValue: z.string().nullable(),
         unitCode: z.string(),
         currentSourceCount: z.number(),
         previousSourceCount: z.number(),
@@ -174,7 +177,10 @@ export class HttpOverviewRepository implements OverviewRepository {
     for (const key of this.cache.keys()) {
       if (
         key.startsWith("/api/v1/overview/dashboard") ||
-        key.startsWith("/api/v1/overview/indicators")
+        key.startsWith("/api/v1/overview/indicators") ||
+        key.startsWith("/api/v1/overview/regions") ||
+        key.startsWith("/api/v1/overview/locations") ||
+        key === "options"
       ) {
         this.cache.delete(key);
       }
@@ -198,11 +204,7 @@ export class HttpOverviewRepository implements OverviewRepository {
     );
   }
 
-  async regions(query: {
-    parentCode?: string;
-    productCode: string;
-    periodCode?: string;
-  }) {
+  async regions(query: { parentCode?: string; productCode: string; year: number }) {
     const path = `/api/v1/overview/regions${queryString(query)}`;
     return this.cached(path, GEOGRAPHY_CACHE_TTL_MS, async () =>
       (await this.http.get(path, regionsSchema)).data.map(toOverviewRegion),
@@ -213,7 +215,7 @@ export class HttpOverviewRepository implements OverviewRepository {
     ancestorCode?: string;
     level: "TOWNSHIP" | "VILLAGE";
     productCode: string;
-    periodCode?: string;
+    year: number;
   }) {
     const path = `/api/v1/overview/locations${queryString(query)}`;
     return this.cached(path, GEOGRAPHY_CACHE_TTL_MS, async () =>
@@ -221,12 +223,7 @@ export class HttpOverviewRepository implements OverviewRepository {
     );
   }
 
-  async indicators(query: {
-    productCode: string;
-    regionCode: string;
-    periodCode: string;
-    marketingYear?: string;
-  }) {
+  async indicators(query: { productCode: string; regionCode: string; year: number }) {
     const path = `/api/v1/overview/indicators${queryString(query)}`;
     return this.cached(
       path,
@@ -235,12 +232,7 @@ export class HttpOverviewRepository implements OverviewRepository {
     );
   }
 
-  async dashboard(query: {
-    marketingYear?: string;
-    periodCode?: string;
-    productCode: string;
-    regionCode?: string;
-  }) {
+  async dashboard(query: { productCode: string; regionCode?: string; year: number }) {
     const path = `/api/v1/overview/dashboard${queryString(query)}`;
     return this.cached(path, BUSINESS_CACHE_TTL_MS, async () => {
       const dashboard = (await this.http.get(path, dashboardSchema)).data;
