@@ -8,8 +8,10 @@ import { join, resolve } from "node:path";
 import process from "node:process";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
+import { resolveVerifiedNginx } from "./verified-nginx-tool.mjs";
 
-const nginxBinary = process.env.COFCO_TEST_NGINX_BIN ?? "nginx";
+const nginxBinary =
+  process.env.COFCO_TEST_NGINX_BIN ?? (await resolveVerifiedNginx()).binaryPath;
 const forgedHeaders = {
   "x-actor": "forged-actor",
   "x-qiqihar-authenticated-subject": "forged-subject",
@@ -17,49 +19,49 @@ const forgedHeaders = {
   "x-remote-user": "forged-remote-user",
 };
 
-if (!process.env.COFCO_TEST_NGINX_LIFECYCLE_SCENARIO) {
-  test("nginx fixture exits promptly for missing tools and early child exits", async () => {
-    const probeDirectory = await mkdtemp(
-      join(tmpdir(), "cofco-frontend-nginx-lifecycle-"),
-    );
-    const earlyExitBinary = join(probeDirectory, "nginx-early-exit");
-    await writeFile(
-      earlyExitBinary,
-      '#!/usr/bin/env bash\ncase " $* " in *" -t "*) exit 0 ;; esac\nexit 23\n',
-      { mode: 0o700 },
+test("nginx fixture exits promptly for missing tools and early child exits", async () => {
+  const probeDirectory = await mkdtemp(
+    join(tmpdir(), "cofco-frontend-nginx-lifecycle-"),
+  );
+  const earlyExitBinary = join(probeDirectory, "nginx-early-exit");
+  const missingBinary = join(probeDirectory, "cofco-definitely-missing-nginx-binary");
+  let earlyExitProcess;
+  await writeFile(
+    earlyExitBinary,
+    '#!/usr/bin/env bash\ncase " $* " in *" -t "*) exit 0 ;; esac\nexit 23\n',
+    { mode: 0o700 },
+  );
+
+  try {
+    const missingCheck = spawnSync(missingBinary, ["-t"], {
+      encoding: "utf8",
+    });
+    assert.throws(
+      () => requireSuccessfulConfigCheck(missingCheck, missingBinary),
+      /required nginx binary is unavailable/iu,
     );
 
+    const earlyCheck = spawnSync(earlyExitBinary, ["-t"], {
+      encoding: "utf8",
+    });
+    requireSuccessfulConfigCheck(earlyCheck, earlyExitBinary);
+    const unusedPort = await reservePort();
+    earlyExitProcess = watchProcess(
+      spawn(earlyExitBinary, [], { stdio: ["ignore", "ignore", "pipe"] }),
+      "nginx",
+    );
+    await assert.rejects(
+      waitForHttp(unusedPort, earlyExitProcess),
+      /nginx exited before readiness/iu,
+    );
+  } finally {
     try {
-      for (const [scenario, binary, expectedDiagnostic] of [
-        ["early-exit", earlyExitBinary, /nginx exited before readiness/iu],
-        [
-          "missing-binary",
-          join(tmpdir(), "cofco-definitely-missing-nginx-binary"),
-          /required nginx binary is unavailable/iu,
-        ],
-      ]) {
-        const childEnvironment = {
-          ...process.env,
-          COFCO_TEST_NGINX_BIN: binary,
-          COFCO_TEST_NGINX_LIFECYCLE_SCENARIO: scenario,
-        };
-        delete childEnvironment.NODE_TEST_CONTEXT;
-        const result = spawnSync(process.execPath, ["--test", import.meta.filename], {
-          encoding: "utf8",
-          env: childEnvironment,
-          timeout: 2_000,
-        });
-
-        assert.equal(result.error, undefined, result.error?.message);
-        assert.equal(result.signal, null);
-        assert.notEqual(result.status, 0);
-        assert.match(`${result.stdout}\n${result.stderr}`, expectedDiagnostic);
-      }
+      await stopProcess(earlyExitProcess);
     } finally {
       await rm(probeDirectory, { recursive: true, force: true });
     }
-  });
-}
+  }
+});
 
 async function listen(server) {
   await new Promise((resolveListen, rejectListen) => {
@@ -143,20 +145,20 @@ async function stopProcess(processHandle) {
   assert.notEqual(outcome, undefined, `${processHandle.label} did not terminate`);
 }
 
-function requireSuccessfulConfigCheck(result) {
+function requireSuccessfulConfigCheck(result, binary = nginxBinary) {
   if (result.error) {
     throw new Error(
-      `required nginx binary is unavailable: ${nginxBinary}: ${result.error.message}`,
+      `required nginx binary is unavailable: ${binary}: ${result.error.message}`,
     );
   }
   assert.equal(result.signal, null, `nginx -t terminated by ${result.signal}`);
   assert.equal(result.status, 0, result.stderr || result.stdout);
 }
 
-function httpGet(port, path) {
+function httpGet(port, path, signal) {
   return new Promise((resolveRequest, rejectRequest) => {
     const outgoing = request(
-      { host: "127.0.0.1", port, path, headers: forgedHeaders },
+      { host: "127.0.0.1", port, path, headers: forgedHeaders, signal },
       (response) => {
         const chunks = [];
         response.on("data", (chunk) => chunks.push(chunk));
@@ -181,13 +183,19 @@ async function waitForHttp(port, processHandle) {
     if (processHandle.outcome) {
       throw processExitError(processHandle, processHandle.outcome);
     }
-    const result = await Promise.race([
-      httpGet(port, "/healthz").then(
-        () => ({ ready: true }),
-        () => ({ ready: false }),
-      ),
-      processHandle.terminated.then((outcome) => ({ outcome })),
-    ]);
+    const abortController = new globalThis.AbortController();
+    let result;
+    try {
+      result = await Promise.race([
+        httpGet(port, "/healthz", abortController.signal).then(
+          () => ({ ready: true }),
+          () => ({ ready: false }),
+        ),
+        processHandle.terminated.then((outcome) => ({ outcome })),
+      ]);
+    } finally {
+      abortController.abort();
+    }
     if (result.outcome) throw processExitError(processHandle, result.outcome);
     if (result.ready) return;
     await delay(10);
