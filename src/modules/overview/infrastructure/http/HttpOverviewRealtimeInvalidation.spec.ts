@@ -6,7 +6,7 @@ import { HttpOverviewRepository } from "./HttpOverviewRepository";
 describe("HttpOverviewRepository realtime invalidation", () => {
   it("evicts business reads while retaining the same formal query contract", async () => {
     const get = vi.fn<HttpClient["get"]>((_path, schema) =>
-      Promise.resolve(schema.parse({ data: [] })),
+      Promise.resolve(schema.parse({ contractVersion: "overview-audit-v2", data: [] })),
     );
     const repository = new HttpOverviewRepository({
       get: get as unknown as HttpClient["get"],

@@ -229,6 +229,8 @@ export function OverviewSamplePointPanel({
     (category) => category.code === categoryCode,
   );
   const qualityScope = result ?? catalog;
+  const currentCorrectionCount =
+    result?.correctionSourceCount ?? catalog?.correctionSourceCount;
   const issue = detailIssue ?? iconIssue ?? resultIssue ?? catalogIssue;
 
   return (
@@ -318,10 +320,12 @@ export function OverviewSamplePointPanel({
             ) : null}
           </div>
         ) : null}
-        {qualityScope?.correctionSourceCount ? (
+        {catalog ? (
           <p role="status">
-            {qualityScope.correctionSourceCount}{" "}
-            条正式来源尚未关联稳定主体，已进入纠错清单。
+            <span>当前分类纠错数：{currentCorrectionCount ?? 0} 条</span>
+            {" · "}
+            <span>全目录未解决数：{catalog.unresolvedSourceCount} 条</span>
+            <span>；未关联稳定主体的正式来源已进入纠错清单。</span>
           </p>
         ) : null}
 

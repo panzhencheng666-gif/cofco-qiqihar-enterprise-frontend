@@ -32,6 +32,9 @@ describe("RegionNarrative", () => {
     expect(screen.getByRole("heading", { name: "数据治理" })).toBeVisible();
     expect(screen.getAllByText("核定播种面积")).toHaveLength(2);
     expect(screen.getByText(/2 条核定来源/)).toBeVisible();
+    expect(screen.getAllByText(/公式 SUM\(governed metric fact\)/)).toHaveLength(2);
+    expect(screen.getAllByText(/截止 2026-08-11T03:20:03Z/)).toHaveLength(2);
+    expect(screen.getAllByText(/版本 OVERVIEW_METRIC_V1/)).toHaveLength(2);
     expect(screen.getAllByText("暂无核定数据")).toHaveLength(2);
     expect(screen.getByText("黑河市玉米粮情讲解")).toBeInTheDocument();
   });
@@ -68,6 +71,12 @@ function indicator(
     sourceDomain,
     sourceCount,
     sourcePath: `/sources/${code}`,
+    formula: "SUM(governed metric fact)",
+    sourceRelation: "production.production_record",
+    dataCutoff: "2026-08-11T03:20:03Z",
+    coverageScope: "region=230200;product=CORN;year=2026;descendants=included",
+    coverageStatus: "AVAILABLE",
+    calculationVersion: "OVERVIEW_METRIC_V1",
     unitCode,
     value,
   };

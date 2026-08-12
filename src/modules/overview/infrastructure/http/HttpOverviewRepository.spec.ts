@@ -5,6 +5,141 @@ import type { HttpClient } from "../../../../shared/api/HttpClient";
 import { HttpOverviewRepository } from "./HttpOverviewRepository";
 
 describe("HttpOverviewRepository request cache", () => {
+  it("rejects an otherwise complete legacy indicator response without a contract version", async () => {
+    const get = vi.fn<HttpClient["get"]>((_path, schema) =>
+      Promise.resolve(
+        schema.parse({
+          data: [
+            {
+              calculationVersion: "总揽指标口径第1版",
+              code: "PRODUCTION_CULTIVATED_AREA",
+              coverageScope: "所选地区及全部下级地区、所选产品、2026年度",
+              coverageStatus: "AVAILABLE",
+              dataCutoff: "2026年08月09日 12:34:56",
+              formula: "核定种植面积合计",
+              name: "核定播种面积",
+              sourceCount: 1,
+              sourceDomain: "PRODUCTION",
+              sourcePath: "/api/v1/production-records",
+              sourceRelation: "产情核定记录",
+              unitCode: "亩",
+              value: "10",
+            },
+          ],
+        }),
+      ),
+    );
+    const repository = new HttpOverviewRepository({
+      get: get as unknown as HttpClient["get"],
+    });
+
+    await expect(
+      repository.indicators({ productCode: "CORN", regionCode: "230200", year: 2026 }),
+    ).rejects.toThrow();
+  });
+
+  it("preserves every dashboard metric audit dimension from the server contract", async () => {
+    const get = vi.fn<HttpClient["get"]>((_path, schema) =>
+      Promise.resolve(
+        schema.parse({
+          contractVersion: "overview-audit-v2",
+          data: {
+            alerts: [],
+            cultivatedAreaYoY: [],
+            metrics: [
+              {
+                auditSources: [],
+                calculationVersion: "OVERVIEW_METRIC_V1",
+                code: "PRODUCTION_CULTIVATED_AREA",
+                coverageScope:
+                  "region=230200;product=CORN;year=2026;descendants=included",
+                coverageStatus: "AVAILABLE",
+                dataCutoff: "2026-08-11T03:20:03Z",
+                formula: "SUM(cultivated_area_mu)",
+                name: "核定播种面积",
+                sourceCount: 2,
+                sourcePath: "/api/v1/production-records",
+                sourceRelation: "production.production_record",
+                unitCode: "亩",
+                value: "10",
+              },
+            ],
+            outputYoY: [],
+            priceTrend: [],
+            productStructure: [],
+            regionActivity: [],
+            regionPath: [],
+            scope: {
+              approvedRecordCount: 2,
+              countyCount: 1,
+              reportingUnitCount: 1,
+              townshipCount: 0,
+              villageCount: 0,
+            },
+          },
+        }),
+      ),
+    );
+    const repository = new HttpOverviewRepository({
+      get: get as unknown as HttpClient["get"],
+    });
+
+    await expect(
+      repository.dashboard({ productCode: "CORN", regionCode: "230200", year: 2026 }),
+    ).resolves.toMatchObject({
+      metrics: [
+        {
+          calculationVersion: "OVERVIEW_METRIC_V1",
+          coverageScope: "region=230200;product=CORN;year=2026;descendants=included",
+          formula: "SUM(cultivated_area_mu)",
+          sourceRelation: "production.production_record",
+        },
+      ],
+    });
+  });
+
+  it("rejects dashboard metrics that omit the mandatory audit contract", async () => {
+    const get = vi.fn<HttpClient["get"]>((_path, schema) =>
+      Promise.resolve(
+        schema.parse({
+          contractVersion: "overview-audit-v2",
+          data: {
+            alerts: [],
+            cultivatedAreaYoY: [],
+            metrics: [
+              {
+                code: "PRODUCTION_CULTIVATED_AREA",
+                name: "核定播种面积",
+                sourceCount: 1,
+                unitCode: "亩",
+                value: "10",
+              },
+            ],
+            outputYoY: [],
+            priceTrend: [],
+            productStructure: [],
+            regionActivity: [],
+            regionPath: [],
+            scope: {
+              approvedRecordCount: 1,
+              countyCount: 1,
+              reportingUnitCount: 1,
+              townshipCount: 0,
+              villageCount: 0,
+            },
+          },
+        }),
+      ),
+    );
+    const repository = new HttpOverviewRepository({
+      get: get as unknown as HttpClient["get"],
+    });
+
+    await expect(
+      repository.dashboard({ productCode: "CORN", regionCode: "230200", year: 2026 }),
+    ).rejects.toThrow();
+  });
+
   it("reads audited survey years and sends the selected year to business queries", async () => {
     const get = vi.fn<HttpClient["get"]>((path, schema) => {
       if (path === "/api/v1/overview/options") {
@@ -20,6 +155,7 @@ describe("HttpOverviewRepository request cache", () => {
       }
       return Promise.resolve(
         schema.parse({
+          contractVersion: "overview-audit-v2",
           data: {
             alerts: [],
             cultivatedAreaYoY: [],
@@ -64,6 +200,7 @@ describe("HttpOverviewRepository request cache", () => {
     const get = vi.fn<HttpClient["get"]>((_path, schema) =>
       Promise.resolve(
         schema.parse({
+          contractVersion: "overview-audit-v2",
           data: {
             alerts: [],
             cultivatedAreaYoY: [],
@@ -88,10 +225,15 @@ describe("HttpOverviewRepository request cache", () => {
                 ],
                 calculationVersion: "REGION_SURPLUS_V1",
                 code: "REGION_SURPLUS",
+                coverageScope:
+                  "region=230200;product=SOYBEAN;year=2026;descendants=included",
                 coverageStatus: "UNRELIABLE_SOURCE_CONTRACT",
                 dataCutoff: null,
+                formula: "SUM(adopted approved inventory)",
                 name: "地区余粮",
                 sourceCount: 0,
+                sourcePath: "/api/v1/overview/dashboard",
+                sourceRelation: "production.production_record + market.market_record",
                 unitCode: "吨",
                 value: null,
               },
@@ -189,6 +331,7 @@ describe("HttpOverviewRepository request cache", () => {
     const get = vi.fn<HttpClient["get"]>((_path, schema) =>
       Promise.resolve(
         schema.parse({
+          contractVersion: "overview-audit-v2",
           data: {
             alerts: [],
             cultivatedAreaYoY: [],

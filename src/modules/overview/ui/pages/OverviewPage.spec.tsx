@@ -17,7 +17,7 @@ import type {
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
 import type { OverviewRegion } from "../../domain/overview";
 import { OverviewPage } from "./OverviewPage";
-import { HttpError } from "../../../../shared/api/HttpClient";
+import { HttpContractError, HttpError } from "../../../../shared/api/HttpClient";
 
 describe("OverviewPage", () => {
   it("renders an explicit failure instead of perpetual loading when options fail", async () => {
@@ -40,6 +40,40 @@ describe("OverviewPage", () => {
     expect(screen.queryByText("正在读取粮食商情业务数据")).not.toBeInTheDocument();
   });
 
+  it("identifies an indicator contract mismatch with its trace instead of suggesting a retry", async () => {
+    render(
+      <OverviewPage
+        repository={{
+          mapScope: () => Promise.resolve(sampleMapScope),
+          options: () => Promise.resolve(options),
+          regions: () => Promise.resolve([sampleRegion]),
+          locations: () => Promise.resolve([]),
+          indicators: () =>
+            Promise.reject(
+              new HttpContractError({
+                endpoint: "/api/v1/overview/indicators",
+                expectedContractVersion: "overview-audit-v2",
+                receivedContractVersion: null,
+                traceId: "trace-def-101",
+              }),
+            ),
+          dashboard: () => Promise.resolve(emptyDashboard),
+        }}
+      />,
+    );
+
+    await userEvent
+      .setup()
+      .click(await screen.findByRole("button", { name: "齐齐哈尔市，已核定 1 条" }));
+
+    expect(
+      await screen.findByText(
+        "指标数据契约版本不匹配，当前验收后端可能仍为旧版本。追踪号：trace-def-101。请停止验收并同步重启后端服务。",
+      ),
+    ).toHaveAttribute("role", "alert");
+    expect(screen.queryByText(/核定指标加载失败，请稍后重试/)).not.toBeInTheDocument();
+  });
+
   it("renders the approved cockpit layout from repository data without embedding preview values", async () => {
     const dashboard = vi.fn(() =>
       Promise.resolve({
@@ -53,22 +87,46 @@ describe("OverviewPage", () => {
         },
         metrics: [
           {
+            auditSources: [],
+            calculationVersion: "OVERVIEW_METRIC_V1",
             code: "PRODUCTION_CULTIVATED_AREA",
+            coverageScope: "region=230200;product=CORN;year=2026",
+            coverageStatus: "AVAILABLE",
+            dataCutoff: "2026-08-11T00:00:00Z",
+            formula: "SUM(cultivated_area_mu)",
             name: "粮食播种面积",
+            sourcePath: "/api/v1/production-records",
+            sourceRelation: "production.production_record",
             unitCode: "亩",
             value: "120000",
             sourceCount: 4,
           },
           {
+            auditSources: [],
+            calculationVersion: "OVERVIEW_METRIC_V1",
             code: "PRODUCTION_ESTIMATED_OUTPUT",
+            coverageScope: "region=230200;product=CORN;year=2026",
+            coverageStatus: "AVAILABLE",
+            dataCutoff: "2026-08-11T00:00:00Z",
+            formula: "SUM(estimated_output_kg)",
             name: "粮食产量",
+            sourcePath: "/api/v1/production-records",
+            sourceRelation: "production.production_record",
             unitCode: "公斤",
             value: "7654321",
             sourceCount: 4,
           },
           {
+            auditSources: [],
+            calculationVersion: "OVERVIEW_METRIC_V1",
             code: "MARKET_AVERAGE_TRADE_PRICE",
+            coverageScope: "region=230200;product=CORN;year=2026",
+            coverageStatus: "AVAILABLE",
+            dataCutoff: "2026-08-11T00:00:00Z",
+            formula: "AVG(trade_price_yuan_per_tonne)",
             name: "平均成交价",
+            sourcePath: "/api/v1/market-records",
+            sourceRelation: "market.market_record",
             unitCode: "元/吨",
             value: "2350",
             sourceCount: 3,
@@ -174,8 +232,16 @@ describe("OverviewPage", () => {
             ...emptyDashboard,
             metrics: [
               {
+                auditSources: [],
+                calculationVersion: "OVERVIEW_METRIC_V1",
                 code: "PRODUCTION_CULTIVATED_AREA",
+                coverageScope: "region=230200;product=CORN;year=2026",
+                coverageStatus: "AVAILABLE",
+                dataCutoff: "2026-08-11T00:00:00Z",
+                formula: "SUM(cultivated_area_mu)",
                 name: "粮食播种面积",
+                sourcePath: "/api/v1/production-records",
+                sourceRelation: "production.production_record",
                 sourceCount: 1,
                 unitCode: "亩",
                 value: "120",
@@ -1314,8 +1380,14 @@ const sampleRegion = {
   }),
 };
 const sampleIndicator = {
+  calculationVersion: "OVERVIEW_METRIC_V1",
   code: "PRODUCTION_CULTIVATED_AREA",
+  coverageScope: "region=230200;product=CORN;year=2026;descendants=included",
+  coverageStatus: "AVAILABLE" as const,
+  dataCutoff: "2026-08-11T00:00:00Z",
+  formula: "SUM(cultivated_area_mu)",
   name: "核定播种面积",
+  sourceRelation: "production.production_record",
   unitCode: "亩",
   value: "10",
   sourceDomain: "PRODUCTION" as const,

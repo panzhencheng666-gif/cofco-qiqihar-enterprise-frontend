@@ -66,8 +66,14 @@ function indicator(
   sourceDomain: OverviewIndicator["sourceDomain"],
 ): OverviewIndicator {
   return {
+    calculationVersion: "OVERVIEW_METRIC_V1",
     code,
+    coverageScope: `region=230200;product=CORN;year=2026;metric=${code}`,
+    coverageStatus: "AVAILABLE",
+    dataCutoff: "2026-08-11T00:00:00Z",
+    formula: `SUM(${code})`,
     name,
+    sourceRelation: `${sourceDomain.toLowerCase()}.${code}`,
     sourceDomain,
     sourceCount: 1,
     sourcePath: `/sources/${code}`,

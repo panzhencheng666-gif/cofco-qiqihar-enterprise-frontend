@@ -22,6 +22,32 @@ export class HttpError extends Error {
   }
 }
 
+export class HttpContractError extends Error {
+  readonly kind = "CONTRACT_MISMATCH" as const;
+  readonly endpoint: string;
+  readonly expectedContractVersion: string;
+  readonly receivedContractVersion: string | null;
+  readonly traceId: string | null;
+
+  constructor(details: {
+    endpoint: string;
+    expectedContractVersion: string;
+    receivedContractVersion: string | null;
+    traceId: string | null;
+    cause?: unknown;
+  }) {
+    super(
+      `Response contract mismatch at ${details.endpoint}; expected ${details.expectedContractVersion}`,
+      { cause: details.cause },
+    );
+    this.name = "HttpContractError";
+    this.endpoint = details.endpoint;
+    this.expectedContractVersion = details.expectedContractVersion;
+    this.receivedContractVersion = details.receivedContractVersion;
+    this.traceId = details.traceId;
+  }
+}
+
 export class FetchHttpClient implements HttpClient {
   constructor(private readonly baseUrl = "") {}
 
@@ -71,8 +97,25 @@ export class FetchHttpClient implements HttpClient {
     if (!response.ok) {
       throw new HttpError(response.status, `请求失败：${response.status}`);
     }
-    return schema.parse(await response.json());
+    const payload = (await response.json()) as unknown;
+    const parsed = schema.safeParse(payload);
+    if (!parsed.success) {
+      throw new HttpContractError({
+        endpoint: path,
+        expectedContractVersion: schema.description ?? "declared-response-contract",
+        receivedContractVersion: contractVersionFrom(payload),
+        traceId: response.headers.get("X-Trace-Id"),
+        cause: parsed.error,
+      });
+    }
+    return parsed.data;
   }
+}
+
+function contractVersionFrom(payload: unknown): string | null {
+  if (typeof payload !== "object" || payload === null) return null;
+  const version = (payload as Record<string, unknown>)["contractVersion"];
+  return typeof version === "string" ? version : null;
 }
 
 function filenameFrom(contentDisposition: string | null): string | undefined {

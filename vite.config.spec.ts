@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
-import viteConfig, { localDevelopmentActor, localApiProxy } from "./vite.config";
+import viteConfig, {
+  localAcceptanceContractGatePlugin,
+  localDevelopmentActor,
+  localApiProxy,
+  localLoopbackProxyTarget,
+  verifyLocalOverviewContract,
+} from "./vite.config";
 
 describe("local overview API development proxy", () => {
   it("serves every map document and asset below the business platform gateway prefix", () => {
@@ -9,6 +15,18 @@ describe("local overview API development proxy", () => {
 
   it("binds the default development server to numeric loopback", () => {
     expect(viteConfig.server).toMatchObject({ host: "127.0.0.1", port: 63200 });
+  });
+
+  it("allows only an explicit numeric loopback origin for an isolated acceptance stack", () => {
+    expect(
+      localLoopbackProxyTarget("http://127.0.0.1:18090", "http://127.0.0.1:8090"),
+    ).toBe("http://127.0.0.1:18090");
+    expect(() =>
+      localLoopbackProxyTarget("http://localhost:18090", "http://127.0.0.1:8090"),
+    ).toThrow(/numeric loopback/);
+    expect(() =>
+      localLoopbackProxyTarget("https://example.com", "http://127.0.0.1:8090"),
+    ).toThrow(/numeric loopback/);
   });
 
   it("forces the loopback development actor after removing browser input", () => {
@@ -32,5 +50,35 @@ describe("local overview API development proxy", () => {
     expect(localApiProxy.target).toBe("http://127.0.0.1:8090");
     expect(request.removeHeader).toHaveBeenCalledWith("x-actor");
     expect(request.setHeader).toHaveBeenCalledWith("X-Actor", localDevelopmentActor);
+  });
+
+  it("stops local acceptance when the backend still serves the legacy overview contract", async () => {
+    const fetchContract = vi.fn(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                code: "PRODUCTION_CULTIVATED_AREA",
+                name: "核定播种面积",
+                sourceCount: 1,
+                sourceDomain: "PRODUCTION",
+                sourcePath: "/api/v1/production-records",
+                unitCode: "亩",
+                value: "10",
+              },
+            ],
+          }),
+          { headers: { "X-Trace-Id": "trace-def-101" }, status: 200 },
+        ),
+      ),
+    );
+
+    await expect(verifyLocalOverviewContract(fetchContract)).rejects.toThrow(
+      /CONTRACT_MISMATCH.*trace-def-101/,
+    );
+    expect(viteConfig.plugins).toEqual(
+      expect.arrayContaining([localAcceptanceContractGatePlugin]),
+    );
   });
 });

@@ -6,6 +6,7 @@ import type {
   OverviewRegion,
   OverviewYoYComparison,
 } from "../../domain/overview";
+import { formatMetricAuditLabel } from "../presentation/metricAuditLabel";
 import type { OverviewMapSelectionPoint } from "./boundaryGeometry";
 import { businessPlatformLedgerUrl } from "../businessPlatformNavigation";
 import { overviewSelectionConnector } from "./terrainReliefGeometry";
@@ -437,9 +438,7 @@ function metric(
 ) {
   return {
     label,
-    sourceLabel: value?.sourceCount
-      ? `${value.sourceCount} 条审核来源`
-      : "暂无审核数据",
+    sourceLabel: value?.sourceCount ? formatMetricAuditLabel(value) : "暂无审核数据",
     tone,
     unit: value?.unitCode ?? "",
     value:

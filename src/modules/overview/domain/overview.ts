@@ -54,6 +54,12 @@ export interface OverviewIndicator {
   sourceDomain: "PRODUCTION" | "MARKET" | "LOGISTICS" | "SUPPLY";
   sourceCount: number;
   sourcePath: string;
+  formula: string;
+  sourceRelation: string;
+  dataCutoff: string | null;
+  coverageScope: string;
+  coverageStatus: "AVAILABLE" | "NO_APPROVED_SOURCES";
+  calculationVersion: string;
 }
 
 export interface OverviewDashboardMetric {
@@ -62,16 +68,20 @@ export interface OverviewDashboardMetric {
   unitCode: string;
   value: string | null;
   sourceCount: number;
-  dataCutoff?: string;
-  coverageStatus?:
+  dataCutoff: string | null;
+  coverageStatus:
     | "AVAILABLE"
     | "NO_APPROVED_SOURCES"
     | "INSUFFICIENT_COVERAGE"
     | "CUTOFF_MISMATCH"
     | "UNRELIABLE_SOURCE_CONTRACT"
     | "MUTUAL_EXCLUSIVITY_VIOLATION";
-  calculationVersion?: string;
-  auditSources?: readonly OverviewRegionSurplusAuditSource[];
+  calculationVersion: string;
+  auditSources: readonly OverviewRegionSurplusAuditSource[];
+  formula: string;
+  sourcePath: string;
+  sourceRelation: string;
+  coverageScope: string;
 }
 
 export interface OverviewRegionSurplusAuditSource {

@@ -24,7 +24,7 @@ import {
 import { OverviewCommandCenter } from "../components/OverviewCommandCenter";
 import { OverviewSamplePointPanel } from "../components/OverviewSamplePointPanel";
 import { useOverviewRealtimeRefresh } from "../hooks/useOverviewRealtimeRefresh";
-import { HttpError } from "../../../../shared/api/HttpClient";
+import { HttpContractError, HttpError } from "../../../../shared/api/HttpClient";
 
 const OVERALL_SCOPE = "__OVERALL__";
 const MAP_SCOPE_RETRY_DELAYS_MS = [500, 1_000, 2_000] as const;
@@ -33,6 +33,10 @@ const NOOP_REALTIME_STREAM: OverviewRealtimeStream = {
 };
 
 function overviewDataIssue(error: unknown, fallback: string): string {
+  if (error instanceof HttpContractError) {
+    const trace = error.traceId ? `追踪号：${error.traceId}。` : "追踪号：响应未提供。";
+    return `指标数据契约版本不匹配，当前验收后端可能仍为旧版本。${trace}请停止验收并同步重启后端服务。`;
+  }
   if (error instanceof HttpError && error.status === 403) {
     return "当前账号无权查看该地区的核定业务数据，请返回已授权地区或联系权限管理员。";
   }

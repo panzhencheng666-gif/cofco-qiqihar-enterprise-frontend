@@ -6,6 +6,7 @@ import type {
   OverviewIndicator,
   OverviewRegion,
 } from "../../domain/overview";
+import { formatMetricAuditLabel } from "../presentation/metricAuditLabel";
 import { businessPlatformLedgerUrl } from "../businessPlatformNavigation";
 
 export function OverviewCockpit({
@@ -424,9 +425,7 @@ function metricCard(
   return {
     icon: tone === "production" ? "穗" : tone === "purchase" ? "购" : "仓",
     label,
-    sourceLabel: metric?.sourceCount
-      ? `${metric.sourceCount} 条审核来源`
-      : "暂无审核来源",
+    sourceLabel: metric?.sourceCount ? formatMetricAuditLabel(metric) : "暂无审核来源",
     tone,
     unit: metric?.unitCode ?? "",
     value:

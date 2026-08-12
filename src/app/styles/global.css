@@ -3576,7 +3576,8 @@ select:focus-visible {
   display: grid;
   align-content: center;
   min-width: 0;
-  padding: 11px 20px;
+  padding: 11px 14px;
+  overflow: hidden;
 }
 .overview-command-kpis article + article::before {
   position: absolute;
@@ -3612,9 +3613,18 @@ select:focus-visible {
   font-size: 11px;
 }
 .overview-command-kpis article > span {
+  display: block;
+  max-width: 100%;
+  max-height: 48px;
+  padding-right: 2px;
+  overflow: auto;
   color: #9bd4e7;
   font-size: 12px;
-  letter-spacing: 0.09em;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  letter-spacing: 0.02em;
+  scrollbar-color: rgb(155 212 231 / 55%) transparent;
+  scrollbar-width: thin;
 }
 .overview-command-kpis .is-output strong,
 .overview-command-kpis .is-supply strong {

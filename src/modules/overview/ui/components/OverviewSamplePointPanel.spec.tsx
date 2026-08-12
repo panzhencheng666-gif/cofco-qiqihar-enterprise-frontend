@@ -168,6 +168,43 @@ describe("OverviewSamplePointPanel", () => {
     ).toBeVisible();
   });
 
+  it("keeps the current-category correction count and full-catalog unresolved count visible together", async () => {
+    const catalog = {
+      ...list,
+      totalCount: 3,
+      validCoordinateCount: 0,
+      dataQualityIssueCount: 3,
+      correctionSourceCount: 4,
+      unresolvedSourceCount: 7,
+    };
+    const market = {
+      ...catalog,
+      correctionSourceCount: 1,
+      unresolvedSourceCount: 7,
+      items: [],
+    };
+    const repository = repositoryStub();
+    repository.list.mockResolvedValueOnce(catalog).mockResolvedValueOnce(market);
+
+    render(
+      <OverviewSamplePointPanel
+        onIconsChange={vi.fn()}
+        year={2026}
+        region={{ code: "230208", level: "COUNTY", name: "梅里斯达斡尔族区" }}
+        repository={repository}
+      />,
+    );
+
+    expect(await screen.findByText("当前分类纠错数：4 条")).toBeVisible();
+    expect(screen.getByText("全目录未解决数：7 条")).toBeVisible();
+
+    await userEvent.click(screen.getByRole("button", { name: "市场类 1" }));
+
+    expect(await screen.findByText("当前分类纠错数：1 条")).toBeVisible();
+    expect(screen.getByText("全目录未解决数：7 条")).toBeVisible();
+    expect(screen.getByText("当前条件下暂无样本点。")).toBeVisible();
+  });
+
   it.each([
     ["COUNTY", "230202", "龙沙区"],
     ["TOWNSHIP", "230202997", "契约测试乡"],

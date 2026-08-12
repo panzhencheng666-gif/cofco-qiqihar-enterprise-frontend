@@ -56,4 +56,18 @@ describe("Overview command center navigation layout", () => {
     expect(hoverRule).not.toMatch(/transform:/);
     expect(aggregateRule).not.toMatch(/transform:/);
   });
+
+  it("contains long metric audit metadata inside each KPI card", () => {
+    const css = readFileSync(resolve("src/app/styles/global.css"), "utf8");
+    const cardRule = css.match(/\.overview-command-kpis article\s*\{([^}]*)\}/s)?.[1];
+    const auditRule = css.match(
+      /\.overview-command-kpis article > span\s*\{([^}]*)\}/s,
+    )?.[1];
+
+    expect(cardRule).toMatch(/overflow:\s*hidden/);
+    expect(auditRule).toMatch(/display:\s*block/);
+    expect(auditRule).toMatch(/max-height:\s*\d+px/);
+    expect(auditRule).toMatch(/overflow:\s*auto/);
+    expect(auditRule).toMatch(/overflow-wrap:\s*anywhere/);
+  });
 });

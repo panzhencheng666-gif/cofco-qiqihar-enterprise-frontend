@@ -137,6 +137,11 @@ export function RegionNarrative({
                       {sourceDomainLabel(indicator.sourceDomain)} ·{" "}
                       {indicator.sourceCount} 条核定来源
                     </em>
+                    <small>
+                      公式 {indicator.formula} · 来源 {indicator.sourceRelation} · 截止{" "}
+                      {indicator.dataCutoff ?? "暂无"} · 覆盖 {indicator.coverageScope}{" "}
+                      · 版本 {indicator.calculationVersion}
+                    </small>
                   </li>
                 ))}
               </ul>
