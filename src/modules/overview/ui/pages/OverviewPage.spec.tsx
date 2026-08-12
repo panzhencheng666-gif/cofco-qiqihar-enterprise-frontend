@@ -17,6 +17,7 @@ import type {
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
 import type { OverviewRegion } from "../../domain/overview";
 import { OverviewPage } from "./OverviewPage";
+import { HttpError } from "../../../../shared/api/HttpClient";
 
 describe("OverviewPage", () => {
   it("renders an explicit failure instead of perpetual loading when options fail", async () => {
@@ -204,6 +205,56 @@ describe("OverviewPage", () => {
     ).toHaveAttribute("role", "alert");
     expect(screen.queryByText("120")).not.toBeInTheDocument();
     expect(screen.getAllByText("暂无审核数据").length).toBeGreaterThan(0);
+  });
+
+  it("distinguishes region authorization failures from invalid filters and empty data", async () => {
+    const baseRepository = {
+      mapScope: () => Promise.resolve(sampleMapScope),
+      options: () => Promise.resolve(options),
+      regions: () => Promise.resolve([sampleRegion]),
+      locations: () => Promise.resolve([]),
+      indicators: () => Promise.resolve([]),
+    };
+    const denied = render(
+      <OverviewPage
+        repository={{
+          ...baseRepository,
+          dashboard: () => Promise.reject(new HttpError(403, "denied")),
+        }}
+      />,
+    );
+
+    expect(
+      await screen.findByText(
+        "当前账号无权查看该地区的核定业务数据，请返回已授权地区或联系权限管理员。",
+      ),
+    ).toHaveAttribute("role", "alert");
+    expect(screen.queryByText(/检查筛选条件/u)).not.toBeInTheDocument();
+    denied.unmount();
+
+    const invalid = render(
+      <OverviewPage
+        repository={{
+          ...baseRepository,
+          dashboard: () => Promise.reject(new HttpError(400, "invalid")),
+        }}
+      />,
+    );
+    expect(
+      await screen.findByText("当前总揽筛选条件无效，请重新选择地区、产品和年度。"),
+    ).toHaveAttribute("role", "alert");
+    invalid.unmount();
+
+    render(
+      <OverviewPage
+        repository={{
+          ...baseRepository,
+          dashboard: () => Promise.resolve(emptyDashboard),
+        }}
+      />,
+    );
+    expect((await screen.findAllByText("暂无审核数据")).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/无权查看|筛选条件无效/u)).not.toBeInTheDocument();
   });
 
   it("does not retain prior-year region counts or hide a region failure behind dashboard success", async () => {

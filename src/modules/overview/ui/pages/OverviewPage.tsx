@@ -24,12 +24,23 @@ import {
 import { OverviewCommandCenter } from "../components/OverviewCommandCenter";
 import { OverviewSamplePointPanel } from "../components/OverviewSamplePointPanel";
 import { useOverviewRealtimeRefresh } from "../hooks/useOverviewRealtimeRefresh";
+import { HttpError } from "../../../../shared/api/HttpClient";
 
 const OVERALL_SCOPE = "__OVERALL__";
 const MAP_SCOPE_RETRY_DELAYS_MS = [500, 1_000, 2_000] as const;
 const NOOP_REALTIME_STREAM: OverviewRealtimeStream = {
   subscribe: () => () => undefined,
 };
+
+function overviewDataIssue(error: unknown, fallback: string): string {
+  if (error instanceof HttpError && error.status === 403) {
+    return "当前账号无权查看该地区的核定业务数据，请返回已授权地区或联系权限管理员。";
+  }
+  if (error instanceof HttpError && error.status === 400) {
+    return "当前总揽筛选条件无效，请重新选择地区、产品和年度。";
+  }
+  return fallback;
+}
 
 export function OverviewPage({
   realtimeStream,
@@ -354,10 +365,10 @@ export function OverviewPage({
         setIndicators(next);
         setIndicatorIssue(undefined);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!live) return;
         setIndicators([]);
-        setIndicatorIssue("核定指标加载失败，请检查筛选条件。");
+        setIndicatorIssue(overviewDataIssue(error, "核定指标加载失败，请稍后重试。"));
       });
     return () => {
       live = false;
@@ -398,10 +409,12 @@ export function OverviewPage({
         setDashboard(next);
         setDashboardIssue(undefined);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!live) return;
         setDashboard(undefined);
-        setDashboardIssue("总揽业务聚合数据加载失败，请稍后重试。");
+        setDashboardIssue(
+          overviewDataIssue(error, "总揽业务聚合数据加载失败，请稍后重试。"),
+        );
       });
     return () => {
       live = false;
