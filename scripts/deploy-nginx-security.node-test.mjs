@@ -9,13 +9,21 @@ test("container proxy strips all client-controlled identity headers", async () =
     "utf8",
   );
 
-  for (const header of [
-    "X-Actor",
-    "X-Qiqihar-Authenticated-Subject",
-    "X-Authenticated-Subject",
-    "X-Remote-User",
-  ]) {
-    assert.match(nginx, new RegExp(`proxy_set_header ${header} "";`, "u"));
+  const proxyLocations = ["api", "actuator"].map((name) => {
+    const start = nginx.indexOf(`location /${name}/`);
+    const end = nginx.indexOf("\n  }", start);
+    return nginx.slice(start, end);
+  });
+  assert.equal(proxyLocations.length, 2);
+  for (const location of proxyLocations) {
+    for (const header of [
+      "X-Actor",
+      "X-Qiqihar-Authenticated-Subject",
+      "X-Authenticated-Subject",
+      "X-Remote-User",
+    ]) {
+      assert.match(location, new RegExp(`proxy_set_header ${header} "";`, "u"));
+    }
   }
   assert.doesNotMatch(nginx, /\$http_x_qiqihar_authenticated_subject/u);
 });
