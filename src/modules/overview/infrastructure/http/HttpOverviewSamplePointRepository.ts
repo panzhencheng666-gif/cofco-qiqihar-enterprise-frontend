@@ -16,19 +16,30 @@ const typeRefSchema = z.object({
   iconKey: z.string().min(1),
 });
 
+const aggregateSchema = z
+  .object({
+    regionCode: z.string(),
+    regionName: z.string(),
+    regionLevel: regionLevelSchema,
+    samplePointCount: z.number().int().nonnegative(),
+    productionCount: z.number().int().nonnegative(),
+    marketCount: z.number().int().nonnegative(),
+    validCoordinateCount: z.number(),
+    dataQualityIssueCount: z.number(),
+    correctionSourceCount: z.number(),
+    unresolvedSourceCount: z.number(),
+  })
+  .refine(
+    ({ marketCount, productionCount, samplePointCount }) =>
+      samplePointCount === productionCount + marketCount,
+    {
+      message: "samplePointCount must equal productionCount + marketCount",
+      path: ["samplePointCount"],
+    },
+  );
+
 const aggregatesSchema = z.object({
-  data: z.array(
-    z.object({
-      regionCode: z.string(),
-      regionName: z.string(),
-      regionLevel: regionLevelSchema,
-      samplePointCount: z.number(),
-      validCoordinateCount: z.number(),
-      dataQualityIssueCount: z.number(),
-      correctionSourceCount: z.number(),
-      unresolvedSourceCount: z.number(),
-    }),
-  ),
+  data: z.array(aggregateSchema),
 });
 
 const listSchema = z.object({

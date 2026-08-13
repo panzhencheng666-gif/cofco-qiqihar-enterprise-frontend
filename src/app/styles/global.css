@@ -3197,13 +3197,7 @@ select:focus-visible {
   border: 1px solid rgb(190 247 255 / 72%);
   border-radius: 50%;
   color: #f7fdff;
-  background: conic-gradient(
-    from -28deg,
-    #ffe58e 0 20%,
-    #5ce1e6 20% 58%,
-    #71b9ff 58% 82%,
-    #ffe58e 82% 100%
-  );
+  background: #31566b;
   box-shadow:
     0 0 0 4px rgb(50 211 230 / 13%),
     0 8px 22px rgb(0 35 57 / 48%);
@@ -3696,6 +3690,21 @@ select:focus-visible {
   border-radius: 2px;
   background: #f2c94c;
   box-shadow: 0 0 8px #ffd76a;
+}
+.overview-command-legend .is-production-sample,
+.overview-command-legend .is-market-sample {
+  width: 11px;
+  height: 11px;
+  margin-left: 2px;
+  border-radius: 50%;
+}
+.overview-command-legend .is-production-sample {
+  background: #ffe58e;
+  box-shadow: 0 0 8px rgb(255 229 142 / 68%);
+}
+.overview-command-legend .is-market-sample {
+  background: #5ce1e6;
+  box-shadow: 0 0 8px rgb(92 225 230 / 68%);
 }
 
 .overview-command-center > .overview-cockpit-navigation {

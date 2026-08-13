@@ -5,6 +5,8 @@ export interface OverviewSamplePointAggregate {
   regionName: string;
   regionLevel: "PREFECTURE" | "COUNTY" | "TOWNSHIP" | "VILLAGE";
   samplePointCount: number;
+  productionCount: number;
+  marketCount: number;
   validCoordinateCount: number;
   dataQualityIssueCount: number;
   correctionSourceCount: number;

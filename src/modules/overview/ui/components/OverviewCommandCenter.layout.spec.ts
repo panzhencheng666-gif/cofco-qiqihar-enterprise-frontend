@@ -11,8 +11,12 @@ describe("Overview command center navigation layout", () => {
     );
   });
 
-  it("uses a centered non-interactive ring instead of a label-offset capsule", () => {
+  it("uses a centered non-interactive data-driven ring instead of a label-offset capsule", () => {
     const css = readFileSync(resolve("src/app/styles/global.css"), "utf8");
+    const source = readFileSync(
+      resolve("src/modules/overview/ui/components/TerrainReliefBoundaryMap.tsx"),
+      "utf8",
+    );
     const markerRule = css.match(
       /\.overview-sample-point-aggregate-marker\s*\{([^}]*)\}/s,
     );
@@ -20,9 +24,11 @@ describe("Overview command center navigation layout", () => {
     expect(markerRule?.[1]).toMatch(/width:\s*\d+px/);
     expect(markerRule?.[1]).toMatch(/height:\s*\d+px/);
     expect(markerRule?.[1]).toMatch(/border-radius:\s*50%/);
-    expect(markerRule?.[1]).toMatch(/conic-gradient/);
+    expect(markerRule?.[1]).not.toMatch(/conic-gradient/);
     expect(markerRule?.[1]).toMatch(/pointer-events:\s*none/);
     expect(markerRule?.[1]).toMatch(/transform:\s*translate\(-50%,\s*-50%\)/);
+    expect(source).toContain("samplePointAggregateRing(aggregate)");
+    expect(css).not.toContain("#71b9ff");
   });
 
   it("keeps concrete map symbols keyboard inspectable for collision disclosure", () => {

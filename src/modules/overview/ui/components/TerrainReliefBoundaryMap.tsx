@@ -11,6 +11,10 @@ import type {
   OverviewSamplePointAggregate,
   OverviewSamplePointIcon,
 } from "../../domain/overviewSamplePoint";
+import {
+  samplePointAggregateLabel,
+  samplePointAggregateRing,
+} from "../presentation/samplePointAggregateRing";
 import type {
   MapFeature,
   MapPointFeature,
@@ -249,10 +253,10 @@ export default function TerrainReliefBoundaryMap({
   const aggregateRegionCodes = new Set(
     activeProjection.samplePointAggregates.map(({ aggregate }) => aggregate.regionCode),
   );
-  const aggregateCountByRegion = new Map(
+  const aggregateByRegion = new Map(
     activeProjection.samplePointAggregates.map(({ aggregate }) => [
       aggregate.regionCode,
-      aggregate.samplePointCount,
+      aggregate,
     ]),
   );
 
@@ -979,7 +983,7 @@ export default function TerrainReliefBoundaryMap({
               <Fragment key={`${kind}-${region.code}-${componentId ?? "point"}`}>
                 <button
                   aria-label={reliefRegionLabel({
-                    aggregateCount: aggregateCountByRegion.get(region.code),
+                    aggregate: aggregateByRegion.get(region.code),
                     isLeaf,
                     region,
                     status: samplePointAggregateStatus,
@@ -1013,25 +1017,33 @@ export default function TerrainReliefBoundaryMap({
           })}
         {overlayLayout.samplePointAggregates
           .filter(({ visible }) => visible)
-          .map(({ aggregate, point, scale }) => (
-            <span
-              aria-hidden="true"
-              className="overview-sample-point-aggregate-marker"
-              data-layout-scale={scale}
-              data-region-code={aggregate.regionCode}
-              key={`sample-point-aggregate-${aggregate.regionCode}`}
-              style={{
-                left: point.x,
-                top:
-                  point.y -
-                  (aggregate.regionCode === selectedCode ? selectedOverlayLift : 0),
-                transform: `translate(-50%, -50%) scale(${scale})`,
-              }}
-            >
-              <strong>{aggregate.samplePointCount}</strong>
-              <small>样本点</small>
-            </span>
-          ))}
+          .map(({ aggregate, point, scale }) => {
+            const ring = samplePointAggregateRing(aggregate);
+            return (
+              <span
+                aria-label={`${aggregate.regionName}，${samplePointAggregateLabel(aggregate)}`}
+                className="overview-sample-point-aggregate-marker"
+                data-layout-scale={scale}
+                data-market-count={aggregate.marketCount}
+                data-production-count={aggregate.productionCount}
+                data-region-code={aggregate.regionCode}
+                data-state={ring.state}
+                key={`sample-point-aggregate-${aggregate.regionCode}`}
+                role="img"
+                style={{
+                  background: ring.background,
+                  left: point.x,
+                  top:
+                    point.y -
+                    (aggregate.regionCode === selectedCode ? selectedOverlayLift : 0),
+                  transform: `translate(-50%, -50%) scale(${scale})`,
+                }}
+              >
+                <strong>{aggregate.samplePointCount}</strong>
+                <small>{ring.state === "empty" ? "暂无样本点" : "样本点"}</small>
+              </span>
+            );
+          })}
         {activeProjection.points
           .filter(({ region }) => region.level === "VILLAGE")
           .map(({ point, region }) => {
@@ -1105,12 +1117,12 @@ export default function TerrainReliefBoundaryMap({
 }
 
 function reliefRegionLabel({
-  aggregateCount,
+  aggregate,
   isLeaf,
   region,
   status,
 }: {
-  aggregateCount: number | undefined;
+  aggregate: OverviewSamplePointAggregate | undefined;
   isLeaf: boolean;
   region: OverviewRegion;
   status: "hidden" | "loading" | "ready" | "unavailable" | undefined;
@@ -1121,15 +1133,16 @@ function reliefRegionLabel({
   const action = isLeaf ? "点击查看行政村详情" : "点击选中，双击进入下一级";
   if (status === "hidden") return `${region.name}，${action}`;
   if (status === "loading") return `${region.name}，样本点聚合数据加载中，${action}`;
-  if (
-    status === "unavailable" ||
-    (status === "ready" && aggregateCount === undefined)
-  ) {
+  if (status === "unavailable" || (status === "ready" && aggregate === undefined)) {
     return `${region.name}，样本点聚合数据不可用，${action}`;
   }
-  const count = status === "ready" ? aggregateCount : region.approvedRecordCount;
-  if (count === null) return `${region.name}，年度业务统计加载中，${action}`;
-  return `${region.name}，已核定 ${count} 个样本点，${action}`;
+  if (status === "ready" && aggregate) {
+    return `${region.name}，${samplePointAggregateLabel(aggregate)}，${action}`;
+  }
+  if (region.approvedRecordCount === null) {
+    return `${region.name}，年度业务统计加载中，${action}`;
+  }
+  return `${region.name}，已核定 ${region.approvedRecordCount} 个样本点，${action}`;
 }
 
 function SamplePointMapSymbol({ iconKey }: { iconKey: string | undefined }) {

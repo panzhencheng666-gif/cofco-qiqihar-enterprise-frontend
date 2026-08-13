@@ -5,6 +5,15 @@ import type { OverviewDashboard } from "../../domain/overview";
 import { OverviewCommandCenter } from "./OverviewCommandCenter";
 
 describe("OverviewCommandCenter region surplus", () => {
+  it("labels the aggregate ring with production and market only", () => {
+    renderCenter(dashboardWithSurplus("32", "AVAILABLE", 2));
+
+    const legend = screen.getByRole("complementary");
+    expect(within(legend).getByText("生产类样本点")).toBeVisible();
+    expect(within(legend).getByText("市场类样本点")).toBeVisible();
+    expect(within(legend).queryByText(/物流/)).not.toBeInTheDocument();
+  });
+
   it("places the backend-derived region surplus in the seventh card after ending inventory", () => {
     renderCenter(dashboardWithSurplus("32", "AVAILABLE", 2));
 

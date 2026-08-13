@@ -119,6 +119,14 @@ export function OverviewCommandCenter({
           <i className="is-village" />
           行政村界
         </span>
+        <span>
+          <i className="is-production-sample" />
+          生产类样本点
+        </span>
+        <span>
+          <i className="is-market-sample" />
+          市场类样本点
+        </span>
       </aside>
       {navigation}
 

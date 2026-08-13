@@ -5,6 +5,7 @@ import type {
   OverviewSamplePointAggregate,
   OverviewSamplePointIcon,
 } from "../../domain/overviewSamplePoint";
+import { samplePointAggregateLabel } from "../presentation/samplePointAggregateRing";
 import {
   flattenCoordinates,
   type MapFeature,
@@ -210,7 +211,7 @@ function accessibleRegionLabel(
   if (status === "unavailable") return `${region.name}，样本点聚合数据不可用`;
   const aggregate = aggregates.find(({ regionCode }) => regionCode === region.code);
   return aggregate
-    ? `${region.name}，已核定 ${aggregate.samplePointCount} 个样本点`
+    ? `${region.name}，${samplePointAggregateLabel(aggregate)}`
     : `${region.name}，样本点聚合数据不可用`;
 }
 

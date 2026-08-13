@@ -552,6 +552,8 @@ describe("OverviewPage", () => {
                 regionName: sampleRegion.name,
                 regionLevel: "PREFECTURE",
                 samplePointCount: 1,
+                productionCount: 1,
+                marketCount: 0,
                 validCoordinateCount: 1,
                 dataQualityIssueCount: 0,
                 correctionSourceCount: 0,
@@ -567,7 +569,7 @@ describe("OverviewPage", () => {
 
     await userEvent.setup().click(
       await screen.findByRole("button", {
-        name: "齐齐哈尔市，已核定 1 个样本点",
+        name: "齐齐哈尔市，已核定 1 个样本点，其中生产类 1 个、市场类 0 个",
       }),
     );
 
@@ -617,6 +619,8 @@ describe("OverviewPage", () => {
             regionName: "齐齐哈尔市",
             regionLevel: "PREFECTURE",
             samplePointCount: 4,
+            productionCount: 3,
+            marketCount: 1,
             validCoordinateCount: 4,
             dataQualityIssueCount: 0,
             correctionSourceCount: 0,
@@ -636,6 +640,8 @@ describe("OverviewPage", () => {
           regionName: child.region.name,
           regionLevel: child.region.level,
           samplePointCount: child.count,
+          productionCount: child.count,
+          marketCount: 0,
           validCoordinateCount: child.count,
           dataQualityIssueCount: 0,
           correctionSourceCount: 0,
@@ -665,11 +671,13 @@ describe("OverviewPage", () => {
 
     fireEvent.doubleClick(
       await screen.findByRole("button", {
-        name: "齐齐哈尔市，已核定 4 个样本点",
+        name: "齐齐哈尔市，已核定 4 个样本点，其中生产类 3 个、市场类 1 个",
       }),
     );
     fireEvent.doubleClick(
-      await screen.findByRole("button", { name: "拜泉县，已核定 3 个样本点" }),
+      await screen.findByRole("button", {
+        name: "拜泉县，已核定 3 个样本点，其中生产类 3 个、市场类 0 个",
+      }),
     );
     const mapRegion = screen.getByLabelText("粮食商情总览地图");
     fireEvent.doubleClick(
@@ -719,6 +727,8 @@ describe("OverviewPage", () => {
                 regionName: query.parentCode ? county.name : sampleRegion.name,
                 regionLevel: query.parentCode ? "COUNTY" : "PREFECTURE",
                 samplePointCount: 1,
+                productionCount: 1,
+                marketCount: 0,
                 validCoordinateCount: 1,
                 dataQualityIssueCount: 0,
                 correctionSourceCount: 0,
@@ -734,9 +744,11 @@ describe("OverviewPage", () => {
 
     await screen.findByRole("option", { name: "齐齐哈尔市" });
     await userEvent.setup().selectOptions(screen.getByLabelText("区域范围"), "230200");
-    await userEvent
-      .setup()
-      .click(await screen.findByRole("button", { name: "拜泉县，已核定 1 个样本点" }));
+    await userEvent.setup().click(
+      await screen.findByRole("button", {
+        name: "拜泉县，已核定 1 个样本点，其中生产类 1 个、市场类 0 个",
+      }),
+    );
     expect(
       await within(screen.getByLabelText("粮食商情总览地图")).findByRole("button", {
         name: "拜泉县",
@@ -762,9 +774,11 @@ describe("OverviewPage", () => {
       }),
     ).not.toBeInTheDocument();
 
-    await userEvent
-      .setup()
-      .click(await screen.findByRole("button", { name: "拜泉县，已核定 1 个样本点" }));
+    await userEvent.setup().click(
+      await screen.findByRole("button", {
+        name: "拜泉县，已核定 1 个样本点，其中生产类 1 个、市场类 0 个",
+      }),
+    );
     expect(
       screen.getByText("请选择分类后逐条查看 1 个实体及坐标质量原因"),
     ).toBeVisible();
@@ -817,6 +831,8 @@ describe("OverviewPage", () => {
                 regionName: query.parentCode ? county.name : sampleRegion.name,
                 regionLevel: query.parentCode ? "COUNTY" : "PREFECTURE",
                 samplePointCount: 1,
+                productionCount: 1,
+                marketCount: 0,
                 validCoordinateCount: 1,
                 dataQualityIssueCount: 0,
                 correctionSourceCount: 0,
@@ -832,9 +848,11 @@ describe("OverviewPage", () => {
 
     await screen.findByRole("option", { name: "齐齐哈尔市" });
     await userEvent.setup().selectOptions(screen.getByLabelText("区域范围"), "230200");
-    await userEvent
-      .setup()
-      .click(await screen.findByRole("button", { name: "拜泉县，已核定 1 个样本点" }));
+    await userEvent.setup().click(
+      await screen.findByRole("button", {
+        name: "拜泉县，已核定 1 个样本点，其中生产类 1 个、市场类 0 个",
+      }),
+    );
     await userEvent.click(await screen.findByRole("button", { name: "产情类 1" }));
     await userEvent.type(screen.getByLabelText("搜索样本点"), "跨产品");
     expect(

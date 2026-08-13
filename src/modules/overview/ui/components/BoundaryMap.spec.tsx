@@ -88,6 +88,39 @@ describe("BoundaryMap", () => {
     expect(passiveCoverage.region.mapContextOnly).toBe(true);
   });
 
+  it("announces production and market counts without a logistics category", () => {
+    render(
+      <BoundaryMap
+        features={[feature("230200")]}
+        onDrill={vi.fn()}
+        onSelect={vi.fn()}
+        points={[]}
+        samplePointAggregates={[
+          {
+            regionCode: "230200",
+            regionName: "齐齐哈尔市",
+            regionLevel: "PREFECTURE",
+            samplePointCount: 4,
+            productionCount: 3,
+            marketCount: 1,
+            validCoordinateCount: 4,
+            dataQualityIssueCount: 0,
+            correctionSourceCount: 0,
+            unresolvedSourceCount: 0,
+          },
+        ]}
+        samplePointAggregateStatus="ready"
+        selectedCode=""
+      />,
+    );
+
+    const region = screen.getByRole("button", {
+      name: "230200，已核定 4 个样本点，其中生产类 3 个、市场类 1 个",
+    });
+    expect(region).toBeVisible();
+    expect(region).not.toHaveAccessibleName(/物流/);
+  });
+
   it("keeps a local terrain placeholder over the initial and replacement scene until each first frame is ready", async () => {
     const common = {
       onDrill: vi.fn(),

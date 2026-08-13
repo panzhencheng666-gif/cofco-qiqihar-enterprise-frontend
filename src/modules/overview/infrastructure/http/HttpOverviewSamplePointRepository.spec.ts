@@ -11,6 +11,8 @@ describe("HttpOverviewSamplePointRepository", () => {
         regionName: "契约测试村",
         regionLevel: "VILLAGE",
         samplePointCount: 3,
+        productionCount: 2,
+        marketCount: 1,
         validCoordinateCount: 2,
         dataQualityIssueCount: 1,
         correctionSourceCount: 0,
@@ -37,12 +39,33 @@ describe("HttpOverviewSamplePointRepository", () => {
       regionName: "契约测试村",
       regionLevel: "VILLAGE",
       samplePointCount: 3,
+      productionCount: 2,
+      marketCount: 1,
       validCoordinateCount: 2,
       dataQualityIssueCount: 1,
       correctionSourceCount: 0,
       unresolvedSourceCount: 1,
     });
     expect(result[0]).not.toHaveProperty("longitude");
+  });
+
+  it("rejects aggregate totals that are not the sum of production and market", async () => {
+    const get = respondingWith([
+      {
+        regionCode: "230202997001",
+        regionName: "契约测试村",
+        regionLevel: "VILLAGE",
+        samplePointCount: 4,
+        productionCount: 2,
+        marketCount: 1,
+        validCoordinateCount: 2,
+        dataQualityIssueCount: 1,
+        correctionSourceCount: 0,
+        unresolvedSourceCount: 1,
+      },
+    ]);
+
+    await expect(repositoryWith(get).aggregates({ year: 2026 })).rejects.toThrow();
   });
 
   it("reads filtered lists and exposes no point geometry", async () => {
