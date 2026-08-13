@@ -49,7 +49,11 @@ export class HttpContractError extends Error {
 }
 
 export class FetchHttpClient implements HttpClient {
-  constructor(private readonly baseUrl = "") {}
+  constructor(
+    private readonly baseUrl = "",
+    private readonly cookieSource: () => string = () =>
+      typeof document === "undefined" ? "" : document.cookie,
+  ) {}
 
   async get<T>(path: string, schema: ZodType<T>): Promise<T> {
     return this.request("GET", path, undefined, schema);
@@ -91,6 +95,7 @@ export class FetchHttpClient implements HttpClient {
       headers: {
         Accept: "application/json",
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+        ...csrfHeaders(method, this.cookieSource()),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
@@ -109,6 +114,26 @@ export class FetchHttpClient implements HttpClient {
       });
     }
     return parsed.data;
+  }
+}
+
+function csrfHeaders(method: string, cookieHeader: string): Record<string, string> {
+  if (method === "GET") return {};
+  const token = csrfTokenFromCookies(cookieHeader);
+  return token ? { "X-XSRF-TOKEN": token } : {};
+}
+
+function csrfTokenFromCookies(cookieHeader: string): string | undefined {
+  const encoded = cookieHeader
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith("XSRF-TOKEN="))
+    ?.slice("XSRF-TOKEN=".length);
+  if (!encoded) return undefined;
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return undefined;
   }
 }
 
