@@ -76,9 +76,7 @@ describe("OverviewSamplePointPanel", () => {
 
     expect(await screen.findByRole("button", { name: "产情类 1" })).toBeVisible();
     expect(screen.queryByText("同一跨产品样本点")).not.toBeInTheDocument();
-    expect(
-      screen.getByText("请选择分类后逐条查看 1 个实体及坐标质量原因"),
-    ).toBeVisible();
+    expect(screen.getByText("请选择分类后查看 1 个样本点")).toBeVisible();
     expect(repository.icons).not.toHaveBeenCalled();
     expect(repository.detail).not.toHaveBeenCalled();
     expect(onIconsChange).toHaveBeenCalledWith([]);
@@ -147,14 +145,8 @@ describe("OverviewSamplePointPanel", () => {
       />,
     );
 
-    expect(
-      await screen.findByText(
-        "实体核对：可显示图标 0 个 + 坐标待纠正 3 个 = 共 3 个。",
-      ),
-    ).toBeVisible();
-    expect(
-      screen.getByText("请选择分类后逐条查看 3 个实体及坐标质量原因"),
-    ).toBeVisible();
+    expect(await screen.findByText("请选择分类后查看 3 个样本点")).toBeVisible();
+    expect(screen.queryByText(/实体核对|坐标待纠正|坐标质量/)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "市场类 3" }));
     expect(await screen.findByText("贸易商甲")).toBeVisible();
@@ -162,13 +154,12 @@ describe("OverviewSamplePointPanel", () => {
     expect(screen.getByText("饲料厂丙")).toBeVisible();
     await userEvent.click(screen.getByText("贸易商甲"));
     expect(
-      await within(screen.getByLabelText("所选样本点详情")).findByText(
-        "坐标质量：重复坐标尚未核实",
-      ),
+      await within(screen.getByLabelText("所选样本点详情")).findByText("贸易商甲"),
     ).toBeVisible();
+    expect(screen.queryByText(/坐标质量/)).not.toBeInTheDocument();
   });
 
-  it("keeps the current-category correction count and full-catalog unresolved count visible together", async () => {
+  it("keeps governance correction diagnostics out of the ordinary business panel", async () => {
     const catalog = {
       ...list,
       totalCount: 3,
@@ -195,13 +186,12 @@ describe("OverviewSamplePointPanel", () => {
       />,
     );
 
-    expect(await screen.findByText("当前分类纠错数：4 条")).toBeVisible();
-    expect(screen.getByText("全目录未解决数：7 条")).toBeVisible();
+    expect(await screen.findByText("请选择分类后查看 3 个样本点")).toBeVisible();
+    expect(screen.queryByText(/纠错数|未解决数|稳定主体/)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "市场类 1" }));
 
-    expect(await screen.findByText("当前分类纠错数：1 条")).toBeVisible();
-    expect(screen.getByText("全目录未解决数：7 条")).toBeVisible();
+    expect(screen.queryByText(/纠错数|未解决数|稳定主体/)).not.toBeInTheDocument();
     expect(screen.getByText("当前条件下暂无样本点。")).toBeVisible();
   });
 
