@@ -6,6 +6,7 @@ import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import { useEffect, useRef } from "react";
 
 import type { OverviewRegion } from "../../domain/overview";
+import { publicAssetUrl } from "../../../../shared/assets/publicAssetUrl";
 import {
   flattenCoordinates,
   type MapFeature,
@@ -777,7 +778,9 @@ function resetCamera(
 }
 
 function createTerrainTexture(renderer: THREE.WebGLRenderer) {
-  const texture = new THREE.TextureLoader().load("/overview/command-terrain-v2.png");
+  const texture = new THREE.TextureLoader().load(
+    publicAssetUrl("overview/command-terrain-v2.png"),
+  );
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
   texture.wrapS = THREE.ClampToEdgeWrapping;

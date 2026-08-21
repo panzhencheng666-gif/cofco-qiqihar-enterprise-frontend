@@ -6,11 +6,13 @@ import { BoundaryMap } from "./BoundaryMap";
 
 const terrainRuntime = vi.hoisted(() => ({
   onReady: undefined as (() => void) | undefined,
+  props: undefined as Record<string, unknown> | undefined,
 }));
 
 vi.mock("./TerrainReliefBoundaryMap", () => ({
-  default: ({ onReady }: { onReady: () => void }) => {
-    terrainRuntime.onReady = onReady;
+  default: (props: Record<string, unknown> & { onReady: () => void }) => {
+    terrainRuntime.onReady = props.onReady;
+    terrainRuntime.props = props;
     return null;
   },
 }));
@@ -39,6 +41,7 @@ const feature = (code: string): MapFeature => ({
 describe("BoundaryMap", () => {
   beforeEach(() => {
     terrainRuntime.onReady = undefined;
+    terrainRuntime.props = undefined;
     vi.stubGlobal("ResizeObserver", class ResizeObserver {});
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
       {} as RenderingContext,
@@ -119,6 +122,42 @@ describe("BoundaryMap", () => {
     });
     expect(region).toBeVisible();
     expect(region).not.toHaveAccessibleName(/物流/);
+  });
+
+  it("forwards one controlled sample-point selection to the terrain map", () => {
+    const onSamplePointSelect = vi.fn();
+    const icon = {
+      samplePointId: "94000000-0000-0000-0000-000000000001",
+      name: "同一跨产品样本点",
+      iconKey: "farmer",
+      types: [{ code: "FARMER", name: "农户", iconKey: "farmer" }],
+      longitude: 123.5,
+      latitude: 47.5,
+      dataQualityReason: null,
+    };
+
+    render(
+      <BoundaryMap
+        features={[feature("230200")]}
+        onDrill={vi.fn()}
+        onSamplePointSelect={onSamplePointSelect}
+        onSelect={vi.fn()}
+        points={[]}
+        samplePointIcons={[icon]}
+        selectedCode=""
+        selectedSamplePointId={icon.samplePointId}
+      />,
+    );
+
+    expect(terrainRuntime.props).toMatchObject({
+      onSamplePointSelect,
+      selectedSamplePointId: icon.samplePointId,
+    });
+    (
+      terrainRuntime.props?.onSamplePointSelect as
+        ((samplePointId: string) => void) | undefined
+    )?.(icon.samplePointId);
+    expect(onSamplePointSelect).toHaveBeenCalledWith(icon.samplePointId);
   });
 
   it("keeps a local terrain placeholder over the initial and replacement scene until each first frame is ready", async () => {

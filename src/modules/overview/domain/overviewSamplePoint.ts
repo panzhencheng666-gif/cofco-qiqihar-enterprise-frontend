@@ -48,6 +48,8 @@ export interface OverviewSamplePointListItem {
   categories: readonly OverviewSamplePointCategoryRef[];
   types: readonly OverviewSamplePointTypeRef[];
   products: readonly OverviewSamplePointProductRef[];
+  latestBusinessDate: string;
+  summaryValues: Readonly<Record<string, OverviewSamplePointBusinessValue>>;
 }
 
 export interface OverviewSamplePointList {
@@ -76,6 +78,7 @@ export interface OverviewSamplePointIcon {
   types: readonly OverviewSamplePointTypeRef[];
   longitude: number;
   latitude: number;
+  dataQualityReason: string | null;
 }
 
 export interface OverviewSamplePointBusinessValue {

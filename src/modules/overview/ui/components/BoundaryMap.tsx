@@ -6,6 +6,7 @@ import type {
   OverviewSamplePointIcon,
 } from "../../domain/overviewSamplePoint";
 import { samplePointAggregateLabel } from "../presentation/samplePointAggregateRing";
+import { publicAssetUrl } from "../../../../shared/assets/publicAssetUrl";
 import {
   flattenCoordinates,
   type MapFeature,
@@ -28,6 +29,7 @@ export function BoundaryMap({
   backdrop,
   features,
   onDrill,
+  onSamplePointSelect,
   onSelect,
   onSelectionPosition,
   points,
@@ -35,11 +37,13 @@ export function BoundaryMap({
   samplePointAggregateStatus,
   samplePointIcons = EMPTY_SAMPLE_POINT_ICONS,
   selectedCode,
+  selectedSamplePointId,
   command,
 }: {
   backdrop?: MapFeature;
   features: readonly MapFeature[];
   onDrill: (region: OverviewRegion) => void;
+  onSamplePointSelect?: (samplePointId: string) => void;
   onSelect: (region: OverviewRegion) => void;
   onSelectionPosition?: (position: OverviewMapSelectionPoint | undefined) => void;
   points: readonly MapPointFeature[];
@@ -47,6 +51,7 @@ export function BoundaryMap({
   samplePointAggregateStatus?: SamplePointAggregateStatus;
   samplePointIcons?: readonly OverviewSamplePointIcon[];
   selectedCode: string;
+  selectedSamplePointId?: string;
   command?: OverviewMapCommand;
 }) {
   const [webGlEnabled, setWebGlEnabled] = useState(canRenderWebGlMap);
@@ -91,6 +96,8 @@ export function BoundaryMap({
           points={points}
           samplePointAggregates={samplePointAggregates}
           samplePointIcons={samplePointIcons}
+          {...(onSamplePointSelect ? { onSamplePointSelect } : {})}
+          {...(selectedSamplePointId ? { selectedSamplePointId } : {})}
           {...(samplePointAggregateStatus ? { samplePointAggregateStatus } : {})}
           onDrill={onDrill}
           onSelect={onSelect}
@@ -108,6 +115,8 @@ export function BoundaryMap({
             points={points}
             samplePointAggregates={samplePointAggregates}
             samplePointIcons={samplePointIcons}
+            {...(onSamplePointSelect ? { onSamplePointSelect } : {})}
+            {...(selectedSamplePointId ? { selectedSamplePointId } : {})}
             {...(samplePointAggregateStatus ? { samplePointAggregateStatus } : {})}
             onDrill={onDrill}
             onSelect={onSelect}
@@ -123,6 +132,8 @@ export function BoundaryMap({
         samplePointAggregates={samplePointAggregates}
         {...(samplePointAggregateStatus ? { samplePointAggregateStatus } : {})}
         samplePointIcons={samplePointIcons}
+        {...(onSamplePointSelect ? { onSamplePointSelect } : {})}
+        {...(selectedSamplePointId ? { selectedSamplePointId } : {})}
         selectedCode={selectedCode}
         onDrill={onDrill}
         onSelect={onSelect}
@@ -148,6 +159,8 @@ function BoundaryMapAccessibility({
   points,
   samplePointAggregates,
   samplePointIcons,
+  onSamplePointSelect,
+  selectedSamplePointId,
   samplePointAggregateStatus,
   onDrill,
   onSelect,
@@ -156,6 +169,8 @@ function BoundaryMapAccessibility({
   points: readonly MapPointFeature[];
   samplePointAggregates: readonly OverviewSamplePointAggregate[];
   samplePointIcons: readonly OverviewSamplePointIcon[];
+  onSamplePointSelect?: (samplePointId: string) => void;
+  selectedSamplePointId?: string;
   samplePointAggregateStatus?: SamplePointAggregateStatus;
   onDrill: (region: OverviewRegion) => void;
   onSelect: (region: OverviewRegion) => void;
@@ -186,10 +201,12 @@ function BoundaryMapAccessibility({
         />
       ))}
       {samplePointIcons.map((icon) => (
-        <span
-          aria-label={`${icon.name}，${icon.types.map((type) => type.name).join("、")}，真实坐标 ${icon.longitude.toFixed(6)}，${icon.latitude.toFixed(6)}`}
+        <button
+          aria-label={`${icon.name}，${icon.types.map((type) => type.name).join("、")}，点击查看样本点详情`}
+          aria-pressed={selectedSamplePointId === icon.samplePointId}
           key={`accessible-sample-point-${icon.samplePointId}`}
-          role="img"
+          onClick={() => onSamplePointSelect?.(icon.samplePointId)}
+          type="button"
         />
       ))}
     </div>
@@ -230,7 +247,11 @@ function TerrainScenePlaceholder({
 }) {
   return (
     <div className="overview-terrain-placeholder">
-      <img alt="" aria-hidden="true" src="/overview/command-terrain-v2.webp" />
+      <img
+        alt=""
+        aria-hidden="true"
+        src={publicAssetUrl("overview/command-terrain-v2.webp")}
+      />
       <span title={reason || undefined}>{message}</span>
     </div>
   );

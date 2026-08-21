@@ -14,7 +14,7 @@ describe("OverviewCommandCenter region surplus", () => {
     expect(within(legend).queryByText(/物流/)).not.toBeInTheDocument();
   });
 
-  it("places the backend-derived region surplus in the seventh card after ending inventory", () => {
+  it("places the backend-derived region surplus after the six non-duplicated business metrics", () => {
     renderCenter(dashboardWithSurplus("32", "AVAILABLE", 2));
 
     const cards = within(
@@ -25,10 +25,10 @@ describe("OverviewCommandCenter region surplus", () => {
     ).toEqual([
       "粮食播种面积",
       "预计总产量",
-      "平均成交价",
+      "平均收购价",
+      "平均销售价",
       "总供给",
       "总需求",
-      "期末库存",
       "地区余粮",
     ]);
     expect(within(cards[6]!).getByText("32")).toBeVisible();
@@ -53,6 +53,17 @@ describe("OverviewCommandCenter region surplus", () => {
     expect(within(card).getByText("暂无审核来源")).toBeVisible();
     expect(within(card).queryByText("暂无可靠数据")).not.toBeInTheDocument();
   });
+
+  it("shows a partial public-field value with its missing business domain disclosed", () => {
+    renderCenter(dashboardWithSurplus("82297", "PARTIAL", 235));
+
+    const card = screen.getByRole("article", { name: /地区余粮/ });
+    expect(within(card).getByText("82,297")).toBeVisible();
+    expect(
+      within(card).getByText("235 条产情审核来源 · 市场暂无审核来源 · 截止 2026-08-10"),
+    ).toBeVisible();
+    expect(within(card).queryByText("暂无可靠数据")).not.toBeInTheDocument();
+  });
 });
 
 function renderCenter(dashboard: OverviewDashboard) {
@@ -71,7 +82,7 @@ function renderCenter(dashboard: OverviewDashboard) {
 
 function dashboardWithSurplus(
   value: string | null,
-  coverageStatus: "AVAILABLE" | "NO_APPROVED_SOURCES" | "CUTOFF_MISMATCH",
+  coverageStatus: "AVAILABLE" | "PARTIAL" | "NO_APPROVED_SOURCES" | "CUTOFF_MISMATCH",
   sourceCount: number,
 ): OverviewDashboard {
   return {
@@ -84,7 +95,25 @@ function dashboardWithSurplus(
     },
     metrics: [
       {
-        auditSources: [],
+        auditSources:
+          coverageStatus === "PARTIAL"
+            ? [
+                {
+                  adopted: true,
+                  adoptionReason: "LATEST_VISIBLE_APPROVED_SOURCE",
+                  approvedAt: "2026-08-10T10:00:00+08:00",
+                  cargoOwnerKey: "VISIBLE|公开产情样本点|13800000003",
+                  dataCutoff: "2026-08-10",
+                  ownershipType: "PRODUCTION_SURPLUS",
+                  regionCode: "230208",
+                  sourceDomain: "PRODUCTION",
+                  sourceRecordId: "production-1",
+                  sourceVersion: 2,
+                  subjectKey: "VISIBLE|公开产情样本点|13800000003",
+                  valueTonnes: 82297,
+                },
+              ]
+            : [],
         calculationVersion: "REGION_SURPLUS_V1",
         code: "REGION_SURPLUS",
         coverageScope: "region=230200;product=CORN;year=2026;descendants=included",
@@ -106,5 +135,6 @@ function dashboardWithSurplus(
     alerts: [],
     cultivatedAreaYoY: [],
     outputYoY: [],
+    businessTables: [],
   };
 }

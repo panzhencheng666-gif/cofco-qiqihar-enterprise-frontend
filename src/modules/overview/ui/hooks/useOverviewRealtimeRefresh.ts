@@ -6,6 +6,7 @@ import type {
 } from "../../application/ports/OverviewRealtimeStream";
 
 const FALLBACK_POLL_INTERVAL_MS = 30_000;
+const REALTIME_REFRESH_DEBOUNCE_MS = 500;
 
 export function useOverviewRealtimeRefresh(
   stream: OverviewRealtimeStream,
@@ -36,22 +37,58 @@ export function useOverviewRealtimeRefresh(
 
   useEffect(() => {
     let fallbackTimer: number | undefined;
+    let refreshTimer: number | undefined;
+    let pendingBusinessRefresh = false;
+    let pendingSamplePointRefresh = false;
+    let pendingOptionRefresh = false;
+    const flushRefresh = () => {
+      refreshTimer = undefined;
+      const refreshBusiness = pendingBusinessRefresh;
+      const refreshSamplePoints = pendingSamplePointRefresh;
+      const refreshOptions = pendingOptionRefresh;
+      pendingBusinessRefresh = false;
+      pendingSamplePointRefresh = false;
+      pendingOptionRefresh = false;
+      if (refreshBusiness) setBusinessSequence((current) => current + 1);
+      if (refreshSamplePoints) setSamplePointSequence((current) => current + 1);
+      if (refreshOptions) setOptionSequence((current) => current + 1);
+    };
+    const scheduleRefresh = ({
+      business = false,
+      samplePoints = false,
+      options = false,
+    }: {
+      business?: boolean;
+      samplePoints?: boolean;
+      options?: boolean;
+    }) => {
+      pendingBusinessRefresh ||= business;
+      pendingSamplePointRefresh ||= samplePoints;
+      pendingOptionRefresh ||= options;
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(flushRefresh, REALTIME_REFRESH_DEBOUNCE_MS);
+    };
     const refreshAll = () => {
-      setBusinessSequence((current) => current + 1);
-      setSamplePointSequence((current) => current + 1);
-      setOptionSequence((current) => current + 1);
+      scheduleRefresh({ business: true, samplePoints: true, options: true });
     };
     const refreshChange = (change: OverviewBusinessChange) => {
       const currentSelection = selectionRef.current;
       const selectedRegions = currentSelection.regionKey
         ? currentSelection.regionKey.split("|")
         : [];
-      setOptionSequence((current) => current + 1);
-      if (!affectsYearAndRegion(change, currentSelection.year, selectedRegions)) return;
-      setSamplePointSequence((current) => current + 1);
-      if (change.productCode === currentSelection.productCode) {
-        setBusinessSequence((current) => current + 1);
-      }
+      const affectsSelection = affectsYearAndRegion(
+        change,
+        currentSelection.year,
+        selectedRegions,
+      );
+      const affectsProduct =
+        change.productCode === undefined ||
+        change.productCode === currentSelection.productCode;
+      scheduleRefresh({
+        options: true,
+        samplePoints: affectsSelection && affectsProduct,
+        business: affectsSelection && affectsProduct,
+      });
     };
     const stopFallback = () => {
       if (fallbackTimer === undefined) return;
@@ -72,6 +109,7 @@ export function useOverviewRealtimeRefresh(
     });
     return () => {
       stopFallback();
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
       unsubscribe();
     };
   }, [fallbackPollIntervalMs, stream]);

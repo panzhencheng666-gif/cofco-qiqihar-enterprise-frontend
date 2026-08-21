@@ -21,6 +21,29 @@ const township = region("230225204", "宝山乡", "TOWNSHIP", "230225");
 const village = region("230225204014", "宝山村", "VILLAGE", "230225204");
 
 test.describe("overview owned-relief interaction", () => {
+  test("keeps map navigation below the KPI band at the formal acceptance viewport", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ height: 985, width: 1480 });
+    await installOverviewFixture(page);
+    await page.goto("/#/overview");
+
+    const kpis = page.locator(".overview-command-kpis");
+    const navigation = page.locator(
+      ".overview-command-center > .overview-cockpit-navigation",
+    );
+    await expect(kpis).toBeVisible();
+    await expect(navigation).toBeVisible();
+    const kpiBox = await kpis.boundingBox();
+    const navigationBox = await navigation.boundingBox();
+
+    expect(kpiBox).not.toBeNull();
+    expect(navigationBox).not.toBeNull();
+    if (kpiBox && navigationBox) {
+      expect(navigationBox.y).toBeGreaterThanOrEqual(kpiBox.y + kpiBox.height);
+    }
+  });
+
   test("raises exactly one owned administrative body at city, county, township, and village levels", async ({
     page,
   }) => {
@@ -206,9 +229,28 @@ function dashboardFor(regionCode: string | null) {
 }
 
 async function canvasUniqueColors(contract: ReturnType<Page["locator"]>) {
-  const png = await contract.locator("canvas").screenshot({ animations: "disabled" });
-  return contract.evaluate(async (_node, base64) => {
-    const response = await fetch(`data:image/png;base64,${base64}`);
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await expect(contract).toHaveAttribute("data-style-state", "ready");
+    await expect(contract.locator("canvas")).toHaveCount(1);
+    try {
+      const png = await contract
+        .locator("canvas")
+        .screenshot({ animations: "disabled" });
+      return await colorsFromPng(contract, png.toString("base64"));
+    } catch (error) {
+      lastError = error;
+      await contract.page().waitForTimeout(50);
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("The owned relief canvas did not become stable.");
+}
+
+function colorsFromPng(contract: ReturnType<Page["locator"]>, base64: string) {
+  return contract.evaluate(async (_node, image) => {
+    const response = await fetch(`data:image/png;base64,${image}`);
     const bitmap = await createImageBitmap(await response.blob());
     const sample = document.createElement("canvas");
     sample.width = 64;
@@ -225,7 +267,7 @@ async function canvasUniqueColors(contract: ReturnType<Page["locator"]>) {
       );
     }
     return colors.size;
-  }, png.toString("base64"));
+  }, base64);
 }
 
 function region(

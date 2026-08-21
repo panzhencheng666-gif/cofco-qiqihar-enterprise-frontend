@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { OverviewRepository } from "../../application/ports/OverviewRepository";
+import type {
+  OverviewRegionTimeScope,
+  OverviewRepository,
+} from "../../application/ports/OverviewRepository";
 import type { OverviewRealtimeStream } from "../../application/ports/OverviewRealtimeStream";
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
 import type {
@@ -28,6 +31,8 @@ import { HttpContractError, HttpError } from "../../../../shared/api/HttpClient"
 
 const OVERALL_SCOPE = "__OVERALL__";
 const MAP_SCOPE_RETRY_DELAYS_MS = [500, 1_000, 2_000] as const;
+const OPTIONS_LOAD_TIMEOUT_MS = 10_000;
+const OPTIONS_LOAD_FAILURE_MESSAGE = "总览筛选条件加载失败，请稍后重试。";
 const NOOP_REALTIME_STREAM: OverviewRealtimeStream = {
   subscribe: () => () => undefined,
 };
@@ -44,6 +49,14 @@ function overviewDataIssue(error: unknown, fallback: string): string {
     return "当前总揽筛选条件无效，请重新选择地区、产品和年度。";
   }
   return fallback;
+}
+
+function mapRegionTimeScope(
+  year: number | undefined,
+  referencePeriodCode: string | undefined,
+): OverviewRegionTimeScope | undefined {
+  if (year !== undefined) return { year };
+  return referencePeriodCode ? { periodCode: referencePeriodCode } : undefined;
 }
 
 export function OverviewPage({
@@ -73,6 +86,7 @@ export function OverviewPage({
   const [parentCode, setParentCode] = useState<string>();
   const [parentTrail, setParentTrail] = useState<readonly string[]>([]);
   const [optionsIssue, setOptionsIssue] = useState<string>();
+  const [optionsReloadKey, setOptionsReloadKey] = useState(0);
   const [rootRegionIssue, setRootRegionIssue] = useState<string>();
   const [childRegionIssue, setChildRegionIssue] = useState<string>();
   const [indicatorIssue, setIndicatorIssue] = useState<string>();
@@ -91,6 +105,7 @@ export function OverviewPage({
   const [samplePointIcons, setSamplePointIcons] = useState<
     readonly OverviewSamplePointIcon[]
   >([]);
+  const [selectedSamplePointId, setSelectedSamplePointId] = useState<string>();
   const aggregateParentLevel = parentCode
     ? mapContextRegion?.code === parentCode
       ? mapContextRegion.level
@@ -106,17 +121,29 @@ export function OverviewPage({
   const showSamplePointAggregates =
     (!parentCode || aggregateParentLevel === "PREFECTURE") && !hasDeepRegionSelection;
   const realtimeRegionCode =
-    selectedRegionCode || (scopeRootCode !== OVERALL_SCOPE ? scopeRootCode : "");
+    selectedRegionCode ||
+    mapContextRegion?.code ||
+    (scopeRootCode !== OVERALL_SCOPE ? scopeRootCode : "");
   const { businessSequence, optionSequence, samplePointSequence } =
     useOverviewRealtimeRefresh(realtimeStream ?? NOOP_REALTIME_STREAM, {
       productCode,
       regionCodes: realtimeRegionCode ? [realtimeRegionCode] : [],
       ...(year === undefined ? {} : { year }),
     });
+  const mapReferencePeriodCode =
+    year === undefined ? options?.periods[0]?.code : undefined;
+  const mapRegionScope = useMemo(
+    () => mapRegionTimeScope(year, mapReferencePeriodCode),
+    [mapReferencePeriodCode, year],
+  );
+  const mapTimeKey =
+    year !== undefined
+      ? `year:${year}`
+      : mapReferencePeriodCode
+        ? `period:${mapReferencePeriodCode}`
+        : "";
   const desiredRootRegionQueryKey =
-    productCode && year !== undefined
-      ? `${productCode}:${year}:${businessSequence}`
-      : "";
+    productCode && mapTimeKey ? `${productCode}:${mapTimeKey}:${businessSequence}` : "";
   const desiredChildRegionQueryKey =
     desiredRootRegionQueryKey && parentCode
       ? `${desiredRootRegionQueryKey}:${parentCode}`
@@ -134,17 +161,21 @@ export function OverviewPage({
     },
     [],
   );
+  const updateSelectedSamplePoint = useCallback((samplePointId: string | undefined) => {
+    setSelectedSamplePointId(samplePointId);
+  }, []);
 
   useEffect(() => {
     let active = true;
     void Promise.resolve().then(() => {
       if (!active) return;
       setSamplePointIcons([]);
+      setSelectedSamplePointId(undefined);
     });
     return () => {
       active = false;
     };
-  }, [selectedRegionCode, year]);
+  }, [productCode, selectedRegionCode, year]);
 
   useEffect(() => {
     repository.invalidateBusinessData?.();
@@ -152,10 +183,14 @@ export function OverviewPage({
 
   useEffect(() => {
     let live = true;
+    const timeout = window.setTimeout(() => {
+      if (live) setOptionsIssue(OPTIONS_LOAD_FAILURE_MESSAGE);
+    }, OPTIONS_LOAD_TIMEOUT_MS);
     repository
       .options()
       .then((next) => {
         if (!live) return;
+        window.clearTimeout(timeout);
         setOptions(next);
         setOptionsIssue(undefined);
         setProductCode((current) => current || next.products[0]?.code || "");
@@ -165,15 +200,30 @@ export function OverviewPage({
             : next.years[0],
         );
       })
-      .catch(() => live && setOptionsIssue("总览筛选条件加载失败，请稍后重试。"));
+      .catch(() => {
+        window.clearTimeout(timeout);
+        if (live) setOptionsIssue(OPTIONS_LOAD_FAILURE_MESSAGE);
+      });
     return () => {
       live = false;
+      window.clearTimeout(timeout);
     };
-  }, [optionSequence, repository]);
+  }, [optionSequence, optionsReloadKey, repository]);
 
   useEffect(() => {
-    if (!samplePointRepository || year === undefined) return;
+    if (!samplePointRepository || !productCode) return;
     let active = true;
+    if (year === undefined) {
+      void Promise.resolve().then(() => {
+        if (!active) return;
+        setSamplePointAggregates([]);
+        setSamplePointAggregateStatus("hidden");
+        setSamplePointAggregateIssue(undefined);
+      });
+      return () => {
+        active = false;
+      };
+    }
     if (!showSamplePointAggregates) {
       void Promise.resolve().then(() => {
         if (!active) return;
@@ -192,7 +242,7 @@ export function OverviewPage({
       setSamplePointAggregateIssue(undefined);
     });
     samplePointRepository
-      .aggregates({ year, ...(parentCode ? { parentCode } : {}) })
+      .aggregates({ productCode, year, ...(parentCode ? { parentCode } : {}) })
       .then((aggregates) => {
         if (!active) return;
         setSamplePointAggregates(aggregates);
@@ -210,6 +260,7 @@ export function OverviewPage({
     };
   }, [
     parentCode,
+    productCode,
     samplePointSequence,
     samplePointRepository,
     showSamplePointAggregates,
@@ -226,20 +277,20 @@ export function OverviewPage({
     return () => {
       active = false;
     };
-  }, [businessSequence, productCode, year]);
+  }, [businessSequence, mapTimeKey, productCode]);
 
   useEffect(() => {
-    if (!productCode || year === undefined) return;
+    if (!productCode || !mapTimeKey || !mapRegionScope) return;
     let live = true;
     repository
       .regions({
         productCode,
-        year,
+        ...mapRegionScope,
       })
       .then((next) => {
         if (!live) return;
         setRootRegions(next);
-        setRootRegionQueryKey(`${productCode}:${year}:${businessSequence}`);
+        setRootRegionQueryKey(`${productCode}:${mapTimeKey}:${businessSequence}`);
         setRootRegionIssue(undefined);
         if (!initializedScope.current) {
           initializedScope.current = true;
@@ -264,7 +315,7 @@ export function OverviewPage({
     return () => {
       live = false;
     };
-  }, [businessSequence, productCode, repository, year]);
+  }, [businessSequence, mapRegionScope, mapTimeKey, productCode, repository]);
 
   useEffect(() => {
     let live = true;
@@ -312,10 +363,10 @@ export function OverviewPage({
     return () => {
       active = false;
     };
-  }, [businessSequence, parentCode, productCode, year]);
+  }, [businessSequence, mapTimeKey, parentCode, productCode]);
 
   useEffect(() => {
-    if (!productCode || year === undefined) return;
+    if (!productCode || !mapTimeKey || !mapRegionScope) return;
     if (!parentCode) {
       return;
     }
@@ -323,15 +374,15 @@ export function OverviewPage({
     repository
       .regions({
         productCode,
-        year,
         parentCode,
+        ...mapRegionScope,
       })
       .then((next) => {
         if (!live) return;
         setRegions(next);
         setRegionsParentCode(parentCode);
         setChildRegionQueryKey(
-          `${productCode}:${year}:${businessSequence}:${parentCode}`,
+          `${productCode}:${mapTimeKey}:${businessSequence}:${parentCode}`,
         );
         setChildRegionIssue(undefined);
       })
@@ -342,7 +393,14 @@ export function OverviewPage({
     return () => {
       live = false;
     };
-  }, [businessSequence, parentCode, productCode, repository, year]);
+  }, [
+    businessSequence,
+    mapRegionScope,
+    mapTimeKey,
+    parentCode,
+    productCode,
+    repository,
+  ]);
 
   useEffect(() => {
     if (!productCode || year === undefined || !selectedRegionCode) return;
@@ -395,7 +453,9 @@ export function OverviewPage({
     const businessRegionCode = requestRegion?.mapContextOnly
       ? (mapContextRegion?.code ??
         (scopeRootCode !== OVERALL_SCOPE ? scopeRootCode : ""))
-      : selectedRegionCode || (scopeRootCode !== OVERALL_SCOPE ? scopeRootCode : "");
+      : selectedRegionCode ||
+        mapContextRegion?.code ||
+        (scopeRootCode !== OVERALL_SCOPE ? scopeRootCode : "");
     let live = true;
     void Promise.resolve().then(() => {
       if (!live) return;
@@ -528,7 +588,8 @@ export function OverviewPage({
   function prefetchRegionChildren(region: OverviewRegion) {
     if (
       !productCode ||
-      year === undefined ||
+      !mapTimeKey ||
+      !mapRegionScope ||
       region.mapContextOnly ||
       region.level === "VILLAGE"
     ) {
@@ -536,7 +597,7 @@ export function OverviewPage({
     }
     const commonQuery = {
       productCode,
-      year,
+      ...mapRegionScope,
     };
     void repository
       .regions({ ...commonQuery, parentCode: region.code })
@@ -577,7 +638,22 @@ export function OverviewPage({
   if (!options) {
     return (
       <main className="overview-loading">
-        {optionsIssue ? <p role="alert">{optionsIssue}</p> : "正在读取粮食商情业务数据"}
+        {optionsIssue ? (
+          <div>
+            <p role="alert">{optionsIssue}</p>
+            <button
+              type="button"
+              onClick={() => {
+                setOptionsIssue(undefined);
+                setOptionsReloadKey((current) => current + 1);
+              }}
+            >
+              重新加载
+            </button>
+          </div>
+        ) : (
+          "正在读取粮食商情业务数据"
+        )}
       </main>
     );
   }
@@ -619,6 +695,8 @@ export function OverviewPage({
                 value={productCode}
                 onChange={(event) => {
                   setProductCode(event.target.value);
+                  setSamplePointIcons([]);
+                  setSelectedSamplePointId(undefined);
                   setIndicators([]);
                   setDashboard(undefined);
                 }}
@@ -637,6 +715,8 @@ export function OverviewPage({
                 value={year ?? ""}
                 onChange={(event) => {
                   setYear(Number(event.target.value));
+                  setSamplePointIcons([]);
+                  setSelectedSamplePointId(undefined);
                   setIndicators([]);
                   setDashboard(undefined);
                 }}
@@ -658,7 +738,9 @@ export function OverviewPage({
             samplePointAggregates={samplePointAggregates}
             {...(samplePointRepository ? { samplePointAggregateStatus } : {})}
             samplePointIcons={samplePointIcons}
+            onSamplePointSelect={updateSelectedSamplePoint}
             selectedCode={selectedRegionCode}
+            {...(selectedSamplePointId ? { selectedSamplePointId } : {})}
             onSelect={selectRegion}
             onSelectionPosition={updateMapSelectionPoint}
             onDrill={drillDown}
@@ -692,17 +774,21 @@ export function OverviewPage({
         {...(yearLabel ? { periodLabel: yearLabel } : {})}
         productLabel={productLabel}
         {...(samplePointRepository &&
+        productCode &&
         year !== undefined &&
         selectedRegion &&
         !selectedRegion.mapContextOnly
           ? {
               samplePoints: (
                 <OverviewSamplePointPanel
-                  key={`${year}:${selectedRegion.code}`}
+                  key={`${productCode}:${year}:${selectedRegion.code}`}
                   onIconsChange={updateSamplePointIcons}
+                  onSelectedSamplePointChange={updateSelectedSamplePoint}
+                  productCode={productCode}
                   refreshSequence={samplePointSequence}
                   region={selectedRegion}
                   repository={samplePointRepository}
+                  selectedSamplePointId={selectedSamplePointId}
                   year={year}
                 />
               ),
@@ -714,6 +800,8 @@ export function OverviewPage({
         onCloseDetails={() => {
           setSelectedRegionCode("");
           setSelectedRegionSnapshot(undefined);
+          setSamplePointIcons([]);
+          setSelectedSamplePointId(undefined);
           setIndicators([]);
           setDashboard(undefined);
         }}

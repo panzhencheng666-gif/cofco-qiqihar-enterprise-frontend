@@ -9,10 +9,12 @@ import type {
 export interface OverviewSamplePointRepository {
   aggregates(query: {
     parentCode?: string;
+    productCode: string;
     year: number;
   }): Promise<readonly OverviewSamplePointAggregate[]>;
   list(query: {
     regionCode: string;
+    productCode: string;
     year: number;
     categoryCode?: OverviewSamplePointCategoryCode;
     typeCode?: string;
@@ -20,6 +22,7 @@ export interface OverviewSamplePointRepository {
   }): Promise<OverviewSamplePointList>;
   icons(query: {
     regionCode: string;
+    productCode: string;
     year: number;
     categoryCode: OverviewSamplePointCategoryCode;
     typeCode?: string;
@@ -28,6 +31,7 @@ export interface OverviewSamplePointRepository {
   detail(query: {
     samplePointId: string;
     regionCode: string;
+    productCode: string;
     year: number;
     categoryCode: OverviewSamplePointCategoryCode;
     typeCode?: string;

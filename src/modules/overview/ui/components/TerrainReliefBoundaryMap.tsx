@@ -38,6 +38,7 @@ import {
   createGeologicalWallMaterial,
   createTerrainSurfaceMaterial,
 } from "./terrainReliefMaterials";
+import { publicAssetUrl } from "../../../../shared/assets/publicAssetUrl";
 
 export { compactAdministrativeName } from "./terrainReliefGeometry";
 
@@ -55,7 +56,7 @@ export const RELIEF_LAYER_Z = {
   interactionOutline: 2.55,
 } as const;
 const RELIEF_FRAME_INSET = 0.035;
-const TERRAIN_URL = "/overview/command-terrain-v2.webp";
+const TERRAIN_URL = publicAssetUrl("overview/command-terrain-v2.webp");
 const BACKGROUND_Z = -900;
 // Keep hit/line overlays just above the textured top. A very large z value
 // makes internal boundaries render through the parent's vertical wall.
@@ -147,6 +148,7 @@ export default function TerrainReliefBoundaryMap({
   features,
   onDrill,
   onReady,
+  onSamplePointSelect,
   onSelect,
   onSelectionPosition,
   onUnavailable,
@@ -155,12 +157,14 @@ export default function TerrainReliefBoundaryMap({
   samplePointAggregateStatus,
   samplePointIcons = [],
   selectedCode,
+  selectedSamplePointId,
 }: {
   backdrop?: MapFeature;
   command?: OverviewMapCommand;
   features: readonly MapFeature[];
   onDrill: (region: OverviewRegion) => void;
   onReady: () => void;
+  onSamplePointSelect?: (samplePointId: string) => void;
   onSelect: (region: OverviewRegion) => void;
   onSelectionPosition?: (position: OverviewMapSelectionPoint | undefined) => void;
   onUnavailable: (reason: string) => void;
@@ -169,6 +173,7 @@ export default function TerrainReliefBoundaryMap({
   samplePointAggregateStatus?: "hidden" | "loading" | "ready" | "unavailable";
   samplePointIcons?: readonly OverviewSamplePointIcon[];
   selectedCode: string;
+  selectedSamplePointId?: string;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const callbacksRef = useRef<RendererCallbacks>({
@@ -247,8 +252,8 @@ export default function TerrainReliefBoundaryMap({
     : IDENTITY_LAYOUT_TRANSFORM;
   const selectedOverlayLift = COMPONENT_HIGHLIGHT_LIFT * activeLayoutTransform.scaleY;
   const overlayLayout = useMemo(
-    () => createReliefOverlayLayout(activeProjection, selectedCode),
-    [activeProjection, selectedCode],
+    () => createReliefOverlayLayout(activeProjection),
+    [activeProjection],
   );
   const aggregateRegionCodes = new Set(
     activeProjection.samplePointAggregates.map(({ aggregate }) => aggregate.regionCode),
@@ -1089,18 +1094,23 @@ export default function TerrainReliefBoundaryMap({
                   }}
                 />
               )}
-              <span
-                aria-label={`${icon.name}，${icon.types.map((type) => type.name).join("、")}，真实坐标 ${icon.longitude.toFixed(6)}，${icon.latitude.toFixed(6)}`}
-                className={`overview-sample-point-map-icon is-${icon.iconKey ?? "unknown"}`}
+              <button
+                aria-label={`${icon.name}，${icon.types.map((type) => type.name).join("、")}${icon.dataQualityReason === "DUPLICATE_COORDINATE_UNVERIFIED" ? "，坐标重合待核验" : ""}，点击查看样本点详情`}
+                aria-pressed={selectedSamplePointId === icon.samplePointId}
+                className={`overview-sample-point-map-icon is-${icon.iconKey ?? "unknown"}${icon.dataQualityReason === "DUPLICATE_COORDINATE_UNVERIFIED" ? " has-coordinate-warning" : ""}${selectedSamplePointId === icon.samplePointId ? " is-selected" : ""}`}
                 data-anchor-latitude={icon.latitude}
                 data-anchor-longitude={icon.longitude}
-                role="img"
+                onClick={() => onSamplePointSelect?.(icon.samplePointId)}
                 style={{ left: point.x, top: point.y }}
-                tabIndex={0}
-                title={`真实坐标：${icon.longitude.toFixed(6)}, ${icon.latitude.toFixed(6)}`}
+                title={
+                  icon.dataQualityReason === "DUPLICATE_COORDINATE_UNVERIFIED"
+                    ? "坐标重合待核验；当前按原始坐标展开显示"
+                    : "点击查看样本点详情"
+                }
+                type="button"
               >
                 <SamplePointMapSymbol iconKey={icon.iconKey} />
-              </span>
+              </button>
             </Fragment>
           );
         })}
@@ -1199,6 +1209,7 @@ export interface ReliefRenderBodies {
 export function selectReliefRenderBodies(
   scene: ReliefSceneProjection,
 ): ReliefRenderBodies {
+  const wallBody = scene.backdrop ?? scene.platform;
   return {
     outlines: scene.features.length
       ? scene.features.filter(({ region }) => !region.mapContextOnly)
@@ -1206,7 +1217,7 @@ export function selectReliefRenderBodies(
         ? [scene.backdrop]
         : [],
     tops: scene.backdrop ? [scene.backdrop] : [],
-    walls: scene.backdrop ? [scene.backdrop] : scene.platform ? [scene.platform] : [],
+    walls: scene.features.length && wallBody ? [wallBody] : [],
   };
 }
 

@@ -438,19 +438,25 @@ function regionSurplusCard(metric: OverviewDashboardMetric | undefined) {
     metric?.coverageStatus === "AVAILABLE" &&
     metric.sourceCount > 0 &&
     metric.value !== null;
+  const partial =
+    metric?.coverageStatus === "PARTIAL" &&
+    metric.sourceCount > 0 &&
+    metric.value !== null;
   const missing = !metric || metric.coverageStatus === "NO_APPROVED_SOURCES";
   return {
     icon: "余",
     label: "地区余粮",
     sourceLabel: available
       ? `${metric.sourceCount} 条审核来源${metric.dataCutoff ? ` · 截止 ${metric.dataCutoff}` : ""}`
-      : missing
-        ? "暂无审核来源"
-        : reliabilityLabel(metric.coverageStatus),
+      : partial
+        ? `${metric.sourceCount} 条审核来源 · 来源范围不完整${metric.dataCutoff ? ` · 截止 ${metric.dataCutoff}` : ""}`
+        : missing
+          ? "暂无审核来源"
+          : reliabilityLabel(metric.coverageStatus),
     tone: "surplus",
     unit: metric?.unitCode ?? "吨",
     value:
-      available && metric?.value !== null && metric?.value !== undefined
+      (available || partial) && metric?.value !== null && metric?.value !== undefined
         ? formatNumber(metric.value)
         : missing
           ? "暂无审核数据"
@@ -460,6 +466,8 @@ function regionSurplusCard(metric: OverviewDashboardMetric | undefined) {
 
 function reliabilityLabel(status: OverviewDashboardMetric["coverageStatus"]) {
   switch (status) {
+    case "PARTIAL":
+      return "审核来源范围不完整";
     case "INSUFFICIENT_COVERAGE":
       return "审核来源覆盖不足";
     case "CUTOFF_MISMATCH":

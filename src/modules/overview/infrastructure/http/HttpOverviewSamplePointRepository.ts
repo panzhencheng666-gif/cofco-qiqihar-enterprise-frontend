@@ -15,6 +15,11 @@ const typeRefSchema = z.object({
   name: z.string(),
   iconKey: z.string().min(1),
 });
+const businessValueSchema = z.object({
+  label: z.string(),
+  value: z.string(),
+  unitCode: z.string().nullable(),
+});
 
 const aggregateSchema = z
   .object({
@@ -31,9 +36,10 @@ const aggregateSchema = z
   })
   .refine(
     ({ marketCount, productionCount, samplePointCount }) =>
-      samplePointCount === productionCount + marketCount,
+      samplePointCount >= Math.max(productionCount, marketCount) &&
+      samplePointCount <= productionCount + marketCount,
     {
-      message: "samplePointCount must equal productionCount + marketCount",
+      message: "samplePointCount must stay within distinct-point bounds",
       path: ["samplePointCount"],
     },
   );
@@ -69,6 +75,8 @@ const listSchema = z.object({
         categories: z.array(z.object({ code: categoryCodeSchema, name: z.string() })),
         types: z.array(typeRefSchema),
         products: z.array(z.object({ code: z.string(), name: z.string() })),
+        latestBusinessDate: z.string(),
+        summaryValues: z.record(z.string(), businessValueSchema),
       }),
     ),
     correctionSources: z.array(
@@ -91,6 +99,7 @@ const iconsSchema = z.object({
       types: z.array(typeRefSchema),
       longitude: z.number(),
       latitude: z.number(),
+      dataQualityReason: z.string().nullable().default(null),
     }),
   ),
 });
@@ -114,14 +123,7 @@ const detailSchema = z.object({
         productName: z.string(),
         occurrenceDate: z.string(),
         sourceVersion: z.number(),
-        businessValues: z.record(
-          z.string(),
-          z.object({
-            label: z.string(),
-            value: z.string(),
-            unitCode: z.string().nullable(),
-          }),
-        ),
+        businessValues: z.record(z.string(), businessValueSchema),
       }),
     ),
   }),
@@ -130,9 +132,10 @@ const detailSchema = z.object({
 export class HttpOverviewSamplePointRepository implements OverviewSamplePointRepository {
   constructor(private readonly http: HttpClient) {}
 
-  async aggregates(query: { year: number; parentCode?: string }) {
+  async aggregates(query: { year: number; productCode: string; parentCode?: string }) {
     const parameters = {
       year: query.year,
+      productCode: query.productCode,
       ...(query.parentCode ? { parentCode: query.parentCode } : {}),
     };
     return (
@@ -145,6 +148,7 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
 
   async list(query: {
     regionCode: string;
+    productCode: string;
     year: number;
     categoryCode?: OverviewSamplePointCategoryCode;
     typeCode?: string;
@@ -160,6 +164,7 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
 
   async icons(query: {
     regionCode: string;
+    productCode: string;
     year: number;
     categoryCode: OverviewSamplePointCategoryCode;
     typeCode?: string;
@@ -176,12 +181,14 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
   async detail(query: {
     samplePointId: string;
     regionCode: string;
+    productCode: string;
     year: number;
     categoryCode: OverviewSamplePointCategoryCode;
     typeCode?: string;
   }) {
     const parameters = {
       year: query.year,
+      productCode: query.productCode,
       regionCode: query.regionCode,
       categoryCode: query.categoryCode,
       ...(query.typeCode ? { typeCode: query.typeCode } : {}),

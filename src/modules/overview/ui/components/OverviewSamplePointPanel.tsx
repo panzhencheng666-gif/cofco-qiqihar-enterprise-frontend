@@ -13,15 +13,21 @@ type LoadState = "idle" | "loading" | "ready" | "unavailable";
 
 export function OverviewSamplePointPanel({
   onIconsChange,
+  onSelectedSamplePointChange,
+  productCode,
   refreshSequence = 0,
   region,
   repository,
+  selectedSamplePointId,
   year,
 }: {
   onIconsChange: (icons: readonly OverviewSamplePointIcon[]) => void;
+  onSelectedSamplePointChange: (samplePointId: string | undefined) => void;
+  productCode: string;
   refreshSequence?: number;
   region: { code: string; level: RegionLevel; name: string };
   repository: OverviewSamplePointRepository;
+  selectedSamplePointId: string | undefined;
   year: number;
 }) {
   const [categoryCode, setCategoryCode] = useState<OverviewSamplePointCategoryCode>();
@@ -29,8 +35,11 @@ export function OverviewSamplePointPanel({
   const [query, setQuery] = useState("");
   const [catalog, setCatalog] = useState<OverviewSamplePointList>();
   const [result, setResult] = useState<OverviewSamplePointList>();
+  const [publishedIcons, setPublishedIcons] = useState<
+    readonly OverviewSamplePointIcon[]
+  >([]);
   const [detail, setDetail] = useState<OverviewSamplePointDetail>();
-  const [selectedId, setSelectedId] = useState<string>();
+  const [detailPeriod, setDetailPeriod] = useState<string>();
   const [catalogState, setCatalogState] = useState<LoadState>("loading");
   const [resultState, setResultState] = useState<LoadState>("idle");
   const [detailUnavailable, setDetailUnavailable] = useState(false);
@@ -48,8 +57,9 @@ export function OverviewSamplePointPanel({
       setQuery("");
       setCatalog(undefined);
       setResult(undefined);
+      setPublishedIcons([]);
       setDetail(undefined);
-      setSelectedId(undefined);
+      setDetailPeriod(undefined);
       setCatalogState("loading");
       setResultState("idle");
       setCatalogIssue(undefined);
@@ -58,11 +68,19 @@ export function OverviewSamplePointPanel({
       setDetailIssue(undefined);
       setDetailUnavailable(false);
     });
+    onSelectedSamplePointChange(undefined);
     onIconsChange([]);
     return () => {
       active = false;
     };
-  }, [onIconsChange, region.code, repository, year]);
+  }, [
+    onIconsChange,
+    onSelectedSamplePointChange,
+    productCode,
+    region.code,
+    repository,
+    year,
+  ]);
 
   useEffect(() => {
     let active = true;
@@ -73,7 +91,7 @@ export function OverviewSamplePointPanel({
       setCatalogIssue(undefined);
     });
     repository
-      .list({ regionCode: region.code, year })
+      .list({ productCode, regionCode: region.code, year })
       .then((next) => {
         if (!active) return;
         setCatalog(next);
@@ -88,15 +106,23 @@ export function OverviewSamplePointPanel({
     return () => {
       active = false;
     };
-  }, [refreshSequence, region.code, repository, year]);
+  }, [productCode, refreshSequence, region.code, repository, year]);
 
   useEffect(() => {
     if (!categoryCode) {
-      onIconsChange([]);
-      return;
+      let active = true;
+      void Promise.resolve().then(() => {
+        if (!active) return;
+        setPublishedIcons([]);
+        onIconsChange([]);
+      });
+      return () => {
+        active = false;
+      };
     }
     let active = true;
     const filters = {
+      productCode,
       regionCode: region.code,
       year,
       categoryCode,
@@ -106,6 +132,7 @@ export function OverviewSamplePointPanel({
     void Promise.resolve().then(() => {
       if (!active) return;
       setResult(undefined);
+      setPublishedIcons([]);
       setResultState("loading");
       setResultIssue(undefined);
       setIconIssue(undefined);
@@ -125,13 +152,22 @@ export function OverviewSamplePointPanel({
         setResultIssue("样本点列表加载失败，请稍后重试。");
       });
     if (region.level === "PREFECTURE") {
-      onIconsChange([]);
+      void Promise.resolve().then(() => {
+        if (!active) return;
+        setPublishedIcons([]);
+        onIconsChange([]);
+      });
     } else {
       repository
         .icons(filters)
-        .then((icons) => active && onIconsChange(icons))
+        .then((icons) => {
+          if (!active) return;
+          setPublishedIcons(icons);
+          onIconsChange(icons);
+        })
         .catch(() => {
           if (!active) return;
+          setPublishedIcons([]);
           onIconsChange([]);
           setIconIssue("样本点图标加载失败，请稍后重试。");
         });
@@ -142,6 +178,7 @@ export function OverviewSamplePointPanel({
   }, [
     categoryCode,
     onIconsChange,
+    productCode,
     query,
     refreshSequence,
     region.code,
@@ -152,25 +189,31 @@ export function OverviewSamplePointPanel({
   ]);
 
   useEffect(() => {
-    if (!selectedId || !categoryCode) {
+    if (!selectedSamplePointId || !categoryCode) {
       return;
     }
     let active = true;
     void Promise.resolve().then(() => {
       if (!active) return;
       setDetail(undefined);
+      setDetailPeriod(undefined);
       setDetailUnavailable(false);
       setDetailIssue(undefined);
     });
     repository
       .detail({
-        samplePointId: selectedId,
+        samplePointId: selectedSamplePointId,
+        productCode,
         regionCode: region.code,
         year,
         categoryCode,
         ...(typeCode ? { typeCode } : {}),
       })
-      .then((next) => active && setDetail(next))
+      .then((next) => {
+        if (!active) return;
+        setDetail(next);
+        setDetailPeriod(detailPeriods(next)[0]);
+      })
       .catch(() => {
         if (!active) return;
         setDetailUnavailable(true);
@@ -181,19 +224,45 @@ export function OverviewSamplePointPanel({
     };
   }, [
     categoryCode,
+    productCode,
     refreshSequence,
     region.code,
     repository,
-    selectedId,
+    selectedSamplePointId,
     typeCode,
     year,
   ]);
 
+  useEffect(() => {
+    if (
+      !selectedSamplePointId ||
+      resultState !== "ready" ||
+      !result ||
+      result.items.some((item) => item.samplePointId === selectedSamplePointId)
+    ) {
+      return;
+    }
+    let active = true;
+    void Promise.resolve().then(() => {
+      if (!active) return;
+      setDetail(undefined);
+      setDetailPeriod(undefined);
+      setDetailUnavailable(false);
+      setDetailIssue(undefined);
+      onSelectedSamplePointChange(undefined);
+    });
+    return () => {
+      active = false;
+    };
+  }, [onSelectedSamplePointChange, result, resultState, selectedSamplePointId]);
+
   function clearConcreteResults() {
     setResult(undefined);
+    setPublishedIcons([]);
     setResultState("idle");
     setDetail(undefined);
-    setSelectedId(undefined);
+    setDetailPeriod(undefined);
+    onSelectedSamplePointChange(undefined);
     setDetailUnavailable(false);
     setResultIssue(undefined);
     setIconIssue(undefined);
@@ -202,8 +271,9 @@ export function OverviewSamplePointPanel({
   }
 
   function selectCategory(next: OverviewSamplePointCategoryCode) {
+    if (categoryCode === next) return;
     clearConcreteResults();
-    setCategoryCode((current) => (current === next ? undefined : next));
+    setCategoryCode(next);
     setTypeCode(undefined);
     setQuery("");
   }
@@ -220,15 +290,28 @@ export function OverviewSamplePointPanel({
 
   function selectItem(samplePointId: string) {
     setDetail(undefined);
+    setDetailPeriod(undefined);
     setDetailUnavailable(false);
     setDetailIssue(undefined);
-    setSelectedId(samplePointId);
+    onSelectedSamplePointChange(samplePointId);
   }
 
   const selectedCategory = catalog?.categories.find(
     (category) => category.code === categoryCode,
   );
   const issue = detailIssue ?? iconIssue ?? resultIssue ?? catalogIssue;
+  const duplicateCoordinateIconCount = publishedIcons.filter(
+    (icon) => icon.dataQualityReason === "DUPLICATE_COORDINATE_UNVERIFIED",
+  ).length;
+  const temporarilyHiddenCount = result
+    ? Math.max(0, result.items.length - publishedIcons.length)
+    : 0;
+  const availableDetailPeriods = detail ? detailPeriods(detail) : [];
+  const visibleAssociations = detail
+    ? detail.associations.filter(
+        (association) => periodKey(association.occurrenceDate) === detailPeriod,
+      )
+    : [];
 
   return (
     <section aria-label="样本点业务信息" className="overview-sample-point-panel">
@@ -248,6 +331,7 @@ export function OverviewSamplePointPanel({
               <button
                 aria-label={`${category.name} ${category.count}`}
                 aria-pressed={categoryCode === category.code}
+                disabled={category.count === 0}
                 key={category.code}
                 onClick={() => selectCategory(category.code)}
                 type="button"
@@ -268,6 +352,7 @@ export function OverviewSamplePointPanel({
             selectedCategory.types.map((type) => (
               <button
                 aria-pressed={typeCode === type.code}
+                disabled={type.count === 0}
                 key={type.code}
                 onClick={() => selectType(type.code)}
                 type="button"
@@ -298,6 +383,23 @@ export function OverviewSamplePointPanel({
           />
         </label>
 
+        {resultState === "ready" && result ? (
+          <p className="overview-sample-point-quality-summary" role="status">
+            <strong>
+              地图显示 {publishedIcons.length} 个
+              {duplicateCoordinateIconCount
+                ? `，其中 ${duplicateCoordinateIconCount} 个坐标重合待核验`
+                : ""}
+            </strong>
+            {temporarilyHiddenCount ? (
+              <span>
+                {temporarilyHiddenCount}{" "}
+                个因坐标缺失或无效暂不显示，请在坐标治理中修正。
+              </span>
+            ) : null}
+          </p>
+        ) : null}
+
         <div aria-label="样本点列表" className="overview-sample-point-list">
           {!categoryCode ? (
             <p>
@@ -308,14 +410,32 @@ export function OverviewSamplePointPanel({
           ) : null}
           {result?.items.map((item) => (
             <button
-              aria-pressed={selectedId === item.samplePointId}
+              aria-pressed={selectedSamplePointId === item.samplePointId}
               key={item.samplePointId}
               onClick={() => selectItem(item.samplePointId)}
               type="button"
             >
               <strong>{item.name}</strong>
-              <span>{item.types.map((type) => type.name).join(" / ")}</span>
-              <small>{item.products.map((product) => product.name).join("、")}</small>
+              <span>
+                {item.types.map((type) => type.name).join(" / ")} · {item.regionName}
+              </span>
+              <small>
+                {item.products.map((product) => product.name).join("、")} · 最近业务
+                {formatChineseDate(item.latestBusinessDate)}
+              </small>
+              {item.dataQualityReason ? (
+                <span className="overview-sample-point-list-quality">
+                  {listQualityLabel(item.dataQualityReason)}
+                </span>
+              ) : null}
+              <span className="overview-sample-point-list-summary">
+                {Object.entries(item.summaryValues).map(([code, value]) => (
+                  <span key={code}>
+                    {value.label}：{value.value}
+                    {value.unitCode ? ` ${value.unitCode}` : ""}
+                  </span>
+                ))}
+              </span>
             </button>
           ))}
           {result && !result.items.length ? <p>当前条件下暂无样本点。</p> : null}
@@ -341,14 +461,39 @@ export function OverviewSamplePointPanel({
               <h4>{detail.name}</h4>
               <span>{detail.regionName}</span>
             </header>
-            {detail.associations.map((association, index) => (
+            {detail.dataQualityReason ? (
+              <p className="overview-sample-point-detail-quality">
+                {detailQualityLabel(detail.dataQualityReason)}
+              </p>
+            ) : null}
+            <div aria-label="核定月份" className="overview-sample-point-periods">
+              <span>核定月份</span>
+              {availableDetailPeriods.map((period) => (
+                <button
+                  aria-label={formatChineseMonth(period)}
+                  aria-pressed={detailPeriod === period}
+                  key={period}
+                  onClick={() => setDetailPeriod(period)}
+                  type="button"
+                >
+                  {formatChineseMonth(period)}
+                </button>
+              ))}
+            </div>
+            <p className="overview-sample-point-period-note">
+              默认显示最新核定月份，可切换查看该样本点的历史核定记录。
+            </p>
+            {visibleAssociations.map((association, index) => (
               <article
                 key={`${association.categoryCode}-${association.typeCode}-${association.productCode}-${association.sourceRole}-${association.occurrenceDate}-${index}`}
               >
                 <h5>
                   {association.categoryName} · {association.typeName}
                 </h5>
-                <p>{association.productName}</p>
+                <p>
+                  {association.productName} · 业务日期
+                  {formatChineseDate(association.occurrenceDate)}
+                </p>
                 <dl>
                   {Object.entries(association.businessValues).map(([code, value]) => (
                     <div key={code}>
@@ -367,7 +512,7 @@ export function OverviewSamplePointPanel({
           <p className="overview-sample-point-state">
             {detailUnavailable
               ? "样本点业务信息不可用"
-              : selectedId
+              : selectedSamplePointId
                 ? "正在同步样本点业务信息"
                 : "请选择样本点查看业务信息"}
           </p>
@@ -377,8 +522,54 @@ export function OverviewSamplePointPanel({
   );
 }
 
+function formatChineseDate(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return value;
+  return `${match[1]}年${Number(match[2])}月${Number(match[3])}日`;
+}
+
 function loadStateLabel(state: LoadState) {
   if (state === "loading") return "同步中";
   if (state === "unavailable") return "不可用";
   return "⌃";
+}
+
+function detailPeriods(detail: OverviewSamplePointDetail) {
+  return Array.from(
+    new Set(
+      detail.associations.map((association) => periodKey(association.occurrenceDate)),
+    ),
+  ).sort((left, right) => right.localeCompare(left));
+}
+
+function periodKey(value: string) {
+  return value.slice(0, 7);
+}
+
+function formatChineseMonth(value: string) {
+  const match = /^(\d{4})-(\d{2})$/.exec(value);
+  if (!match) return value;
+  return `${match[1]}年${Number(match[2])}月`;
+}
+
+function listQualityLabel(reason: string) {
+  if (reason === "DUPLICATE_COORDINATE_UNVERIFIED") {
+    return "地图已显示 · 坐标重合待核验";
+  }
+  return `地图暂未显示 · ${qualityReasonLabel(reason)}`;
+}
+
+function detailQualityLabel(reason: string) {
+  if (reason === "DUPLICATE_COORDINATE_UNVERIFIED") {
+    return "坐标重合待核验，地图按原始坐标显示";
+  }
+  return `${qualityReasonLabel(reason)}，地图暂不显示`;
+}
+
+function qualityReasonLabel(reason: string) {
+  if (reason === "MISSING_COORDINATE") return "缺少坐标";
+  if (reason === "INVALID_COORDINATE") return "坐标无效";
+  if (reason === "OUT_OF_REGION") return "坐标超出所属地区";
+  if (reason === "SUBJECT_IDENTITY_MISSING") return "样本点身份待治理";
+  return "坐标质量待治理";
 }

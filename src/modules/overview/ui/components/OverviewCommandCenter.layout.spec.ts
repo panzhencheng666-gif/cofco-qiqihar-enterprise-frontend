@@ -3,6 +3,44 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 describe("Overview command center navigation layout", () => {
+  it("keeps every overview presentation asset under the configured deployment base", () => {
+    const presentationSources = [
+      "src/modules/overview/ui/components/BoundaryMap.tsx",
+      "src/modules/overview/ui/components/CesiumBoundaryMap.tsx",
+      "src/modules/overview/ui/components/TerrainReliefBoundaryMap.tsx",
+      "src/modules/overview/ui/components/ThreeBoundaryMap.tsx",
+      "src/app/styles/global.css",
+    ].map((path) => readFileSync(resolve(path), "utf8"));
+    const index = readFileSync(resolve("index.html"), "utf8");
+
+    presentationSources.forEach((source) =>
+      expect(source).not.toMatch(/["'(]\/overview\//),
+    );
+    expect(index).toContain('href="/overview/command-terrain-v2.webp"');
+  });
+
+  it("positions map navigation from the fixed KPI band instead of an unrelated top offset", () => {
+    const css = readFileSync(resolve("src/app/styles/global.css"), "utf8");
+    const commandRule = css.match(/\.overview-command-center\s*\{([^}]*)\}/s)?.[1];
+    const kpiRule = css.match(/\.overview-command-kpis\s*\{([^}]*)\}/s)?.[1];
+    const navigationRule = css.match(
+      /\.overview-command-center > \.overview-cockpit-navigation\s*\{([^}]*)\}/s,
+    )?.[1];
+    const metricValueRule = css.match(
+      /\.overview-command-kpis strong\s*\{([^}]*)\}/s,
+    )?.[1];
+
+    expect(commandRule).toMatch(/--command-kpi-top:\s*\d+px/);
+    expect(commandRule).toMatch(/--command-kpi-height:\s*\d+px/);
+    expect(commandRule).toMatch(/--command-map-tools-gap:\s*\d+px/);
+    expect(kpiRule).toMatch(/top:\s*var\(--command-kpi-top\)/);
+    expect(kpiRule).toMatch(/height:\s*var\(--command-kpi-height\)/);
+    expect(navigationRule).toMatch(
+      /top:\s*calc\(\s*var\(--command-kpi-top\)\s*\+\s*var\(--command-kpi-height\)\s*\+\s*var\(--command-map-tools-gap\)\s*\)/,
+    );
+    expect(metricValueRule).toMatch(/white-space:\s*nowrap/);
+  });
+
   it("centers the region selector label inside its control", () => {
     const css = readFileSync(resolve("src/app/styles/global.css"), "utf8");
 
@@ -36,7 +74,7 @@ describe("Overview command center navigation layout", () => {
     const iconRule = css.match(/\.overview-sample-point-map-icon\s*\{([^}]*)\}/s);
 
     expect(iconRule?.[1]).toMatch(/pointer-events:\s*auto/);
-    expect(iconRule?.[1]).toMatch(/cursor:\s*help/);
+    expect(iconRule?.[1]).toMatch(/cursor:\s*pointer/);
   });
 
   it("does not let a renderer rebuild cancel the independently owned details-frame transition", () => {

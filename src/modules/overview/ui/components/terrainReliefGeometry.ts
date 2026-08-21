@@ -152,7 +152,6 @@ const FRAME_INSET = 0.035;
 const MAX_POINT_LABELS = 24;
 const OVERLAY_CANDIDATE_STEPS = 24;
 const OVERLAY_SAFE_MARGIN = 2;
-const MIN_LABEL_SCALE = 0.58;
 const MIN_AGGREGATE_SCALE = 0.58;
 export const RELIEF_SAMPLE_POINT_AGGREGATE_RADIUS = 34;
 export const OVERVIEW_RELIEF_DEPTH = 34;
@@ -175,9 +174,10 @@ export function compactAdministrativeName(name: string) {
 }
 
 /**
- * Fixed 1920×1080 presentation frames. They reserve the KPI band, bottom
- * analysis band, map tools, navigation, and (when open) the detail drawer.
- * The relief depth and its contact shadow stay inside these bounds as well.
+ * Fixed 1920×1080 presentation frames. They reserve the KPI band, map tools,
+ * navigation, persistent footer, and (when open) the detail drawer. The map
+ * uses the full vertical space released by removing the former analysis band;
+ * the relief depth and its contact shadow still remain above the footer.
  */
 export function overviewDetailsPanelLeft(stageWidth: number) {
   return (
@@ -191,18 +191,18 @@ export function overviewReliefFrame(
   detailsOpen: boolean,
   stageWidth = 1920,
 ): ReliefFrame {
-  const x = 170;
+  const x = 100;
   const right = detailsOpen
     ? Math.min(
         1300,
         overviewDetailsPanelLeft(stageWidth) - OVERVIEW_DETAILS_MAP_SAFE_GAP,
       )
-    : 1750;
+    : 1820;
   return {
     x,
     y: 226,
     width: Math.max(1, right - x),
-    height: 532,
+    height: 770,
   };
 }
 
@@ -758,13 +758,9 @@ export function reliefCircleInsidePolygon(
   );
 }
 
-export function reliefLabelFootprint(
-  label: ReliefLabel,
-  selected: boolean,
-): ReliefOverlayFootprint {
-  const fontSize = selected
-    ? 24
-    : label.kind === "point"
+export function reliefLabelFootprint(label: ReliefLabel): ReliefOverlayFootprint {
+  const fontSize =
+    label.kind === "point"
       ? 12
       : label.region.level === "COUNTY"
         ? 16
@@ -784,7 +780,6 @@ export function reliefLabelFootprint(
 
 export function createReliefOverlayLayout(
   scene: ReliefSceneProjection,
-  selectedCode: string,
 ): ReliefOverlayLayout {
   const surfaces = [...scene.features, ...(scene.backdrop ? [scene.backdrop] : [])];
   const surfaceByRegion = new Map(
@@ -815,7 +810,7 @@ export function createReliefOverlayLayout(
     samplePointAggregates.map((item) => [item.aggregate.regionCode, item]),
   );
   const labels = scene.labels.map((label) => {
-    const footprint = reliefLabelFootprint(label, label.region.code === selectedCode);
+    const footprint = reliefLabelFootprint(label);
     const surface = surfaceByRegion.get(label.region.code);
     const polygon = surface?.polygons[surface.primaryPolygonIndex ?? 0];
     if (!polygon) {
@@ -879,28 +874,26 @@ function placeReliefRectInsidePolygon(
   exclusions: readonly { point: ReliefPoint; radius: number }[],
 ): ReliefOverlayPlacement {
   const candidates = reliefPlacementCandidates(polygon, preferred);
-  for (let scale = 1; scale >= MIN_LABEL_SCALE - 0.001; scale -= 0.02) {
-    const roundedScale = Math.round(scale * 100) / 100;
-    const scaled = {
-      height: footprint.height * roundedScale,
-      width: footprint.width * roundedScale,
-    };
-    const point = candidates.find(
-      (candidate) =>
-        reliefRectInsidePolygon(candidate, scaled, polygon, OVERLAY_SAFE_MARGIN) &&
-        exclusions.every(
-          (exclusion) =>
-            !reliefCircleIntersectsRect(
-              exclusion.point,
-              exclusion.radius,
-              candidate,
-              scaled,
-            ),
-        ),
-    );
-    if (point) return { point, scale: roundedScale, visible: true };
-  }
-  return { point: preferred, scale: MIN_LABEL_SCALE, visible: false };
+  const scaled = { height: footprint.height, width: footprint.width };
+  const point = candidates.find(
+    (candidate) =>
+      reliefRectInsidePolygon(candidate, scaled, polygon, OVERLAY_SAFE_MARGIN) &&
+      exclusions.every(
+        (exclusion) =>
+          !reliefCircleIntersectsRect(
+            exclusion.point,
+            exclusion.radius,
+            candidate,
+            scaled,
+          ),
+      ),
+  );
+  if (point) return { point, scale: 1, visible: true };
+  return {
+    point: candidates[0] ?? preferred,
+    scale: 1,
+    visible: true,
+  };
 }
 
 function reliefPlacementCandidates(polygon: ReliefPolygon, preferred: ReliefPoint) {

@@ -6,15 +6,19 @@ import type {
   OverviewRegion,
 } from "../../domain/overview";
 
+export type OverviewRegionTimeScope =
+  { periodCode: string; year?: never } | { periodCode?: never; year: number };
+
+export type OverviewRegionQuery = {
+  parentCode?: string;
+  productCode: string;
+} & OverviewRegionTimeScope;
+
 export interface OverviewRepository {
   invalidateBusinessData?(): void;
   options(): Promise<OverviewOptions>;
   mapScope(): Promise<OverviewMapScope>;
-  regions(query: {
-    parentCode?: string;
-    productCode: string;
-    year: number;
-  }): Promise<readonly OverviewRegion[]>;
+  regions(query: OverviewRegionQuery): Promise<readonly OverviewRegion[]>;
   locations(query: {
     ancestorCode?: string;
     level: "TOWNSHIP" | "VILLAGE";

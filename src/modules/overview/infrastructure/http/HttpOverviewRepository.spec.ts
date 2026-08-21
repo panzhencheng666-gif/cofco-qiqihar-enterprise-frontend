@@ -38,6 +38,46 @@ describe("HttpOverviewRepository request cache", () => {
     ).rejects.toThrow();
   });
 
+  it("accepts partial coverage for automatically calculated supply indicators", async () => {
+    const get = vi.fn<HttpClient["get"]>((_path, schema) =>
+      Promise.resolve(
+        schema.parse({
+          contractVersion: "overview-audit-v2",
+          data: [
+            {
+              calculationVersion: "审核数据自动供需口径第1版",
+              code: "SUPPLY_ADOPTED_ENDING_INVENTORY",
+              coverageScope: "所选地区及全部下级地区、所选产品、2024年度",
+              coverageStatus: "PARTIAL",
+              dataCutoff: "2026年08月19日 05:37:58",
+              formula: "核定生产端和企业端期末库存自动合计",
+              name: "正式采用期末库存",
+              sourceCount: 195,
+              sourceDomain: "SUPPLY",
+              sourcePath: "/api/v1/observable-analysis/snapshots",
+              sourceRelation: "审核通过的产情、市场和物流数据自动计算结果",
+              unitCode: "万吨",
+              value: "155.10517",
+            },
+          ],
+        }),
+      ),
+    );
+    const repository = new HttpOverviewRepository({
+      get: get as unknown as HttpClient["get"],
+    });
+
+    await expect(
+      repository.indicators({ productCode: "CORN", regionCode: "230200", year: 2024 }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        code: "SUPPLY_ADOPTED_ENDING_INVENTORY",
+        coverageStatus: "PARTIAL",
+        value: "155.10517",
+      }),
+    ]);
+  });
+
   it("preserves every dashboard metric audit dimension from the server contract", async () => {
     const get = vi.fn<HttpClient["get"]>((_path, schema) =>
       Promise.resolve(
@@ -45,6 +85,24 @@ describe("HttpOverviewRepository request cache", () => {
           contractVersion: "overview-audit-v2",
           data: {
             alerts: [],
+            businessTables: [
+              {
+                code: "PRODUCTION",
+                title: "产情监测表",
+                coverageStatus: "AVAILABLE",
+                columns: [{ code: "PROD_AREA_MU", label: "种植面积", unitCode: "亩" }],
+                rows: [
+                  {
+                    regionCode: "230208",
+                    regionName: "梅里斯达斡尔族区",
+                    sourceCount: 1,
+                    latestApprovedAt: "2026年08月11日 11:20:03",
+                    completenessStatus: "PARTIAL",
+                    values: { PROD_AREA_MU: { value: "0", sourceCount: 1 } },
+                  },
+                ],
+              },
+            ],
             cultivatedAreaYoY: [],
             metrics: [
               {
@@ -95,6 +153,76 @@ describe("HttpOverviewRepository request cache", () => {
           sourceRelation: "production.production_record",
         },
       ],
+      businessTables: [
+        expect.objectContaining({
+          code: "PRODUCTION",
+          rows: [
+            expect.objectContaining({
+              completenessStatus: "PARTIAL",
+              values: { PROD_AREA_MU: { value: "0", sourceCount: 1 } },
+            }),
+          ],
+        }),
+      ],
+    });
+  });
+
+  it("accepts the public region-surplus partial coverage contract", async () => {
+    const get = vi.fn<HttpClient["get"]>((_path, schema) =>
+      Promise.resolve(
+        schema.parse({
+          contractVersion: "overview-audit-v2",
+          data: {
+            alerts: [],
+            businessTables: [],
+            cultivatedAreaYoY: [],
+            metrics: [
+              {
+                auditSources: [],
+                calculationVersion: "地区余粮公开填报口径第1版",
+                code: "REGION_SURPLUS",
+                coverageScope: "所选地区及全部下级地区、所选产品、2024年度",
+                coverageStatus: "PARTIAL",
+                dataCutoff: "2024年11月30日",
+                formula: "按公开样本身份采用最新产情期末余粮与市场现有库存后合计",
+                name: "地区余粮",
+                sourceCount: 235,
+                sourcePath: "/api/v1/overview/dashboard",
+                sourceRelation: "已审核产情与市场公开填报字段",
+                unitCode: "吨",
+                value: "82297",
+              },
+            ],
+            outputYoY: [],
+            priceTrend: [],
+            productStructure: [],
+            regionActivity: [],
+            regionPath: [],
+            scope: {
+              approvedRecordCount: 235,
+              countyCount: 20,
+              reportingUnitCount: 1,
+              townshipCount: 232,
+              villageCount: 2332,
+            },
+          },
+        }),
+      ),
+    );
+    const repository = new HttpOverviewRepository({
+      get: get as unknown as HttpClient["get"],
+    });
+
+    await expect(
+      repository.dashboard({ productCode: "CORN", year: 2024 }),
+    ).resolves.toMatchObject({
+      metrics: [
+        expect.objectContaining({
+          code: "REGION_SURPLUS",
+          coverageStatus: "PARTIAL",
+          value: "82297",
+        }),
+      ],
     });
   });
 
@@ -105,6 +233,7 @@ describe("HttpOverviewRepository request cache", () => {
           contractVersion: "overview-audit-v2",
           data: {
             alerts: [],
+            businessTables: [],
             cultivatedAreaYoY: [],
             metrics: [
               {
@@ -158,6 +287,7 @@ describe("HttpOverviewRepository request cache", () => {
           contractVersion: "overview-audit-v2",
           data: {
             alerts: [],
+            businessTables: [],
             cultivatedAreaYoY: [],
             metrics: [],
             outputYoY: [],
@@ -203,6 +333,7 @@ describe("HttpOverviewRepository request cache", () => {
           contractVersion: "overview-audit-v2",
           data: {
             alerts: [],
+            businessTables: [],
             cultivatedAreaYoY: [],
             metrics: [
               {
@@ -334,6 +465,7 @@ describe("HttpOverviewRepository request cache", () => {
           contractVersion: "overview-audit-v2",
           data: {
             alerts: [],
+            businessTables: [],
             cultivatedAreaYoY: [],
             metrics: [],
             outputYoY: [],

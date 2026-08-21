@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-import type { OverviewRepository } from "../../application/ports/OverviewRepository";
+import type {
+  OverviewRegionQuery,
+  OverviewRepository,
+} from "../../application/ports/OverviewRepository";
 import type { HttpClient } from "../../../../shared/api/HttpClient";
 import { queryString } from "../../../../shared/api/HttpClient";
 
@@ -54,12 +57,38 @@ const indicatorsSchema = z
         sourceRelation: z.string(),
         dataCutoff: z.string().nullable(),
         coverageScope: z.string(),
-        coverageStatus: z.enum(["AVAILABLE", "NO_APPROVED_SOURCES"]),
+        coverageStatus: z.enum(["AVAILABLE", "PARTIAL", "NO_APPROVED_SOURCES"]),
         calculationVersion: z.string(),
       }),
     ),
   })
   .describe(OVERVIEW_AUDIT_CONTRACT_VERSION);
+const businessTableCellSchema = z.object({
+  value: z.string().nullable(),
+  sourceCount: z.number().int().nonnegative(),
+});
+const businessTableSchema = z.object({
+  code: z.enum(["PRODUCTION", "MARKET", "LOGISTICS", "SUPPLY"]),
+  title: z.string(),
+  coverageStatus: z.enum(["AVAILABLE", "NO_APPROVED_SOURCES"]),
+  columns: z.array(
+    z.object({
+      code: z.string(),
+      label: z.string(),
+      unitCode: z.string().nullable(),
+    }),
+  ),
+  rows: z.array(
+    z.object({
+      regionCode: z.string(),
+      regionName: z.string(),
+      sourceCount: z.number().int().nonnegative(),
+      latestApprovedAt: z.string().nullable(),
+      completenessStatus: z.enum(["COMPLETE", "PARTIAL", "NO_APPROVED_SOURCES"]),
+      values: z.record(z.string(), businessTableCellSchema),
+    }),
+  ),
+});
 const dashboardSchema = z
   .object({
     contractVersion: z.literal(OVERVIEW_AUDIT_CONTRACT_VERSION),
@@ -72,6 +101,7 @@ const dashboardSchema = z
         approvedRecordCount: z.number(),
         latestUpdatedAt: z.string().nullable().optional(),
       }),
+      businessTables: z.array(businessTableSchema),
       metrics: z.array(
         z.object({
           code: z.string(),
@@ -82,6 +112,7 @@ const dashboardSchema = z
           dataCutoff: z.string().nullable(),
           coverageStatus: z.enum([
             "AVAILABLE",
+            "PARTIAL",
             "NO_APPROVED_SOURCES",
             "INSUFFICIENT_COVERAGE",
             "CUTOFF_MISMATCH",
@@ -218,7 +249,7 @@ export class HttpOverviewRepository implements OverviewRepository {
     );
   }
 
-  async regions(query: { parentCode?: string; productCode: string; year: number }) {
+  async regions(query: OverviewRegionQuery) {
     const path = `/api/v1/overview/regions${queryString(query)}`;
     return this.cached(path, GEOGRAPHY_CACHE_TTL_MS, async () =>
       (await this.http.get(path, regionsSchema)).data.map(toOverviewRegion),

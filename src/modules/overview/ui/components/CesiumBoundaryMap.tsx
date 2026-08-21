@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import type * as Cesium from "cesium";
 
 import type { OverviewRegion } from "../../domain/overview";
+import { publicAssetUrl } from "../../../../shared/assets/publicAssetUrl";
 import {
   flattenCoordinates,
   type MapFeature,
@@ -210,7 +211,7 @@ async function loadTerrainTexture() {
   if (terrainTexture) return terrainTexture;
   const image = new Image();
   image.decoding = "async";
-  image.src = "/overview/ice-terrain-relief.png";
+  image.src = publicAssetUrl("overview/ice-terrain-relief.png");
   await image.decode();
   terrainTexture = image;
   return image;
@@ -309,7 +310,7 @@ function iceMaterial(
   texture = terrainTexture,
 ) {
   return new runtime.ImageMaterialProperty({
-    image: texture ?? "/overview/ice-terrain-relief.png",
+    image: texture ?? publicAssetUrl("overview/ice-terrain-relief.png"),
     repeat: new runtime.Cartesian2(1.45, 1.45),
     color: runtime.Color.fromCssColorString(selected ? "#64ded5" : "#ffffff"),
     transparent: false,

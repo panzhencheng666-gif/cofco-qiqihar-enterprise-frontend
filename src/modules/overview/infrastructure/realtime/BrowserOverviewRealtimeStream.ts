@@ -8,23 +8,55 @@ export class BrowserOverviewRealtimeStream implements OverviewRealtimeStream {
   constructor(
     private readonly createEventSource: (url: string) => EventSource = (url) =>
       new EventSource(url),
+    private readonly loadInitialCursor: () => Promise<number> = loadLatestVisibleNotificationSequence,
   ) {}
 
   subscribe(callbacks: OverviewRealtimeCallbacks) {
-    const source = this.createEventSource("/api/v1/business-events/stream");
+    let source: EventSource | undefined;
+    let closed = false;
     const onBusinessChange = (event: Event) => {
       const change = parseBusinessChange(event);
       if (change) callbacks.onBusinessChange(change);
     };
-    source.addEventListener("business-change", onBusinessChange);
-    source.onopen = () => callbacks.onConnected();
-    source.onerror = () => callbacks.onDisconnected();
+    const connect = (cursor: number) => {
+      if (closed) return;
+      const safeCursor = Number.isSafeInteger(cursor) ? Math.max(0, cursor) : 0;
+      source = this.createEventSource(
+        `/api/v1/business-events/stream?after=${safeCursor}`,
+      );
+      source.addEventListener("business-change", onBusinessChange);
+      source.onopen = () => callbacks.onConnected();
+      source.onerror = () => callbacks.onDisconnected();
+    };
+    void this.loadInitialCursor().then(connect, () => connect(0));
 
     return () => {
-      source.removeEventListener("business-change", onBusinessChange);
-      source.close();
+      closed = true;
+      source?.removeEventListener("business-change", onBusinessChange);
+      source?.close();
     };
   }
+}
+
+async function loadLatestVisibleNotificationSequence(): Promise<number> {
+  const response = await fetch("/api/v1/notifications", {
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) {
+    throw new Error(`Notification cursor request failed: ${response.status}`);
+  }
+  const payload = (await response.json()) as {
+    data?: { items?: Array<{ sequence?: unknown }> };
+  };
+  return (payload.data?.items ?? []).reduce((latest, item) => {
+    const sequence = item.sequence;
+    return typeof sequence === "number" &&
+      Number.isSafeInteger(sequence) &&
+      sequence >= 0
+      ? Math.max(latest, sequence)
+      : latest;
+  }, 0);
 }
 
 function parseBusinessChange(event: Event): OverviewBusinessChange | undefined {

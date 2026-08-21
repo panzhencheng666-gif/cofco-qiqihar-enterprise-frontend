@@ -58,7 +58,7 @@ export interface OverviewIndicator {
   sourceRelation: string;
   dataCutoff: string | null;
   coverageScope: string;
-  coverageStatus: "AVAILABLE" | "NO_APPROVED_SOURCES";
+  coverageStatus: "AVAILABLE" | "PARTIAL" | "NO_APPROVED_SOURCES";
   calculationVersion: string;
 }
 
@@ -71,6 +71,7 @@ export interface OverviewDashboardMetric {
   dataCutoff: string | null;
   coverageStatus:
     | "AVAILABLE"
+    | "PARTIAL"
     | "NO_APPROVED_SOURCES"
     | "INSUFFICIENT_COVERAGE"
     | "CUTOFF_MISMATCH"
@@ -139,6 +140,34 @@ export interface OverviewYoYComparison {
   previousSourceCount: number;
 }
 
+export interface OverviewBusinessTableCell {
+  value: string | null;
+  sourceCount: number;
+}
+
+export interface OverviewBusinessTableColumn {
+  code: string;
+  label: string;
+  unitCode: string | null;
+}
+
+export interface OverviewBusinessTableRow {
+  regionCode: string;
+  regionName: string;
+  sourceCount: number;
+  latestApprovedAt: string | null;
+  completenessStatus: "COMPLETE" | "PARTIAL" | "NO_APPROVED_SOURCES";
+  values: Readonly<Record<string, OverviewBusinessTableCell>>;
+}
+
+export interface OverviewBusinessTable {
+  code: "PRODUCTION" | "MARKET" | "LOGISTICS" | "SUPPLY";
+  title: string;
+  coverageStatus: "AVAILABLE" | "NO_APPROVED_SOURCES";
+  columns: readonly OverviewBusinessTableColumn[];
+  rows: readonly OverviewBusinessTableRow[];
+}
+
 export interface OverviewDashboard {
   scope: {
     countyCount: number;
@@ -156,4 +185,5 @@ export interface OverviewDashboard {
   alerts: readonly OverviewAlert[];
   cultivatedAreaYoY: readonly OverviewYoYComparison[];
   outputYoY: readonly OverviewYoYComparison[];
+  businessTables: readonly OverviewBusinessTable[];
 }

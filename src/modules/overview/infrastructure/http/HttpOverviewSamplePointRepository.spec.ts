@@ -4,13 +4,13 @@ import type { HttpClient } from "../../../../shared/api/HttpClient";
 import { HttpOverviewSamplePointRepository } from "./HttpOverviewSamplePointRepository";
 
 describe("HttpOverviewSamplePointRepository", () => {
-  it("reads aggregate counts without accepting a business filter", async () => {
+  it("reads product-scoped distinct aggregate counts", async () => {
     const get = respondingWith([
       {
         regionCode: "230202997001",
         regionName: "契约测试村",
         regionLevel: "VILLAGE",
-        samplePointCount: 3,
+        samplePointCount: 2,
         productionCount: 2,
         marketCount: 1,
         validCoordinateCount: 2,
@@ -27,18 +27,19 @@ describe("HttpOverviewSamplePointRepository", () => {
       ) => Promise<readonly unknown[]>
     )({
       parentCode: "230202997",
+      productCode: "CORN",
       year: 2026,
     });
 
     expect(get).toHaveBeenCalledWith(
-      "/api/v1/overview/sample-point-aggregates?year=2026&parentCode=230202997",
+      "/api/v1/overview/sample-point-aggregates?year=2026&productCode=CORN&parentCode=230202997",
       expect.anything(),
     );
     expect(result[0]).toEqual({
       regionCode: "230202997001",
       regionName: "契约测试村",
       regionLevel: "VILLAGE",
-      samplePointCount: 3,
+      samplePointCount: 2,
       productionCount: 2,
       marketCount: 1,
       validCoordinateCount: 2,
@@ -49,7 +50,7 @@ describe("HttpOverviewSamplePointRepository", () => {
     expect(result[0]).not.toHaveProperty("longitude");
   });
 
-  it("rejects aggregate totals that are not the sum of production and market", async () => {
+  it("rejects aggregate totals outside the distinct-point bounds", async () => {
     const get = respondingWith([
       {
         regionCode: "230202997001",
@@ -65,7 +66,9 @@ describe("HttpOverviewSamplePointRepository", () => {
       },
     ]);
 
-    await expect(repositoryWith(get).aggregates({ year: 2026 })).rejects.toThrow();
+    await expect(
+      repositoryWith(get).aggregates({ productCode: "CORN", year: 2026 }),
+    ).rejects.toThrow();
   });
 
   it("reads filtered lists and exposes no point geometry", async () => {
@@ -95,6 +98,14 @@ describe("HttpOverviewSamplePointRepository", () => {
           categories: [{ code: "PRODUCTION", name: "产情类" }],
           types: [{ code: "FARMER", name: "农户", iconKey: "farmer" }],
           products: [{ code: "CORN", name: "玉米" }],
+          latestBusinessDate: "2026-08-05",
+          summaryValues: {
+            SAMPLE_CONTACT: {
+              label: "样本点联系方式",
+              value: "13900000000",
+              unitCode: null,
+            },
+          },
         },
       ],
       correctionSources: [
@@ -114,6 +125,7 @@ describe("HttpOverviewSamplePointRepository", () => {
       ) => Promise<Awaited<ReturnType<typeof repository.list>>>
     )({
       year: 2026,
+      productCode: "CORN",
       regionCode: "230202997001",
       categoryCode: "PRODUCTION",
       typeCode: "FARMER",
@@ -121,11 +133,12 @@ describe("HttpOverviewSamplePointRepository", () => {
     });
 
     expect(get.mock.calls[0]?.[0]).toBe(
-      "/api/v1/overview/sample-points?year=2026&regionCode=230202997001&categoryCode=PRODUCTION&typeCode=FARMER&query=%E5%90%8C%E4%B8%80",
+      "/api/v1/overview/sample-points?year=2026&productCode=CORN&regionCode=230202997001&categoryCode=PRODUCTION&typeCode=FARMER&query=%E5%90%8C%E4%B8%80",
     );
     expect(result.totalCount).toBe(1);
     expect(result.items[0]).not.toHaveProperty("longitude");
     expect(result.items[0]).not.toHaveProperty("latitude");
+    expect(result.items[0]?.summaryValues.SAMPLE_CONTACT?.value).toBe("13900000000");
   });
 
   it("reads county-and-deeper icons through the full categorized query", async () => {
@@ -137,6 +150,7 @@ describe("HttpOverviewSamplePointRepository", () => {
         types: [{ code: "FARMER", name: "农户", iconKey: "farmer" }],
         longitude: 123.9,
         latitude: 47.3,
+        dataQualityReason: "DUPLICATE_COORDINATE_UNVERIFIED",
       },
     ]);
     const repository = repositoryWith(get);
@@ -147,6 +161,7 @@ describe("HttpOverviewSamplePointRepository", () => {
       ) => Promise<Awaited<ReturnType<typeof repository.icons>>>
     )({
       year: 2026,
+      productCode: "CORN",
       regionCode: "230202",
       categoryCode: "PRODUCTION",
       typeCode: "FARMER",
@@ -154,9 +169,10 @@ describe("HttpOverviewSamplePointRepository", () => {
     });
 
     expect(get.mock.calls[0]?.[0]).toBe(
-      "/api/v1/overview/sample-point-icons?year=2026&regionCode=230202&categoryCode=PRODUCTION&typeCode=FARMER&query=%E5%90%8C%E4%B8%80",
+      "/api/v1/overview/sample-point-icons?year=2026&productCode=CORN&regionCode=230202&categoryCode=PRODUCTION&typeCode=FARMER&query=%E5%90%8C%E4%B8%80",
     );
     expect(result[0]?.longitude).toBe(123.9);
+    expect(result[0]?.dataQualityReason).toBe("DUPLICATE_COORDINATE_UNVERIFIED");
   });
 
   it("reads a stable-id detail with formal business values and no geometry", async () => {
@@ -179,7 +195,11 @@ describe("HttpOverviewSamplePointRepository", () => {
           occurrenceDate: "2026-08-05",
           sourceVersion: 0,
           businessValues: {
-            CONTACT: { label: "联系方式", value: "13900000000", unitCode: null },
+            SAMPLE_CONTACT: {
+              label: "样本点联系方式",
+              value: "13900000000",
+              unitCode: null,
+            },
           },
         },
       ],
@@ -194,14 +214,17 @@ describe("HttpOverviewSamplePointRepository", () => {
       samplePointId: "94000000-0000-0000-0000-000000000001",
       regionCode: "230202",
       year: 2026,
+      productCode: "CORN",
       categoryCode: "PRODUCTION",
       typeCode: "FARMER",
     });
 
     expect(get.mock.calls[0]?.[0]).toBe(
-      "/api/v1/overview/sample-points/94000000-0000-0000-0000-000000000001?year=2026&regionCode=230202&categoryCode=PRODUCTION&typeCode=FARMER",
+      "/api/v1/overview/sample-points/94000000-0000-0000-0000-000000000001?year=2026&productCode=CORN&regionCode=230202&categoryCode=PRODUCTION&typeCode=FARMER",
     );
-    expect(result.associations[0]?.businessValues.CONTACT?.value).toBe("13900000000");
+    expect(result.associations[0]?.businessValues.SAMPLE_CONTACT?.value).toBe(
+      "13900000000",
+    );
     expect(result).not.toHaveProperty("pointGeometry");
   });
 });

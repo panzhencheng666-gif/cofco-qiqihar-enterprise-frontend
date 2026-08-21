@@ -10,6 +10,7 @@ import {
   overviewDetailsPanelLeft,
   overviewReliefFrame,
   overviewSelectionConnector,
+  pointInReliefPolygon,
   projectReliefScene,
   reliefCircleInsidePolygon,
   reliefRectInsidePolygon,
@@ -224,6 +225,7 @@ describe("projectReliefScene", () => {
           types: [{ code: "FARMER", name: "农户", iconKey: "farmer" }],
           longitude: 123.5,
           latitude: 47.5,
+          dataQualityReason: null,
         },
       ],
     });
@@ -244,6 +246,7 @@ describe("projectReliefScene", () => {
       types: [{ code: "TRADER", name: "贸易商", iconKey: "trader" }],
       longitude: 123.5,
       latitude: 47.5,
+      dataQualityReason: null,
     };
     const projection = projectReliefScene({
       features: [
@@ -314,23 +317,25 @@ describe("projectReliefScene", () => {
     ).toBe("友谊乡");
   });
 
-  it("uses a safe presentation frame for every overlay state", () => {
+  it("uses the full map viewport after the bottom analysis band is removed", () => {
     const openFrame = overviewReliefFrame(false);
     const detailsFrame = overviewReliefFrame(true);
 
     expect(openFrame.y).toBeGreaterThanOrEqual(220);
-    expect(openFrame.y + openFrame.height).toBeLessThanOrEqual(770);
-    expect(openFrame.x + openFrame.width).toBeLessThanOrEqual(1780);
+    expect(openFrame.y + openFrame.height).toBeGreaterThanOrEqual(980);
+    expect(openFrame.y + openFrame.height).toBeLessThanOrEqual(1010);
+    expect(openFrame.x).toBeLessThanOrEqual(110);
+    expect(openFrame.x + openFrame.width).toBeGreaterThanOrEqual(1810);
     expect(detailsFrame.y).toBe(openFrame.y);
     expect(detailsFrame.height).toBe(openFrame.height);
     expect(detailsFrame.x + detailsFrame.width).toBeLessThanOrEqual(1320);
   });
 
-  it("reserves vertical room for the whole earth wall above the analysis band", () => {
+  it("keeps the enlarged earth wall above the persistent footer", () => {
     [overviewReliefFrame(false), overviewReliefFrame(true)].forEach((safeFrame) => {
       expect(
         safeFrame.y + safeFrame.height + OVERVIEW_RELIEF_DEPTH,
-      ).toBeLessThanOrEqual(800);
+      ).toBeLessThanOrEqual(1040);
     });
   });
 
@@ -477,6 +482,28 @@ describe("projectReliefScene", () => {
     expect(bodies.outlines[0]?.region.code).toBe("T");
     expect(bodies.outlines.some(({ region }) => region.code === "P")).toBe(false);
     expect(bodies.walls).toEqual([scene.backdrop]);
+  });
+
+  it("keeps a backdrop-only empty state flat instead of extruding one giant wall", () => {
+    const parent = polygonFeature("P", [
+      [0, 0],
+      [12, 0],
+      [12, 8],
+      [0, 8],
+      [0, 0],
+    ]);
+    const scene = projectReliefScene({
+      backdrop: parent,
+      features: [],
+      points: [],
+      frame,
+    });
+
+    const bodies = selectReliefRenderBodies(scene);
+
+    expect(bodies.outlines).toEqual([scene.backdrop]);
+    expect(bodies.tops).toEqual([scene.backdrop]);
+    expect(bodies.walls).toEqual([]);
   });
 
   it("uses passive map context as a seamless cap without drawing another administrative outline", () => {
@@ -1278,13 +1305,11 @@ describe("polygon-contained relief overlay layout", () => {
       });
       const details = reframeReliefScene(full, overviewReliefFrame(true));
       const states = [
-        { name: "closed", scene: full, selectedCode: "" },
-        { name: "open", scene: details, selectedCode: target.region.code },
-        { name: "returned", scene: full, selectedCode: "" },
+        { name: "closed", scene: full },
+        { name: "open", scene: details },
+        { name: "returned", scene: full },
       ] as const;
-      const layouts = states.map(({ scene, selectedCode }) =>
-        createReliefOverlayLayout(scene, selectedCode),
-      );
+      const layouts = states.map(({ scene }) => createReliefOverlayLayout(scene));
 
       states.forEach(({ name, scene }, stateIndex) => {
         const surface = scene.features.find(
@@ -1335,7 +1360,7 @@ describe("polygon-contained relief overlay layout", () => {
     },
   );
 
-  it("hides a label instead of pushing its bbox outside a surface too small to contain it", () => {
+  it("keeps a small administrative surface named with an anchored fallback label", () => {
     const tiny = polygonFeature(
       "tiny",
       [
@@ -1366,7 +1391,64 @@ describe("polygon-contained relief overlay layout", () => {
       points: [],
     });
 
-    expect(createReliefOverlayLayout(scene, "").labels[0]?.visible).toBe(false);
+    const surface = scene.features[0];
+    const polygon = surface?.polygons[surface.primaryPolygonIndex];
+    const label = createReliefOverlayLayout(scene).labels[0];
+
+    expect(polygon).toBeDefined();
+    expect(label).toBeDefined();
+    expect(label?.visible).toBe(true);
+    expect(label?.scale).toBe(1);
+    if (polygon && label) {
+      expect(pointInReliefPolygon(label.point, polygon)).toBe(true);
+      expect(
+        reliefRectInsidePolygon(
+          label.point,
+          {
+            height: label.footprint.height * label.scale,
+            width: label.footprint.width * label.scale,
+          },
+          polygon,
+        ),
+      ).toBe(false);
+    }
+  });
+
+  it("keeps one typography scale across neighboring township labels", () => {
+    const township = polygonFeature(
+      "231102201",
+      [
+        [1, 1],
+        [2.7, 1],
+        [2.7, 2],
+        [1, 2],
+        [1, 1],
+      ],
+      "TOWNSHIP",
+    );
+    township.region.name = "四嘉子满族乡";
+    const context = polygonFeature(
+      "231102",
+      [
+        [0, 0],
+        [20, 0],
+        [20, 10],
+        [0, 10],
+        [0, 0],
+      ],
+      "COUNTY",
+    );
+    const scene = projectReliefScene({
+      backdrop: context,
+      features: [township],
+      frame,
+      points: [],
+    });
+
+    const label = createReliefOverlayLayout(scene).labels[0];
+
+    expect(label?.visible).toBe(true);
+    expect(label?.scale).toBe(1);
   });
 
   it.each([
@@ -1415,7 +1497,7 @@ describe("polygon-contained relief overlay layout", () => {
       // responsive safe-frame fix the function ignored it and left the map
       // under the fixed 540 px details panel at the formal screenshot ratio.
       const details = reframeReliefScene(full, overviewReliefFrame(true, stageWidth));
-      const layout = createReliefOverlayLayout(details, target.region.code);
+      const layout = createReliefOverlayLayout(details);
       const surfacePoints = details.features.flatMap(({ polygons }) =>
         polygons.flatMap(({ rings }) => rings.flatMap(({ points }) => points)),
       );

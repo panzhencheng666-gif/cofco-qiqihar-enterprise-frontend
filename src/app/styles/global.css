@@ -1370,7 +1370,8 @@ select:focus-visible {
   min-height: 680px;
   overflow: hidden;
   color: #174d78;
-  background: #eef7fd url("/overview/spatial-atmosphere.svg") center / cover no-repeat;
+  background: #eef7fd url("../../../public/overview/spatial-atmosphere.svg") center /
+    cover no-repeat;
 }
 
 .overview-loading {
@@ -1378,6 +1379,26 @@ select:focus-visible {
   place-items: center;
   color: #4287b5;
   letter-spacing: 0.16em;
+}
+
+.overview-loading > div {
+  display: grid;
+  gap: 14px;
+  justify-items: center;
+  letter-spacing: normal;
+  text-align: center;
+}
+
+.overview-loading > div p {
+  margin: 0;
+}
+
+.overview-loading > div button {
+  padding: 7px 22px;
+  border: 1px solid #4287b5;
+  color: #174d78;
+  background: #fff;
+  cursor: pointer;
 }
 
 .overview-spatial {
@@ -1681,7 +1702,7 @@ select:focus-visible {
 }
 
 .overview-spatial .overview-boundary-map > path[role="button"] {
-  fill: url("/overview/ice-terrain-texture.svg");
+  fill: url("../../../public/overview/ice-terrain-texture.svg");
   stroke: rgb(249 254 255 / 98%);
   stroke-width: 2.2;
   filter: drop-shadow(0 14px 9px rgb(41 108 156 / 25%));
@@ -2752,7 +2773,7 @@ select:focus-visible {
   left: 0;
   height: 88px;
   opacity: 0.46;
-  background: url("/overview/ice-terrain-relief.png") center 38% / cover;
+  background: url("../../../public/overview/ice-terrain-relief.png") center 38% / cover;
   mask-image: linear-gradient(to bottom, transparent, #000);
 }
 
@@ -2984,6 +3005,9 @@ select:focus-visible {
   --command-cyan-soft: #b9f5ff;
   --command-blue: #2997df;
   --command-gold: #ffd36d;
+  --command-kpi-top: 88px;
+  --command-kpi-height: 140px;
+  --command-map-tools-gap: 14px;
   --command-stage-scale: min(1, calc(100vh / 1080px));
   position: fixed;
   top: 0;
@@ -3177,7 +3201,6 @@ select:focus-visible {
 }
 .overview-relief-label.is-selected {
   color: #fff6c7;
-  font-size: 24px;
   text-shadow:
     0 2px 4px rgb(91 55 0 / 82%),
     0 0 13px #ffd45c;
@@ -3250,7 +3273,7 @@ select:focus-visible {
   box-shadow:
     0 0 0 3px rgb(32 211 234 / 14%),
     0 7px 16px rgb(0 28 48 / 46%);
-  cursor: help;
+  cursor: pointer;
   pointer-events: auto;
   transform: translate(-50%, -100%) rotate(-45deg);
 }
@@ -3296,8 +3319,15 @@ select:focus-visible {
   color: #ffe0c6;
   background: rgb(111 57 68 / 96%);
 }
+.overview-sample-point-map-icon.has-coordinate-warning {
+  border-color: #ffe08a;
+  box-shadow:
+    0 0 0 3px rgb(255 190 59 / 25%),
+    0 7px 16px rgb(0 28 48 / 46%);
+}
 .overview-sample-point-map-icon:hover,
-.overview-sample-point-map-icon:focus-visible {
+.overview-sample-point-map-icon:focus-visible,
+.overview-sample-point-map-icon.is-selected {
   filter: brightness(1.18) drop-shadow(0 0 7px #76ecff);
   outline: 2px solid #d7fbff;
   outline-offset: 2px;
@@ -3545,13 +3575,14 @@ select:focus-visible {
 
 .overview-command-kpis {
   position: absolute;
-  top: 88px;
+  top: var(--command-kpi-top);
   right: 40px;
   left: 40px;
   z-index: 11;
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  min-height: 128px;
+  height: var(--command-kpi-height);
+  min-height: 0;
   padding: 0 22px;
   border: 1px solid rgb(202 245 255 / 42%);
   border-radius: 18px;
@@ -3600,6 +3631,7 @@ select:focus-visible {
   font-family: "DIN Alternate", "Bahnschrift", sans-serif;
   font-size: clamp(21px, 1.45vw, 29px);
   letter-spacing: 0.06em;
+  white-space: nowrap;
   text-shadow: 0 0 14px rgb(85 226 255 / 36%);
 }
 .overview-command-kpis small {
@@ -3709,7 +3741,9 @@ select:focus-visible {
 
 .overview-command-center > .overview-cockpit-navigation {
   position: absolute;
-  top: 232px;
+  top: calc(
+    var(--command-kpi-top) + var(--command-kpi-height) + var(--command-map-tools-gap)
+  );
   right: auto;
   left: 176px;
   z-index: 14;
@@ -4137,6 +4171,23 @@ select:focus-visible {
 .overview-sample-point-list > button small {
   grid-column: 1 / -1;
 }
+.overview-sample-point-list > button .overview-sample-point-list-summary {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: 3px 8px;
+  padding-top: 3px;
+  border-top: 1px solid rgb(151 221 239 / 14%);
+}
+.overview-sample-point-list > button .overview-sample-point-list-quality {
+  grid-column: 1 / -1;
+  color: #ffe2a0;
+  font-size: 9px;
+}
+.overview-sample-point-list > button .overview-sample-point-list-summary > span {
+  color: #d9f4fb;
+  white-space: nowrap;
+}
 .overview-sample-point-business {
   flex: 0.95 1 0;
 }
@@ -4163,6 +4214,33 @@ select:focus-visible {
   border-radius: 6px;
   color: #ffe4a1;
   background: rgb(100 65 14 / 20%);
+  font-size: 9px;
+}
+.overview-sample-point-periods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+  margin-bottom: 5px;
+}
+.overview-sample-point-periods > span {
+  color: #b9e2ee;
+  font-size: 9px;
+}
+.overview-sample-point-periods > button {
+  min-height: 25px;
+  padding: 3px 7px;
+  border-radius: 5px;
+  font-size: 9px;
+}
+.overview-sample-point-periods > button[aria-pressed="true"] {
+  border-color: #ffe08a;
+  color: #fff2b6;
+  background: rgb(121 82 18 / 42%);
+}
+.overview-sample-point-detail .overview-sample-point-period-note {
+  margin-bottom: 8px;
+  color: #b9e2ee;
   font-size: 9px;
 }
 .overview-sample-point-detail dl > div {
@@ -4403,28 +4481,6 @@ select:focus-visible {
   background: rgb(7 79 122 / 42%);
 }
 
-.overview-command-analysis {
-  position: absolute;
-  right: 36px;
-  bottom: 28px;
-  left: 18px;
-  z-index: 12;
-  display: grid;
-  grid-template-columns: 1.05fr 0.8fr 1fr 1fr;
-  height: 247px;
-  overflow: hidden;
-  border: 1px solid rgb(219 248 255 / 55%);
-  border-radius: 19px;
-  background: linear-gradient(130deg, rgb(17 99 145 / 58%), rgb(4 73 116 / 39%));
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 22%),
-    0 22px 48px rgb(0 39 70 / 26%);
-  backdrop-filter: blur(18px) saturate(1.2);
-  transition: right 260ms ease;
-}
-.overview-command-center.has-details .overview-command-analysis {
-  right: 570px;
-}
 .overview-command-chart {
   position: relative;
   min-width: 0;

@@ -20,6 +20,50 @@ import { OverviewPage } from "./OverviewPage";
 import { HttpContractError, HttpError } from "../../../../shared/api/HttpClient";
 
 describe("OverviewPage", () => {
+  it("leaves perpetual loading and allows retry when the options request stalls", async () => {
+    vi.useFakeTimers();
+    const optionsRequest = vi
+      .fn<OverviewRepository["options"]>()
+      .mockImplementationOnce(() => new Promise<never>(() => undefined))
+      .mockResolvedValueOnce(options);
+    try {
+      render(
+        <OverviewPage
+          repository={{
+            mapScope: () => Promise.resolve(sampleMapScope),
+            options: optionsRequest,
+            regions: () => Promise.resolve([sampleRegion]),
+            locations: () => Promise.resolve([]),
+            indicators: () => Promise.resolve([]),
+            dashboard: () => Promise.resolve(emptyDashboard),
+          }}
+        />,
+      );
+
+      expect(screen.getByText("正在读取粮食商情业务数据")).toBeVisible();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+
+      expect(screen.getByText("总览筛选条件加载失败，请稍后重试。")).toHaveAttribute(
+        "role",
+        "alert",
+      );
+      expect(screen.queryByText("正在读取粮食商情业务数据")).not.toBeInTheDocument();
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
+        await Promise.resolve();
+      });
+
+      expect(optionsRequest).toHaveBeenCalledTimes(2);
+      expect(screen.getByRole("combobox", { name: "产品" })).toBeVisible();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("renders an explicit failure instead of perpetual loading when options fail", async () => {
     render(
       <OverviewPage
@@ -119,17 +163,71 @@ describe("OverviewPage", () => {
           {
             auditSources: [],
             calculationVersion: "OVERVIEW_METRIC_V1",
-            code: "MARKET_AVERAGE_TRADE_PRICE",
+            code: "MARKET_AVERAGE_PURCHASE_PRICE",
             coverageScope: "region=230200;product=CORN;year=2026",
             coverageStatus: "AVAILABLE",
             dataCutoff: "2026-08-11T00:00:00Z",
-            formula: "AVG(trade_price_yuan_per_tonne)",
-            name: "平均成交价",
+            formula: "AVG(purchase_base_price)",
+            name: "平均收购价",
             sourcePath: "/api/v1/market-records",
             sourceRelation: "market.market_record",
             unitCode: "元/吨",
             value: "2350",
             sourceCount: 3,
+          },
+          {
+            auditSources: [],
+            calculationVersion: "OVERVIEW_METRIC_V1",
+            code: "MARKET_AVERAGE_SALE_PRICE",
+            coverageScope: "region=230200;product=CORN;year=2026",
+            coverageStatus: "AVAILABLE",
+            dataCutoff: "2026-08-11T00:00:00Z",
+            formula: "AVG(sale_base_price)",
+            name: "平均销售价",
+            sourcePath: "/api/v1/market-records",
+            sourceRelation: "market.market_record",
+            unitCode: "元/吨",
+            value: "2450",
+            sourceCount: 3,
+          },
+        ],
+        businessTables: [
+          {
+            code: "PRODUCTION",
+            title: "产情监测表",
+            coverageStatus: "AVAILABLE",
+            columns: [{ code: "PROD_AREA_MU", label: "种植面积", unitCode: "亩" }],
+            rows: [
+              {
+                regionCode: "230281",
+                regionName: "讷河市",
+                sourceCount: 4,
+                latestApprovedAt: "2026年08月11日 08:00:00",
+                completenessStatus: "COMPLETE",
+                values: { PROD_AREA_MU: { value: "120000", sourceCount: 4 } },
+              },
+            ],
+          },
+          {
+            code: "MARKET",
+            title: "市场监测表",
+            coverageStatus: "NO_APPROVED_SOURCES",
+            columns: [],
+            rows: [],
+          },
+          {
+            code: "LOGISTICS",
+            title: "物流监测表",
+            coverageStatus: "NO_APPROVED_SOURCES",
+            columns: [],
+            rows: [],
+          },
+          {
+            code: "SUPPLY",
+            title: "供需平衡表",
+            coverageStatus: "NO_APPROVED_SOURCES",
+            columns: [],
+            rows: [],
           },
         ],
         regionPath: [
@@ -213,11 +311,19 @@ describe("OverviewPage", () => {
     expect(await screen.findByText(/246个行政村/)).toBeVisible();
     expect(screen.getByText("120,000")).toBeVisible();
     expect(screen.getByText("2,350")).toBeVisible();
+    expect(screen.getByText("2,450")).toBeVisible();
     expect(screen.queryByText("2,332")).not.toBeInTheDocument();
     expect(screen.queryByText("粮食商品量")).not.toBeInTheDocument();
     expect(screen.queryByText("品种A")).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "各地区播种面积同比" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "各地区总产量同比" })).toBeVisible();
+    expect(
+      screen.queryByRole("region", { name: "业务目录联动数据表" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "产情监测表" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "市场监测表" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "物流监测表" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "供需平衡表" })).not.toBeInTheDocument();
+    expect(screen.queryByText("近12月价格趋势")).not.toBeInTheDocument();
+    expect(screen.queryByText("各地区播种面积同比")).not.toBeInTheDocument();
     await waitFor(() =>
       expect(dashboard).toHaveBeenCalledWith(
         expect.objectContaining({ productCode: "CORN", year: 2026 }),
@@ -575,7 +681,11 @@ describe("OverviewPage", () => {
 
     expect(await screen.findByRole("button", { name: "产情类 1" })).toBeVisible();
     expect(screen.queryByText("样本点数据不可用")).not.toBeInTheDocument();
-    expect(list).toHaveBeenCalledWith({ regionCode: "230200", year: 2026 });
+    expect(list).toHaveBeenCalledWith({
+      productCode: "CORN",
+      regionCode: "230200",
+      year: 2026,
+    });
 
     await userEvent.click(screen.getByRole("button", { name: "产情类 1" }));
     expect(await screen.findByText("同一跨产品样本点")).toBeVisible();
@@ -687,9 +797,13 @@ describe("OverviewPage", () => {
       await within(mapRegion).findByRole("button", { name: "众兴村" }),
     ).toBeVisible();
     expect(aggregates).toHaveBeenCalledTimes(2);
-    expect(aggregates).toHaveBeenNthCalledWith(1, { year: 2026 });
+    expect(aggregates).toHaveBeenNthCalledWith(1, {
+      productCode: "CORN",
+      year: 2026,
+    });
     expect(aggregates).toHaveBeenNthCalledWith(2, {
       parentCode: "230200",
+      productCode: "CORN",
       year: 2026,
     });
     expect(
@@ -761,16 +875,24 @@ describe("OverviewPage", () => {
       .setup()
       .click(await screen.findByRole("button", { name: "产情类 1" }));
 
-    const symbol = await screen.findByRole("img", {
-      name: "同一跨产品样本点，农户，真实坐标 123.500000，47.500000",
+    const symbol = await screen.findByRole("button", {
+      name: "同一跨产品样本点，农户，点击查看样本点详情",
     });
     fireEvent.click(symbol);
-    expect(detail).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(detail).toHaveBeenCalledWith({
+        categoryCode: "PRODUCTION",
+        productCode: "CORN",
+        regionCode: "230231",
+        samplePointId: "94000000-0000-0000-0000-000000000001",
+        year: 2026,
+      }),
+    );
 
     await userEvent.setup().click(screen.getByRole("button", { name: "关闭地区详情" }));
     expect(
-      screen.queryByRole("img", {
-        name: "同一跨产品样本点，农户，真实坐标 123.500000，47.500000",
+      screen.queryByRole("button", {
+        name: "同一跨产品样本点，农户，点击查看样本点详情",
       }),
     ).not.toBeInTheDocument();
 
@@ -779,17 +901,15 @@ describe("OverviewPage", () => {
         name: "拜泉县，已核定 1 个样本点，其中生产类 1 个、市场类 0 个",
       }),
     );
+    expect(screen.getByText("请选择分类后查看 1 个样本点")).toBeVisible();
     expect(
-      screen.getByText("请选择分类后逐条查看 1 个实体及坐标质量原因"),
-    ).toBeVisible();
-    expect(
-      screen.queryByRole("img", {
-        name: "同一跨产品样本点，农户，真实坐标 123.500000，47.500000",
+      screen.queryByRole("button", {
+        name: "同一跨产品样本点，农户，点击查看样本点详情",
       }),
     ).not.toBeInTheDocument();
   });
 
-  it("keeps an open sample drawer, filters, list, and icons unchanged during product reload", async () => {
+  it("keeps the drawer open but resets and reloads sample data for the new product", async () => {
     const county = {
       ...sampleRegion,
       code: "230231",
@@ -856,8 +976,8 @@ describe("OverviewPage", () => {
     await userEvent.click(await screen.findByRole("button", { name: "产情类 1" }));
     await userEvent.type(screen.getByLabelText("搜索样本点"), "跨产品");
     expect(
-      await screen.findByRole("img", {
-        name: "同一跨产品样本点，农户，真实坐标 123.500000，47.500000",
+      await screen.findByRole("button", {
+        name: "同一跨产品样本点，农户，点击查看样本点详情",
       }),
     ).toBeVisible();
     const listCalls = list.mock.calls.length;
@@ -868,14 +988,19 @@ describe("OverviewPage", () => {
     expect(
       screen.getByRole("complementary", { name: "所选地区样本点详情" }),
     ).toBeVisible();
-    expect(screen.getByLabelText("搜索样本点")).toHaveValue("跨产品");
-    expect(screen.getByText("同一跨产品样本点")).toBeVisible();
+    expect(screen.getByLabelText("搜索样本点")).toHaveValue("");
+    expect(screen.getByText("请选择分类后查看 1 个样本点")).toBeVisible();
     expect(
-      screen.getByRole("img", {
-        name: "同一跨产品样本点，农户，真实坐标 123.500000，47.500000",
+      screen.queryByRole("button", {
+        name: "同一跨产品样本点，农户，点击查看样本点详情",
       }),
-    ).toBeVisible();
-    expect(list).toHaveBeenCalledTimes(listCalls);
+    ).not.toBeInTheDocument();
+    expect(list).toHaveBeenCalledTimes(listCalls + 1);
+    expect(list).toHaveBeenLastCalledWith({
+      productCode: "SOYBEAN",
+      regionCode: "230231",
+      year: 2026,
+    });
     expect(icons).toHaveBeenCalledTimes(iconCalls);
   });
 
@@ -947,20 +1072,67 @@ describe("OverviewPage", () => {
     );
   });
 
-  it("keeps verified boundary geometry visible while approved years are unavailable", async () => {
-    const regions = vi.fn<OverviewRepository["regions"]>(() =>
-      Promise.resolve([sampleRegion]),
+  it("loads reference administrative regions without requesting business data when approved years are unavailable", async () => {
+    const prefecture = { ...sampleRegion, approvedRecordCount: 0 };
+    const county = {
+      ...sampleRegion,
+      approvedRecordCount: 0,
+      code: "230208",
+      level: "COUNTY" as const,
+      name: "梅里斯达斡尔族区",
+      parentCode: prefecture.code,
+    };
+    const township = {
+      ...sampleRegion,
+      approvedRecordCount: 0,
+      code: "230208101",
+      level: "TOWNSHIP" as const,
+      name: "雅尔塞镇",
+      parentCode: county.code,
+    };
+    const village = {
+      ...sampleRegion,
+      approvedRecordCount: 0,
+      code: "230208101001",
+      level: "VILLAGE" as const,
+      name: "音钦村",
+      parentCode: township.code,
+    };
+    const regions = vi.fn<OverviewRepository["regions"]>((query) => {
+      if (query.parentCode === prefecture.code) return Promise.resolve([county]);
+      if (query.parentCode === county.code) return Promise.resolve([township]);
+      if (query.parentCode === township.code) return Promise.resolve([village]);
+      return Promise.resolve([prefecture]);
+    });
+    const indicators = vi.fn<OverviewRepository["indicators"]>(() =>
+      Promise.resolve([]),
+    );
+    const dashboard = vi.fn<OverviewRepository["dashboard"]>(() =>
+      Promise.resolve(emptyDashboard),
+    );
+    const aggregates = vi.fn<OverviewSamplePointRepository["aggregates"]>(() =>
+      Promise.resolve([]),
     );
     render(
       <OverviewPage
         repository={{
           mapScope: () => Promise.resolve(sampleMapScope),
           options: () =>
-            Promise.resolve({ products: options.products, periods: [], years: [] }),
+            Promise.resolve({
+              products: options.products,
+              periods: options.periods,
+              years: [],
+            }),
           regions,
           locations: () => Promise.resolve([]),
-          indicators: () => Promise.resolve([]),
-          dashboard: () => Promise.resolve(emptyDashboard),
+          indicators,
+          dashboard,
+        }}
+        samplePointRepository={{
+          aggregates,
+          detail: () => Promise.resolve(samplePointDetail),
+          icons: () => Promise.resolve([]),
+          list: () => Promise.resolve(samplePointList),
         }}
       />,
     );
@@ -968,7 +1140,44 @@ describe("OverviewPage", () => {
     expect(
       screen.getByText("尚无审核正式年度数据", { exact: false }),
     ).toBeInTheDocument();
-    expect(regions).not.toHaveBeenCalled();
+    const map = screen.getByLabelText("粮食商情总览地图");
+    fireEvent.doubleClick(
+      await within(map).findByRole("button", { name: "齐齐哈尔市" }),
+    );
+    fireEvent.doubleClick(
+      await within(map).findByRole("button", {
+        name: "梅里斯达斡尔族区",
+      }),
+    );
+    fireEvent.doubleClick(await within(map).findByRole("button", { name: "雅尔塞镇" }));
+    expect(await within(map).findByRole("button", { name: "音钦村" })).toBeVisible();
+    expect(regions).toHaveBeenCalledWith({
+      periodCode: "2026-Q3",
+      productCode: "CORN",
+    });
+    expect(regions).toHaveBeenCalledWith({
+      parentCode: prefecture.code,
+      periodCode: "2026-Q3",
+      productCode: "CORN",
+    });
+    expect(regions).toHaveBeenCalledWith({
+      parentCode: county.code,
+      periodCode: "2026-Q3",
+      productCode: "CORN",
+    });
+    expect(regions).toHaveBeenCalledWith({
+      parentCode: township.code,
+      periodCode: "2026-Q3",
+      productCode: "CORN",
+    });
+    expect(
+      regions.mock.calls.every(
+        ([query]) => query.periodCode === "2026-Q3" && query.year === undefined,
+      ),
+    ).toBe(true);
+    expect(indicators).not.toHaveBeenCalled();
+    expect(dashboard).not.toHaveBeenCalled();
+    expect(aggregates).not.toHaveBeenCalled();
   });
 
   it("keeps Qiqihar, Heihe, and Hulunbuir available in the formal region selector", async () => {
@@ -1026,6 +1235,9 @@ describe("OverviewPage", () => {
 
   it("loads only the immediate administrative level for each presentation view", async () => {
     const locations = vi.fn<OverviewRepository["locations"]>(() => Promise.resolve([]));
+    const dashboard = vi.fn<OverviewRepository["dashboard"]>(() =>
+      Promise.resolve(emptyDashboard),
+    );
     const county = {
       ...sampleRegion,
       code: "230231",
@@ -1045,7 +1257,7 @@ describe("OverviewPage", () => {
           regions,
           locations,
           indicators: () => Promise.resolve([]),
-          dashboard: () => Promise.resolve(emptyDashboard),
+          dashboard,
         }}
       />,
     );
@@ -1061,6 +1273,13 @@ describe("OverviewPage", () => {
     expect(
       await screen.findByRole("button", { name: "拜泉县，已核定 1 条" }),
     ).toBeVisible();
+    await waitFor(() =>
+      expect(dashboard).toHaveBeenCalledWith({
+        productCode: "CORN",
+        regionCode: "230200",
+        year: 2026,
+      }),
+    );
     expect(locations).not.toHaveBeenCalled();
 
     fireEvent.doubleClick(screen.getByRole("button", { name: "拜泉县，已核定 1 条" }));
@@ -1068,6 +1287,13 @@ describe("OverviewPage", () => {
       expect(regions).toHaveBeenCalledWith(
         expect.objectContaining({ parentCode: "230231" }),
       ),
+    );
+    await waitFor(() =>
+      expect(dashboard).toHaveBeenCalledWith({
+        productCode: "CORN",
+        regionCode: "230231",
+        year: 2026,
+      }),
     );
     expect(locations).not.toHaveBeenCalled();
   });
@@ -1379,6 +1605,7 @@ const emptyDashboard = {
   alerts: [],
   cultivatedAreaYoY: [],
   outputYoY: [],
+  businessTables: [],
 } as const;
 const sampleRegion = {
   code: "230200",
@@ -1439,6 +1666,14 @@ const samplePointList = {
       categories: [{ code: "PRODUCTION" as const, name: "产情类" }],
       types: [{ code: "FARMER", name: "农户", iconKey: "farmer" }],
       products: [{ code: "CORN", name: "玉米" }],
+      latestBusinessDate: "2026-08-05",
+      summaryValues: {
+        SAMPLE_CONTACT: {
+          label: "样本点联系方式",
+          value: "13900000000",
+          unitCode: null,
+        },
+      },
     },
   ],
   correctionSources: [],
@@ -1451,6 +1686,7 @@ const samplePointIcons = [
     types: [{ code: "FARMER", name: "农户", iconKey: "farmer" }],
     longitude: 123.5,
     latitude: 47.5,
+    dataQualityReason: null,
   },
 ];
 const samplePointDetail = {

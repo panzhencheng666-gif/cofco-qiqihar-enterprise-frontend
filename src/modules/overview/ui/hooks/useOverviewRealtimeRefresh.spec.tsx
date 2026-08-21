@@ -10,14 +10,13 @@ import { useOverviewRealtimeRefresh } from "./useOverviewRealtimeRefresh";
 describe("useOverviewRealtimeRefresh", () => {
   afterEach(() => vi.useRealTimers());
 
-  it("compensates on connect, refreshes on change, and polls only while disconnected", () => {
+  it("coalesces connection and business-event bursts, then polls only while disconnected", () => {
     vi.useFakeTimers();
     const stream = new FakeRealtimeStream();
     const { unmount } = render(<Harness stream={stream} />);
 
-    expect(screen.getByText("0:0")).toBeInTheDocument();
+    expect(screen.getByText("0:0:0")).toBeInTheDocument();
     act(() => stream.callbacks.onConnected());
-    expect(screen.getByText("1:1")).toBeInTheDocument();
     act(() =>
       stream.callbacks.onBusinessChange({
         productCode: "CORN",
@@ -25,17 +24,13 @@ describe("useOverviewRealtimeRefresh", () => {
         surveyYear: 2026,
       }),
     );
-    expect(screen.getByText("2:2")).toBeInTheDocument();
-
-    act(() =>
+    act(() => {
       stream.callbacks.onBusinessChange({
         productCode: "SOYBEAN",
         regionCodes: ["230200"],
         surveyYear: 2026,
-      }),
-    );
-    expect(screen.getByText("2:3")).toBeInTheDocument();
-
+      });
+    });
     act(() =>
       stream.callbacks.onBusinessChange({
         productCode: "CORN",
@@ -43,26 +38,42 @@ describe("useOverviewRealtimeRefresh", () => {
         surveyYear: 2025,
       }),
     );
-    expect(screen.getByText("2:3")).toBeInTheDocument();
+    expect(screen.getByText("0:0:0")).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(499);
+    });
+    expect(screen.getByText("0:0:0")).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.getByText("1:1:1")).toBeInTheDocument();
 
     act(() => {
       stream.callbacks.onDisconnected();
       vi.advanceTimersByTime(30_000);
     });
-    expect(screen.getByText("3:4")).toBeInTheDocument();
+    expect(screen.getByText("1:1:1")).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(screen.getByText("2:2:2")).toBeInTheDocument();
 
     act(() => stream.callbacks.onConnected());
-    expect(screen.getByText("4:5")).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(screen.getByText("3:3:3")).toBeInTheDocument();
     act(() => {
       vi.advanceTimersByTime(60_000);
     });
-    expect(screen.getByText("4:5")).toBeInTheDocument();
+    expect(screen.getByText("3:3:3")).toBeInTheDocument();
 
     unmount();
     expect(stream.closed).toBe(true);
   });
 
   it("keeps one subscription and does not refresh samples when only product changes", () => {
+    vi.useFakeTimers();
     const stream = new FakeRealtimeStream();
     const { rerender } = render(<Harness productCode="CORN" stream={stream} />);
     const callbacks = stream.callbacks;
@@ -71,7 +82,7 @@ describe("useOverviewRealtimeRefresh", () => {
 
     expect(stream.subscribeCalls).toBe(1);
     expect(stream.callbacks).toBe(callbacks);
-    expect(screen.getByText("0:0")).toBeInTheDocument();
+    expect(screen.getByText("0:0:0")).toBeInTheDocument();
     act(() =>
       callbacks.onBusinessChange({
         productCode: "SOYBEAN",
@@ -79,7 +90,64 @@ describe("useOverviewRealtimeRefresh", () => {
         surveyYear: 2026,
       }),
     );
-    expect(screen.getByText("1:1")).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(screen.getByText("1:1:1")).toBeInTheDocument();
+  });
+
+  it("does not refresh current business or sample points for another product", () => {
+    vi.useFakeTimers();
+    const stream = new FakeRealtimeStream();
+    render(<Harness productCode="CORN" stream={stream} />);
+
+    act(() => {
+      stream.callbacks.onBusinessChange({
+        productCode: "SOYBEAN",
+        regionCodes: ["230200"],
+        surveyYear: 2026,
+      });
+    });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(screen.getByText("0:0:1")).toBeInTheDocument();
+
+    act(() => {
+      stream.callbacks.onBusinessChange({
+        productCode: "CORN",
+        regionCodes: ["230200"],
+        surveyYear: 2026,
+      });
+    });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(screen.getByText("1:1:2")).toBeInTheDocument();
+  });
+
+  it("turns a large historical replay into one refresh instead of rebuilding the map per event", () => {
+    vi.useFakeTimers();
+    const stream = new FakeRealtimeStream();
+    render(<Harness stream={stream} />);
+
+    act(() => {
+      stream.callbacks.onConnected();
+      for (let index = 0; index < 1_203; index += 1) {
+        stream.callbacks.onBusinessChange({
+          productCode: "CORN",
+          regionCodes: ["230200"],
+          surveyYear: 2026,
+        });
+      }
+      vi.advanceTimersByTime(499);
+    });
+    expect(screen.getByText("0:0:0")).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.getByText("1:1:1")).toBeInTheDocument();
   });
 });
 
@@ -94,7 +162,11 @@ function Harness({
     useOverviewRealtimeRefresh as unknown as (
       stream: OverviewRealtimeStream,
       selection: unknown,
-    ) => { businessSequence: number; samplePointSequence: number }
+    ) => {
+      businessSequence: number;
+      samplePointSequence: number;
+      optionSequence: number;
+    }
   )(stream, {
     productCode,
     regionCodes: ["230200"],
@@ -102,7 +174,8 @@ function Harness({
   });
   return (
     <span>
-      {sequence.businessSequence}:{sequence.samplePointSequence}
+      {sequence.businessSequence}:{sequence.samplePointSequence}:
+      {sequence.optionSequence}
     </span>
   );
 }
