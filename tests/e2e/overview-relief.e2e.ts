@@ -116,11 +116,15 @@ test.describe("overview owned-relief interaction", () => {
     await contract.locator("canvas").evaluate((canvas) => {
       canvas.dataset.e2eRendererIdentity = "stable";
     });
+    const initialRenderCount = Number(
+      await contract.getAttribute("data-renderer-frame-count"),
+    );
     const cityButton = page.getByRole("button", {
       name: /^齐齐哈尔市，.*点击选中，双击进入下一级$/,
     });
 
-    for (let attempt = 0; attempt < 10; attempt += 1) {
+    const selectionCloseCycles = 10;
+    for (let attempt = 0; attempt < selectionCloseCycles; attempt += 1) {
       await cityButton.click();
       await expectOwnedSelection(contract, city.code);
       await page.getByRole("button", { name: "关闭地区详情", exact: true }).click();
@@ -141,6 +145,15 @@ test.describe("overview owned-relief interaction", () => {
     }
 
     expect(crashed).toBe(false);
+    const finalRenderCount = Number(
+      await contract.getAttribute("data-renderer-frame-count"),
+    );
+    // Each cycle has five intentional visual frames: hover, selection,
+    // detail-layout, hover release, and close. State bookkeeping must not add
+    // extra full-resolution software-WebGL draws.
+    expect(finalRenderCount - initialRenderCount).toBeLessThanOrEqual(
+      selectionCloseCycles * 5,
+    );
   });
 });
 
