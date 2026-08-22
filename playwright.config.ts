@@ -22,7 +22,14 @@ export default defineConfig({
         ...(process.env.CI
           ? {
               launchOptions: {
-                args: ["--use-gl=angle", "--use-angle=swiftshader"],
+                // Chromium 138+ no longer permits automatic SwiftShader WebGL
+                // fallback. This CI job runs only the trusted local application,
+                // so opt in explicitly instead of depending on removed behavior.
+                args: [
+                  "--use-gl=angle",
+                  "--use-angle=swiftshader-webgl",
+                  "--enable-unsafe-swiftshader",
+                ],
               },
             }
           : {}),
