@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 import viteConfig, {
@@ -15,6 +18,20 @@ describe("local overview API development proxy", () => {
 
   it("binds the default development server to numeric loopback", () => {
     expect(viteConfig.server).toMatchObject({ host: "127.0.0.1", port: 63200 });
+  });
+
+  it("runs source E2E on a port isolated from the managed runtime copy", () => {
+    const playwrightConfig = readFileSync(
+      resolve(process.cwd(), "playwright.config.ts"),
+      "utf8",
+    );
+
+    expect(playwrightConfig).toContain('baseURL: "http://127.0.0.1:63210"');
+    expect(playwrightConfig).toContain('url: "http://127.0.0.1:63210"');
+    expect(playwrightConfig).toContain("reuseExistingServer: false");
+    expect(playwrightConfig).toContain('"--use-gl=angle"');
+    expect(playwrightConfig).toContain('"--use-angle=swiftshader-webgl"');
+    expect(playwrightConfig).toContain('"--enable-unsafe-swiftshader"');
   });
 
   it("allows only an explicit numeric loopback origin for an isolated acceptance stack", () => {
@@ -80,5 +97,22 @@ describe("local overview API development proxy", () => {
     expect(viteConfig.plugins).toEqual(
       expect.arrayContaining([localAcceptanceContractGatePlugin]),
     );
+  });
+
+  it("skips the live startup probe only for the isolated E2E fixture mode", async () => {
+    vi.stubEnv("VITEST", "false");
+    vi.stubEnv("COFCO_OVERVIEW_E2E_FIXTURE_MODE", "true");
+    const fetchContract = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(new Error("live backend must not be called"));
+
+    try {
+      await expect(
+        localAcceptanceContractGatePlugin.configureServer(),
+      ).resolves.toBeUndefined();
+      expect(fetchContract).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

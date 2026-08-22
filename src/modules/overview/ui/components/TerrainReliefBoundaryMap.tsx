@@ -204,6 +204,7 @@ export default function TerrainReliefBoundaryMap({
   const layoutTimerRef = useRef<number | undefined>(undefined);
   const detailsOpen = Boolean(selectedCode);
   const [detailLayoutOpen, setDetailLayoutOpen] = useState(false);
+  const activeDetailLayout = detailsOpen && detailLayoutOpen;
   const detailLayoutOpenRef = useRef(false);
   const [stageWidth, setStageWidth] = useState(commandStageWidth);
   const fullMapFrame = useMemo(() => overviewReliefFrame(false), []);
@@ -245,9 +246,9 @@ export default function TerrainReliefBoundaryMap({
   const detailProjection = detailProjectionResult.projection;
   const projectionDurationMs =
     sceneProjectionResult.duration + detailProjectionResult.duration;
-  const activeProjection = detailLayoutOpen ? detailProjection : sceneProjection;
+  const activeProjection = activeDetailLayout ? detailProjection : sceneProjection;
   const activeSurfaceBounds = reliefSceneBounds(activeProjection);
-  const activeLayoutTransform = detailLayoutOpen
+  const activeLayoutTransform = activeDetailLayout
     ? calculateLayoutTransform(sceneProjection, detailProjection)
     : IDENTITY_LAYOUT_TRANSFORM;
   const selectedOverlayLift = COMPONENT_HIGHLIGHT_LIFT * activeLayoutTransform.scaleY;
@@ -295,8 +296,8 @@ export default function TerrainReliefBoundaryMap({
   );
 
   useEffect(() => {
-    detailLayoutOpenRef.current = detailLayoutOpen;
-  }, [detailLayoutOpen]);
+    detailLayoutOpenRef.current = activeDetailLayout;
+  }, [activeDetailLayout]);
 
   useEffect(() => {
     const updateStageWidth = () => setStageWidth(commandStageWidth());
@@ -341,7 +342,7 @@ export default function TerrainReliefBoundaryMap({
     if (!selectedCode) {
       selectedComponentRef.current = "";
     }
-    layoutUpdateRef.current(detailLayoutOpen);
+    layoutUpdateRef.current(activeDetailLayout);
     hoverUpdateRef.current(undefined);
     componentReliefUpdateRef.current();
     pointMaterialsRef.current.forEach((material, code) => {
@@ -355,7 +356,7 @@ export default function TerrainReliefBoundaryMap({
       stageWidth,
     );
     renderRef.current();
-  }, [activeProjection, detailLayoutOpen, selectedCode, stageWidth]);
+  }, [activeDetailLayout, activeProjection, selectedCode, stageWidth]);
 
   useEffect(() => {
     if (!command) return;
@@ -469,8 +470,12 @@ export default function TerrainReliefBoundaryMap({
     componentReliefVisualsRef.current = componentReliefVisuals;
     pointMaterialsRef.current = pointMaterials;
 
+    let renderCount = 0;
     const render = () => {
-      if (!disposed) renderer.render(scene, camera);
+      if (disposed) return;
+      renderCount += 1;
+      if (sceneHost) sceneHost.dataset.rendererFrameCount = String(renderCount);
+      renderer.render(scene, camera);
     };
     renderRef.current = render;
 
@@ -764,7 +769,6 @@ export default function TerrainReliefBoundaryMap({
             sceneHost.dataset.selectionOverlayLayerCount = "0";
             sceneHost.dataset.selectionRaisedGeometryCount = "1";
           }
-          render();
         };
 
         let hoveredComponentKey = "";
@@ -849,7 +853,6 @@ export default function TerrainReliefBoundaryMap({
           surfaceMaterials.forEach((material) =>
             updateTerrainUvTransform(material, transform),
           );
-          render();
         };
         layoutUpdateRef.current(detailLayoutOpenRef.current);
 
@@ -942,6 +945,11 @@ export default function TerrainReliefBoundaryMap({
           geometry.dispose();
         }
       });
+      // Renderer disposal releases Three.js resources but deliberately keeps
+      // the browser WebGL context alive. A drill-down rebuilds this renderer;
+      // explicitly lose the obsolete context so software WebGL runners and
+      // long-lived workstations do not exhaust their finite context budget.
+      renderer.forceContextLoss();
       renderer.dispose();
       componentReliefVisualsRef.current = new Map();
       primaryComponentByRegionRef.current = new Map();

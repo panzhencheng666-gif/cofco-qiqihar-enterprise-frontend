@@ -10,19 +10,35 @@ export default defineConfig({
   reporter: "line",
   outputDir: "test-results",
   use: {
-    baseURL: "http://127.0.0.1:63200",
+    baseURL: "http://127.0.0.1:63210",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        ...(process.env.CI
+          ? {
+              launchOptions: {
+                // Chromium 138+ no longer permits automatic SwiftShader WebGL
+                // fallback. This CI job runs only the trusted local application,
+                // so opt in explicitly instead of depending on removed behavior.
+                args: [
+                  "--use-gl=angle",
+                  "--use-angle=swiftshader-webgl",
+                  "--enable-unsafe-swiftshader",
+                ],
+              },
+            }
+          : {}),
+      },
     },
   ],
   webServer: {
-    command: "npm run dev",
-    url: "http://127.0.0.1:63200",
-    reuseExistingServer: !process.env.CI,
+    command: "npm run dev -- --port 63210 --strictPort",
+    url: "http://127.0.0.1:63210",
+    reuseExistingServer: false,
   },
 });
