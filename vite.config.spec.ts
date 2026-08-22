@@ -30,8 +30,9 @@ describe("local overview API development proxy", () => {
     expect(playwrightConfig).toContain('url: "http://127.0.0.1:63210"');
     expect(playwrightConfig).toContain("reuseExistingServer: false");
     expect(playwrightConfig).toContain('"--use-gl=angle"');
-    expect(playwrightConfig).toContain('"--use-angle=swiftshader-webgl"');
-    expect(playwrightConfig).toContain('"--enable-unsafe-swiftshader"');
+    expect(playwrightConfig).toContain('"--use-angle=swiftshader"');
+    expect(playwrightConfig).not.toContain('"--use-angle=swiftshader-webgl"');
+    expect(playwrightConfig).not.toContain('"--enable-unsafe-swiftshader"');
   });
 
   it("allows only an explicit numeric loopback origin for an isolated acceptance stack", () => {

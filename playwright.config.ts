@@ -22,11 +22,7 @@ export default defineConfig({
         ...(process.env.CI
           ? {
               launchOptions: {
-                args: [
-                  "--use-gl=angle",
-                  "--use-angle=swiftshader-webgl",
-                  "--enable-unsafe-swiftshader",
-                ],
+                args: ["--use-gl=angle", "--use-angle=swiftshader"],
               },
             }
           : {}),
