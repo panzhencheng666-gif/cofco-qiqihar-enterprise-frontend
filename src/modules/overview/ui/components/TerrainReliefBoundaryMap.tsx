@@ -942,6 +942,11 @@ export default function TerrainReliefBoundaryMap({
           geometry.dispose();
         }
       });
+      // Renderer disposal releases Three.js resources but deliberately keeps
+      // the browser WebGL context alive. A drill-down rebuilds this renderer;
+      // explicitly lose the obsolete context so software WebGL runners and
+      // long-lived workstations do not exhaust their finite context budget.
+      renderer.forceContextLoss();
       renderer.dispose();
       componentReliefVisualsRef.current = new Map();
       primaryComponentByRegionRef.current = new Map();

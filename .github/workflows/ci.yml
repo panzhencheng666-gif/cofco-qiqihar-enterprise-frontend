@@ -57,3 +57,12 @@ jobs:
         run: npm run verify
         env:
           COFCO_OVERVIEW_E2E_FIXTURE_MODE: "true"
+
+      - name: Preserve Playwright failure evidence
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: frontend-playwright-failure-${{ github.run_attempt }}
+          path: test-results
+          if-no-files-found: ignore
+          retention-days: 7

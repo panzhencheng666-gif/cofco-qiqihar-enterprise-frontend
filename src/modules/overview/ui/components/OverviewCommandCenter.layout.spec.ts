@@ -90,6 +90,19 @@ describe("Overview command center navigation layout", () => {
     expect(rendererCleanup).not.toContain("cancelLayoutTimer()");
   });
 
+  it("releases each obsolete WebGL context after a renderer rebuild", () => {
+    const source = readFileSync(
+      resolve("src/modules/overview/ui/components/TerrainReliefBoundaryMap.tsx"),
+      "utf8",
+    );
+    const rendererCleanup = source.match(
+      /return \(\) => \{[\s\S]*?renderer\.dispose\(\);/,
+    )?.[0];
+
+    expect(rendererCleanup).toBeDefined();
+    expect(rendererCleanup).toContain("renderer.forceContextLoss()");
+  });
+
   it("keeps hover and aggregate label separation inside the geometry planner", () => {
     const css = readFileSync(resolve("src/app/styles/global.css"), "utf8");
     const hoverRule = css.match(/\.overview-relief-label:hover\s*\{([^}]*)\}/s)?.[1];
