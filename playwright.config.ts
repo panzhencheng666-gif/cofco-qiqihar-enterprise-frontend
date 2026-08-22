@@ -17,7 +17,20 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        ...(process.env.CI
+          ? {
+              launchOptions: {
+                args: [
+                  "--use-gl=angle",
+                  "--use-angle=swiftshader-webgl",
+                  "--enable-unsafe-swiftshader",
+                ],
+              },
+            }
+          : {}),
+      },
     },
   ],
   webServer: {
