@@ -37,6 +37,86 @@ const NOOP_REALTIME_STREAM: OverviewRealtimeStream = {
   subscribe: () => () => undefined,
 };
 
+function preserveEquivalentCollection<T>(
+  current: readonly T[],
+  next: readonly T[],
+  equivalent: (left: T, right: T) => boolean,
+): readonly T[] {
+  if (current.length !== next.length) return next;
+  return current.every((item, index) => {
+    const candidate = next[index];
+    return candidate !== undefined && equivalent(item, candidate);
+  })
+    ? current
+    : next;
+}
+
+function preserveEquivalentRegions(
+  current: readonly OverviewRegion[],
+  next: readonly OverviewRegion[],
+): readonly OverviewRegion[] {
+  return preserveEquivalentCollection(
+    current,
+    next,
+    (region, candidate) =>
+      region.code === candidate.code &&
+      region.name === candidate.name &&
+      region.parentCode === candidate.parentCode &&
+      region.level === candidate.level &&
+      region.approvedRecordCount === candidate.approvedRecordCount &&
+      region.boundaryGeoJson === candidate.boundaryGeoJson &&
+      region.locationGeoJson === candidate.locationGeoJson &&
+      region.locationReviewStatus === candidate.locationReviewStatus &&
+      region.mapContextOnly === candidate.mapContextOnly,
+  );
+}
+
+function preserveEquivalentAggregates(
+  current: readonly OverviewSamplePointAggregate[],
+  next: readonly OverviewSamplePointAggregate[],
+): readonly OverviewSamplePointAggregate[] {
+  return preserveEquivalentCollection(
+    current,
+    next,
+    (aggregate, candidate) =>
+      aggregate.regionCode === candidate.regionCode &&
+      aggregate.regionName === candidate.regionName &&
+      aggregate.regionLevel === candidate.regionLevel &&
+      aggregate.samplePointCount === candidate.samplePointCount &&
+      aggregate.productionCount === candidate.productionCount &&
+      aggregate.marketCount === candidate.marketCount &&
+      aggregate.validCoordinateCount === candidate.validCoordinateCount &&
+      aggregate.dataQualityIssueCount === candidate.dataQualityIssueCount &&
+      aggregate.correctionSourceCount === candidate.correctionSourceCount &&
+      aggregate.unresolvedSourceCount === candidate.unresolvedSourceCount,
+  );
+}
+
+function preserveEquivalentIcons(
+  current: readonly OverviewSamplePointIcon[],
+  next: readonly OverviewSamplePointIcon[],
+): readonly OverviewSamplePointIcon[] {
+  return preserveEquivalentCollection(
+    current,
+    next,
+    (icon, candidate) =>
+      icon.samplePointId === candidate.samplePointId &&
+      icon.name === candidate.name &&
+      icon.iconKey === candidate.iconKey &&
+      icon.longitude === candidate.longitude &&
+      icon.latitude === candidate.latitude &&
+      icon.dataQualityReason === candidate.dataQualityReason &&
+      preserveEquivalentCollection(
+        icon.types,
+        candidate.types,
+        (type, nextType) =>
+          type.code === nextType.code &&
+          type.name === nextType.name &&
+          type.iconKey === nextType.iconKey,
+      ) === icon.types,
+  );
+}
+
 function overviewDataIssue(error: unknown, fallback: string): string {
   if (error instanceof HttpContractError) {
     const trace = error.traceId ? `追踪号：${error.traceId}。` : "追踪号：响应未提供。";
@@ -157,10 +237,14 @@ export function OverviewPage({
   );
   const updateSamplePointIcons = useCallback(
     (icons: readonly OverviewSamplePointIcon[]) => {
-      setSamplePointIcons(icons);
+      setSamplePointIcons((current) => preserveEquivalentIcons(current, icons));
     },
     [],
   );
+  const clearSamplePointSelection = useCallback(() => {
+    setSamplePointIcons((current) => preserveEquivalentIcons(current, []));
+    setSelectedSamplePointId(undefined);
+  }, []);
   const updateSelectedSamplePoint = useCallback((samplePointId: string | undefined) => {
     setSelectedSamplePointId(samplePointId);
   }, []);
@@ -169,13 +253,12 @@ export function OverviewPage({
     let active = true;
     void Promise.resolve().then(() => {
       if (!active) return;
-      setSamplePointIcons([]);
-      setSelectedSamplePointId(undefined);
+      clearSamplePointSelection();
     });
     return () => {
       active = false;
     };
-  }, [productCode, selectedRegionCode, year]);
+  }, [clearSamplePointSelection, productCode, selectedRegionCode, year]);
 
   useEffect(() => {
     repository.invalidateBusinessData?.();
@@ -216,7 +299,9 @@ export function OverviewPage({
     if (year === undefined) {
       void Promise.resolve().then(() => {
         if (!active) return;
-        setSamplePointAggregates([]);
+        setSamplePointAggregates((current) =>
+          preserveEquivalentAggregates(current, []),
+        );
         setSamplePointAggregateStatus("hidden");
         setSamplePointAggregateIssue(undefined);
       });
@@ -227,7 +312,9 @@ export function OverviewPage({
     if (!showSamplePointAggregates) {
       void Promise.resolve().then(() => {
         if (!active) return;
-        setSamplePointAggregates([]);
+        setSamplePointAggregates((current) =>
+          preserveEquivalentAggregates(current, []),
+        );
         setSamplePointAggregateStatus("hidden");
         setSamplePointAggregateIssue(undefined);
       });
@@ -237,7 +324,7 @@ export function OverviewPage({
     }
     void Promise.resolve().then(() => {
       if (!active) return;
-      setSamplePointAggregates([]);
+      setSamplePointAggregates((current) => preserveEquivalentAggregates(current, []));
       setSamplePointAggregateStatus("loading");
       setSamplePointAggregateIssue(undefined);
     });
@@ -245,13 +332,17 @@ export function OverviewPage({
       .aggregates({ productCode, year, ...(parentCode ? { parentCode } : {}) })
       .then((aggregates) => {
         if (!active) return;
-        setSamplePointAggregates(aggregates);
+        setSamplePointAggregates((current) =>
+          preserveEquivalentAggregates(current, aggregates),
+        );
         setSamplePointAggregateStatus("ready");
         setSamplePointAggregateIssue(undefined);
       })
       .catch(() => {
         if (!active) return;
-        setSamplePointAggregates([]);
+        setSamplePointAggregates((current) =>
+          preserveEquivalentAggregates(current, []),
+        );
         setSamplePointAggregateStatus("unavailable");
         setSamplePointAggregateIssue("样本点行政统计加载失败，请稍后重试。");
       });
@@ -289,7 +380,7 @@ export function OverviewPage({
       })
       .then((next) => {
         if (!live) return;
-        setRootRegions(next);
+        setRootRegions((current) => preserveEquivalentRegions(current, next));
         setRootRegionQueryKey(`${productCode}:${mapTimeKey}:${businessSequence}`);
         setRootRegionIssue(undefined);
         if (!initializedScope.current) {
@@ -379,7 +470,7 @@ export function OverviewPage({
       })
       .then((next) => {
         if (!live) return;
-        setRegions(next);
+        setRegions((current) => preserveEquivalentRegions(current, next));
         setRegionsParentCode(parentCode);
         setChildRegionQueryKey(
           `${productCode}:${mapTimeKey}:${businessSequence}:${parentCode}`,
@@ -508,16 +599,17 @@ export function OverviewPage({
   const visibleRegionCountsCurrent = parentCode
     ? childRegionQueryKey === desiredChildRegionQueryKey
     : rootRegionQueryKey === desiredRootRegionQueryKey;
+  const visibleRegionCountsUsable =
+    visibleRegionCountsCurrent ||
+    (parentCode ? childRegionIssue === undefined : rootRegionIssue === undefined);
   const interactiveMapRegions = useMemo(
     () =>
       visibleRegions
         .filter(({ mapContextOnly }) => !mapContextOnly)
         .map((region) =>
-          visibleRegionCountsCurrent
-            ? region
-            : { ...region, approvedRecordCount: null },
+          visibleRegionCountsUsable ? region : { ...region, approvedRecordCount: null },
         ),
-    [visibleRegionCountsCurrent, visibleRegions],
+    [visibleRegionCountsUsable, visibleRegions],
   );
   const mapFeatures = useMemo(
     () => interactiveMapRegions.flatMap(toMapFeature),
@@ -695,8 +787,7 @@ export function OverviewPage({
                 value={productCode}
                 onChange={(event) => {
                   setProductCode(event.target.value);
-                  setSamplePointIcons([]);
-                  setSelectedSamplePointId(undefined);
+                  clearSamplePointSelection();
                   setIndicators([]);
                   setDashboard(undefined);
                 }}
@@ -715,8 +806,7 @@ export function OverviewPage({
                 value={year ?? ""}
                 onChange={(event) => {
                   setYear(Number(event.target.value));
-                  setSamplePointIcons([]);
-                  setSelectedSamplePointId(undefined);
+                  clearSamplePointSelection();
                   setIndicators([]);
                   setDashboard(undefined);
                 }}
@@ -800,8 +890,7 @@ export function OverviewPage({
         onCloseDetails={() => {
           setSelectedRegionCode("");
           setSelectedRegionSnapshot(undefined);
-          setSamplePointIcons([]);
-          setSelectedSamplePointId(undefined);
+          clearSamplePointSelection();
           setIndicators([]);
           setDashboard(undefined);
         }}

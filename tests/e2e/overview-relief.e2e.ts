@@ -113,6 +113,9 @@ test.describe("overview owned-relief interaction", () => {
     await expect(contract.locator("canvas")).toBeVisible();
     expect((await terrainResponse).status()).toBe(200);
     expect(await canvasUniqueColors(contract)).toBeGreaterThanOrEqual(16);
+    await contract.locator("canvas").evaluate((canvas) => {
+      canvas.dataset.e2eRendererIdentity = "stable";
+    });
     const cityButton = page.getByRole("button", {
       name: /^齐齐哈尔市，.*点击选中，双击进入下一级$/,
     });
@@ -131,6 +134,10 @@ test.describe("overview owned-relief interaction", () => {
         "0",
       );
       await expect(contract).toHaveAttribute("data-style-state", "ready");
+      await expect(contract.locator("canvas")).toHaveAttribute(
+        "data-e2e-renderer-identity",
+        "stable",
+      );
     }
 
     expect(crashed).toBe(false);
