@@ -118,7 +118,12 @@ function diagnosticValue(value: unknown): string {
 export const localAcceptanceContractGatePlugin = {
   name: "cofco-local-overview-contract-gate",
   async configureServer() {
-    if (process.env["VITEST"] === "true") return;
+    if (
+      process.env["VITEST"] === "true" ||
+      process.env["COFCO_OVERVIEW_E2E_FIXTURE_MODE"] === "true"
+    ) {
+      return;
+    }
     await verifyLocalOverviewContract();
   },
 };

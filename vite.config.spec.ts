@@ -81,4 +81,21 @@ describe("local overview API development proxy", () => {
       expect.arrayContaining([localAcceptanceContractGatePlugin]),
     );
   });
+
+  it("skips the live startup probe only for the isolated E2E fixture mode", async () => {
+    vi.stubEnv("VITEST", "false");
+    vi.stubEnv("COFCO_OVERVIEW_E2E_FIXTURE_MODE", "true");
+    const fetchContract = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(new Error("live backend must not be called"));
+
+    try {
+      await expect(
+        localAcceptanceContractGatePlugin.configureServer(),
+      ).resolves.toBeUndefined();
+      expect(fetchContract).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });

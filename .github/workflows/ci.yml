@@ -55,3 +55,5 @@ jobs:
 
       - name: Verify Frontend
         run: npm run verify
+        env:
+          COFCO_OVERVIEW_E2E_FIXTURE_MODE: "true"
