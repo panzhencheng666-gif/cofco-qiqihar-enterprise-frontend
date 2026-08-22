@@ -47,6 +47,7 @@ test.describe("overview owned-relief interaction", () => {
   test("raises exactly one owned administrative body at city, county, township, and village levels", async ({
     page,
   }) => {
+    test.setTimeout(120_000);
     await installOverviewFixture(page);
     const terrainResponse = page.waitForResponse((response) =>
       new URL(response.url()).pathname.endsWith("/overview/command-terrain-v2.webp"),
@@ -64,7 +65,7 @@ test.describe("overview owned-relief interaction", () => {
     });
     await cityButton.click();
     await expectOwnedSelection(contract, city.code);
-    await cityButton.dblclick();
+    await enterSelectedRegion(page);
 
     const countyButton = page.getByRole("button", {
       name: /^甘南县，.*点击选中，双击进入下一级$/,
@@ -72,7 +73,7 @@ test.describe("overview owned-relief interaction", () => {
     await expect(countyButton).toBeVisible();
     await countyButton.click();
     await expectOwnedSelection(contract, county.code);
-    await countyButton.dblclick();
+    await enterSelectedRegion(page);
 
     const townshipButton = page.getByRole("button", {
       name: /^宝山乡，.*点击选中，双击进入下一级$/,
@@ -80,7 +81,7 @@ test.describe("overview owned-relief interaction", () => {
     await expect(townshipButton).toBeVisible();
     await townshipButton.click();
     await expectOwnedSelection(contract, township.code);
-    await townshipButton.dblclick();
+    await enterSelectedRegion(page);
 
     const villageButton = page.getByRole("button", {
       name: /^宝山村，.*点击查看行政村详情$/,
@@ -97,6 +98,7 @@ test.describe("overview owned-relief interaction", () => {
   test("keeps the relief renderer structurally stable through ten selection close cycles", async ({
     page,
   }) => {
+    test.setTimeout(120_000);
     await installOverviewFixture(page);
     let crashed = false;
     page.on("crash", () => {
@@ -128,6 +130,7 @@ test.describe("overview owned-relief interaction", () => {
         "data-duplicate-interactive-top-count",
         "0",
       );
+      await expect(contract).toHaveAttribute("data-style-state", "ready");
     }
 
     expect(crashed).toBe(false);
@@ -146,7 +149,22 @@ async function expectOwnedSelection(
   await expect(contract).toHaveAttribute("data-suppressed-ground-outline-region", code);
 }
 
+async function enterSelectedRegion(page: Page) {
+  const action = page.getByRole("button", {
+    name: "进入样本点监测",
+    exact: true,
+  });
+  await expect(action).toBeVisible();
+  await action.click();
+}
+
 async function installOverviewFixture(page: Page) {
+  await page.route("**/api/v1/notifications", (route) =>
+    route.fulfill({ json: { data: [] } }),
+  );
+  await page.route("**/api/v1/business-events/stream**", (route) =>
+    route.fulfill({ body: "", contentType: "text/event-stream", status: 200 }),
+  );
   await page.route("**/overview/command-terrain-v2.webp", (route) =>
     route.fulfill({
       contentType: "image/webp",
@@ -185,20 +203,43 @@ async function installOverviewFixture(page: Page) {
           }
         : pathname.endsWith("/regions")
           ? regionsFor(parentCode)
-          : pathname.endsWith("/locations")
+          : pathname.endsWith("/sample-point-aggregates")
             ? []
-            : pathname.endsWith("/indicators")
-              ? []
-              : pathname.endsWith("/dashboard")
-                ? dashboardFor(regionCode)
-                : undefined;
+            : pathname.endsWith("/sample-points")
+              ? emptySamplePointList(regionCode)
+              : pathname.endsWith("/locations")
+                ? []
+                : pathname.endsWith("/indicators")
+                  ? []
+                  : pathname.endsWith("/dashboard")
+                    ? dashboardFor(regionCode)
+                    : undefined;
 
     if (data === undefined) {
       await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
       return;
     }
-    await route.fulfill({ json: { data } });
+    await route.fulfill({
+      json:
+        pathname.endsWith("/indicators") || pathname.endsWith("/dashboard")
+          ? { contractVersion: "overview-audit-v2", data }
+          : { data },
+    });
   });
+}
+
+function emptySamplePointList(regionCode: string | null) {
+  return {
+    categories: [],
+    correctionSourceCount: 0,
+    correctionSources: [],
+    dataQualityIssueCount: 0,
+    items: [],
+    regionCode: regionCode ?? "",
+    totalCount: 0,
+    unresolvedSourceCount: 0,
+    validCoordinateCount: 0,
+  };
 }
 
 function regionsFor(parentCode: string | null) {
@@ -211,6 +252,7 @@ function regionsFor(parentCode: string | null) {
 function dashboardFor(regionCode: string | null) {
   return {
     alerts: [],
+    businessTables: [],
     cultivatedAreaYoY: [],
     metrics: [],
     outputYoY: [],

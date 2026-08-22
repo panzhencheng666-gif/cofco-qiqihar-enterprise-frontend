@@ -10,7 +10,7 @@ export default defineConfig({
   reporter: "line",
   outputDir: "test-results",
   use: {
-    baseURL: "http://127.0.0.1:63200",
+    baseURL: "http://127.0.0.1:63210",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
@@ -21,8 +21,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev",
-    url: "http://127.0.0.1:63200",
-    reuseExistingServer: !process.env.CI,
+    command: "npm run dev -- --port 63210 --strictPort",
+    url: "http://127.0.0.1:63210",
+    reuseExistingServer: false,
   },
 });

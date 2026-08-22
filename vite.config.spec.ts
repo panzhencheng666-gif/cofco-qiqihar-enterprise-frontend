@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { describe, expect, it, vi } from "vitest";
 
 import viteConfig, {
@@ -15,6 +18,17 @@ describe("local overview API development proxy", () => {
 
   it("binds the default development server to numeric loopback", () => {
     expect(viteConfig.server).toMatchObject({ host: "127.0.0.1", port: 63200 });
+  });
+
+  it("runs source E2E on a port isolated from the managed runtime copy", () => {
+    const playwrightConfig = readFileSync(
+      resolve(process.cwd(), "playwright.config.ts"),
+      "utf8",
+    );
+
+    expect(playwrightConfig).toContain('baseURL: "http://127.0.0.1:63210"');
+    expect(playwrightConfig).toContain('url: "http://127.0.0.1:63210"');
+    expect(playwrightConfig).toContain("reuseExistingServer: false");
   });
 
   it("allows only an explicit numeric loopback origin for an isolated acceptance stack", () => {
