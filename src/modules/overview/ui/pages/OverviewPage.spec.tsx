@@ -634,7 +634,7 @@ describe("OverviewPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("loads the prefecture sample-point drawer without requesting concrete icons", async () => {
+  it("keeps prefecture current-sample and farmer filters connected to map icons", async () => {
     const list = vi.fn<OverviewSamplePointRepository["list"]>(() =>
       Promise.resolve(samplePointList),
     );
@@ -667,7 +667,26 @@ describe("OverviewPage", () => {
                 unresolvedSourceCount: 0,
               },
             ]),
-          comparison: () => Promise.resolve(emptySampleNetworkComparison),
+          comparison: () =>
+            Promise.resolve({
+              ...emptySampleNetworkComparison,
+              networkStatus: "PUBLISHED",
+              activeSamplePointCount: 1,
+              actualPoints: [
+                {
+                  samplePointId: samplePointIcons[0]!.samplePointId,
+                  samplePointName: samplePointIcons[0]!.name,
+                  samplePointKindCode: "FARMER",
+                  membershipStatusCode: "ACTIVE",
+                  locatedRegionCode: "230200",
+                  locatedRegionName: "齐齐哈尔市",
+                  locatedRegionLevel: "PREFECTURE" as const,
+                  actualLongitude: samplePointIcons[0]!.longitude,
+                  actualLatitude: samplePointIcons[0]!.latitude,
+                  locationState: "VALID",
+                },
+              ],
+            }),
           list,
           icons,
           detail: () => Promise.resolve(samplePointDetail),
@@ -691,7 +710,88 @@ describe("OverviewPage", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "产情类 1" }));
     expect(await screen.findByText("同一跨产品样本点")).toBeVisible();
+    await waitFor(() =>
+      expect(icons).toHaveBeenCalledWith({
+        categoryCode: "PRODUCTION",
+        productCode: "CORN",
+        regionCode: "230200",
+        year: 2026,
+      }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "农户 1" }));
+    await waitFor(() =>
+      expect(icons).toHaveBeenLastCalledWith({
+        categoryCode: "PRODUCTION",
+        productCode: "CORN",
+        regionCode: "230200",
+        typeCode: "FARMER",
+        year: 2026,
+      }),
+    );
+    expect(
+      await within(screen.getByLabelText("粮食商情总览地图")).findByRole("button", {
+        name: "同一跨产品样本点，农户，点击查看样本点详情",
+      }),
+    ).toBeVisible();
+  });
+
+  it("keeps pre-2026 business history while withholding annual sample-network UI", async () => {
+    const aggregates = vi.fn<OverviewSamplePointRepository["aggregates"]>(() =>
+      Promise.resolve([]),
+    );
+    const comparison = vi.fn<OverviewSamplePointRepository["comparison"]>(() =>
+      Promise.resolve(emptySampleNetworkComparison),
+    );
+    const list = vi.fn<OverviewSamplePointRepository["list"]>(() =>
+      Promise.resolve(samplePointList),
+    );
+    const icons = vi.fn<OverviewSamplePointRepository["icons"]>(() =>
+      Promise.resolve(samplePointIcons),
+    );
+
+    render(
+      <OverviewPage
+        repository={{
+          mapScope: () => Promise.resolve(sampleMapScope),
+          options: () => Promise.resolve({ ...options, years: [2025] }),
+          regions: () => Promise.resolve([sampleRegion]),
+          locations: () => Promise.resolve([]),
+          indicators: () => Promise.resolve([]),
+          dashboard: () => Promise.resolve(emptyDashboard),
+        }}
+        samplePointRepository={{
+          aggregates,
+          comparison,
+          list,
+          icons,
+          detail: () => Promise.resolve(samplePointDetail),
+        }}
+      />,
+    );
+
+    expect(await screen.findByRole("option", { name: "2026年" })).toBeVisible();
+    expect(screen.getByLabelText("年度")).toHaveValue("2026");
+    await waitFor(() =>
+      expect(aggregates).toHaveBeenCalledWith({ productCode: "CORN", year: 2026 }),
+    );
+    aggregates.mockClear();
+    comparison.mockClear();
+    list.mockClear();
+    icons.mockClear();
+    await userEvent.setup().selectOptions(screen.getByLabelText("年度"), "2025");
+    await userEvent.click(
+      await within(screen.getByLabelText("粮食商情总览地图")).findByRole("button", {
+        name: "齐齐哈尔市",
+      }),
+    );
+    expect(
+      screen.getAllByText("现有样本网络自2026年启用，当前年度仅展示历史业务记录。"),
+    ).not.toHaveLength(0);
+    expect(aggregates).not.toHaveBeenCalled();
+    expect(comparison).not.toHaveBeenCalled();
+    expect(list).not.toHaveBeenCalled();
     expect(icons).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "产情类 1" })).not.toBeInTheDocument();
   });
 
   it("shows aggregates only for prefectures and counties across all five map levels", async () => {
@@ -1155,18 +1255,20 @@ describe("OverviewPage", () => {
     );
     expect(await screen.findByRole("img", { name: "行政区边界地图" })).toBeVisible();
     expect(
-      screen.getByText("尚无审核正式年度数据", { exact: false }),
+      screen.getByText("2026年度暂无审核正式业务数据", { exact: false }),
     ).toBeInTheDocument();
     const map = screen.getByLabelText("粮食商情总览地图");
     fireEvent.doubleClick(
-      await within(map).findByRole("button", { name: "齐齐哈尔市" }),
+      await within(map).findByRole("button", { name: /^齐齐哈尔市/ }),
     );
     fireEvent.doubleClick(
       await within(map).findByRole("button", {
-        name: "梅里斯达斡尔族区",
+        name: /^梅里斯达斡尔族区/,
       }),
     );
-    fireEvent.doubleClick(await within(map).findByRole("button", { name: "雅尔塞镇" }));
+    fireEvent.doubleClick(
+      await within(map).findByRole("button", { name: /^雅尔塞镇/ }),
+    );
     expect(await within(map).findByRole("button", { name: "音钦村" })).toBeVisible();
     expect(regions).toHaveBeenCalledWith({
       periodCode: "2026-Q3",
@@ -1194,7 +1296,9 @@ describe("OverviewPage", () => {
     ).toBe(true);
     expect(indicators).not.toHaveBeenCalled();
     expect(dashboard).not.toHaveBeenCalled();
-    expect(aggregates).not.toHaveBeenCalled();
+    expect(aggregates).toHaveBeenCalledWith(
+      expect.objectContaining({ productCode: "CORN", year: 2026 }),
+    );
   });
 
   it("keeps Qiqihar, Heihe, and Hulunbuir available in the formal region selector", async () => {

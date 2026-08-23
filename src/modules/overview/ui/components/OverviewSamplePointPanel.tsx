@@ -36,10 +36,11 @@ export function OverviewSamplePointPanel({
   selectedSamplePointId: string | undefined;
   year: number;
 }) {
-  const [categoryCode, setCategoryCode] = useState<OverviewSamplePointCategoryCode>();
-  const [typeCode, setTypeCode] = useState<string>();
+  const [localCategoryCode, setLocalCategoryCode] =
+    useState<OverviewSamplePointCategoryCode>();
+  const [localTypeCode, setLocalTypeCode] = useState<string>();
   const [query, setQuery] = useState("");
-  const [catalog, setCatalog] = useState<OverviewSamplePointList>();
+  const [localCatalog, setLocalCatalog] = useState<OverviewSamplePointList>();
   const [result, setResult] = useState<OverviewSamplePointList>();
   const [publishedIcons, setPublishedIcons] = useState<
     readonly OverviewSamplePointIcon[]
@@ -58,23 +59,27 @@ export function OverviewSamplePointPanel({
   const [resultIssue, setResultIssue] = useState<string>();
   const [iconIssue, setIconIssue] = useState<string>();
   const [detailIssue, setDetailIssue] = useState<string>();
+  const categoryCode = networkModel?.categoryCode ?? localCategoryCode;
+  const typeCode = networkModel?.typeCode ?? localTypeCode;
   const missingVillageParent = region.level === "VILLAGE" && !region.parentCode;
   const controlledNetwork = networkModel !== undefined;
+  const catalog = networkModel?.catalog ?? localCatalog;
+  const effectiveCatalogState = networkModel?.catalogState ?? catalogState;
   const comparisonRegionCode = missingVillageParent
     ? undefined
     : region.level === "VILLAGE"
       ? region.parentCode
       : region.code;
-  const pointMapEnabled = region.level === "TOWNSHIP" || region.level === "VILLAGE";
+  const pointMapEnabled = true;
 
   useEffect(() => {
     let active = true;
     void Promise.resolve().then(() => {
       if (!active) return;
-      setCategoryCode(undefined);
-      setTypeCode(undefined);
+      setLocalCategoryCode(undefined);
+      setLocalTypeCode(undefined);
       setQuery("");
-      setCatalog(undefined);
+      setLocalCatalog(undefined);
       setResult(undefined);
       setPublishedIcons([]);
       setLayerMode("actual");
@@ -108,9 +113,14 @@ export function OverviewSamplePointPanel({
 
   useEffect(() => {
     let active = true;
+    if (controlledNetwork) {
+      return () => {
+        active = false;
+      };
+    }
     void Promise.resolve().then(() => {
       if (!active) return;
-      setCatalog(undefined);
+      setLocalCatalog(undefined);
       setCatalogState("loading");
       setCatalogIssue(undefined);
     });
@@ -118,19 +128,19 @@ export function OverviewSamplePointPanel({
       .list({ productCode, regionCode: region.code, year })
       .then((next) => {
         if (!active) return;
-        setCatalog(next);
+        setLocalCatalog(next);
         setCatalogState("ready");
       })
       .catch(() => {
         if (!active) return;
-        setCatalog(undefined);
+        setLocalCatalog(undefined);
         setCatalogState("unavailable");
         setCatalogIssue("样本点分类加载失败，请稍后重试。");
       });
     return () => {
       active = false;
     };
-  }, [productCode, refreshSequence, region.code, repository, year]);
+  }, [controlledNetwork, productCode, refreshSequence, region.code, repository, year]);
 
   useEffect(() => {
     let active = true;
@@ -255,6 +265,18 @@ export function OverviewSamplePointPanel({
   const effectiveComparisonState = networkModel?.state ?? comparisonState;
   const effectiveShowExactDesignLocations =
     networkModel?.showExactDesignLocations ?? showExactDesignLocations;
+  const selectedCategory = catalog?.categories.find(
+    (category) => category.code === categoryCode,
+  );
+  const actualKindCodes = useMemo(
+    () =>
+      categoryCode
+        ? typeCode
+          ? [typeCode]
+          : (selectedCategory?.types.map(({ code }) => code) ?? [])
+        : undefined,
+    [categoryCode, selectedCategory, typeCode],
+  );
   const visibleLayerIcons = useMemo(() => {
     if (missingVillageParent && effectiveLayerMode !== "actual") return [];
     const visibleComparison =
@@ -266,6 +288,7 @@ export function OverviewSamplePointPanel({
       publishedIcons,
       visibleComparison,
       {
+        ...(actualKindCodes ? { actualKindCodes } : {}),
         regionLevel: region.level,
         selectedRegionCode: region.code,
         ...(comparisonRegionCode
@@ -275,6 +298,7 @@ export function OverviewSamplePointPanel({
       },
     );
   }, [
+    actualKindCodes,
     comparisonRegionCode,
     effectiveComparison,
     effectiveLayerMode,
@@ -375,14 +399,23 @@ export function OverviewSamplePointPanel({
   function selectCategory(next: OverviewSamplePointCategoryCode) {
     if (categoryCode === next) return;
     clearConcreteResults();
-    setCategoryCode(next);
-    setTypeCode(undefined);
+    if (networkModel) {
+      networkModel.setCategoryCode(next);
+    } else {
+      setLocalCategoryCode(next);
+      setLocalTypeCode(undefined);
+    }
     setQuery("");
   }
 
   function selectType(next: string) {
     clearConcreteResults();
-    setTypeCode((current) => (current === next ? undefined : next));
+    const selectedType = typeCode === next ? undefined : next;
+    if (networkModel) {
+      networkModel.setTypeCode(selectedType);
+    } else {
+      setLocalTypeCode(selectedType);
+    }
   }
 
   function changeQuery(next: string) {
@@ -398,9 +431,6 @@ export function OverviewSamplePointPanel({
     onSelectedSamplePointChange(samplePointId);
   }
 
-  const selectedCategory = catalog?.categories.find(
-    (category) => category.code === categoryCode,
-  );
   const issue =
     detailIssue ??
     iconIssue ??
@@ -556,7 +586,9 @@ export function OverviewSamplePointPanel({
               <span aria-hidden="true">◆</span>
               样本点分类
               <i aria-hidden="true">
-                {catalog ? `${catalog.totalCount} 个` : loadStateLabel(catalogState)}
+                {catalog
+                  ? `${catalog.totalCount} 个`
+                  : loadStateLabel(effectiveCatalogState)}
               </i>
             </h3>
             {catalog ? (
@@ -578,7 +610,7 @@ export function OverviewSamplePointPanel({
               </nav>
             ) : (
               <p className="overview-sample-point-state">
-                {catalogState === "unavailable"
+                {effectiveCatalogState === "unavailable"
                   ? "样本点数据不可用"
                   : "正在同步样本点分类"}
               </p>

@@ -15,8 +15,9 @@ export function OverviewSampleNetworkToolbar({
     ["actual", "现有样本"],
     ["design", "设计样本"],
   ] as const satisfies readonly (readonly [SampleNetworkLayerMode, string])[];
-  const mapLevelGuidance =
-    model.region?.level === "PREFECTURE"
+  const mapLevelGuidance = !model.applicable
+    ? "现有样本网络自2026年启用，当前年度仅展示历史业务记录。"
+    : model.region?.level === "PREFECTURE"
       ? "市级显示区县汇总"
       : model.region?.level === "COUNTY"
         ? "区县级显示乡镇汇总"
@@ -34,6 +35,7 @@ export function OverviewSampleNetworkToolbar({
         {controls.map(([mode, label]) => (
           <button
             aria-pressed={model.mode === mode}
+            disabled={!model.applicable}
             key={mode}
             onClick={() => model.setMode(mode)}
             type="button"
@@ -43,7 +45,9 @@ export function OverviewSampleNetworkToolbar({
         ))}
       </div>
       <span aria-live="polite">{mapLevelGuidance}</span>
-      {model.mode !== "actual" && approvedDesignCoordinateCount > 0 ? (
+      {model.applicable &&
+      model.mode !== "actual" &&
+      approvedDesignCoordinateCount > 0 ? (
         <label>
           <input
             checked={model.showExactDesignLocations}

@@ -13,10 +13,7 @@ import type {
   OverviewOptions,
   OverviewRegion,
 } from "../../domain/overview";
-import type {
-  OverviewSamplePointAggregate,
-  OverviewSamplePointIcon,
-} from "../../domain/overviewSamplePoint";
+import type { OverviewSamplePointAggregate } from "../../domain/overviewSamplePoint";
 import {
   BoundaryMap,
   toMapFeature,
@@ -35,9 +32,25 @@ const OVERALL_SCOPE = "__OVERALL__";
 const MAP_SCOPE_RETRY_DELAYS_MS = [500, 1_000, 2_000] as const;
 const OPTIONS_LOAD_TIMEOUT_MS = 10_000;
 const OPTIONS_LOAD_FAILURE_MESSAGE = "总览筛选条件加载失败，请稍后重试。";
+const ANNUAL_SAMPLE_NETWORK_START_YEAR = 2026;
 const NOOP_REALTIME_STREAM: OverviewRealtimeStream = {
   subscribe: () => () => undefined,
 };
+
+function selectableOverviewYears(
+  approvedBusinessYears: readonly number[],
+  currentYear = new Date().getFullYear(),
+): readonly number[] {
+  const years = new Set(approvedBusinessYears);
+  for (
+    let annualYear = ANNUAL_SAMPLE_NETWORK_START_YEAR;
+    annualYear <= currentYear;
+    annualYear += 1
+  ) {
+    years.add(annualYear);
+  }
+  return [...years].sort((left, right) => right - left);
+}
 
 function preserveEquivalentCollection<T>(
   current: readonly T[],
@@ -94,30 +107,7 @@ function preserveEquivalentAggregates(
   );
 }
 
-function preserveEquivalentIcons(
-  current: readonly OverviewSamplePointIcon[],
-  next: readonly OverviewSamplePointIcon[],
-): readonly OverviewSamplePointIcon[] {
-  return preserveEquivalentCollection(
-    current,
-    next,
-    (icon, candidate) =>
-      icon.samplePointId === candidate.samplePointId &&
-      icon.name === candidate.name &&
-      icon.iconKey === candidate.iconKey &&
-      icon.longitude === candidate.longitude &&
-      icon.latitude === candidate.latitude &&
-      icon.dataQualityReason === candidate.dataQualityReason &&
-      preserveEquivalentCollection(
-        icon.types,
-        candidate.types,
-        (type, nextType) =>
-          type.code === nextType.code &&
-          type.name === nextType.name &&
-          type.iconKey === nextType.iconKey,
-      ) === icon.types,
-  );
-}
+const IGNORE_SAMPLE_POINT_ICONS = (): void => undefined;
 
 function overviewDataIssue(error: unknown, fallback: string): string {
   if (error instanceof HttpContractError) {
@@ -184,10 +174,13 @@ export function OverviewPage({
   const [samplePointAggregateStatus, setSamplePointAggregateStatus] =
     useState<SamplePointAggregateStatus>("loading");
   const [samplePointAggregateIssue, setSamplePointAggregateIssue] = useState<string>();
-  const [actualSamplePointIcons, setActualSamplePointIcons] = useState<
-    readonly OverviewSamplePointIcon[]
-  >([]);
   const [selectedSamplePointId, setSelectedSamplePointId] = useState<string>();
+  const availableYears = useMemo(
+    () => selectableOverviewYears(options?.years ?? []),
+    [options?.years],
+  );
+  const hasApprovedBusinessYear =
+    year !== undefined && (options?.years.includes(year) ?? false);
   const aggregateParentLevel = parentCode
     ? mapContextRegion?.code === parentCode
       ? mapContextRegion.level
@@ -212,11 +205,16 @@ export function OverviewPage({
       regionCodes: realtimeRegionCode ? [realtimeRegionCode] : [],
       ...(year === undefined ? {} : { year }),
     });
-  const mapReferencePeriodCode =
-    year === undefined ? options?.periods[0]?.code : undefined;
+  const mapReferencePeriodCode = hasApprovedBusinessYear
+    ? undefined
+    : options?.periods[0]?.code;
   const mapRegionScope = useMemo(
-    () => mapRegionTimeScope(year, mapReferencePeriodCode),
-    [mapReferencePeriodCode, year],
+    () =>
+      mapRegionTimeScope(
+        hasApprovedBusinessYear ? year : undefined,
+        mapReferencePeriodCode,
+      ),
+    [hasApprovedBusinessYear, mapReferencePeriodCode, year],
   );
   const mapTimeKey =
     year !== undefined
@@ -237,14 +235,7 @@ export function OverviewPage({
     },
     [],
   );
-  const updateActualSamplePointIcons = useCallback(
-    (icons: readonly OverviewSamplePointIcon[]) => {
-      setActualSamplePointIcons((current) => preserveEquivalentIcons(current, icons));
-    },
-    [],
-  );
   const clearSamplePointSelection = useCallback(() => {
-    setActualSamplePointIcons((current) => preserveEquivalentIcons(current, []));
     setSelectedSamplePointId(undefined);
   }, []);
   const updateSelectedSamplePoint = useCallback((samplePointId: string | undefined) => {
@@ -276,13 +267,14 @@ export function OverviewPage({
       .then((next) => {
         if (!live) return;
         window.clearTimeout(timeout);
+        const selectableYears = selectableOverviewYears(next.years);
         setOptions(next);
         setOptionsIssue(undefined);
         setProductCode((current) => current || next.products[0]?.code || "");
         setYear((current) =>
-          current !== undefined && next.years.includes(current)
+          current !== undefined && selectableYears.includes(current)
             ? current
-            : next.years[0],
+            : selectableYears[0],
         );
       })
       .catch(() => {
@@ -298,7 +290,7 @@ export function OverviewPage({
   useEffect(() => {
     if (!samplePointRepository || !productCode) return;
     let active = true;
-    if (year === undefined) {
+    if (year === undefined || year < 2026) {
       void Promise.resolve().then(() => {
         if (!active) return;
         setSamplePointAggregates((current) =>
@@ -496,7 +488,13 @@ export function OverviewPage({
   ]);
 
   useEffect(() => {
-    if (!productCode || year === undefined || !selectedRegionCode) return;
+    if (
+      !productCode ||
+      year === undefined ||
+      !hasApprovedBusinessYear ||
+      !selectedRegionCode
+    )
+      return;
     const requestRegion = [...regions, ...rootRegions].find(
       (region) => region.code === selectedRegionCode,
     );
@@ -530,6 +528,7 @@ export function OverviewPage({
     };
   }, [
     businessSequence,
+    hasApprovedBusinessYear,
     productCode,
     regions,
     repository,
@@ -539,7 +538,7 @@ export function OverviewPage({
   ]);
 
   useEffect(() => {
-    if (!productCode || year === undefined) return;
+    if (!productCode || year === undefined || !hasApprovedBusinessYear) return;
     const requestRegion = [...regions, ...rootRegions].find(
       (region) => region.code === selectedRegionCode,
     );
@@ -578,6 +577,7 @@ export function OverviewPage({
     };
   }, [
     businessSequence,
+    hasApprovedBusinessYear,
     productCode,
     mapContextRegion,
     regions,
@@ -605,13 +605,18 @@ export function OverviewPage({
         ? mapContextRegion
         : (selectedRegion ?? mapContextRegion);
   const sampleNetworkModel = useOverviewSampleNetworkLayers({
-    actualIcons: actualSamplePointIcons,
     productCode,
     refreshSequence: samplePointSequence,
     region: sampleNetworkRegion,
     repository: samplePointRepository,
     year,
   });
+  const showAggregateLayer =
+    sampleNetworkModel.applicable && sampleNetworkModel.mode !== "design";
+  const visibleSamplePointAggregates = showAggregateLayer ? samplePointAggregates : [];
+  const visibleSamplePointAggregateStatus = showAggregateLayer
+    ? samplePointAggregateStatus
+    : "hidden";
   const visibleRegionCountsCurrent = parentCode
     ? childRegionQueryKey === desiredChildRegionQueryKey
     : rootRegionQueryKey === desiredRootRegionQueryKey;
@@ -827,7 +832,7 @@ export function OverviewPage({
                   setDashboard(undefined);
                 }}
               >
-                {options.years.map((item) => (
+                {availableYears.map((item) => (
                   <option key={item} value={item}>
                     {item}年
                   </option>
@@ -841,8 +846,10 @@ export function OverviewPage({
             {...(mapBackdrop ? { backdrop: mapBackdrop } : {})}
             features={mapFeatures}
             points={mapPoints}
-            samplePointAggregates={samplePointAggregates}
-            {...(samplePointRepository ? { samplePointAggregateStatus } : {})}
+            samplePointAggregates={visibleSamplePointAggregates}
+            {...(samplePointRepository
+              ? { samplePointAggregateStatus: visibleSamplePointAggregateStatus }
+              : {})}
             samplePointIcons={sampleNetworkModel.icons}
             onSamplePointSelect={updateSelectedSamplePoint}
             selectedCode={selectedRegionCode}
@@ -892,20 +899,32 @@ export function OverviewPage({
         selectedRegion &&
         !selectedRegion.mapContextOnly
           ? {
-              samplePoints: (
-                <OverviewSamplePointPanel
-                  key={`${productCode}:${year}:${selectedRegion.code}`}
-                  networkModel={sampleNetworkModel}
-                  onIconsChange={updateActualSamplePointIcons}
-                  onSelectedSamplePointChange={updateSelectedSamplePoint}
-                  productCode={productCode}
-                  refreshSequence={samplePointSequence}
-                  region={selectedRegion}
-                  repository={samplePointRepository}
-                  selectedSamplePointId={selectedSamplePointId}
-                  year={year}
-                />
-              ),
+              samplePoints:
+                year >= 2026 ? (
+                  <OverviewSamplePointPanel
+                    key={`${productCode}:${year}:${selectedRegion.code}`}
+                    networkModel={sampleNetworkModel}
+                    onIconsChange={IGNORE_SAMPLE_POINT_ICONS}
+                    onSelectedSamplePointChange={updateSelectedSamplePoint}
+                    productCode={productCode}
+                    refreshSequence={samplePointSequence}
+                    region={selectedRegion}
+                    repository={samplePointRepository}
+                    selectedSamplePointId={selectedSamplePointId}
+                    year={year}
+                  />
+                ) : (
+                  <section
+                    aria-label="历史业务记录说明"
+                    className="overview-sample-point-panel overview-historical-record-notice"
+                  >
+                    <h3>{year}年历史业务记录</h3>
+                    <p>现有样本网络自2026年启用，当前年度仅展示历史业务记录。</p>
+                    <p>
+                      产情、市场和物流记录仍按原业务页面查询，但不计入现有样本点数量、分类或地图图标。
+                    </p>
+                  </section>
+                ),
             }
           : {})}
         {...(mapSelectionPoint ? { selectionPoint: mapSelectionPoint } : {})}
@@ -914,14 +933,16 @@ export function OverviewPage({
         onCloseDetails={() => {
           setSelectedRegionCode("");
           setSelectedRegionSnapshot(undefined);
+          sampleNetworkModel.setCategoryCode(undefined);
           clearSamplePointSelection();
           setIndicators([]);
           setDashboard(undefined);
         }}
       />
-      {!options.years.length && (
+      {year !== undefined && !hasApprovedBusinessYear && (
         <p className="overview-cockpit-guidance" role="status">
-          尚无审核正式年度数据：地图可查看，业务指标将在平台完成正式填报并审核后自动接入。
+          {year}
+          年度暂无审核正式业务数据：样本网络可查看，业务指标将在平台完成正式填报并审核后自动接入。
         </p>
       )}
       {issue && (

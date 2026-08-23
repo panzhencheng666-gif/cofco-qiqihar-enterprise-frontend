@@ -370,12 +370,46 @@ describe("sampleNetworkLayerIcons", () => {
     ).toEqual([]);
   });
 
-  it("keeps prefecture and county views aggregate-only", () => {
+  it("keeps high-level descendants aggregated while retaining native-level actual points", () => {
     expect(
-      sampleNetworkLayerIcons("comparison", [actualIcon], comparison, {
+      sampleNetworkLayerIcons("actual", [actualIcon], comparison, {
+        regionLevel: "COUNTY",
+        selectedRegionCode: "230202",
+        actualKindCodes: ["FARMER"],
+      }),
+    ).toEqual([]);
+    expect(
+      sampleNetworkLayerIcons("actual", [], comparison, {
+        regionLevel: "COUNTY",
+        selectedRegionCode: "230202",
+        actualKindCodes: ["TRADER"],
+      }),
+    ).toContainEqual(
+      expect.objectContaining({
+        aggregateCount: 1,
+        representedRegionLevel: "COUNTY",
+        samplePointId: "regional-actual:COUNTY:230202",
+      }),
+    );
+    expect(
+      sampleNetworkLayerIcons("design", [actualIcon], comparison, {
         regionLevel: "COUNTY",
         selectedRegionCode: "230202",
       }),
     ).toEqual([]);
+  });
+
+  it("applies a concrete kind filter to every annual actual source", () => {
+    const result = sampleNetworkLayerIcons("actual", [], comparison, {
+      regionLevel: "TOWNSHIP",
+      selectedRegionCode: "230202997",
+      actualKindCodes: ["FARMER"],
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        samplePointId: "94000000-0000-0000-0000-000000000001",
+      }),
+    ]);
   });
 });

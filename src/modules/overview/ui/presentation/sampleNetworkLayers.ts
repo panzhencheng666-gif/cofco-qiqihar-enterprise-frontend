@@ -17,6 +17,7 @@ export const regionalActualBadgePathData =
 type RegionLevel = "PREFECTURE" | "COUNTY" | "TOWNSHIP" | "VILLAGE";
 
 export interface SampleNetworkLayerContext {
+  actualKindCodes?: readonly string[];
   regionLevel: RegionLevel;
   selectedRegionCode: string;
   summaryAnchorRegionCode?: string;
@@ -32,13 +33,6 @@ export function sampleNetworkLayerIcons(
     selectedRegionCode: "",
   },
 ): readonly OverviewSamplePointIcon[] {
-  // City and county maps communicate coverage through their existing aggregate
-  // rings. Expanding village markers at these levels would recreate the 2,332
-  // point wall that the hierarchy is designed to avoid.
-  if (context.regionLevel === "PREFECTURE" || context.regionLevel === "COUNTY") {
-    return [];
-  }
-
   const formalComparison =
     comparison && ["PUBLISHED", "RETIRED"].includes(comparison.networkStatus)
       ? comparison
@@ -46,15 +40,22 @@ export function sampleNetworkLayerIcons(
   const relationIndexes = formalComparison
     ? indexRelationTypes(formalComparison)
     : undefined;
+  const actualKindCodes = context.actualKindCodes
+    ? new Set(context.actualKindCodes)
+    : undefined;
   const activeActualPoints =
     formalComparison?.actualPoints.filter(
-      ({ membershipStatusCode }) => membershipStatusCode === "ACTIVE",
+      ({ membershipStatusCode, samplePointKindCode }) =>
+        membershipStatusCode === "ACTIVE" &&
+        (!actualKindCodes || actualKindCodes.has(samplePointKindCode)),
     ) ?? [];
   const activeIds = new Set(
     activeActualPoints.map(({ samplePointId }) => samplePointId),
   );
-  const approvedBusinessIcons = actualIcons.filter(({ samplePointId }) =>
-    activeIds.has(samplePointId),
+  const approvedBusinessIcons = actualIcons.filter(
+    ({ samplePointId, types }) =>
+      activeIds.has(samplePointId) &&
+      (!actualKindCodes || types.some(({ code }) => actualKindCodes.has(code))),
   );
   const approvedBusinessIconIds = new Set(
     approvedBusinessIcons.map(({ samplePointId }) => samplePointId),
@@ -68,10 +69,27 @@ export function sampleNetworkLayerIcons(
         Number.isFinite(point.actualLatitude),
     )
     .map((point) => annualPreciseActual(point, relationIndexes?.byActual));
-  const regionalActual = formalComparison
-    ? regionalActualBadges(formalComparison, context, relationIndexes?.byActual)
-    : [];
+  const regionalActual = regionalActualBadges(
+    activeActualPoints,
+    context,
+    relationIndexes?.byActual,
+  );
   const actual = [...approvedBusinessIcons, ...annualPrecise, ...regionalActual];
+  const aggregateOnlyLevel =
+    context.regionLevel === "PREFECTURE" || context.regionLevel === "COUNTY";
+  if (aggregateOnlyLevel) {
+    if (mode === "design") return [];
+    const nativeActualIds = new Set(
+      activeActualPoints
+        .filter(({ locatedRegionLevel }) => locatedRegionLevel === context.regionLevel)
+        .map(({ samplePointId }) => samplePointId),
+    );
+    return actual.filter(({ layerType, representedRegionLevel, samplePointId }) =>
+      layerType === "REGIONAL_ACTUAL_BADGE"
+        ? representedRegionLevel === context.regionLevel
+        : nativeActualIds.has(samplePointId),
+    );
+  }
   if (mode === "actual") return actual;
 
   const coverage = comparison
@@ -186,7 +204,7 @@ function exactDesignLocation(point: SampleNetworkDesignPoint): OverviewSamplePoi
 }
 
 function regionalActualBadges(
-  comparison: SampleNetworkComparison,
+  actualPoints: SampleNetworkComparison["actualPoints"],
   context: SampleNetworkLayerContext,
   relationTypesByActual: ReadonlyMap<
     string,
@@ -205,7 +223,7 @@ function regionalActualBadges(
     }
   >();
 
-  comparison.actualPoints.forEach((point) => {
+  actualPoints.forEach((point) => {
     if (
       point.membershipStatusCode !== "ACTIVE" ||
       point.locatedRegionLevel === "VILLAGE" ||
