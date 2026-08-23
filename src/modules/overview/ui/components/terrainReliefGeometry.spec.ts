@@ -330,6 +330,55 @@ describe("projectReliefScene", () => {
     );
   });
 
+  it("separates multiple ancestor summaries that share one township anchor", () => {
+    const township = polygonFeature(
+      "230202997",
+      [
+        [123, 47],
+        [124, 47],
+        [124, 48],
+        [123, 48],
+        [123, 47],
+      ],
+      "TOWNSHIP",
+    );
+    const ancestorBadges = [
+      ["PREFECTURE", "230200", "齐齐哈尔市", 3],
+      ["COUNTY", "230202", "龙沙区", 2],
+      ["TOWNSHIP", "230202997", "契约测试乡", 1],
+    ].map(([level, code, name, count]) => ({
+      samplePointId: `regional-actual:${level}:${code}`,
+      name: `${name}区域级现有样本（${count}个）`,
+      iconKey: "regional-actual",
+      layerType: "REGIONAL_ACTUAL_BADGE" as const,
+      anchorRegionCode: "230202997",
+      representedRegionCode: code as string,
+      representedRegionName: name as string,
+      representedRegionLevel: level as "PREFECTURE" | "COUNTY" | "TOWNSHIP",
+      aggregateCount: count as number,
+      types: [],
+      longitude: null,
+      latitude: null,
+      dataQualityReason: "MISSING_COORDINATE",
+    }));
+    const projection = projectReliefScene({
+      backdrop: township,
+      features: [],
+      frame: overviewReliefFrame(false),
+      points: [],
+      samplePointIcons: ancestorBadges,
+    });
+
+    expect(projection.samplePointIcons.map(({ icon }) => icon)).toEqual(ancestorBadges);
+    expect(
+      new Set(projection.samplePointIcons.map(({ point }) => `${point.x}:${point.y}`))
+        .size,
+    ).toBe(3);
+    projection.samplePointIcons.forEach(({ anchorPoint }) => {
+      expect(anchorPoint).toEqual(projection.backdrop?.anchor);
+    });
+  });
+
   it("expands verified colocated entities without changing their true anchor", () => {
     const samplePointFrame = overviewReliefFrame(false);
     const shared = {

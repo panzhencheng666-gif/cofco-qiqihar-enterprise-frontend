@@ -4,6 +4,7 @@ import { type ComponentProps, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
+import type { OverviewSamplePointIcon } from "../../domain/overviewSamplePoint";
 import { OverviewSamplePointPanel } from "./OverviewSamplePointPanel";
 
 const list = {
@@ -79,7 +80,7 @@ describe("OverviewSamplePointPanel", () => {
 
   it("shows category counts but no concrete result before a category is selected", async () => {
     const repository = repositoryStub();
-    const onIconsChange = vi.fn();
+    const onIconsChange = vi.fn<(icons: readonly OverviewSamplePointIcon[]) => void>();
 
     render(
       <PanelHarness
@@ -178,7 +179,7 @@ describe("OverviewSamplePointPanel", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "市场类 3" }));
     expect(
-      await screen.findByText("地图显示 3 个，其中 3 个坐标重合待核验"),
+      await screen.findByText("精确业务图标 3 个，其中 3 个坐标重合待核验"),
     ).toBeVisible();
     expect(await screen.findByText("贸易商甲")).toBeVisible();
     expect(screen.getByText("贸易商乙")).toBeVisible();
@@ -678,6 +679,125 @@ describe("OverviewSamplePointPanel", () => {
     expect(
       screen.queryByText(/已审核 0 个|待坐标治理登记|精确对应 0/),
     ).not.toBeInTheDocument();
+  });
+
+  it("fails closed when a village has no parent township", async () => {
+    const repository = repositoryStub();
+    const onIconsChange = vi.fn();
+
+    render(
+      <PanelHarness
+        onIconsChange={onIconsChange}
+        year={2026}
+        region={{ code: "230202997001", level: "VILLAGE", name: "孤立测试村" }}
+        repository={repository}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "产情类 1" }));
+    await waitFor(() =>
+      expect(onIconsChange).toHaveBeenLastCalledWith([
+        expect.objectContaining({
+          samplePointId: "94000000-0000-0000-0000-000000000001",
+        }),
+      ]),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "网络覆盖对照" }));
+    expect(
+      await screen.findByText(
+        "父乡镇信息缺失，网络对照不可用，请先治理行政区层级关系。",
+      ),
+    ).toBeVisible();
+    expect(repository.comparison).not.toHaveBeenCalled();
+    expect(onIconsChange).toHaveBeenLastCalledWith([]);
+  });
+
+  it("reports exact business icons separately from unfiltered regional summaries", async () => {
+    const repository = repositoryStub();
+    const current = await repository.comparison({
+      regionCode: "230202997",
+      year: 2026,
+    });
+    repository.comparison.mockClear();
+    repository.comparison.mockResolvedValue({
+      ...current,
+      activeSamplePointCount: 2,
+      actualLevelCounts: { prefecture: 0, county: 1, township: 0, village: 1 },
+      actualPoints: [
+        ...current.actualPoints,
+        {
+          samplePointId: "94000000-0000-0000-0000-000000000099",
+          samplePointName: "龙沙区区域样本",
+          samplePointKindCode: "TRADER",
+          membershipStatusCode: "ACTIVE",
+          locatedRegionCode: "230202",
+          locatedRegionName: "龙沙区",
+          locatedRegionLevel: "COUNTY",
+          actualLongitude: null,
+          actualLatitude: null,
+          locationState: "MISSING_COORDINATE",
+        },
+      ],
+    });
+    const onIconsChange = vi.fn<(icons: readonly OverviewSamplePointIcon[]) => void>();
+
+    render(
+      <PanelHarness
+        onIconsChange={onIconsChange}
+        year={2026}
+        region={{ code: "230202997", level: "TOWNSHIP", name: "契约测试乡" }}
+        repository={repository}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "产情类 1" }));
+    expect(await screen.findByText("精确业务图标 1 个")).toBeVisible();
+    expect(
+      screen.getByText("年度区域汇总标识 1 个（不参与产情/市场分类筛选）"),
+    ).toBeVisible();
+    await waitFor(() => {
+      const layers = onIconsChange.mock.calls.at(-1)?.[0] ?? [];
+      expect(
+        layers.filter((icon) => icon.layerType === "REGIONAL_ACTUAL_BADGE"),
+      ).toHaveLength(1);
+      expect(
+        layers.filter((icon) => !icon.layerType || icon.layerType === "ANNUAL_ACTUAL"),
+      ).toHaveLength(1);
+    });
+  });
+
+  it("shows registered coordinate sources as coverage rather than all-or-nothing", async () => {
+    const repository = repositoryStub();
+    const current = await repository.comparison({
+      regionCode: "230202997",
+      year: 2026,
+    });
+    repository.comparison.mockClear();
+    repository.comparison.mockResolvedValue({
+      ...current,
+      designPointCount: 2,
+      designPoints: [
+        ...current.designPoints,
+        {
+          ...current.designPoints[0]!,
+          villageRegionCode: "230202997002",
+          villageName: "无来源测试村",
+          coordinateSourceName: null,
+        },
+      ],
+    });
+
+    render(
+      <PanelHarness
+        onIconsChange={vi.fn()}
+        year={2026}
+        region={{ code: "230202997", level: "TOWNSHIP", name: "契约测试乡" }}
+        repository={repository}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "只看设计" }));
+    expect(await screen.findByText("已登记 1 / 总数 2")).toBeVisible();
   });
 
   it.each([

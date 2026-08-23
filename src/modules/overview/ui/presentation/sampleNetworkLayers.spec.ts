@@ -225,6 +225,43 @@ describe("sampleNetworkLayerIcons", () => {
     ).toHaveLength(1);
   });
 
+  it("excludes candidate, paused, and removed actual points from regional layers", () => {
+    const mixedStatusComparison: SampleNetworkComparison = {
+      ...comparison,
+      actualPoints: [
+        ...comparison.actualPoints,
+        ...(["CANDIDATE", "PAUSED", "REMOVED"] as const).map(
+          (membershipStatusCode, index) => ({
+            samplePointId: `95000000-0000-0000-0000-00000000000${index}`,
+            samplePointName: `${membershipStatusCode}区县级样本`,
+            samplePointKindCode: "TRADER",
+            membershipStatusCode,
+            locatedRegionCode: "230202",
+            locatedRegionName: "龙沙区",
+            locatedRegionLevel: "COUNTY" as const,
+            actualLongitude: null,
+            actualLatitude: null,
+            locationState: "MISSING_COORDINATE",
+          }),
+        ),
+      ],
+    };
+
+    const result = sampleNetworkLayerIcons("actual", [], mixedStatusComparison, {
+      regionLevel: "TOWNSHIP",
+      selectedRegionCode: "230202997",
+      summaryAnchorRegionCode: "230202997",
+    });
+
+    expect(result).toContainEqual(
+      expect.objectContaining({
+        samplePointId: "regional-actual:COUNTY:230202",
+        aggregateCount: 2,
+      }),
+    );
+    expect(result).toHaveLength(1);
+  });
+
   it("keeps prefecture and county views aggregate-only", () => {
     expect(
       sampleNetworkLayerIcons("comparison", [actualIcon], comparison, {

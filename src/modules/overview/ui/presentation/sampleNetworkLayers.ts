@@ -150,6 +150,7 @@ function regionalActualBadges(
 
   comparison.actualPoints.forEach((point) => {
     if (
+      point.membershipStatusCode !== "ACTIVE" ||
       point.locatedRegionLevel === "VILLAGE" ||
       (point.actualLongitude !== null && point.actualLatitude !== null)
     ) {
