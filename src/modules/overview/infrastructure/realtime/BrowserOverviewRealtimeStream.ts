@@ -65,11 +65,19 @@ function parseBusinessChange(event: Event): OverviewBusinessChange | undefined {
   try {
     const value = JSON.parse(event.data) as Record<string, unknown>;
     const regionCodes = value.regionCodes;
+    const aggregateType = value.aggregateType;
+    const actionCode = value.actionCode;
     const productCode = value.productCode;
     const surveyYear = value.surveyYear;
     if (
       !Array.isArray(regionCodes) ||
       !regionCodes.every((code) => typeof code === "string") ||
+      (aggregateType !== null &&
+        aggregateType !== undefined &&
+        typeof aggregateType !== "string") ||
+      (actionCode !== null &&
+        actionCode !== undefined &&
+        typeof actionCode !== "string") ||
       (productCode !== null &&
         productCode !== undefined &&
         typeof productCode !== "string") ||
@@ -79,6 +87,8 @@ function parseBusinessChange(event: Event): OverviewBusinessChange | undefined {
     }
     return {
       regionCodes,
+      ...(typeof aggregateType === "string" ? { aggregateType } : {}),
+      ...(typeof actionCode === "string" ? { actionCode } : {}),
       ...(typeof productCode === "string" ? { productCode } : {}),
       ...(typeof surveyYear === "number" ? { surveyYear } : {}),
     };

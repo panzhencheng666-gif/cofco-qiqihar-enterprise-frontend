@@ -126,6 +126,34 @@ describe("useOverviewRealtimeRefresh", () => {
     expect(screen.getByText("1:1:2")).toBeInTheDocument();
   });
 
+  it("refreshes only the selected year's sample-network layer for annual-network events", () => {
+    vi.useFakeTimers();
+    const stream = new FakeRealtimeStream();
+    render(<Harness productCode="CORN" stream={stream} />);
+
+    act(() => {
+      stream.callbacks.onBusinessChange({
+        aggregateType: "SAMPLE_NETWORK_YEAR",
+        actionCode: "SAMPLE_NETWORK_PUBLISHED",
+        regionCodes: ["230200"],
+        surveyYear: 2025,
+      });
+      vi.advanceTimersByTime(500);
+    });
+    expect(screen.getByText("0:0:1")).toBeInTheDocument();
+
+    act(() => {
+      stream.callbacks.onBusinessChange({
+        aggregateType: "SAMPLE_NETWORK_YEAR",
+        actionCode: "SAMPLE_NETWORK_PUBLISHED",
+        regionCodes: ["230200"],
+        surveyYear: 2026,
+      });
+      vi.advanceTimersByTime(500);
+    });
+    expect(screen.getByText("0:1:2")).toBeInTheDocument();
+  });
+
   it("turns a large historical replay into one refresh instead of rebuilding the map per event", () => {
     vi.useFakeTimers();
     const stream = new FakeRealtimeStream();

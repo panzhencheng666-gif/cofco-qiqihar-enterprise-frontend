@@ -59,6 +59,8 @@ describe("BrowserOverviewRealtimeStream", () => {
     source.dispatch(
       new MessageEvent("business-change", {
         data: JSON.stringify({
+          aggregateType: "SAMPLE_NETWORK_YEAR",
+          actionCode: "SAMPLE_NETWORK_PUBLISHED",
           productCode: "CORN",
           regionCodes: ["230208"],
           surveyYear: 2025,
@@ -67,6 +69,8 @@ describe("BrowserOverviewRealtimeStream", () => {
     );
 
     expect(onBusinessChange).toHaveBeenCalledWith({
+      aggregateType: "SAMPLE_NETWORK_YEAR",
+      actionCode: "SAMPLE_NETWORK_PUBLISHED",
       productCode: "CORN",
       regionCodes: ["230208"],
       surveyYear: 2025,

@@ -84,6 +84,13 @@ export function useOverviewRealtimeRefresh(
       const affectsProduct =
         change.productCode === undefined ||
         change.productCode === currentSelection.productCode;
+      if (change.aggregateType === "SAMPLE_NETWORK_YEAR") {
+        scheduleRefresh({
+          options: true,
+          samplePoints: affectsSelection,
+        });
+        return;
+      }
       scheduleRefresh({
         options: true,
         samplePoints: affectsSelection && affectsProduct,
