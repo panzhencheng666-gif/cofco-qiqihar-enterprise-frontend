@@ -70,7 +70,6 @@ export function OverviewSamplePointPanel({
     : region.level === "VILLAGE"
       ? region.parentCode
       : region.code;
-  const pointMapEnabled = true;
 
   useEffect(() => {
     let active = true;
@@ -226,24 +225,17 @@ export function OverviewSamplePointPanel({
         setResultState("unavailable");
         setResultIssue("样本点列表加载失败，请稍后重试。");
       });
-    if (!pointMapEnabled) {
-      void Promise.resolve().then(() => {
+    repository
+      .icons(filters)
+      .then((icons) => {
+        if (!active) return;
+        setPublishedIcons(icons);
+      })
+      .catch(() => {
         if (!active) return;
         setPublishedIcons([]);
+        setIconIssue("样本点图标加载失败，请稍后重试。");
       });
-    } else {
-      repository
-        .icons(filters)
-        .then((icons) => {
-          if (!active) return;
-          setPublishedIcons(icons);
-        })
-        .catch(() => {
-          if (!active) return;
-          setPublishedIcons([]);
-          setIconIssue("样本点图标加载失败，请稍后重试。");
-        });
-    }
     return () => {
       active = false;
     };
@@ -254,7 +246,6 @@ export function OverviewSamplePointPanel({
     refreshSequence,
     region.code,
     region.level,
-    pointMapEnabled,
     repository,
     typeCode,
     year,
@@ -448,7 +439,7 @@ export function OverviewSamplePointPanel({
     (icon) => icon.layerType === "REGIONAL_ACTUAL_BADGE",
   ).length;
   const temporarilyHiddenCount =
-    pointMapEnabled && !missingVillageParent && result
+    !missingVillageParent && result
       ? Math.max(0, result.items.length - publishedIcons.length)
       : 0;
   const availableDetailPeriods = detail ? detailPeriods(detail) : [];
@@ -653,33 +644,27 @@ export function OverviewSamplePointPanel({
 
             {resultState === "ready" && result ? (
               <p className="overview-sample-point-quality-summary" role="status">
-                {pointMapEnabled ? (
-                  <>
-                    <strong>
-                      精确业务图标 {preciseBusinessIconCount} 个
-                      {duplicateCoordinateIconCount
-                        ? `，其中 ${duplicateCoordinateIconCount} 个坐标重合待核验`
-                        : ""}
-                    </strong>
-                    <span>
-                      {!missingVillageParent &&
-                      effectiveComparisonState === "ready" &&
-                      effectiveComparison
-                        ? `年度区域汇总标识 ${regionalSummaryBadgeCount} 个（不参与产情/市场分类筛选）`
-                        : effectiveComparisonState === "unavailable"
-                          ? "年度区域汇总标识不可用"
-                          : "年度区域汇总标识加载中"}
-                    </span>
-                    {temporarilyHiddenCount ? (
-                      <span>
-                        {temporarilyHiddenCount}{" "}
-                        个因坐标缺失或无效暂不显示，请在坐标治理中修正。
-                      </span>
-                    ) : null}
-                  </>
-                ) : (
-                  <strong>当前层级使用聚合统计，不显示单个样本点图标。</strong>
-                )}
+                <strong>
+                  精确业务图标 {preciseBusinessIconCount} 个
+                  {duplicateCoordinateIconCount
+                    ? `，其中 ${duplicateCoordinateIconCount} 个坐标重合待核验`
+                    : ""}
+                </strong>
+                <span>
+                  {!missingVillageParent &&
+                  effectiveComparisonState === "ready" &&
+                  effectiveComparison
+                    ? `当前筛选区域汇总标识 ${regionalSummaryBadgeCount} 个`
+                    : effectiveComparisonState === "unavailable"
+                      ? "年度区域汇总标识不可用"
+                      : "年度区域汇总标识加载中"}
+                </span>
+                {temporarilyHiddenCount ? (
+                  <span>
+                    {temporarilyHiddenCount}{" "}
+                    个因坐标缺失或无效暂不显示，请在坐标治理中修正。
+                  </span>
+                ) : null}
               </p>
             ) : null}
 

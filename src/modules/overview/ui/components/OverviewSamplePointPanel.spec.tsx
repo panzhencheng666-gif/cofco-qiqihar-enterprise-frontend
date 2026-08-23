@@ -735,7 +735,7 @@ describe("OverviewSamplePointPanel", () => {
     expect(onIconsChange).toHaveBeenLastCalledWith([]);
   });
 
-  it("reports exact business icons separately from unfiltered regional summaries", async () => {
+  it("applies the selected category to precise icons and regional summaries", async () => {
     const repository = repositoryStub();
     const current = await repository.comparison({
       productCode: "CORN",
@@ -776,14 +776,12 @@ describe("OverviewSamplePointPanel", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: "产情类 1" }));
     expect(await screen.findByText("精确业务图标 1 个")).toBeVisible();
-    expect(
-      screen.getByText("年度区域汇总标识 1 个（不参与产情/市场分类筛选）"),
-    ).toBeVisible();
+    expect(screen.getByText("当前筛选区域汇总标识 0 个")).toBeVisible();
     await waitFor(() => {
       const layers = onIconsChange.mock.calls.at(-1)?.[0] ?? [];
       expect(
         layers.filter((icon) => icon.layerType === "REGIONAL_ACTUAL_BADGE"),
-      ).toHaveLength(1);
+      ).toHaveLength(0);
       expect(
         layers.filter((icon) => !icon.layerType || icon.layerType === "ANNUAL_ACTUAL"),
       ).toHaveLength(1);
@@ -848,7 +846,7 @@ describe("OverviewSamplePointPanel", () => {
     ["PREFECTURE", "230200", "齐齐哈尔市"],
     ["COUNTY", "230202", "龙沙区"],
   ] as const)(
-    "uses aggregate wording and skips icon requests at %s level",
+    "keeps the current-sample data source connected at %s level",
     async (level, code, name) => {
       const repository = repositoryStub();
 
@@ -862,10 +860,17 @@ describe("OverviewSamplePointPanel", () => {
       );
 
       await userEvent.click(await screen.findByRole("button", { name: "产情类 1" }));
+      await waitFor(() =>
+        expect(repository.icons).toHaveBeenCalledWith({
+          categoryCode: "PRODUCTION",
+          productCode: "CORN",
+          regionCode: code,
+          year: 2026,
+        }),
+      );
       expect(
-        await screen.findByText("当前层级使用聚合统计，不显示单个样本点图标。"),
-      ).toBeVisible();
-      expect(repository.icons).not.toHaveBeenCalled();
+        screen.queryByText("当前层级使用聚合统计，不显示单个样本点图标。"),
+      ).not.toBeInTheDocument();
       expect(screen.queryByText(/地图显示 1 个/)).not.toBeInTheDocument();
       expect(screen.queryByText(/因坐标缺失或无效暂不显示/)).not.toBeInTheDocument();
     },
