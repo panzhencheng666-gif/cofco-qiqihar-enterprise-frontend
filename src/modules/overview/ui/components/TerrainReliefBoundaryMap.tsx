@@ -217,7 +217,24 @@ export default function TerrainReliefBoundaryMap({
     () => overviewReliefFrame(true, stageWidth),
     [stageWidth],
   );
+  const terrainProjectionResult = useMemo(() => {
+    const startedAt = window.performance.now();
+    const projection = projectReliefScene({
+      ...(backdrop ? { backdrop } : {}),
+      features,
+      frame: fullMapFrame,
+      points,
+    });
+    return {
+      duration: window.performance.now() - startedAt,
+      projection,
+    };
+  }, [backdrop, features, fullMapFrame, points]);
+  const terrainProjection = terrainProjectionResult.projection;
   const sceneProjectionResult = useMemo(() => {
+    if (!samplePointAggregates.length && !samplePointIcons.length) {
+      return terrainProjectionResult;
+    }
     const startedAt = window.performance.now();
     const projection = projectReliefScene({
       ...(backdrop ? { backdrop } : {}),
@@ -238,8 +255,18 @@ export default function TerrainReliefBoundaryMap({
     points,
     samplePointAggregates,
     samplePointIcons,
+    terrainProjectionResult,
   ]);
   const sceneProjection = sceneProjectionResult.projection;
+  const terrainDetailProjectionResult = useMemo(() => {
+    const startedAt = window.performance.now();
+    const projection = reframeReliefScene(terrainProjection, detailMapFrame);
+    return {
+      duration: window.performance.now() - startedAt,
+      projection,
+    };
+  }, [detailMapFrame, terrainProjection]);
+  const terrainDetailProjection = terrainDetailProjectionResult.projection;
   const detailProjectionResult = useMemo(() => {
     const startedAt = window.performance.now();
     const projection = reframeReliefScene(sceneProjection, detailMapFrame);
@@ -249,8 +276,8 @@ export default function TerrainReliefBoundaryMap({
     };
   }, [detailMapFrame, sceneProjection]);
   const detailProjection = detailProjectionResult.projection;
-  const projectionDurationMs =
-    sceneProjectionResult.duration + detailProjectionResult.duration;
+  const rendererProjectionDurationMs =
+    terrainProjectionResult.duration + terrainDetailProjectionResult.duration;
   const activeProjection = activeDetailLayout ? detailProjection : sceneProjection;
   const activeSurfaceBounds = reliefSceneBounds(activeProjection);
   const activeLayoutTransform = activeDetailLayout
@@ -414,26 +441,28 @@ export default function TerrainReliefBoundaryMap({
       sceneHost.dataset.wallMaterial = "opaque-depth-gradient-prism-wall";
       sceneHost.dataset.interactionCapLayerCount = "1";
       sceneHost.dataset.interactionSocketLayerCount = "0";
-      sceneHost.dataset.reliefMode = sceneProjection.backdrop
+      sceneHost.dataset.reliefMode = terrainProjection.backdrop
         ? "continuous-backdrop"
-        : sceneProjection.features.length
+        : terrainProjection.features.length
           ? "real-feature-fallback"
           : "empty";
-      sceneHost.dataset.featureCount = String(sceneProjection.features.length);
-      sceneHost.dataset.pointCount = String(sceneProjection.points.length);
+      sceneHost.dataset.featureCount = String(terrainProjection.features.length);
+      sceneHost.dataset.pointCount = String(terrainProjection.points.length);
       sceneHost.dataset.rendererInitDurationMs = String(
         Math.round(window.performance.now() - buildStartedAt),
       );
-      sceneHost.dataset.projectionDurationMs = String(Math.round(projectionDurationMs));
-      if (sceneProjection.diagnostics) {
+      sceneHost.dataset.projectionDurationMs = String(
+        Math.round(rendererProjectionDurationMs),
+      );
+      if (terrainProjection.diagnostics) {
         sceneHost.dataset.projectionSourceBoundsMs = String(
-          Math.round(sceneProjection.diagnostics.sourceBoundsMs),
+          Math.round(terrainProjection.diagnostics.sourceBoundsMs),
         );
         sceneHost.dataset.projectionSurfaceMs = String(
-          Math.round(sceneProjection.diagnostics.surfaceProjectionMs),
+          Math.round(terrainProjection.diagnostics.surfaceProjectionMs),
         );
         sceneHost.dataset.projectionUnionMs = String(
-          Math.round(sceneProjection.diagnostics.unionMs),
+          Math.round(terrainProjection.diagnostics.unionMs),
         );
       }
     }
@@ -581,7 +610,7 @@ export default function TerrainReliefBoundaryMap({
         // beneath every movable administrative component. It sits below the
         // component caps, so it cannot become a pasted interaction overlay;
         // it only prevents transparent voids from appearing when a cap rises.
-        const renderBodies = selectReliefRenderBodies(sceneProjection);
+        const renderBodies = selectReliefRenderBodies(terrainProjection);
         const earthWallBodies = renderBodies.walls;
         const earthTopBodies = renderBodies.tops;
         if (sceneHost) {
@@ -610,20 +639,20 @@ export default function TerrainReliefBoundaryMap({
           if (sceneHost) {
             sceneHost.dataset.reliefWallGeometryCount = String(earthWalls.length);
             sceneHost.dataset.reliefSolidVisible = earthWalls.length ? "true" : "false";
-            sceneHost.dataset.parentOuterLayerCount = sceneProjection.backdrop
+            sceneHost.dataset.parentOuterLayerCount = terrainProjection.backdrop
               ? "1"
               : "0";
           }
         }
 
         const selectableSurfaces = new Map<string, ReliefSurface>();
-        sceneProjection.features
+        terrainProjection.features
           .filter(({ region }) => !region.mapContextOnly)
           .forEach((surface) => selectableSurfaces.set(surface.region.code, surface));
-        if (!sceneProjection.features.length && sceneProjection.backdrop) {
+        if (!terrainProjection.features.length && terrainProjection.backdrop) {
           selectableSurfaces.set(
-            sceneProjection.backdrop.region.code,
-            sceneProjection.backdrop,
+            terrainProjection.backdrop.region.code,
+            terrainProjection.backdrop,
           );
         }
         const primaryComponentByRegion = new Map<string, ReliefComponentIdentity>();
@@ -715,8 +744,8 @@ export default function TerrainReliefBoundaryMap({
         // When a component rises, only segments owned by that region disappear;
         // the rest of the administrative structure remains on the ground.
         const groundOutlineSurfaces =
-          sceneProjection.features.length && sceneProjection.backdrop
-            ? [...renderBodies.outlines, sceneProjection.backdrop]
+          terrainProjection.features.length && terrainProjection.backdrop
+            ? [...renderBodies.outlines, terrainProjection.backdrop]
             : renderBodies.outlines;
         const activeOutline = createUniqueOutlineGroup(
           groundOutlineSurfaces,
@@ -726,10 +755,11 @@ export default function TerrainReliefBoundaryMap({
         );
         reliefRoot.add(activeOutline.group);
         if (sceneHost) {
-          sceneHost.dataset.parentOutlineLayerCount = sceneProjection.backdrop
+          sceneHost.dataset.parentOutlineLayerCount = terrainProjection.backdrop
             ? "1"
             : "0";
-          sceneHost.dataset.childrenInternalLayerCount = sceneProjection.features.length
+          sceneHost.dataset.childrenInternalLayerCount = terrainProjection.features
+            .length
             ? "1"
             : "0";
           sceneHost.dataset.duplicateOutlineSegmentCount = "0";
@@ -793,8 +823,8 @@ export default function TerrainReliefBoundaryMap({
           render();
         };
 
-        sceneProjection.points.forEach(({ point, region }) => {
-          const densePoints = sceneProjection.points.length > 32;
+        terrainProjection.points.forEach(({ point, region }) => {
+          const densePoints = terrainProjection.points.length > 32;
           const geometry = new THREE.CircleGeometry(
             densePoints ? 1.65 : region.level === "VILLAGE" ? 3.8 : 5.1,
             densePoints ? 12 : 24,
@@ -852,7 +882,7 @@ export default function TerrainReliefBoundaryMap({
         ];
         layoutUpdateRef.current = (open) => {
           const transform = open
-            ? calculateLayoutTransform(sceneProjection, detailProjection)
+            ? calculateLayoutTransform(terrainProjection, terrainDetailProjection)
             : IDENTITY_LAYOUT_TRANSFORM;
           applyReliefLayoutMatrix(reliefRoot, transform);
           surfaceMaterials.forEach((material) =>
@@ -864,13 +894,13 @@ export default function TerrainReliefBoundaryMap({
         const geometryReadyAt = window.performance.now();
         if (sceneHost) {
           sceneHost.dataset.projectedVertexCount = String(
-            countProjectedVertices(sceneProjection),
+            countProjectedVertices(terrainProjection),
           );
           sceneHost.dataset.earthVertexCount = String(
-            countEarthVertices(sceneProjection),
+            countEarthVertices(terrainProjection),
           );
           sceneHost.dataset.hitTestVertexCount = String(
-            countHitTestVertices(sceneProjection),
+            countHitTestVertices(terrainProjection),
           );
           sceneHost.dataset.geometryCpuDurationMs = String(
             Math.round(geometryReadyAt - terrainReadyAt),
@@ -895,7 +925,7 @@ export default function TerrainReliefBoundaryMap({
         }
         callbacksRef.current.onReady();
         reportSelectionPosition(
-          selectedRef.current ? detailProjection : sceneProjection,
+          selectedRef.current ? terrainDetailProjection : terrainProjection,
           selectedRef.current,
           positionCallbackRef.current,
           stageWidth,
@@ -970,13 +1000,13 @@ export default function TerrainReliefBoundaryMap({
     };
   }, [
     cancelLayoutTimer,
-    detailProjection,
+    terrainDetailProjection,
     drillImmediately,
-    projectionDurationMs,
-    sceneProjection,
+    rendererProjectionDurationMs,
     scheduleComponentSelection,
     scheduleSelection,
     stageWidth,
+    terrainProjection,
   ]);
 
   return (

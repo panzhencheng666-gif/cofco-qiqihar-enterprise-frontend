@@ -264,4 +264,41 @@ describe("BoundaryMap", () => {
     act(() => terrainRuntime.onReady?.());
     expect(screen.queryByText("正在完成地表首帧，请稍候")).not.toBeInTheDocument();
   });
+
+  it("does not mark the terrain unready when only sample-network overlays change", async () => {
+    const features = [feature("230200")];
+    const common = {
+      features,
+      onDrill: vi.fn(),
+      onSelect: vi.fn(),
+      points: [],
+      selectedCode: "",
+    };
+    const { rerender } = render(<BoundaryMap {...common} />);
+
+    expect(await screen.findByText("正在完成地表首帧，请稍候")).toBeVisible();
+    act(() => terrainRuntime.onReady?.());
+    expect(screen.queryByText("正在完成地表首帧，请稍候")).not.toBeInTheDocument();
+
+    rerender(
+      <BoundaryMap
+        {...common}
+        samplePointIcons={[
+          {
+            samplePointId: "design-coverage:230200001001",
+            name: "测试村设计覆盖",
+            iconKey: "design-reference",
+            layerType: "DESIGN_COVERAGE_BADGE",
+            anchorRegionCode: "230200001001",
+            types: [],
+            longitude: null,
+            latitude: null,
+            dataQualityReason: "MISSING_COORDINATE",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.queryByText("正在完成地表首帧，请稍候")).not.toBeInTheDocument();
+  });
 });
