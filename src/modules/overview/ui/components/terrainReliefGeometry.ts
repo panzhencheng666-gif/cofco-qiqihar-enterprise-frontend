@@ -268,14 +268,30 @@ export function projectReliefScene({
     point: project(position),
     region,
   }));
+  const projectedSurfaces = [projectedBackdrop, ...projectedFeatures].filter(
+    (surface): surface is ReliefSurface => Boolean(surface),
+  );
+  const surfaceByRegion = new Map(
+    projectedSurfaces.map((surface) => [surface.region.code, surface]),
+  );
+  const pointByRegion = new Map(
+    projectedPoints.map((location) => [location.region.code, location.point]),
+  );
   const projectedSamplePointIcons = expandColocatedSamplePointIcons(
-    samplePointIcons.map((icon) => {
+    samplePointIcons.flatMap((icon) => {
+      if (icon.anchorRegionCode) {
+        const regionAnchor =
+          surfaceByRegion.get(icon.anchorRegionCode)?.anchor ??
+          pointByRegion.get(icon.anchorRegionCode);
+        if (!regionAnchor) return [];
+        const anchorPoint = { ...regionAnchor };
+        return [{ anchorPoint, icon, point: { ...anchorPoint } }];
+      }
+      if (icon.longitude === null || icon.latitude === null) return [];
       const anchorPoint = project([icon.longitude, icon.latitude]);
-      return { anchorPoint, icon, point: anchorPoint };
+      return [{ anchorPoint, icon, point: anchorPoint }];
     }),
-    [projectedBackdrop, ...projectedFeatures].filter(
-      (surface): surface is ReliefSurface => Boolean(surface),
-    ),
+    projectedSurfaces,
   );
   // One administrative region is one map entity even when its source geometry
   // is a MultiPolygon. A single canonical label selects the complete boundary;
@@ -358,7 +374,7 @@ function expandColocatedSamplePointIcons(
 ) {
   const groups = new Map<string, ReliefSamplePointIcon[]>();
   icons.forEach((icon) => {
-    const key = `${icon.icon.longitude.toFixed(12)}:${icon.icon.latitude.toFixed(12)}`;
+    const key = `${icon.anchorPoint.x.toFixed(12)}:${icon.anchorPoint.y.toFixed(12)}`;
     const group = groups.get(key) ?? [];
     group.push(icon);
     groups.set(key, group);

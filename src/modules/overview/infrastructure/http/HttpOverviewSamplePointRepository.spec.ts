@@ -234,9 +234,12 @@ describe("HttpOverviewSamplePointRepository", () => {
       networkStatus: "PUBLISHED",
       designPointCount: 1,
       activeSamplePointCount: 1,
-      coveredDesignPointCount: 1,
-      uncoveredDesignPointCount: 0,
-      points: [
+      exactCoveredDesignPointCount: 1,
+      representedDesignPointCount: 0,
+      regionalAssociationDesignPointCount: 0,
+      unrelatedDesignPointCount: 0,
+      actualLevelCounts: { prefecture: 0, county: 0, township: 0, village: 1 },
+      designPoints: [
         {
           villageRegionCode: "230202997001",
           villageName: "契约测试村",
@@ -246,13 +249,33 @@ describe("HttpOverviewSamplePointRepository", () => {
           countyName: "龙沙区",
           designLongitude: 123.8,
           designLatitude: 47.2,
+        },
+      ],
+      actualPoints: [
+        {
           samplePointId: "94000000-0000-0000-0000-000000000001",
           samplePointName: "同一跨产品样本点",
           samplePointKindCode: "SURVEY_SITE",
           membershipStatusCode: "ACTIVE",
+          locatedRegionCode: "230202997001",
+          locatedRegionName: "契约测试村",
+          locatedRegionLevel: "VILLAGE",
           actualLongitude: 123.9,
           actualLatitude: 47.3,
-          comparisonState: "ACTIVE_MATCH",
+          locationState: "VALID",
+        },
+      ],
+      relations: [
+        {
+          samplePointId: "94000000-0000-0000-0000-000000000001",
+          designVillageRegionCode: "230202997001",
+          relationType: "EXACT_VILLAGE",
+          evidenceReference: null,
+          reviewStatus: "APPROVED",
+          createdBy: "system",
+          createdAt: "2026-08-23T01:00:00Z",
+          reviewedBy: null,
+          reviewedAt: null,
         },
       ],
     });
@@ -267,7 +290,9 @@ describe("HttpOverviewSamplePointRepository", () => {
       expect.anything(),
     );
     expect(result.designPointCount).toBe(1);
-    expect(result.points[0]?.comparisonState).toBe("ACTIVE_MATCH");
+    expect(result.designPoints[0]?.villageRegionCode).toBe("230202997001");
+    expect(result.actualPoints[0]?.locatedRegionLevel).toBe("VILLAGE");
+    expect(result.relations[0]?.relationType).toBe("EXACT_VILLAGE");
   });
 });
 

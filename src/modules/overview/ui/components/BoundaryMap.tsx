@@ -203,18 +203,22 @@ function BoundaryMapAccessibility({
       {samplePointIcons.map((icon) => (
         <button
           aria-label={
-            icon.layerType === "DESIGN_REFERENCE"
-              ? `${icon.name}，不含年度业务数据的行政村设计参照点`
-              : `${icon.name}，${icon.types.map((type) => type.name).join("、")}，点击查看样本点详情`
+            icon.layerType === "DESIGN_COVERAGE_BADGE"
+              ? `${icon.name}，行政村展示分区覆盖徽标，不代表精确经纬度`
+              : icon.layerType === "DESIGN_EXACT_LOCATION"
+                ? `${icon.name}，已审核设计样本点精确位置`
+                : icon.layerType === "REGIONAL_ACTUAL_BADGE"
+                  ? `${icon.name}，仅确认到行政区域，不显示伪造图钉`
+                  : `${icon.name}，${icon.types.map((type) => type.name).join("、")}，点击查看样本点详情`
           }
           aria-pressed={
-            icon.layerType === "DESIGN_REFERENCE"
+            icon.layerType && icon.layerType !== "ANNUAL_ACTUAL"
               ? undefined
               : selectedSamplePointId === icon.samplePointId
           }
           key={`accessible-sample-point-${icon.samplePointId}`}
           onClick={
-            icon.layerType === "DESIGN_REFERENCE"
+            icon.layerType && icon.layerType !== "ANNUAL_ACTUAL"
               ? undefined
               : () => onSamplePointSelect?.(icon.samplePointId)
           }

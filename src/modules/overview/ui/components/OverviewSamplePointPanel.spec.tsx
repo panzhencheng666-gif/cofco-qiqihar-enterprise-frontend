@@ -232,7 +232,6 @@ describe("OverviewSamplePointPanel", () => {
   });
 
   it.each([
-    ["COUNTY", "230202", "龙沙区"],
     ["TOWNSHIP", "230202997", "契约测试乡"],
     ["VILLAGE", "230202997001", "契约测试村"],
   ] as const)("publishes categorized icons at %s level", async (level, code, name) => {
@@ -326,9 +325,7 @@ describe("OverviewSamplePointPanel", () => {
     expect(
       within(screen.getByLabelText("所选样本点详情")).getByText("13900000000"),
     ).toBeVisible();
-    expect(onIconsChange).toHaveBeenLastCalledWith([
-      expect.objectContaining({ samplePointId: list.items[0]?.samplePointId }),
-    ]);
+    expect(onIconsChange).toHaveBeenLastCalledWith([]);
   });
 
   it("loads stable-id business detail without map geometry", async () => {
@@ -573,32 +570,70 @@ describe("OverviewSamplePointPanel", () => {
       <PanelHarness
         onIconsChange={onIconsChange}
         year={2026}
-        region={{ code: "230202", level: "COUNTY", name: "龙沙区" }}
+        region={{ code: "230202997", level: "TOWNSHIP", name: "契约测试乡" }}
         repository={repository}
       />,
     );
 
     expect(await screen.findByRole("group", { name: "地图样本点图层" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "现有样本点" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "只看现有" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
-    await userEvent.click(screen.getByRole("button", { name: "设计样本点" }));
+    await userEvent.click(screen.getByRole("button", { name: "只看设计" }));
 
     await waitFor(() =>
       expect(onIconsChange).toHaveBeenLastCalledWith([
         expect.objectContaining({
           iconKey: "design-reference",
-          layerType: "DESIGN_REFERENCE",
-          samplePointId: "design:230202997001",
+          layerType: "DESIGN_COVERAGE_BADGE",
+          samplePointId: "design-coverage:230202997001",
         }),
       ]),
     );
     expect(repository.comparison).toHaveBeenCalledWith({
-      regionCode: "230202",
+      regionCode: "230202997",
       year: 2026,
     });
     expect(screen.getByText("设计行政村 1 个 · 年度现有样本点 1 个")).toBeVisible();
+    expect(screen.getByText(/行政村展示分区（非权威边界）/)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "设计覆盖信息" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "产情类 1" })).not.toBeInTheDocument();
+  });
+
+  it("loads the parent township comparison when a village is selected", async () => {
+    const repository = repositoryStub();
+    const onIconsChange = vi.fn();
+
+    render(
+      <PanelHarness
+        onIconsChange={onIconsChange}
+        year={2026}
+        region={{
+          code: "230202997001",
+          level: "VILLAGE",
+          name: "契约测试村",
+          parentCode: "230202997",
+        }}
+        repository={repository}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(repository.comparison).toHaveBeenCalledWith({
+        regionCode: "230202997",
+        year: 2026,
+      }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "只看设计" }));
+    await waitFor(() =>
+      expect(onIconsChange).toHaveBeenLastCalledWith([
+        expect.objectContaining({
+          anchorRegionCode: "230202997001",
+          visualState: "selected",
+        }),
+      ]),
+    );
   });
 });
 
@@ -612,9 +647,12 @@ function repositoryStub() {
       networkStatus: "PUBLISHED",
       designPointCount: 1,
       activeSamplePointCount: 1,
-      coveredDesignPointCount: 1,
-      uncoveredDesignPointCount: 0,
-      points: [
+      exactCoveredDesignPointCount: 1,
+      representedDesignPointCount: 0,
+      regionalAssociationDesignPointCount: 0,
+      unrelatedDesignPointCount: 0,
+      actualLevelCounts: { prefecture: 0, county: 0, township: 0, village: 1 },
+      designPoints: [
         {
           villageRegionCode: "230202997001",
           villageName: "契约测试村",
@@ -624,13 +662,35 @@ function repositoryStub() {
           countyName: "龙沙区",
           designLongitude: 123.8,
           designLatitude: 47.2,
+          coordinateReviewStatus: "APPROVED",
+          coordinateSource: "村委会驻地复核",
+        },
+      ],
+      actualPoints: [
+        {
           samplePointId: "94000000-0000-0000-0000-000000000001",
           samplePointName: "同一跨产品样本点",
-          samplePointKindCode: "SURVEY_SITE",
+          samplePointKindCode: "FARMER",
           membershipStatusCode: "ACTIVE",
+          locatedRegionCode: "230202997001",
+          locatedRegionName: "契约测试村",
+          locatedRegionLevel: "VILLAGE",
           actualLongitude: 123.9,
           actualLatitude: 47.3,
-          comparisonState: "ACTIVE_MATCH",
+          locationState: "VALID",
+        },
+      ],
+      relations: [
+        {
+          samplePointId: "94000000-0000-0000-0000-000000000001",
+          designVillageRegionCode: "230202997001",
+          relationType: "EXACT_VILLAGE",
+          evidenceReference: null,
+          reviewStatus: "APPROVED",
+          createdBy: "system",
+          createdAt: "2026-08-23T01:00:00Z",
+          reviewedBy: null,
+          reviewedAt: null,
         },
       ],
     }),

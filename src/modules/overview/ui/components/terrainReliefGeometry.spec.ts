@@ -238,6 +238,94 @@ describe("projectReliefScene", () => {
     expect(typeof projection.samplePointIcons[0]?.point.y).toBe("number");
   });
 
+  it("anchors a design coverage badge to the village interior instead of its design coordinate", () => {
+    const village = polygonFeature(
+      "230202997001",
+      [
+        [123, 47],
+        [124, 47],
+        [124, 48],
+        [123, 48],
+        [123, 47],
+      ],
+      "VILLAGE",
+    );
+    const projection = projectReliefScene({
+      features: [village],
+      frame: overviewReliefFrame(false),
+      points: [],
+      samplePointIcons: [
+        {
+          samplePointId: "design-coverage:230202997001",
+          name: "契约测试村设计覆盖",
+          iconKey: "design-coverage",
+          layerType: "DESIGN_COVERAGE_BADGE",
+          anchorRegionCode: "230202997001",
+          villageRegionCode: "230202997001",
+          types: [
+            {
+              code: "DESIGN_COVERAGE",
+              name: "行政村设计覆盖",
+              iconKey: "design-coverage",
+            },
+          ],
+          longitude: 130,
+          latitude: 55,
+          dataQualityReason: null,
+        },
+      ],
+    });
+
+    expect(projection.samplePointIcons[0]?.anchorPoint).toEqual(
+      projection.features[0]?.anchor,
+    );
+    expect(projection.samplePointIcons[0]?.icon.longitude).toBe(130);
+    expect(projection.samplePointIcons[0]?.icon.latitude).toBe(55);
+  });
+
+  it("anchors a coordinate-free regional actual badge to its administrative label", () => {
+    const township = polygonFeature(
+      "230202997",
+      [
+        [123, 47],
+        [124, 47],
+        [124, 48],
+        [123, 48],
+        [123, 47],
+      ],
+      "TOWNSHIP",
+    );
+    const projection = projectReliefScene({
+      backdrop: township,
+      features: [],
+      frame: overviewReliefFrame(false),
+      points: [],
+      samplePointIcons: [
+        {
+          samplePointId: "regional-actual:94000000-0000-0000-0000-000000000002",
+          name: "乡镇级现有样本",
+          iconKey: "regional-actual",
+          layerType: "REGIONAL_ACTUAL_BADGE",
+          anchorRegionCode: "230202997",
+          types: [
+            {
+              code: "TRADER",
+              name: "区域级现有样本",
+              iconKey: "regional-actual",
+            },
+          ],
+          longitude: null,
+          latitude: null,
+          dataQualityReason: "MISSING_COORDINATE",
+        },
+      ],
+    });
+
+    expect(projection.samplePointIcons[0]?.anchorPoint).toEqual(
+      projection.backdrop?.anchor,
+    );
+  });
+
   it("expands verified colocated entities without changing their true anchor", () => {
     const samplePointFrame = overviewReliefFrame(false);
     const shared = {

@@ -9,11 +9,14 @@ import {
 const comparison: SampleNetworkComparison = {
   networkYear: 2026,
   networkStatus: "PUBLISHED",
-  designPointCount: 1,
-  activeSamplePointCount: 1,
-  coveredDesignPointCount: 1,
-  uncoveredDesignPointCount: 0,
-  points: [
+  designPointCount: 2,
+  activeSamplePointCount: 2,
+  exactCoveredDesignPointCount: 1,
+  representedDesignPointCount: 0,
+  regionalAssociationDesignPointCount: 2,
+  unrelatedDesignPointCount: 1,
+  actualLevelCounts: { prefecture: 0, county: 1, township: 0, village: 1 },
+  designPoints: [
     {
       villageRegionCode: "230202997001",
       villageName: "契约测试村",
@@ -23,13 +26,68 @@ const comparison: SampleNetworkComparison = {
       countyName: "龙沙区",
       designLongitude: 123.8,
       designLatitude: 47.2,
+      coordinateReviewStatus: "APPROVED",
+    },
+    {
+      villageRegionCode: "230202997002",
+      villageName: "兄弟测试村",
+      townshipRegionCode: "230202997",
+      townshipName: "契约测试乡",
+      countyRegionCode: "230202",
+      countyName: "龙沙区",
+      designLongitude: 123.7,
+      designLatitude: 47.1,
+      coordinateReviewStatus: "PENDING_REVIEW",
+    },
+  ],
+  actualPoints: [
+    {
       samplePointId: "94000000-0000-0000-0000-000000000001",
       samplePointName: "同一跨产品样本点",
-      samplePointKindCode: "SURVEY_SITE",
+      samplePointKindCode: "FARMER",
       membershipStatusCode: "ACTIVE",
+      locatedRegionCode: "230202997001",
+      locatedRegionName: "契约测试村",
+      locatedRegionLevel: "VILLAGE",
       actualLongitude: 123.9,
       actualLatitude: 47.3,
-      comparisonState: "ACTIVE_MATCH",
+      locationState: "VALID",
+    },
+    {
+      samplePointId: "94000000-0000-0000-0000-000000000002",
+      samplePointName: "区县级样本",
+      samplePointKindCode: "TRADER",
+      membershipStatusCode: "ACTIVE",
+      locatedRegionCode: "230202",
+      locatedRegionName: "龙沙区",
+      locatedRegionLevel: "COUNTY",
+      actualLongitude: null,
+      actualLatitude: null,
+      locationState: "MISSING_COORDINATE",
+    },
+  ],
+  relations: [
+    {
+      samplePointId: "94000000-0000-0000-0000-000000000001",
+      designVillageRegionCode: "230202997001",
+      relationType: "EXACT_VILLAGE",
+      evidenceReference: null,
+      reviewStatus: "APPROVED",
+      createdBy: "system",
+      createdAt: "2026-08-23T01:00:00Z",
+      reviewedBy: null,
+      reviewedAt: null,
+    },
+    {
+      samplePointId: "94000000-0000-0000-0000-000000000002",
+      designVillageRegionCode: "230202997001",
+      relationType: "REGIONAL_ASSOCIATION",
+      evidenceReference: null,
+      reviewStatus: "COMPUTED",
+      createdBy: "system",
+      createdAt: "2026-08-23T01:00:00Z",
+      reviewedBy: null,
+      reviewedAt: null,
     },
   ],
 };
@@ -45,33 +103,115 @@ const actualIcon = {
 };
 
 describe("sampleNetworkLayerIcons", () => {
-  it("keeps the existing actual icon unchanged in actual mode", () => {
-    expect(sampleNetworkLayerIcons("actual", [actualIcon], comparison)).toEqual([
-      actualIcon,
-    ]);
+  it("keeps the existing nine-type actual icon unchanged", () => {
+    expect(
+      sampleNetworkLayerIcons("actual", [actualIcon], comparison, {
+        regionLevel: "TOWNSHIP",
+        selectedRegionCode: "230202997",
+      }),
+    ).toContainEqual(actualIcon);
   });
 
-  it("creates one neutral yearless reference marker per design village", () => {
-    const result = sampleNetworkLayerIcons("design", [actualIcon], comparison);
+  it("creates one design coverage badge for every township village without using the design coordinate as its anchor", () => {
+    const result = sampleNetworkLayerIcons("design", [actualIcon], comparison, {
+      regionLevel: "TOWNSHIP",
+      selectedRegionCode: "230202997",
+    });
 
-    expect(result).toEqual([
-      expect.objectContaining({
-        samplePointId: "design:230202997001",
-        name: "契约测试村设计样本点",
-        iconKey: "design-reference",
-        layerType: "DESIGN_REFERENCE",
-        longitude: 123.8,
-        latitude: 47.2,
-      }),
-    ]);
+    expect(result).toHaveLength(2);
+    expect(result).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          samplePointId: "design-coverage:230202997001",
+          anchorRegionCode: "230202997001",
+          iconKey: "design-reference",
+          layerType: "DESIGN_COVERAGE_BADGE",
+        }),
+        expect.objectContaining({
+          samplePointId: "design-coverage:230202997002",
+          anchorRegionCode: "230202997002",
+          iconKey: "design-reference",
+          layerType: "DESIGN_COVERAGE_BADGE",
+        }),
+      ]),
+    );
     expect(designReferenceIconPathData).toMatch(/^M/);
   });
 
-  it("combines actual and design markers without replacing the nine-type actual icon", () => {
-    const result = sampleNetworkLayerIcons("comparison", [actualIcon], comparison);
+  it("keeps sibling badges visible but muted after a village is selected", () => {
+    const result = sampleNetworkLayerIcons("design", [], comparison, {
+      regionLevel: "VILLAGE",
+      selectedRegionCode: "230202997001",
+    });
 
-    expect(result).toHaveLength(2);
-    expect(result[0]).toEqual(actualIcon);
-    expect(result[1]?.iconKey).toBe("design-reference");
+    expect(result).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          anchorRegionCode: "230202997001",
+          visualState: "selected",
+        }),
+        expect.objectContaining({
+          anchorRegionCode: "230202997002",
+          visualState: "muted",
+        }),
+      ]),
+    );
+  });
+
+  it("creates an exact design location only when explicitly enabled and approved", () => {
+    const hidden = sampleNetworkLayerIcons("design", [], comparison, {
+      regionLevel: "TOWNSHIP",
+      selectedRegionCode: "230202997",
+      showExactDesignLocations: false,
+    });
+    const visible = sampleNetworkLayerIcons("design", [], comparison, {
+      regionLevel: "TOWNSHIP",
+      selectedRegionCode: "230202997",
+      showExactDesignLocations: true,
+    });
+
+    expect(hidden).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ layerType: "DESIGN_EXACT_LOCATION" }),
+      ]),
+    );
+    expect(visible).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          layerType: "DESIGN_EXACT_LOCATION",
+          longitude: 123.8,
+          latitude: 47.2,
+        }),
+      ]),
+    );
+    expect(
+      visible.filter((icon) => icon.layerType === "DESIGN_EXACT_LOCATION"),
+    ).toHaveLength(1);
+  });
+
+  it("uses a regional badge rather than a fabricated pin for an actual point without coordinates", () => {
+    const result = sampleNetworkLayerIcons("actual", [], comparison, {
+      regionLevel: "TOWNSHIP",
+      selectedRegionCode: "230202997",
+    });
+
+    expect(result).toContainEqual(
+      expect.objectContaining({
+        samplePointId: "regional-actual:94000000-0000-0000-0000-000000000002",
+        anchorRegionCode: "230202",
+        layerType: "REGIONAL_ACTUAL_BADGE",
+        longitude: null,
+        latitude: null,
+      }),
+    );
+  });
+
+  it("keeps prefecture and county views aggregate-only", () => {
+    expect(
+      sampleNetworkLayerIcons("comparison", [actualIcon], comparison, {
+        regionLevel: "COUNTY",
+        selectedRegionCode: "230202",
+      }),
+    ).toEqual([]);
   });
 });

@@ -814,7 +814,7 @@ describe("OverviewPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("renders concrete sample points as inspectable map symbols and resets them with the drawer", async () => {
+  it("keeps county maps aggregate-only while list selection remains inspectable", async () => {
     const county = {
       ...sampleRegion,
       code: "230231",
@@ -879,10 +879,16 @@ describe("OverviewPage", () => {
       .setup()
       .click(await screen.findByRole("button", { name: "产情类 1" }));
 
-    const symbol = await screen.findByRole("button", {
-      name: "同一跨产品样本点，农户，点击查看样本点详情",
-    });
-    fireEvent.click(symbol);
+    expect(
+      screen.queryByRole("button", {
+        name: "同一跨产品样本点，农户，点击查看样本点详情",
+      }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      within(screen.getByLabelText("样本点列表")).getByRole("button", {
+        name: /同一跨产品样本点/,
+      }),
+    );
     await waitFor(() =>
       expect(detail).toHaveBeenCalledWith({
         categoryCode: "PRODUCTION",
@@ -981,10 +987,15 @@ describe("OverviewPage", () => {
     await userEvent.click(await screen.findByRole("button", { name: "产情类 1" }));
     await userEvent.type(screen.getByLabelText("搜索样本点"), "跨产品");
     expect(
-      await screen.findByRole("button", {
-        name: "同一跨产品样本点，农户，点击查看样本点详情",
+      within(screen.getByLabelText("样本点列表")).getByRole("button", {
+        name: /同一跨产品样本点/,
       }),
     ).toBeVisible();
+    expect(
+      screen.queryByRole("button", {
+        name: "同一跨产品样本点，农户，点击查看样本点详情",
+      }),
+    ).not.toBeInTheDocument();
     const listCalls = list.mock.calls.length;
     const iconCalls = icons.mock.calls.length;
 
@@ -1650,9 +1661,14 @@ const emptySampleNetworkComparison = {
   networkStatus: "NOT_CREATED",
   designPointCount: 0,
   activeSamplePointCount: 0,
-  coveredDesignPointCount: 0,
-  uncoveredDesignPointCount: 0,
-  points: [],
+  exactCoveredDesignPointCount: 0,
+  representedDesignPointCount: 0,
+  regionalAssociationDesignPointCount: 0,
+  unrelatedDesignPointCount: 0,
+  actualLevelCounts: { prefecture: 0, county: 0, township: 0, village: 0 },
+  designPoints: [],
+  actualPoints: [],
+  relations: [],
 };
 
 const samplePointList = {
