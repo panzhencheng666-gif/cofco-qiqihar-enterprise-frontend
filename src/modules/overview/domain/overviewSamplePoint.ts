@@ -75,10 +75,42 @@ export interface OverviewSamplePointIcon {
   samplePointId: string;
   name: string;
   iconKey: string;
+  layerType?: "ANNUAL_ACTUAL" | "DESIGN_REFERENCE";
+  villageRegionCode?: string;
   types: readonly OverviewSamplePointTypeRef[];
   longitude: number;
   latitude: number;
   dataQualityReason: string | null;
+}
+
+export type SampleNetworkLayerMode = "actual" | "design" | "comparison";
+
+export interface SampleNetworkComparisonPoint {
+  villageRegionCode: string;
+  villageName: string;
+  townshipRegionCode: string;
+  townshipName: string;
+  countyRegionCode: string;
+  countyName: string;
+  designLongitude: number;
+  designLatitude: number;
+  samplePointId: string | null;
+  samplePointName: string | null;
+  samplePointKindCode: string | null;
+  membershipStatusCode: string | null;
+  actualLongitude: number | null;
+  actualLatitude: number | null;
+  comparisonState: string;
+}
+
+export interface SampleNetworkComparison {
+  networkYear: number;
+  networkStatus: string;
+  designPointCount: number;
+  activeSamplePointCount: number;
+  coveredDesignPointCount: number;
+  uncoveredDesignPointCount: number;
+  points: readonly SampleNetworkComparisonPoint[];
 }
 
 export interface OverviewSamplePointBusinessValue {

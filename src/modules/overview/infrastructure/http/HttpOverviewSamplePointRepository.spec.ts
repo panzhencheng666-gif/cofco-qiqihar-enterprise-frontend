@@ -227,6 +227,48 @@ describe("HttpOverviewSamplePointRepository", () => {
     );
     expect(result).not.toHaveProperty("pointGeometry");
   });
+
+  it("reads the governed annual network comparison for the exact map scope", async () => {
+    const get = respondingWith({
+      networkYear: 2026,
+      networkStatus: "PUBLISHED",
+      designPointCount: 1,
+      activeSamplePointCount: 1,
+      coveredDesignPointCount: 1,
+      uncoveredDesignPointCount: 0,
+      points: [
+        {
+          villageRegionCode: "230202997001",
+          villageName: "契约测试村",
+          townshipRegionCode: "230202997",
+          townshipName: "契约测试乡",
+          countyRegionCode: "230202",
+          countyName: "龙沙区",
+          designLongitude: 123.8,
+          designLatitude: 47.2,
+          samplePointId: "94000000-0000-0000-0000-000000000001",
+          samplePointName: "同一跨产品样本点",
+          samplePointKindCode: "SURVEY_SITE",
+          membershipStatusCode: "ACTIVE",
+          actualLongitude: 123.9,
+          actualLatitude: 47.3,
+          comparisonState: "ACTIVE_MATCH",
+        },
+      ],
+    });
+
+    const result = await repositoryWith(get).comparison({
+      regionCode: "230202",
+      year: 2026,
+    });
+
+    expect(get).toHaveBeenCalledWith(
+      "/api/v1/sample-networks/2026/comparison?regionCode=230202",
+      expect.anything(),
+    );
+    expect(result.designPointCount).toBe(1);
+    expect(result.points[0]?.comparisonState).toBe("ACTIVE_MATCH");
+  });
 });
 
 function respondingWith(data: unknown) {

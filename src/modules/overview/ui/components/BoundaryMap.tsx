@@ -202,10 +202,22 @@ function BoundaryMapAccessibility({
       ))}
       {samplePointIcons.map((icon) => (
         <button
-          aria-label={`${icon.name}，${icon.types.map((type) => type.name).join("、")}，点击查看样本点详情`}
-          aria-pressed={selectedSamplePointId === icon.samplePointId}
+          aria-label={
+            icon.layerType === "DESIGN_REFERENCE"
+              ? `${icon.name}，不含年度业务数据的行政村设计参照点`
+              : `${icon.name}，${icon.types.map((type) => type.name).join("、")}，点击查看样本点详情`
+          }
+          aria-pressed={
+            icon.layerType === "DESIGN_REFERENCE"
+              ? undefined
+              : selectedSamplePointId === icon.samplePointId
+          }
           key={`accessible-sample-point-${icon.samplePointId}`}
-          onClick={() => onSamplePointSelect?.(icon.samplePointId)}
+          onClick={
+            icon.layerType === "DESIGN_REFERENCE"
+              ? undefined
+              : () => onSamplePointSelect?.(icon.samplePointId)
+          }
           type="button"
         />
       ))}

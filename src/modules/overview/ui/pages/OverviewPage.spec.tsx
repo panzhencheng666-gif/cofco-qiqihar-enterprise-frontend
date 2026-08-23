@@ -592,6 +592,7 @@ describe("OverviewPage", () => {
   it("shows unavailable sample-point state without inventing a zero aggregate", async () => {
     const samplePointRepository: OverviewSamplePointRepository = {
       aggregates: () => Promise.reject(new Error("formal aggregate unavailable")),
+      comparison: () => Promise.reject(new Error("formal comparison unavailable")),
       list: () => Promise.reject(new Error("formal list unavailable")),
       icons: () => Promise.reject(new Error("formal icons unavailable")),
       detail: () => Promise.reject(new Error("formal detail unavailable")),
@@ -666,6 +667,7 @@ describe("OverviewPage", () => {
                 unresolvedSourceCount: 0,
               },
             ]),
+          comparison: () => Promise.resolve(emptySampleNetworkComparison),
           list,
           icons,
           detail: () => Promise.resolve(samplePointDetail),
@@ -772,6 +774,7 @@ describe("OverviewPage", () => {
         }}
         samplePointRepository={{
           aggregates,
+          comparison: () => Promise.resolve(emptySampleNetworkComparison),
           list: () => Promise.resolve(samplePointList),
           icons: () => Promise.resolve([]),
           detail: () => Promise.reject(new Error("not selected")),
@@ -849,6 +852,7 @@ describe("OverviewPage", () => {
                 unresolvedSourceCount: 0,
               },
             ]),
+          comparison: () => Promise.resolve(emptySampleNetworkComparison),
           list: () => Promise.resolve(samplePointList),
           icons: () => Promise.resolve(samplePointIcons),
           detail,
@@ -959,6 +963,7 @@ describe("OverviewPage", () => {
                 unresolvedSourceCount: 0,
               },
             ]),
+          comparison: () => Promise.resolve(emptySampleNetworkComparison),
           list,
           icons,
           detail: () => Promise.resolve(samplePointDetail),
@@ -1130,6 +1135,7 @@ describe("OverviewPage", () => {
         }}
         samplePointRepository={{
           aggregates,
+          comparison: () => Promise.resolve(emptySampleNetworkComparison),
           detail: () => Promise.resolve(samplePointDetail),
           icons: () => Promise.resolve([]),
           list: () => Promise.resolve(samplePointList),
@@ -1639,6 +1645,16 @@ const sampleIndicator = {
   sourceCount: 1,
   sourcePath: "/api/v1/production-records",
 };
+const emptySampleNetworkComparison = {
+  networkYear: 2026,
+  networkStatus: "NOT_CREATED",
+  designPointCount: 0,
+  activeSamplePointCount: 0,
+  coveredDesignPointCount: 0,
+  uncoveredDesignPointCount: 0,
+  points: [],
+};
+
 const samplePointList = {
   regionCode: "230231",
   totalCount: 1,

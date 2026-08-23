@@ -6,7 +6,10 @@ import type {
   OverviewSamplePointDetail,
   OverviewSamplePointIcon,
   OverviewSamplePointList,
+  SampleNetworkComparison,
+  SampleNetworkLayerMode,
 } from "../../domain/overviewSamplePoint";
+import { sampleNetworkLayerIcons } from "../presentation/sampleNetworkLayers";
 
 type RegionLevel = "PREFECTURE" | "COUNTY" | "TOWNSHIP" | "VILLAGE";
 type LoadState = "idle" | "loading" | "ready" | "unavailable";
@@ -38,6 +41,10 @@ export function OverviewSamplePointPanel({
   const [publishedIcons, setPublishedIcons] = useState<
     readonly OverviewSamplePointIcon[]
   >([]);
+  const [layerMode, setLayerMode] = useState<SampleNetworkLayerMode>("actual");
+  const [comparison, setComparison] = useState<SampleNetworkComparison>();
+  const [comparisonState, setComparisonState] = useState<LoadState>("loading");
+  const [comparisonIssue, setComparisonIssue] = useState<string>();
   const [detail, setDetail] = useState<OverviewSamplePointDetail>();
   const [detailPeriod, setDetailPeriod] = useState<string>();
   const [catalogState, setCatalogState] = useState<LoadState>("loading");
@@ -58,6 +65,10 @@ export function OverviewSamplePointPanel({
       setCatalog(undefined);
       setResult(undefined);
       setPublishedIcons([]);
+      setLayerMode("actual");
+      setComparison(undefined);
+      setComparisonState("loading");
+      setComparisonIssue(undefined);
       setDetail(undefined);
       setDetailPeriod(undefined);
       setCatalogState("loading");
@@ -109,12 +120,37 @@ export function OverviewSamplePointPanel({
   }, [productCode, refreshSequence, region.code, repository, year]);
 
   useEffect(() => {
+    let active = true;
+    void Promise.resolve().then(() => {
+      if (!active) return;
+      setComparison(undefined);
+      setComparisonState("loading");
+      setComparisonIssue(undefined);
+    });
+    repository
+      .comparison({ regionCode: region.code, year })
+      .then((next) => {
+        if (!active) return;
+        setComparison(next);
+        setComparisonState("ready");
+      })
+      .catch(() => {
+        if (!active) return;
+        setComparison(undefined);
+        setComparisonState("unavailable");
+        setComparisonIssue("设计样本点与年度样本网络加载失败，请稍后重试。");
+      });
+    return () => {
+      active = false;
+    };
+  }, [refreshSequence, region.code, repository, year]);
+
+  useEffect(() => {
     if (!categoryCode) {
       let active = true;
       void Promise.resolve().then(() => {
         if (!active) return;
         setPublishedIcons([]);
-        onIconsChange([]);
       });
       return () => {
         active = false;
@@ -136,7 +172,6 @@ export function OverviewSamplePointPanel({
       setResultState("loading");
       setResultIssue(undefined);
       setIconIssue(undefined);
-      onIconsChange([]);
     });
     repository
       .list(filters)
@@ -155,7 +190,6 @@ export function OverviewSamplePointPanel({
       void Promise.resolve().then(() => {
         if (!active) return;
         setPublishedIcons([]);
-        onIconsChange([]);
       });
     } else {
       repository
@@ -163,12 +197,10 @@ export function OverviewSamplePointPanel({
         .then((icons) => {
           if (!active) return;
           setPublishedIcons(icons);
-          onIconsChange(icons);
         })
         .catch(() => {
           if (!active) return;
           setPublishedIcons([]);
-          onIconsChange([]);
           setIconIssue("样本点图标加载失败，请稍后重试。");
         });
     }
@@ -177,7 +209,6 @@ export function OverviewSamplePointPanel({
     };
   }, [
     categoryCode,
-    onIconsChange,
     productCode,
     query,
     refreshSequence,
@@ -187,6 +218,13 @@ export function OverviewSamplePointPanel({
     typeCode,
     year,
   ]);
+
+  useEffect(() => {
+    const visibleComparison = region.level === "PREFECTURE" ? undefined : comparison;
+    onIconsChange(
+      sampleNetworkLayerIcons(layerMode, publishedIcons, visibleComparison),
+    );
+  }, [comparison, layerMode, onIconsChange, publishedIcons, region.level]);
 
   useEffect(() => {
     if (!selectedSamplePointId || !categoryCode) {
@@ -299,7 +337,8 @@ export function OverviewSamplePointPanel({
   const selectedCategory = catalog?.categories.find(
     (category) => category.code === categoryCode,
   );
-  const issue = detailIssue ?? iconIssue ?? resultIssue ?? catalogIssue;
+  const issue =
+    detailIssue ?? iconIssue ?? resultIssue ?? catalogIssue ?? comparisonIssue;
   const duplicateCoordinateIconCount = publishedIcons.filter(
     (icon) => icon.dataQualityReason === "DUPLICATE_COORDINATE_UNVERIFIED",
   ).length;
@@ -316,6 +355,42 @@ export function OverviewSamplePointPanel({
   return (
     <section aria-label="样本点业务信息" className="overview-sample-point-panel">
       {issue && <p role="alert">{issue}</p>}
+
+      <section className="overview-sample-network-layers">
+        <div aria-label="地图样本点图层" role="group">
+          {(
+            [
+              ["actual", "现有样本点"],
+              ["design", "设计样本点"],
+              ["comparison", "对照显示"],
+            ] as const
+          ).map(([mode, label]) => (
+            <button
+              aria-pressed={layerMode === mode}
+              key={mode}
+              onClick={() => setLayerMode(mode)}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {comparison ? (
+          <p>
+            设计行政村 {comparison.designPointCount} 个 · 年度现有样本点{" "}
+            {comparison.activeSamplePointCount} 个
+          </p>
+        ) : (
+          <p>
+            {comparisonState === "unavailable"
+              ? "年度样本网络不可用"
+              : "正在同步年度样本网络"}
+          </p>
+        )}
+        {region.level === "PREFECTURE" && layerMode !== "actual" ? (
+          <small>进入区县后显示设计样本点，避免在全市范围堆叠 2,332 个图标。</small>
+        ) : null}
+      </section>
 
       <section className="overview-detail-section overview-sample-point-categories">
         <h3>

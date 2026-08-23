@@ -4,9 +4,14 @@ import type {
   OverviewSamplePointDetail,
   OverviewSamplePointIcon,
   OverviewSamplePointList,
+  SampleNetworkComparison,
 } from "../../domain/overviewSamplePoint";
 
 export interface OverviewSamplePointRepository {
+  comparison(query: {
+    regionCode?: string;
+    year: number;
+  }): Promise<SampleNetworkComparison>;
   aggregates(query: {
     parentCode?: string;
     productCode: string;

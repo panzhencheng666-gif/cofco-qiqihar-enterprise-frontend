@@ -564,6 +564,42 @@ describe("OverviewSamplePointPanel", () => {
       year: 2026,
     });
   });
+
+  it("switches between actual, design, and comparison layers without changing actual icons", async () => {
+    const repository = repositoryStub();
+    const onIconsChange = vi.fn();
+
+    render(
+      <PanelHarness
+        onIconsChange={onIconsChange}
+        year={2026}
+        region={{ code: "230202", level: "COUNTY", name: "龙沙区" }}
+        repository={repository}
+      />,
+    );
+
+    expect(await screen.findByRole("group", { name: "地图样本点图层" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "现有样本点" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "设计样本点" }));
+
+    await waitFor(() =>
+      expect(onIconsChange).toHaveBeenLastCalledWith([
+        expect.objectContaining({
+          iconKey: "design-reference",
+          layerType: "DESIGN_REFERENCE",
+          samplePointId: "design:230202997001",
+        }),
+      ]),
+    );
+    expect(repository.comparison).toHaveBeenCalledWith({
+      regionCode: "230202",
+      year: 2026,
+    });
+    expect(screen.getByText("设计行政村 1 个 · 年度现有样本点 1 个")).toBeVisible();
+  });
 });
 
 function repositoryStub() {
@@ -571,6 +607,33 @@ function repositoryStub() {
     aggregates: vi
       .fn<OverviewSamplePointRepository["aggregates"]>()
       .mockResolvedValue([]),
+    comparison: vi.fn<OverviewSamplePointRepository["comparison"]>().mockResolvedValue({
+      networkYear: 2026,
+      networkStatus: "PUBLISHED",
+      designPointCount: 1,
+      activeSamplePointCount: 1,
+      coveredDesignPointCount: 1,
+      uncoveredDesignPointCount: 0,
+      points: [
+        {
+          villageRegionCode: "230202997001",
+          villageName: "契约测试村",
+          townshipRegionCode: "230202997",
+          townshipName: "契约测试乡",
+          countyRegionCode: "230202",
+          countyName: "龙沙区",
+          designLongitude: 123.8,
+          designLatitude: 47.2,
+          samplePointId: "94000000-0000-0000-0000-000000000001",
+          samplePointName: "同一跨产品样本点",
+          samplePointKindCode: "SURVEY_SITE",
+          membershipStatusCode: "ACTIVE",
+          actualLongitude: 123.9,
+          actualLatitude: 47.3,
+          comparisonState: "ACTIVE_MATCH",
+        },
+      ],
+    }),
     list: vi.fn<OverviewSamplePointRepository["list"]>().mockResolvedValue(list),
     icons: vi.fn<OverviewSamplePointRepository["icons"]>().mockResolvedValue([
       {

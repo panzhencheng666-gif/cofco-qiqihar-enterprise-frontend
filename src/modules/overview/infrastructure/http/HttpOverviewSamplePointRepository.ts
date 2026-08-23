@@ -129,8 +129,49 @@ const detailSchema = z.object({
   }),
 });
 
+const comparisonSchema = z.object({
+  data: z.object({
+    networkYear: z.number().int(),
+    networkStatus: z.string(),
+    designPointCount: z.number().int().nonnegative(),
+    activeSamplePointCount: z.number().int().nonnegative(),
+    coveredDesignPointCount: z.number().int().nonnegative(),
+    uncoveredDesignPointCount: z.number().int().nonnegative(),
+    points: z.array(
+      z.object({
+        villageRegionCode: z.string(),
+        villageName: z.string(),
+        townshipRegionCode: z.string(),
+        townshipName: z.string(),
+        countyRegionCode: z.string(),
+        countyName: z.string(),
+        designLongitude: z.number(),
+        designLatitude: z.number(),
+        samplePointId: uuidTextSchema.nullable(),
+        samplePointName: z.string().nullable(),
+        samplePointKindCode: z.string().nullable(),
+        membershipStatusCode: z.string().nullable(),
+        actualLongitude: z.number().nullable(),
+        actualLatitude: z.number().nullable(),
+        comparisonState: z.string(),
+      }),
+    ),
+  }),
+});
+
 export class HttpOverviewSamplePointRepository implements OverviewSamplePointRepository {
   constructor(private readonly http: HttpClient) {}
+
+  async comparison(query: { year: number; regionCode?: string }) {
+    return (
+      await this.http.get(
+        `/api/v1/sample-networks/${query.year}/comparison${queryString(
+          query.regionCode ? { regionCode: query.regionCode } : {},
+        )}`,
+        comparisonSchema,
+      )
+    ).data;
+  }
 
   async aggregates(query: { year: number; productCode: string; parentCode?: string }) {
     const parameters = {

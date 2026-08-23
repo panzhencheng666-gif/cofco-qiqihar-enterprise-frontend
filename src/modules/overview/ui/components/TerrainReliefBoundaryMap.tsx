@@ -15,6 +15,7 @@ import {
   samplePointAggregateLabel,
   samplePointAggregateRing,
 } from "../presentation/samplePointAggregateRing";
+import { designReferenceIconPathData } from "../presentation/sampleNetworkLayers";
 import type {
   MapFeature,
   MapPointFeature,
@@ -1081,6 +1082,7 @@ export default function TerrainReliefBoundaryMap({
             );
           })}
         {activeProjection.samplePointIcons.map(({ anchorPoint, icon, point }) => {
+          const isDesignReference = icon.layerType === "DESIGN_REFERENCE";
           const expanded =
             Math.abs(anchorPoint.x - point.x) > 0.01 ||
             Math.abs(anchorPoint.y - point.y) > 0.01;
@@ -1103,17 +1105,32 @@ export default function TerrainReliefBoundaryMap({
                 />
               )}
               <button
-                aria-label={`${icon.name}，${icon.types.map((type) => type.name).join("、")}${icon.dataQualityReason === "DUPLICATE_COORDINATE_UNVERIFIED" ? "，坐标重合待核验" : ""}，点击查看样本点详情`}
-                aria-pressed={selectedSamplePointId === icon.samplePointId}
+                aria-label={
+                  isDesignReference
+                    ? `${icon.name}，不含年度业务数据的行政村设计参照点`
+                    : `${icon.name}，${icon.types.map((type) => type.name).join("、")}${icon.dataQualityReason === "DUPLICATE_COORDINATE_UNVERIFIED" ? "，坐标重合待核验" : ""}，点击查看样本点详情`
+                }
+                aria-pressed={
+                  isDesignReference
+                    ? undefined
+                    : selectedSamplePointId === icon.samplePointId
+                }
                 className={`overview-sample-point-map-icon is-${icon.iconKey ?? "unknown"}${icon.dataQualityReason === "DUPLICATE_COORDINATE_UNVERIFIED" ? " has-coordinate-warning" : ""}${selectedSamplePointId === icon.samplePointId ? " is-selected" : ""}`}
                 data-anchor-latitude={icon.latitude}
                 data-anchor-longitude={icon.longitude}
-                onClick={() => onSamplePointSelect?.(icon.samplePointId)}
+                data-layer-type={icon.layerType ?? "ANNUAL_ACTUAL"}
+                onClick={
+                  isDesignReference
+                    ? undefined
+                    : () => onSamplePointSelect?.(icon.samplePointId)
+                }
                 style={{ left: point.x, top: point.y }}
                 title={
-                  icon.dataQualityReason === "DUPLICATE_COORDINATE_UNVERIFIED"
-                    ? "坐标重合待核验；当前按原始坐标展开显示"
-                    : "点击查看样本点详情"
+                  isDesignReference
+                    ? "原始设计样本点；仅作年度样本网络对照"
+                    : icon.dataQualityReason === "DUPLICATE_COORDINATE_UNVERIFIED"
+                      ? "坐标重合待核验；当前按原始坐标展开显示"
+                      : "点击查看样本点详情"
                 }
                 type="button"
               >
@@ -1164,7 +1181,12 @@ function reliefRegionLabel({
 }
 
 function SamplePointMapSymbol({ iconKey }: { iconKey: string | undefined }) {
-  const pathData = iconKey ? samplePointIconPathData[iconKey] : undefined;
+  const pathData =
+    iconKey === "design-reference"
+      ? designReferenceIconPathData
+      : iconKey
+        ? samplePointIconPathData[iconKey]
+        : undefined;
   if (!pathData) return null;
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24">
