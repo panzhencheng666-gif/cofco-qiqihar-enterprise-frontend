@@ -10,11 +10,13 @@ import type {
   SampleNetworkLayerMode,
 } from "../../domain/overviewSamplePoint";
 import { sampleNetworkLayerIcons } from "../presentation/sampleNetworkLayers";
+import type { OverviewSampleNetworkLayerModel } from "../hooks/useOverviewSampleNetworkLayers";
 
 type RegionLevel = "PREFECTURE" | "COUNTY" | "TOWNSHIP" | "VILLAGE";
 type LoadState = "idle" | "loading" | "ready" | "unavailable";
 
 export function OverviewSamplePointPanel({
+  networkModel,
   onIconsChange,
   onSelectedSamplePointChange,
   productCode,
@@ -24,6 +26,7 @@ export function OverviewSamplePointPanel({
   selectedSamplePointId,
   year,
 }: {
+  networkModel?: OverviewSampleNetworkLayerModel;
   onIconsChange: (icons: readonly OverviewSamplePointIcon[]) => void;
   onSelectedSamplePointChange: (samplePointId: string | undefined) => void;
   productCode: string;
@@ -56,6 +59,7 @@ export function OverviewSamplePointPanel({
   const [iconIssue, setIconIssue] = useState<string>();
   const [detailIssue, setDetailIssue] = useState<string>();
   const missingVillageParent = region.level === "VILLAGE" && !region.parentCode;
+  const controlledNetwork = networkModel !== undefined;
   const comparisonRegionCode = missingVillageParent
     ? undefined
     : region.level === "VILLAGE"
@@ -130,6 +134,11 @@ export function OverviewSamplePointPanel({
 
   useEffect(() => {
     let active = true;
+    if (controlledNetwork) {
+      return () => {
+        active = false;
+      };
+    }
     void Promise.resolve().then(() => {
       if (!active) return;
       setComparison(undefined);
@@ -157,7 +166,14 @@ export function OverviewSamplePointPanel({
     return () => {
       active = false;
     };
-  }, [comparisonRegionCode, productCode, refreshSequence, repository, year]);
+  }, [
+    comparisonRegionCode,
+    controlledNetwork,
+    productCode,
+    refreshSequence,
+    repository,
+    year,
+  ]);
 
   useEffect(() => {
     if (!categoryCode) {
@@ -234,32 +250,45 @@ export function OverviewSamplePointPanel({
     year,
   ]);
 
+  const effectiveLayerMode = networkModel?.mode ?? layerMode;
+  const effectiveComparison = networkModel?.comparison ?? comparison;
+  const effectiveComparisonState = networkModel?.state ?? comparisonState;
+  const effectiveShowExactDesignLocations =
+    networkModel?.showExactDesignLocations ?? showExactDesignLocations;
   const visibleLayerIcons = useMemo(() => {
-    if (missingVillageParent && layerMode !== "actual") return [];
+    if (missingVillageParent && effectiveLayerMode !== "actual") return [];
     const visibleComparison =
-      comparisonRegionCode && region.level !== "PREFECTURE" ? comparison : undefined;
-    return sampleNetworkLayerIcons(layerMode, publishedIcons, visibleComparison, {
-      regionLevel: region.level,
-      selectedRegionCode: region.code,
-      ...(comparisonRegionCode
-        ? { summaryAnchorRegionCode: comparisonRegionCode }
-        : {}),
-      showExactDesignLocations,
-    });
+      comparisonRegionCode && region.level !== "PREFECTURE"
+        ? effectiveComparison
+        : undefined;
+    return sampleNetworkLayerIcons(
+      effectiveLayerMode,
+      publishedIcons,
+      visibleComparison,
+      {
+        regionLevel: region.level,
+        selectedRegionCode: region.code,
+        ...(comparisonRegionCode
+          ? { summaryAnchorRegionCode: comparisonRegionCode }
+          : {}),
+        showExactDesignLocations: effectiveShowExactDesignLocations,
+      },
+    );
   }, [
-    comparison,
     comparisonRegionCode,
-    layerMode,
+    effectiveComparison,
+    effectiveLayerMode,
+    effectiveShowExactDesignLocations,
     missingVillageParent,
     publishedIcons,
     region.code,
     region.level,
-    showExactDesignLocations,
   ]);
+  const displayedLayerIcons = networkModel?.icons ?? visibleLayerIcons;
 
   useEffect(() => {
-    onIconsChange(visibleLayerIcons);
-  }, [onIconsChange, visibleLayerIcons]);
+    onIconsChange(controlledNetwork ? publishedIcons : visibleLayerIcons);
+  }, [controlledNetwork, onIconsChange, publishedIcons, visibleLayerIcons]);
 
   useEffect(() => {
     if (!selectedSamplePointId || !categoryCode) {
@@ -373,14 +402,19 @@ export function OverviewSamplePointPanel({
     (category) => category.code === categoryCode,
   );
   const issue =
-    detailIssue ?? iconIssue ?? resultIssue ?? catalogIssue ?? comparisonIssue;
-  const duplicateCoordinateIconCount = visibleLayerIcons.filter(
+    detailIssue ??
+    iconIssue ??
+    resultIssue ??
+    catalogIssue ??
+    networkModel?.issue ??
+    comparisonIssue;
+  const duplicateCoordinateIconCount = displayedLayerIcons.filter(
     (icon) => icon.dataQualityReason === "DUPLICATE_COORDINATE_UNVERIFIED",
   ).length;
-  const preciseBusinessIconCount = visibleLayerIcons.filter(
+  const preciseBusinessIconCount = displayedLayerIcons.filter(
     (icon) => !icon.layerType || icon.layerType === "ANNUAL_ACTUAL",
   ).length;
-  const regionalSummaryBadgeCount = visibleLayerIcons.filter(
+  const regionalSummaryBadgeCount = displayedLayerIcons.filter(
     (icon) => icon.layerType === "REGIONAL_ACTUAL_BADGE",
   ).length;
   const temporarilyHiddenCount =
@@ -394,16 +428,16 @@ export function OverviewSamplePointPanel({
       )
     : [];
   const approvedDesignCoordinateCount =
-    comparison?.designPoints.filter(
+    effectiveComparison?.designPoints.filter(
       ({ coordinateReviewStatus }) => coordinateReviewStatus === "AUTHORITY_APPROVED",
     ).length ?? 0;
   const registeredCoordinateSourceCount =
-    comparison?.designPoints.filter(({ coordinateSourceName }) =>
+    effectiveComparison?.designPoints.filter(({ coordinateSourceName }) =>
       Boolean(coordinateSourceName?.trim()),
     ).length ?? 0;
   const comparisonStatusText = missingVillageParent
     ? "父乡镇信息缺失，网络对照不可用，请先治理行政区层级关系。"
-    : comparisonState === "unavailable"
+    : effectiveComparisonState === "unavailable"
       ? "年度样本网络不可用"
       : "正在同步年度样本网络";
 
@@ -411,60 +445,64 @@ export function OverviewSamplePointPanel({
     <section aria-label="样本点业务信息" className="overview-sample-point-panel">
       {issue && <p role="alert">{issue}</p>}
 
-      <section className="overview-sample-network-layers">
-        <div aria-label="地图样本点图层" role="group">
-          {(
-            [
-              ["actual", "只看现有"],
-              ["design", "只看设计"],
-              ["comparison", "网络覆盖对照"],
-            ] as const
-          ).map(([mode, label]) => (
-            <button
-              aria-pressed={layerMode === mode}
-              key={mode}
-              onClick={() => setLayerMode(mode)}
-              type="button"
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        {!missingVillageParent && comparisonState === "ready" && comparison ? (
-          <p>
-            设计行政村 {comparison.designPointCount} 个 · 年度现有样本点{" "}
-            {comparison.activeSamplePointCount} 个
-          </p>
-        ) : (
-          <p>{comparisonStatusText}</p>
-        )}
-        {region.level === "PREFECTURE" && layerMode !== "actual" ? (
-          <small>市级仅显示区县汇总，避免在全市范围堆叠 2,332 个标识。</small>
-        ) : null}
-        {region.level === "COUNTY" && layerMode !== "actual" ? (
-          <small>区县级仅显示乡镇汇总；进入乡镇后展示全部下属村覆盖徽标。</small>
-        ) : null}
-        {(region.level === "TOWNSHIP" || region.level === "VILLAGE") &&
-        layerMode !== "actual" ? (
-          <small>行政村展示分区（非权威边界）；覆盖徽标不代表精确经纬度。</small>
-        ) : null}
-        {layerMode !== "actual" &&
-        !missingVillageParent &&
-        comparisonState === "ready" &&
-        comparison ? (
-          <label>
-            <input
-              checked={showExactDesignLocations}
-              disabled={approvedDesignCoordinateCount === 0}
-              onChange={(event) => setShowExactDesignLocations(event.target.checked)}
-              type="checkbox"
-            />
-            显示权威核验精确位置（{approvedDesignCoordinateCount}）
-          </label>
-        ) : null}
-      </section>
+      {!controlledNetwork ? (
+        <section className="overview-sample-network-layers">
+          <div aria-label="地图样本点图层" role="group">
+            {(
+              [
+                ["actual", "只看现有"],
+                ["design", "只看设计"],
+                ["comparison", "网络覆盖对照"],
+              ] as const
+            ).map(([mode, label]) => (
+              <button
+                aria-pressed={effectiveLayerMode === mode}
+                key={mode}
+                onClick={() => setLayerMode(mode)}
+                type="button"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {!missingVillageParent &&
+          effectiveComparisonState === "ready" &&
+          effectiveComparison ? (
+            <p>
+              设计行政村 {effectiveComparison.designPointCount} 个 · 年度现有样本点{" "}
+              {effectiveComparison.activeSamplePointCount} 个
+            </p>
+          ) : (
+            <p>{comparisonStatusText}</p>
+          )}
+          {region.level === "PREFECTURE" && effectiveLayerMode !== "actual" ? (
+            <small>市级仅显示区县汇总，避免在全市范围堆叠 2,332 个标识。</small>
+          ) : null}
+          {region.level === "COUNTY" && effectiveLayerMode !== "actual" ? (
+            <small>区县级仅显示乡镇汇总；进入乡镇后展示全部下属村覆盖徽标。</small>
+          ) : null}
+          {(region.level === "TOWNSHIP" || region.level === "VILLAGE") &&
+          effectiveLayerMode !== "actual" ? (
+            <small>行政村展示分区（非权威边界）；覆盖徽标不代表精确经纬度。</small>
+          ) : null}
+          {effectiveLayerMode !== "actual" &&
+          !missingVillageParent &&
+          effectiveComparisonState === "ready" &&
+          effectiveComparison ? (
+            <label>
+              <input
+                checked={effectiveShowExactDesignLocations}
+                disabled={approvedDesignCoordinateCount === 0}
+                onChange={(event) => setShowExactDesignLocations(event.target.checked)}
+                type="checkbox"
+              />
+              显示权威核验精确位置（{approvedDesignCoordinateCount}）
+            </label>
+          ) : null}
+        </section>
+      ) : null}
 
-      {layerMode === "design" ? (
+      {effectiveLayerMode === "design" ? (
         <section
           aria-label="设计样本网络信息"
           className="overview-detail-section overview-sample-network-design"
@@ -473,7 +511,9 @@ export function OverviewSamplePointPanel({
             <span aria-hidden="true">◆</span>
             设计覆盖信息
           </h3>
-          {!missingVillageParent && comparisonState === "ready" && comparison ? (
+          {!missingVillageParent &&
+          effectiveComparisonState === "ready" &&
+          effectiveComparison ? (
             <>
               <p>设计样本点不带年份，不承载产量、价格、库存等年度业务数据。</p>
               <dl>
@@ -481,22 +521,22 @@ export function OverviewSamplePointPanel({
                   <dt>坐标来源</dt>
                   <dd>
                     已登记 {registeredCoordinateSourceCount} / 总数{" "}
-                    {comparison.designPointCount}
+                    {effectiveComparison.designPointCount}
                   </dd>
                 </div>
                 <div>
                   <dt>坐标审核</dt>
                   <dd>
                     权威核验通过 {approvedDesignCoordinateCount} 个 · 待核验{" "}
-                    {comparison.pendingVerificationDesignPointCount} 个
+                    {effectiveComparison.pendingVerificationDesignPointCount} 个
                   </dd>
                 </div>
                 <div>
                   <dt>对照关系</dt>
                   <dd>
-                    精确对应 {comparison.exactCoveredDesignPointCount} · 明确代表{" "}
-                    {comparison.representedDesignPointCount} · 区域关联{" "}
-                    {comparison.regionalAssociationDesignPointCount}
+                    精确对应 {effectiveComparison.exactCoveredDesignPointCount} ·
+                    明确代表 {effectiveComparison.representedDesignPointCount} ·
+                    区域关联 {effectiveComparison.regionalAssociationDesignPointCount}
                   </dd>
                 </div>
               </dl>
@@ -591,10 +631,10 @@ export function OverviewSamplePointPanel({
                     </strong>
                     <span>
                       {!missingVillageParent &&
-                      comparisonState === "ready" &&
-                      comparison
+                      effectiveComparisonState === "ready" &&
+                      effectiveComparison
                         ? `年度区域汇总标识 ${regionalSummaryBadgeCount} 个（不参与产情/市场分类筛选）`
-                        : comparisonState === "unavailable"
+                        : effectiveComparisonState === "unavailable"
                           ? "年度区域汇总标识不可用"
                           : "年度区域汇总标识加载中"}
                     </span>

@@ -25,8 +25,10 @@ import {
   type SamplePointAggregateStatus,
 } from "../components/BoundaryMap";
 import { OverviewCommandCenter } from "../components/OverviewCommandCenter";
+import { OverviewSampleNetworkToolbar } from "../components/OverviewSampleNetworkToolbar";
 import { OverviewSamplePointPanel } from "../components/OverviewSamplePointPanel";
 import { useOverviewRealtimeRefresh } from "../hooks/useOverviewRealtimeRefresh";
+import { useOverviewSampleNetworkLayers } from "../hooks/useOverviewSampleNetworkLayers";
 import { HttpContractError, HttpError } from "../../../../shared/api/HttpClient";
 
 const OVERALL_SCOPE = "__OVERALL__";
@@ -182,7 +184,7 @@ export function OverviewPage({
   const [samplePointAggregateStatus, setSamplePointAggregateStatus] =
     useState<SamplePointAggregateStatus>("loading");
   const [samplePointAggregateIssue, setSamplePointAggregateIssue] = useState<string>();
-  const [samplePointIcons, setSamplePointIcons] = useState<
+  const [actualSamplePointIcons, setActualSamplePointIcons] = useState<
     readonly OverviewSamplePointIcon[]
   >([]);
   const [selectedSamplePointId, setSelectedSamplePointId] = useState<string>();
@@ -235,14 +237,14 @@ export function OverviewPage({
     },
     [],
   );
-  const updateSamplePointIcons = useCallback(
+  const updateActualSamplePointIcons = useCallback(
     (icons: readonly OverviewSamplePointIcon[]) => {
-      setSamplePointIcons((current) => preserveEquivalentIcons(current, icons));
+      setActualSamplePointIcons((current) => preserveEquivalentIcons(current, icons));
     },
     [],
   );
   const clearSamplePointSelection = useCallback(() => {
-    setSamplePointIcons((current) => preserveEquivalentIcons(current, []));
+    setActualSamplePointIcons((current) => preserveEquivalentIcons(current, []));
     setSelectedSamplePointId(undefined);
   }, []);
   const updateSelectedSamplePoint = useCallback((samplePointId: string | undefined) => {
@@ -596,6 +598,20 @@ export function OverviewPage({
     (selectedRegionSnapshot?.code === selectedRegionCode
       ? selectedRegionSnapshot
       : undefined);
+  const sampleNetworkRegion =
+    selectedRegion?.level === "VILLAGE"
+      ? selectedRegion
+      : mapContextRegion?.level === "TOWNSHIP"
+        ? mapContextRegion
+        : (selectedRegion ?? mapContextRegion);
+  const sampleNetworkModel = useOverviewSampleNetworkLayers({
+    actualIcons: actualSamplePointIcons,
+    productCode,
+    refreshSequence: samplePointSequence,
+    region: sampleNetworkRegion,
+    repository: samplePointRepository,
+    year,
+  });
   const visibleRegionCountsCurrent = parentCode
     ? childRegionQueryKey === desiredChildRegionQueryKey
     : rootRegionQueryKey === desiredRootRegionQueryKey;
@@ -827,7 +843,7 @@ export function OverviewPage({
             points={mapPoints}
             samplePointAggregates={samplePointAggregates}
             {...(samplePointRepository ? { samplePointAggregateStatus } : {})}
-            samplePointIcons={samplePointIcons}
+            samplePointIcons={sampleNetworkModel.icons}
             onSamplePointSelect={updateSelectedSamplePoint}
             selectedCode={selectedRegionCode}
             {...(selectedSamplePointId ? { selectedSamplePointId } : {})}
@@ -861,6 +877,13 @@ export function OverviewPage({
             )}
           </nav>
         }
+        {...(samplePointRepository
+          ? {
+              sampleNetworkControls: (
+                <OverviewSampleNetworkToolbar model={sampleNetworkModel} />
+              ),
+            }
+          : {})}
         {...(yearLabel ? { periodLabel: yearLabel } : {})}
         productLabel={productLabel}
         {...(samplePointRepository &&
@@ -872,7 +895,8 @@ export function OverviewPage({
               samplePoints: (
                 <OverviewSamplePointPanel
                   key={`${productCode}:${year}:${selectedRegion.code}`}
-                  onIconsChange={updateSamplePointIcons}
+                  networkModel={sampleNetworkModel}
+                  onIconsChange={updateActualSamplePointIcons}
                   onSelectedSamplePointChange={updateSelectedSamplePoint}
                   productCode={productCode}
                   refreshSequence={samplePointSequence}

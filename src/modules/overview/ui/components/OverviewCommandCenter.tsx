@@ -20,6 +20,7 @@ export function OverviewCommandCenter({
   onEnterSelectedRegion,
   periodLabel,
   productLabel,
+  sampleNetworkControls,
   samplePoints,
   selectedRegion,
   selectionPoint,
@@ -37,6 +38,7 @@ export function OverviewCommandCenter({
   onEnterSelectedRegion: (region: OverviewRegion) => void;
   periodLabel?: string;
   productLabel: string;
+  sampleNetworkControls?: ReactNode;
   samplePoints?: ReactNode;
   selectedRegion?: OverviewRegion;
   selectionPoint?: OverviewMapSelectionPoint;
@@ -122,8 +124,17 @@ export function OverviewCommandCenter({
           <i className="is-market-sample" />
           市场类样本点
         </span>
+        <span>
+          <i className="is-design-coverage" />
+          设计覆盖
+        </span>
+        <span>
+          <i className="is-design-exact" />
+          已核验设计位置
+        </span>
       </aside>
       {navigation}
+      {sampleNetworkControls}
 
       {selectedRegion && selectionPoint && <SelectionLink point={selectionPoint} />}
 

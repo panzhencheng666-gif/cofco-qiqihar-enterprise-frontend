@@ -3752,6 +3752,27 @@ select:focus-visible {
   background: #5ce1e6;
   box-shadow: 0 0 8px rgb(92 225 230 / 68%);
 }
+.overview-command-legend .is-design-coverage {
+  width: 11px;
+  height: 11px;
+  margin-left: 2px;
+  border: 2px solid #ffd76a;
+  border-radius: 3px;
+  background: rgb(255 215 106 / 20%);
+  box-shadow: 0 0 8px rgb(255 215 106 / 58%);
+  transform: rotate(45deg);
+}
+.overview-command-legend .is-design-exact {
+  width: 11px;
+  height: 11px;
+  margin-left: 2px;
+  border: 2px solid #fff3b5;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow:
+    0 0 0 2px rgb(255 215 106 / 24%),
+    0 0 8px rgb(255 215 106 / 58%);
+}
 
 .overview-command-center > .overview-cockpit-navigation {
   position: absolute;
@@ -3767,6 +3788,58 @@ select:focus-visible {
 }
 .overview-command-center.has-details > .overview-cockpit-navigation {
   display: none;
+}
+.overview-sample-network-toolbar {
+  position: absolute;
+  top: calc(
+    var(--command-kpi-top) + var(--command-kpi-height) + var(--command-map-tools-gap)
+  );
+  left: 332px;
+  z-index: 14;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-height: 34px;
+  padding: 4px 8px;
+  border: 1px solid rgb(201 245 255 / 40%);
+  border-radius: 7px;
+  color: #d9f5ff;
+  background: rgb(4 77 122 / 58%);
+  box-shadow: 0 8px 24px rgb(0 48 80 / 15%);
+  backdrop-filter: blur(12px);
+}
+.overview-command-center.has-details > .overview-sample-network-toolbar {
+  left: 42px;
+}
+.overview-sample-network-toolbar > div[role="group"] {
+  display: flex;
+  gap: 2px;
+}
+.overview-sample-network-toolbar button {
+  min-height: 26px;
+  padding: 3px 10px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #c8eefa;
+  background: transparent;
+  cursor: pointer;
+  font-size: 10px;
+}
+.overview-sample-network-toolbar button[aria-pressed="true"] {
+  border-color: rgb(255 224 126 / 65%);
+  color: #fff4c6;
+  background: rgb(168 118 21 / 32%);
+}
+.overview-sample-network-toolbar > span,
+.overview-sample-network-toolbar > label {
+  font-size: 9px;
+  white-space: nowrap;
+}
+.overview-sample-network-toolbar > label {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  color: #fff0b2;
 }
 .overview-command-center .overview-region-browser summary,
 .overview-command-center > .overview-cockpit-navigation > button {

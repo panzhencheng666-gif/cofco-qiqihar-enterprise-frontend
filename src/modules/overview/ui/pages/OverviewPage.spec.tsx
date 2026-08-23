@@ -1483,6 +1483,169 @@ describe("OverviewPage", () => {
     ).toBeVisible();
   });
 
+  it("shows every village design coverage badge immediately after entering a township", async () => {
+    const county = {
+      ...sampleRegion,
+      code: "230231",
+      name: "拜泉县",
+      level: "COUNTY" as const,
+      parentCode: "230200",
+    };
+    const township = {
+      code: "230231100",
+      name: "兴农镇",
+      parentCode: "230231",
+      level: "TOWNSHIP" as const,
+      approvedRecordCount: 0,
+      boundaryGeoJson: sampleRegion.boundaryGeoJson,
+      locationGeoJson: JSON.stringify({ type: "Point", coordinates: [126.08, 47.61] }),
+      locationReviewStatus: "DERIVED_FROM_VILLAGE_POINTS",
+    };
+    const villages = [
+      {
+        code: "230231100201",
+        name: "众兴村",
+        parentCode: township.code,
+        level: "VILLAGE" as const,
+        approvedRecordCount: 0,
+        boundaryGeoJson: sampleRegion.boundaryGeoJson,
+        locationGeoJson: JSON.stringify({ type: "Point", coordinates: [126.1, 47.62] }),
+        locationReviewStatus: "AUTO_MATCHED_PENDING_SPATIAL_QA",
+      },
+      {
+        code: "230231100202",
+        name: "和平村",
+        parentCode: township.code,
+        level: "VILLAGE" as const,
+        approvedRecordCount: 0,
+        boundaryGeoJson: sampleRegion.boundaryGeoJson,
+        locationGeoJson: JSON.stringify({
+          type: "Point",
+          coordinates: [126.12, 47.63],
+        }),
+        locationReviewStatus: "AUTO_MATCHED_PENDING_SPATIAL_QA",
+      },
+    ];
+    const regions = vi.fn<OverviewRepository["regions"]>((query) => {
+      if (!query.parentCode) return Promise.resolve([sampleRegion]);
+      if (query.parentCode === "230200") return Promise.resolve([county]);
+      if (query.parentCode === county.code) return Promise.resolve([township]);
+      if (query.parentCode === township.code) return Promise.resolve(villages);
+      return Promise.resolve([]);
+    });
+    const comparison = vi.fn<OverviewSamplePointRepository["comparison"]>(() =>
+      Promise.resolve({
+        ...emptySampleNetworkComparison,
+        networkStatus: "PUBLISHED",
+        designPointCount: 2,
+        pendingVerificationDesignPointCount: 2,
+        designPoints: villages.map((village, index) => ({
+          villageRegionCode: village.code,
+          villageName: village.name,
+          townshipRegionCode: township.code,
+          townshipName: township.name,
+          countyRegionCode: county.code,
+          countyName: county.name,
+          designLongitude: 126.1 + index * 0.02,
+          designLatitude: 47.62 + index * 0.01,
+          coordinateReviewStatus: "PENDING_AUTHORITY_REVIEW",
+        })),
+      }),
+    );
+
+    render(
+      <OverviewPage
+        repository={{
+          mapScope: () => Promise.resolve(sampleMapScope),
+          options: () => Promise.resolve(options),
+          regions,
+          locations: () => Promise.resolve([]),
+          indicators: () => Promise.resolve([]),
+          dashboard: () => Promise.resolve(emptyDashboard),
+        }}
+        samplePointRepository={{
+          aggregates: (query) => {
+            const aggregateRegion = query.parentCode
+              ? query.parentCode === "230200"
+                ? county
+                : query.parentCode === county.code
+                  ? township
+                  : villages[0]!
+              : sampleRegion;
+            return Promise.resolve([
+              {
+                regionCode: aggregateRegion.code,
+                regionName: aggregateRegion.name,
+                regionLevel: aggregateRegion.level,
+                samplePointCount: aggregateRegion.code === township.code ? 0 : 1,
+                productionCount: aggregateRegion.code === township.code ? 0 : 1,
+                marketCount: 0,
+                validCoordinateCount: 0,
+                dataQualityIssueCount: 0,
+                correctionSourceCount: 0,
+                unresolvedSourceCount: 0,
+              },
+            ]);
+          },
+          comparison,
+          list: () => Promise.resolve({ ...samplePointList, totalCount: 0, items: [] }),
+          icons: () => Promise.resolve([]),
+          detail: () => Promise.reject(new Error("not selected")),
+        }}
+      />,
+    );
+
+    fireEvent.doubleClick(await screen.findByRole("button", { name: /^齐齐哈尔市，/ }));
+    fireEvent.doubleClick(await screen.findByRole("button", { name: /^拜泉县，/ }));
+    fireEvent.doubleClick(
+      await within(screen.getByLabelText("粮食商情总览地图")).findByRole("button", {
+        name: "兴农镇",
+      }),
+    );
+
+    expect(await screen.findByRole("group", { name: "样本网络图层" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "对照显示" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await waitFor(() =>
+      expect(comparison).toHaveBeenCalledWith({
+        productCode: "CORN",
+        regionCode: township.code,
+        year: 2026,
+      }),
+    );
+    const map = screen.getByLabelText("粮食商情总览地图");
+    expect(
+      await within(map).findByRole("img", {
+        name: /众兴村设计覆盖，行政村展示分区覆盖徽标/,
+      }),
+    ).toBeVisible();
+    expect(
+      within(map).getByRole("img", {
+        name: /和平村设计覆盖，行政村展示分区覆盖徽标/,
+      }),
+    ).toBeVisible();
+
+    await userEvent.click(screen.getByRole("button", { name: "设计样本" }));
+    await userEvent.click(within(map).getByRole("button", { name: "众兴村" }));
+
+    expect(screen.getByRole("button", { name: "设计样本" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      await within(map).findByRole("img", {
+        name: /众兴村设计覆盖，行政村展示分区覆盖徽标/,
+      }),
+    ).toBeVisible();
+    expect(
+      within(map).getByRole("img", {
+        name: /和平村设计覆盖，行政村展示分区覆盖徽标/,
+      }),
+    ).toBeVisible();
+  });
+
   it("automatically upgrades the real-feature fallback after map scope recovers", async () => {
     const mapScope = vi
       .fn<OverviewRepository["mapScope"]>()
