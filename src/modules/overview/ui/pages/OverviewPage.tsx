@@ -108,6 +108,14 @@ function preserveEquivalentAggregates(
 }
 
 const IGNORE_SAMPLE_POINT_ICONS = (): void => undefined;
+const EMPTY_SAMPLE_POINT_AGGREGATES: readonly OverviewSamplePointAggregate[] = [];
+
+export function selectVisibleSamplePointAggregates(
+  showAggregateLayer: boolean,
+  aggregates: readonly OverviewSamplePointAggregate[],
+): readonly OverviewSamplePointAggregate[] {
+  return showAggregateLayer ? aggregates : EMPTY_SAMPLE_POINT_AGGREGATES;
+}
 
 function overviewDataIssue(error: unknown, fallback: string): string {
   if (error instanceof HttpContractError) {
@@ -613,7 +621,10 @@ export function OverviewPage({
   });
   const showAggregateLayer =
     sampleNetworkModel.applicable && sampleNetworkModel.mode !== "design";
-  const visibleSamplePointAggregates = showAggregateLayer ? samplePointAggregates : [];
+  const visibleSamplePointAggregates = selectVisibleSamplePointAggregates(
+    showAggregateLayer,
+    samplePointAggregates,
+  );
   const visibleSamplePointAggregateStatus = showAggregateLayer
     ? samplePointAggregateStatus
     : "hidden";

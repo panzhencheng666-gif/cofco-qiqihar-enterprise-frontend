@@ -16,10 +16,34 @@ import type {
 } from "../../application/ports/OverviewRealtimeStream";
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
 import type { OverviewRegion } from "../../domain/overview";
-import { OverviewPage } from "./OverviewPage";
+import { OverviewPage, selectVisibleSamplePointAggregates } from "./OverviewPage";
 import { HttpContractError, HttpError } from "../../../../shared/api/HttpClient";
 
 describe("OverviewPage", () => {
+  it("keeps the hidden sample aggregate collection referentially stable", () => {
+    const aggregates = [
+      {
+        regionCode: "230200",
+        regionName: "齐齐哈尔市",
+        regionLevel: "PREFECTURE" as const,
+        samplePointCount: 1,
+        productionCount: 1,
+        marketCount: 0,
+        validCoordinateCount: 1,
+        dataQualityIssueCount: 0,
+        correctionSourceCount: 0,
+        unresolvedSourceCount: 0,
+      },
+    ];
+
+    const firstHidden = selectVisibleSamplePointAggregates(false, aggregates);
+    const secondHidden = selectVisibleSamplePointAggregates(false, aggregates);
+
+    expect(firstHidden).toBe(secondHidden);
+    expect(firstHidden).toEqual([]);
+    expect(selectVisibleSamplePointAggregates(true, aggregates)).toBe(aggregates);
+  });
+
   it("leaves perpetual loading and allows retry when the options request stalls", async () => {
     vi.useFakeTimers();
     const optionsRequest = vi
