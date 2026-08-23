@@ -142,7 +142,7 @@ export function OverviewSamplePointPanel({
       };
     }
     repository
-      .comparison({ regionCode: comparisonRegionCode, year })
+      .comparison({ productCode, regionCode: comparisonRegionCode, year })
       .then((next) => {
         if (!active) return;
         setComparison(next);
@@ -157,7 +157,7 @@ export function OverviewSamplePointPanel({
     return () => {
       active = false;
     };
-  }, [comparisonRegionCode, refreshSequence, repository, year]);
+  }, [comparisonRegionCode, productCode, refreshSequence, repository, year]);
 
   useEffect(() => {
     if (!categoryCode) {
@@ -395,7 +395,7 @@ export function OverviewSamplePointPanel({
     : [];
   const approvedDesignCoordinateCount =
     comparison?.designPoints.filter(
-      ({ coordinateReviewStatus }) => coordinateReviewStatus === "APPROVED",
+      ({ coordinateReviewStatus }) => coordinateReviewStatus === "AUTHORITY_APPROVED",
     ).length ?? 0;
   const registeredCoordinateSourceCount =
     comparison?.designPoints.filter(({ coordinateSourceName }) =>
@@ -459,7 +459,7 @@ export function OverviewSamplePointPanel({
               onChange={(event) => setShowExactDesignLocations(event.target.checked)}
               type="checkbox"
             />
-            显示已审核精确位置（{approvedDesignCoordinateCount}）
+            显示权威核验精确位置（{approvedDesignCoordinateCount}）
           </label>
         ) : null}
       </section>
@@ -487,7 +487,8 @@ export function OverviewSamplePointPanel({
                 <div>
                   <dt>坐标审核</dt>
                   <dd>
-                    已审核 {approvedDesignCoordinateCount} 个 · 其余不显示精确图钉
+                    权威核验通过 {approvedDesignCoordinateCount} 个 · 待核验{" "}
+                    {comparison.pendingVerificationDesignPointCount} 个
                   </dd>
                 </div>
                 <div>

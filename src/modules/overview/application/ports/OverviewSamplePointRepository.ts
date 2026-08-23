@@ -9,6 +9,7 @@ import type {
 
 export interface OverviewSamplePointRepository {
   comparison(query: {
+    productCode: string;
     regionCode?: string;
     year: number;
   }): Promise<SampleNetworkComparison>;

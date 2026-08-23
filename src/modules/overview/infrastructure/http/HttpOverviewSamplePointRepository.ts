@@ -141,6 +141,8 @@ const comparisonDesignPointSchema = z
     designLatitude: z.number(),
     coordinateReviewStatus: z.string().nullable().optional(),
     coordinateSourceName: z.string().nullable().optional(),
+    coordinateSourceRevision: z.string().nullable().optional(),
+    coordinateMatchConfidence: z.string().nullable().optional(),
     coordinateSource: z.string().nullable().optional(),
   })
   .transform(({ coordinateSource, coordinateSourceName, ...point }) => {
@@ -155,7 +157,12 @@ const comparisonSchema = z.object({
     networkYear: z.number().int(),
     networkStatus: z.string(),
     designPointCount: z.number().int().nonnegative(),
+    designCoordinateCount: z.number().int().nonnegative(),
     activeSamplePointCount: z.number().int().nonnegative(),
+    approvedSubmissionSamplePointCount: z.number().int().nonnegative(),
+    pendingVerificationDesignPointCount: z.number().int().nonnegative(),
+    multipleActualPerDesignPointCount: z.number().int().nonnegative(),
+    anomalyCount: z.number().int().nonnegative(),
     exactCoveredDesignPointCount: z.number().int().nonnegative(),
     representedDesignPointCount: z.number().int().nonnegative(),
     regionalAssociationDesignPointCount: z.number().int().nonnegative(),
@@ -204,12 +211,13 @@ const comparisonSchema = z.object({
 export class HttpOverviewSamplePointRepository implements OverviewSamplePointRepository {
   constructor(private readonly http: HttpClient) {}
 
-  async comparison(query: { year: number; regionCode?: string }) {
+  async comparison(query: { year: number; productCode: string; regionCode?: string }) {
     return (
       await this.http.get(
-        `/api/v1/sample-networks/${query.year}/comparison${queryString(
-          query.regionCode ? { regionCode: query.regionCode } : {},
-        )}`,
+        `/api/v1/sample-networks/${query.year}/comparison${queryString({
+          productCode: query.productCode,
+          ...(query.regionCode ? { regionCode: query.regionCode } : {}),
+        })}`,
         comparisonSchema,
       )
     ).data;

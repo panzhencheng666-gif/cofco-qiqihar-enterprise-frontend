@@ -39,11 +39,39 @@ export function sampleNetworkLayerIcons(
     return [];
   }
 
-  const relationIndexes = comparison ? indexRelationTypes(comparison) : undefined;
-  const regionalActual = comparison
-    ? regionalActualBadges(comparison, context, relationIndexes?.byActual)
+  const formalComparison =
+    comparison && ["PUBLISHED", "RETIRED"].includes(comparison.networkStatus)
+      ? comparison
+      : undefined;
+  const relationIndexes = formalComparison
+    ? indexRelationTypes(formalComparison)
+    : undefined;
+  const activeActualPoints =
+    formalComparison?.actualPoints.filter(
+      ({ membershipStatusCode }) => membershipStatusCode === "ACTIVE",
+    ) ?? [];
+  const activeIds = new Set(
+    activeActualPoints.map(({ samplePointId }) => samplePointId),
+  );
+  const approvedBusinessIcons = actualIcons.filter(({ samplePointId }) =>
+    activeIds.has(samplePointId),
+  );
+  const approvedBusinessIconIds = new Set(
+    approvedBusinessIcons.map(({ samplePointId }) => samplePointId),
+  );
+  const annualPrecise = activeActualPoints
+    .filter(
+      (point) =>
+        !approvedBusinessIconIds.has(point.samplePointId) &&
+        point.locationState === "VALID" &&
+        Number.isFinite(point.actualLongitude) &&
+        Number.isFinite(point.actualLatitude),
+    )
+    .map((point) => annualPreciseActual(point, relationIndexes?.byActual));
+  const regionalActual = formalComparison
+    ? regionalActualBadges(formalComparison, context, relationIndexes?.byActual)
     : [];
-  const actual = [...actualIcons, ...regionalActual];
+  const actual = [...approvedBusinessIcons, ...annualPrecise, ...regionalActual];
   if (mode === "actual") return actual;
 
   const coverage = comparison
@@ -55,6 +83,34 @@ export function sampleNetworkLayerIcons(
       : [];
   const design = [...coverage, ...exact];
   return mode === "design" ? design : [...actual, ...design];
+}
+
+function annualPreciseActual(
+  point: SampleNetworkComparison["actualPoints"][number],
+  relationTypesByActual: ReadonlyMap<
+    string,
+    readonly SampleNetworkRelationType[]
+  > = new Map(),
+): OverviewSamplePointIcon {
+  return {
+    samplePointId: point.samplePointId,
+    name: point.samplePointName,
+    iconKey: "regional-actual",
+    layerType: "ANNUAL_ACTUAL",
+    representedRegionCode: point.locatedRegionCode,
+    representedRegionName: point.locatedRegionName,
+    relationTypes: relationTypesByActual.get(point.samplePointId) ?? [],
+    types: [
+      {
+        code: point.samplePointKindCode,
+        name: "年度在网样本点",
+        iconKey: "regional-actual",
+      },
+    ],
+    longitude: point.actualLongitude,
+    latitude: point.actualLatitude,
+    dataQualityReason: null,
+  };
 }
 
 function designCoverageBadges(
@@ -101,7 +157,8 @@ function approvedExactDesignLocations(
   return comparison.designPoints
     .filter(
       (point) =>
-        point.coordinateReviewStatus === "APPROVED" &&
+        // REVIEWED is a historical source status, not authoritative boundary approval.
+        point.coordinateReviewStatus === "AUTHORITY_APPROVED" &&
         Number.isFinite(point.designLongitude) &&
         Number.isFinite(point.designLatitude),
     )
@@ -118,7 +175,7 @@ function exactDesignLocation(point: SampleNetworkDesignPoint): OverviewSamplePoi
     types: [
       {
         code: "DESIGN_EXACT_LOCATION",
-        name: "已审核精确位置",
+        name: "权威核验精确位置",
         iconKey: "design-reference",
       },
     ],

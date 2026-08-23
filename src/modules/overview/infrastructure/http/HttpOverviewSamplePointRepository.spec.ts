@@ -233,7 +233,12 @@ describe("HttpOverviewSamplePointRepository", () => {
       networkYear: 2026,
       networkStatus: "PUBLISHED",
       designPointCount: 1,
+      designCoordinateCount: 1,
       activeSamplePointCount: 1,
+      approvedSubmissionSamplePointCount: 1,
+      pendingVerificationDesignPointCount: 1,
+      multipleActualPerDesignPointCount: 0,
+      anomalyCount: 0,
       exactCoveredDesignPointCount: 1,
       representedDesignPointCount: 0,
       regionalAssociationDesignPointCount: 0,
@@ -282,12 +287,13 @@ describe("HttpOverviewSamplePointRepository", () => {
     });
 
     const result = await repositoryWith(get).comparison({
+      productCode: "CORN",
       regionCode: "230202",
       year: 2026,
     });
 
     expect(get).toHaveBeenCalledWith(
-      "/api/v1/sample-networks/2026/comparison?regionCode=230202",
+      "/api/v1/sample-networks/2026/comparison?productCode=CORN&regionCode=230202",
       expect.anything(),
     );
     expect(result.designPointCount).toBe(1);

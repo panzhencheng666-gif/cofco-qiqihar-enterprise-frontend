@@ -112,6 +112,8 @@ export interface SampleNetworkDesignPoint {
   designLatitude: number;
   coordinateReviewStatus?: string | null | undefined;
   coordinateSourceName?: string | null | undefined;
+  coordinateSourceRevision?: string | null | undefined;
+  coordinateMatchConfidence?: string | null | undefined;
 }
 
 export interface SampleNetworkActualPoint {
@@ -143,7 +145,12 @@ export interface SampleNetworkComparison {
   networkYear: number;
   networkStatus: string;
   designPointCount: number;
+  designCoordinateCount: number;
   activeSamplePointCount: number;
+  approvedSubmissionSamplePointCount: number;
+  pendingVerificationDesignPointCount: number;
+  multipleActualPerDesignPointCount: number;
+  anomalyCount: number;
   exactCoveredDesignPointCount: number;
   representedDesignPointCount: number;
   regionalAssociationDesignPointCount: number;

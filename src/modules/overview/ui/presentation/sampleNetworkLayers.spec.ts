@@ -10,7 +10,12 @@ const comparison: SampleNetworkComparison = {
   networkYear: 2026,
   networkStatus: "PUBLISHED",
   designPointCount: 2,
+  designCoordinateCount: 2,
   activeSamplePointCount: 3,
+  approvedSubmissionSamplePointCount: 1,
+  pendingVerificationDesignPointCount: 1,
+  multipleActualPerDesignPointCount: 0,
+  anomalyCount: 0,
   exactCoveredDesignPointCount: 1,
   representedDesignPointCount: 0,
   regionalAssociationDesignPointCount: 2,
@@ -26,7 +31,7 @@ const comparison: SampleNetworkComparison = {
       countyName: "龙沙区",
       designLongitude: 123.8,
       designLatitude: 47.2,
-      coordinateReviewStatus: "APPROVED",
+      coordinateReviewStatus: "REVIEWED",
     },
     {
       villageRegionCode: "230202997002",
@@ -124,6 +129,86 @@ describe("sampleNetworkLayerIcons", () => {
     ).toContainEqual(actualIcon);
   });
 
+  it("does not render draft annual members or monthly icons as formal current points", () => {
+    expect(
+      sampleNetworkLayerIcons(
+        "actual",
+        [actualIcon],
+        { ...comparison, networkStatus: "DRAFT" },
+        {
+          regionLevel: "TOWNSHIP",
+          selectedRegionCode: "230202997",
+        },
+      ),
+    ).toEqual([]);
+  });
+
+  it("filters approved monthly business icons through the published annual member list", () => {
+    const nonMemberIcon = {
+      ...actualIcon,
+      samplePointId: "94000000-0000-0000-0000-000000000099",
+      name: "不在年度网络中的月度样本",
+    };
+
+    const result = sampleNetworkLayerIcons(
+      "actual",
+      [actualIcon, nonMemberIcon],
+      comparison,
+      {
+        regionLevel: "TOWNSHIP",
+        selectedRegionCode: "230202997",
+      },
+    );
+
+    expect(result).toContainEqual(actualIcon);
+    expect(result).not.toContainEqual(nonMemberIcon);
+  });
+
+  it("keeps a published annual member visible even before it has a monthly business icon", () => {
+    const result = sampleNetworkLayerIcons("actual", [], comparison, {
+      regionLevel: "TOWNSHIP",
+      selectedRegionCode: "230202997",
+    });
+
+    expect(result).toContainEqual(
+      expect.objectContaining({
+        samplePointId: "94000000-0000-0000-0000-000000000001",
+        name: "同一跨产品样本点",
+        layerType: "ANNUAL_ACTUAL",
+        longitude: 123.9,
+        latitude: 47.3,
+      }),
+    );
+  });
+
+  it("does not turn an invalid governed coordinate into a precise annual icon", () => {
+    const invalid = {
+      ...comparison,
+      actualPoints: [
+        {
+          ...comparison.actualPoints[0]!,
+          actualLongitude: 123.9,
+          actualLatitude: 47.3,
+          locationState: "OUTSIDE_REGION",
+        },
+      ],
+    } satisfies SampleNetworkComparison;
+
+    expect(
+      sampleNetworkLayerIcons("actual", [], invalid, {
+        regionLevel: "TOWNSHIP",
+        selectedRegionCode: "230202997",
+      }),
+    ).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          samplePointId: invalid.actualPoints[0]!.samplePointId,
+          layerType: "ANNUAL_ACTUAL",
+        }),
+      ]),
+    );
+  });
+
   it("creates one design coverage badge for every township village without using the design coordinate as its anchor", () => {
     const result = sampleNetworkLayerIcons("design", [actualIcon], comparison, {
       regionLevel: "TOWNSHIP",
@@ -170,7 +255,7 @@ describe("sampleNetworkLayerIcons", () => {
     );
   });
 
-  it("creates an exact design location only when explicitly enabled and approved", () => {
+  it("does not promote a historical REVIEWED coordinate to an exact design location", () => {
     const hidden = sampleNetworkLayerIcons("design", [], comparison, {
       regionLevel: "TOWNSHIP",
       selectedRegionCode: "230202997",
@@ -187,6 +272,27 @@ describe("sampleNetworkLayerIcons", () => {
         expect.objectContaining({ layerType: "DESIGN_EXACT_LOCATION" }),
       ]),
     );
+    expect(
+      visible.filter((icon) => icon.layerType === "DESIGN_EXACT_LOCATION"),
+    ).toHaveLength(0);
+  });
+
+  it("creates an exact design location only after explicit authority approval", () => {
+    const authorityApproved = {
+      ...comparison,
+      designPoints: comparison.designPoints.map((point, index) =>
+        index === 0
+          ? { ...point, coordinateReviewStatus: "AUTHORITY_APPROVED" }
+          : point,
+      ),
+    } satisfies SampleNetworkComparison;
+
+    const visible = sampleNetworkLayerIcons("design", [], authorityApproved, {
+      regionLevel: "TOWNSHIP",
+      selectedRegionCode: "230202997",
+      showExactDesignLocations: true,
+    });
+
     expect(visible).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -259,7 +365,9 @@ describe("sampleNetworkLayerIcons", () => {
         aggregateCount: 2,
       }),
     );
-    expect(result).toHaveLength(1);
+    expect(
+      result.filter(({ samplePointId }) => samplePointId.startsWith("95000000-")),
+    ).toEqual([]);
   });
 
   it("keeps prefecture and county views aggregate-only", () => {

@@ -143,6 +143,28 @@ describe("OverviewSamplePointPanel", () => {
       items: qualityItems,
     };
     const repository = repositoryStub();
+    const publishedNetwork = await repository.comparison({
+      productCode: "CORN",
+      regionCode: "230208997",
+      year: 2026,
+    });
+    repository.comparison.mockClear();
+    repository.comparison.mockResolvedValue({
+      ...publishedNetwork,
+      activeSamplePointCount: qualityItems.length,
+      actualPoints: qualityItems.map((item) => ({
+        samplePointId: item.samplePointId,
+        samplePointName: item.name,
+        samplePointKindCode: item.types[0]!.code,
+        membershipStatusCode: "ACTIVE",
+        locatedRegionCode: item.regionCode,
+        locatedRegionName: item.regionName,
+        locatedRegionLevel: "COUNTY",
+        actualLongitude: 123.5,
+        actualLatitude: 47.5,
+        locationState: "VALID",
+      })),
+    });
     repository.list.mockResolvedValue(qualityList);
     repository.icons.mockResolvedValue(
       qualityItems.map((item) => ({
@@ -243,7 +265,12 @@ describe("OverviewSamplePointPanel", () => {
       <PanelHarness
         onIconsChange={onIconsChange}
         year={2026}
-        region={{ code, level, name }}
+        region={{
+          code,
+          level,
+          name,
+          ...(level === "VILLAGE" ? { parentCode: "230202997" } : {}),
+        }}
         repository={repository}
       />,
     );
@@ -597,6 +624,7 @@ describe("OverviewSamplePointPanel", () => {
       ]),
     );
     expect(repository.comparison).toHaveBeenCalledWith({
+      productCode: "CORN",
       regionCode: "230202997",
       year: 2026,
     });
@@ -626,6 +654,7 @@ describe("OverviewSamplePointPanel", () => {
 
     await waitFor(() =>
       expect(repository.comparison).toHaveBeenCalledWith({
+        productCode: "CORN",
         regionCode: "230202997",
         year: 2026,
       }),
@@ -695,13 +724,7 @@ describe("OverviewSamplePointPanel", () => {
     );
 
     await userEvent.click(await screen.findByRole("button", { name: "产情类 1" }));
-    await waitFor(() =>
-      expect(onIconsChange).toHaveBeenLastCalledWith([
-        expect.objectContaining({
-          samplePointId: "94000000-0000-0000-0000-000000000001",
-        }),
-      ]),
-    );
+    await waitFor(() => expect(onIconsChange).toHaveBeenLastCalledWith([]));
     await userEvent.click(screen.getByRole("button", { name: "网络覆盖对照" }));
     expect(
       await screen.findByText(
@@ -715,6 +738,7 @@ describe("OverviewSamplePointPanel", () => {
   it("reports exact business icons separately from unfiltered regional summaries", async () => {
     const repository = repositoryStub();
     const current = await repository.comparison({
+      productCode: "CORN",
       regionCode: "230202997",
       year: 2026,
     });
@@ -769,6 +793,7 @@ describe("OverviewSamplePointPanel", () => {
   it("shows registered coordinate sources as coverage rather than all-or-nothing", async () => {
     const repository = repositoryStub();
     const current = await repository.comparison({
+      productCode: "CORN",
       regionCode: "230202997",
       year: 2026,
     });
@@ -798,6 +823,25 @@ describe("OverviewSamplePointPanel", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "只看设计" }));
     expect(await screen.findByText("已登记 1 / 总数 2")).toBeVisible();
+  });
+
+  it("keeps historical REVIEWED coordinates pending and disables the exact-location toggle", async () => {
+    const repository = repositoryStub();
+
+    render(
+      <PanelHarness
+        onIconsChange={vi.fn()}
+        year={2026}
+        region={{ code: "230202997", level: "TOWNSHIP", name: "契约测试乡" }}
+        repository={repository}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "只看设计" }));
+    expect(
+      screen.getByRole("checkbox", { name: "显示权威核验精确位置（0）" }),
+    ).toBeDisabled();
+    expect(screen.getByText("权威核验通过 0 个 · 待核验 1 个")).toBeVisible();
   });
 
   it.each([
@@ -837,7 +881,12 @@ function repositoryStub() {
       networkYear: 2026,
       networkStatus: "PUBLISHED",
       designPointCount: 1,
+      designCoordinateCount: 1,
       activeSamplePointCount: 1,
+      approvedSubmissionSamplePointCount: 1,
+      pendingVerificationDesignPointCount: 1,
+      multipleActualPerDesignPointCount: 0,
+      anomalyCount: 0,
       exactCoveredDesignPointCount: 1,
       representedDesignPointCount: 0,
       regionalAssociationDesignPointCount: 0,
@@ -853,7 +902,7 @@ function repositoryStub() {
           countyName: "龙沙区",
           designLongitude: 123.8,
           designLatitude: 47.2,
-          coordinateReviewStatus: "APPROVED",
+          coordinateReviewStatus: "REVIEWED",
           coordinateSourceName: "村委会驻地复核",
         },
       ],
