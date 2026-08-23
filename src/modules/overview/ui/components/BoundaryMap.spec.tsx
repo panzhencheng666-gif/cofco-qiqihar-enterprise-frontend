@@ -160,6 +160,88 @@ describe("BoundaryMap", () => {
     expect(onSamplePointSelect).toHaveBeenCalledWith(icon.samplePointId);
   });
 
+  it("announces informational network markers without empty-action buttons", () => {
+    render(
+      <BoundaryMap
+        features={[feature("230200")]}
+        onDrill={vi.fn()}
+        onSelect={vi.fn()}
+        points={[]}
+        samplePointIcons={[
+          {
+            samplePointId: "design-coverage:230202997001",
+            name: "契约测试村设计覆盖",
+            iconKey: "design-reference",
+            layerType: "DESIGN_COVERAGE_BADGE",
+            anchorRegionCode: "230202997001",
+            types: [],
+            longitude: 123.5,
+            latitude: 47.5,
+            dataQualityReason: null,
+          },
+          {
+            samplePointId: "regional-actual:COUNTY:230202",
+            name: "龙沙区区域级现有样本（2个）",
+            iconKey: "regional-actual",
+            layerType: "REGIONAL_ACTUAL_BADGE",
+            anchorRegionCode: "230202997",
+            representedRegionCode: "230202",
+            representedRegionName: "龙沙区",
+            representedRegionLevel: "COUNTY",
+            aggregateCount: 2,
+            types: [],
+            longitude: null,
+            latitude: null,
+            dataQualityReason: "MISSING_COORDINATE",
+          },
+          {
+            samplePointId: "design-exact:230202997001",
+            name: "契约测试村设计样本点精确位置",
+            iconKey: "design-reference",
+            layerType: "DESIGN_EXACT_LOCATION",
+            villageRegionCode: "230202997001",
+            types: [],
+            longitude: 123.5,
+            latitude: 47.5,
+            dataQualityReason: null,
+          },
+        ]}
+        selectedCode=""
+      />,
+    );
+
+    act(() => {
+      (terrainRuntime.props?.onUnavailable as ((reason: string) => void) | undefined)?.(
+        "test fallback",
+      );
+    });
+
+    expect(
+      screen.getByRole("img", {
+        name: /契约测试村设计覆盖，行政村展示分区覆盖徽标/,
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("img", {
+        name: /龙沙区区域级现有样本（2个），仅确认到区县/,
+      }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("img", {
+        name: /契约测试村设计样本点精确位置，已审核设计样本点精确位置/,
+      }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /契约测试村设计覆盖/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /龙沙区区域级现有样本/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /设计样本点精确位置/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("keeps a local terrain placeholder over the initial and replacement scene until each first frame is ready", async () => {
     const common = {
       onDrill: vi.fn(),

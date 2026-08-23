@@ -200,33 +200,51 @@ function BoundaryMapAccessibility({
           type="button"
         />
       ))}
-      {samplePointIcons.map((icon) => (
-        <button
-          aria-label={
-            icon.layerType === "DESIGN_COVERAGE_BADGE"
-              ? `${icon.name}，行政村展示分区覆盖徽标，不代表精确经纬度`
-              : icon.layerType === "DESIGN_EXACT_LOCATION"
-                ? `${icon.name}，已审核设计样本点精确位置`
-                : icon.layerType === "REGIONAL_ACTUAL_BADGE"
-                  ? `${icon.name}，仅确认到行政区域，不显示伪造图钉`
-                  : `${icon.name}，${icon.types.map((type) => type.name).join("、")}，点击查看样本点详情`
-          }
-          aria-pressed={
-            icon.layerType && icon.layerType !== "ANNUAL_ACTUAL"
-              ? undefined
-              : selectedSamplePointId === icon.samplePointId
-          }
-          key={`accessible-sample-point-${icon.samplePointId}`}
-          onClick={
-            icon.layerType && icon.layerType !== "ANNUAL_ACTUAL"
-              ? undefined
-              : () => onSamplePointSelect?.(icon.samplePointId)
-          }
-          type="button"
-        />
-      ))}
+      {samplePointIcons.map((icon) => {
+        const informational = Boolean(
+          icon.layerType && icon.layerType !== "ANNUAL_ACTUAL",
+        );
+        const label = samplePointAccessibilityLabel(icon);
+        return informational ? (
+          <span
+            aria-label={label}
+            key={`accessible-sample-point-${icon.samplePointId}`}
+            role="img"
+          />
+        ) : (
+          <button
+            aria-label={label}
+            aria-pressed={selectedSamplePointId === icon.samplePointId}
+            key={`accessible-sample-point-${icon.samplePointId}`}
+            onClick={() => onSamplePointSelect?.(icon.samplePointId)}
+            type="button"
+          />
+        );
+      })}
     </div>
   );
+}
+
+function samplePointAccessibilityLabel(icon: OverviewSamplePointIcon): string {
+  if (icon.layerType === "DESIGN_COVERAGE_BADGE") {
+    return `${icon.name}，行政村展示分区覆盖徽标，不代表精确经纬度`;
+  }
+  if (icon.layerType === "DESIGN_EXACT_LOCATION") {
+    return `${icon.name}，已审核设计样本点精确位置`;
+  }
+  if (icon.layerType === "REGIONAL_ACTUAL_BADGE") {
+    return `${icon.name}，仅确认到${regionLevelLabel(icon.representedRegionLevel)}，不显示伪造图钉`;
+  }
+  return `${icon.name}，${icon.types.map((type) => type.name).join("、")}，点击查看样本点详情`;
+}
+
+function regionLevelLabel(
+  level: OverviewSamplePointIcon["representedRegionLevel"],
+): string {
+  if (level === "PREFECTURE") return "地级市";
+  if (level === "COUNTY") return "区县";
+  if (level === "TOWNSHIP") return "乡镇";
+  return "行政区域";
 }
 
 function accessibleRegionLabel(

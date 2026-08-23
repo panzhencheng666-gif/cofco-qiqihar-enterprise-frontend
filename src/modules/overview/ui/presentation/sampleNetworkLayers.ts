@@ -19,6 +19,7 @@ type RegionLevel = "PREFECTURE" | "COUNTY" | "TOWNSHIP" | "VILLAGE";
 export interface SampleNetworkLayerContext {
   regionLevel: RegionLevel;
   selectedRegionCode: string;
+  summaryAnchorRegionCode?: string;
   showExactDesignLocations?: boolean;
 }
 
@@ -38,11 +39,16 @@ export function sampleNetworkLayerIcons(
     return [];
   }
 
-  const regionalActual = comparison ? regionalActualBadges(comparison) : [];
+  const relationIndexes = comparison ? indexRelationTypes(comparison) : undefined;
+  const regionalActual = comparison
+    ? regionalActualBadges(comparison, context, relationIndexes?.byActual)
+    : [];
   const actual = [...actualIcons, ...regionalActual];
   if (mode === "actual") return actual;
 
-  const coverage = comparison ? designCoverageBadges(comparison, context) : [];
+  const coverage = comparison
+    ? designCoverageBadges(comparison, context, relationIndexes?.byVillage)
+    : [];
   const exact =
     comparison && context.showExactDesignLocations
       ? approvedExactDesignLocations(comparison)
@@ -54,6 +60,10 @@ export function sampleNetworkLayerIcons(
 function designCoverageBadges(
   comparison: SampleNetworkComparison,
   context: SampleNetworkLayerContext,
+  relationTypesByVillage: ReadonlyMap<
+    string,
+    readonly SampleNetworkRelationType[]
+  > = new Map(),
 ): readonly OverviewSamplePointIcon[] {
   return comparison.designPoints.map((point) => ({
     samplePointId: `design-coverage:${point.villageRegionCode}`,
@@ -68,7 +78,7 @@ function designCoverageBadges(
         : point.villageRegionCode === context.selectedRegionCode
           ? "selected"
           : "muted",
-    relationTypes: relationTypesForVillage(comparison, point.villageRegionCode),
+    relationTypes: relationTypesByVillage.get(point.villageRegionCode) ?? [],
     types: [
       {
         code: "DESIGN_COVERAGE",
@@ -120,59 +130,94 @@ function exactDesignLocation(point: SampleNetworkDesignPoint): OverviewSamplePoi
 
 function regionalActualBadges(
   comparison: SampleNetworkComparison,
+  context: SampleNetworkLayerContext,
+  relationTypesByActual: ReadonlyMap<
+    string,
+    readonly SampleNetworkRelationType[]
+  > = new Map(),
 ): readonly OverviewSamplePointIcon[] {
-  return comparison.actualPoints
-    .filter(
-      (point) =>
-        point.locatedRegionLevel !== "VILLAGE" &&
-        (point.actualLongitude === null || point.actualLatitude === null),
-    )
-    .map((point) => ({
-      samplePointId: `regional-actual:${point.samplePointId}`,
-      name: point.samplePointName,
+  const groups = new Map<
+    string,
+    {
+      count: number;
+      kindCodes: Set<string>;
+      level: "PREFECTURE" | "COUNTY" | "TOWNSHIP";
+      regionCode: string;
+      regionName: string;
+      relationTypes: Set<SampleNetworkRelationType>;
+    }
+  >();
+
+  comparison.actualPoints.forEach((point) => {
+    if (
+      point.locatedRegionLevel === "VILLAGE" ||
+      (point.actualLongitude !== null && point.actualLatitude !== null)
+    ) {
+      return;
+    }
+    const key = `${point.locatedRegionLevel}:${point.locatedRegionCode}`;
+    const existing = groups.get(key) ?? {
+      count: 0,
+      kindCodes: new Set<string>(),
+      level: point.locatedRegionLevel,
+      regionCode: point.locatedRegionCode,
+      regionName: point.locatedRegionName,
+      relationTypes: new Set<SampleNetworkRelationType>(),
+    };
+    existing.count += 1;
+    existing.kindCodes.add(point.samplePointKindCode);
+    (relationTypesByActual.get(point.samplePointId) ?? []).forEach((relationType) =>
+      existing.relationTypes.add(relationType),
+    );
+    groups.set(key, existing);
+  });
+
+  return [...groups.values()].map((group) => ({
+    samplePointId: `regional-actual:${group.level}:${group.regionCode}`,
+    name: `${group.regionName}区域级现有样本（${group.count}个）`,
+    iconKey: "regional-actual",
+    layerType: "REGIONAL_ACTUAL_BADGE" as const,
+    // A parent-level actual point has no village coordinate. Anchor its summary
+    // to the current township backdrop, never to an arbitrary child polygon.
+    anchorRegionCode: context.summaryAnchorRegionCode ?? group.regionCode,
+    representedRegionCode: group.regionCode,
+    representedRegionName: group.regionName,
+    representedRegionLevel: group.level,
+    aggregateCount: group.count,
+    relationTypes: [...group.relationTypes],
+    types: [...group.kindCodes].map((code) => ({
+      code,
+      name: "区域级现有样本",
       iconKey: "regional-actual",
-      layerType: "REGIONAL_ACTUAL_BADGE" as const,
-      anchorRegionCode: point.locatedRegionCode,
-      relationTypes: relationTypesForActual(comparison, point.samplePointId),
-      types: [
-        {
-          code: point.samplePointKindCode,
-          name: "区域级现有样本",
-          iconKey: "regional-actual",
-        },
-      ],
-      longitude: null,
-      latitude: null,
-      dataQualityReason: point.locationState,
-    }));
+    })),
+    longitude: null,
+    latitude: null,
+    dataQualityReason: "MISSING_COORDINATE",
+  }));
 }
 
-function relationTypesForVillage(
-  comparison: SampleNetworkComparison,
-  villageRegionCode: string,
-): readonly SampleNetworkRelationType[] {
-  return uniqueRelationTypes(
-    comparison.relations
-      .filter(
-        ({ designVillageRegionCode }) => designVillageRegionCode === villageRegionCode,
-      )
-      .map(({ relationType }) => relationType),
+function indexRelationTypes(comparison: SampleNetworkComparison): {
+  byActual: ReadonlyMap<string, readonly SampleNetworkRelationType[]>;
+  byVillage: ReadonlyMap<string, readonly SampleNetworkRelationType[]>;
+} {
+  const actualSets = new Map<string, Set<SampleNetworkRelationType>>();
+  const villageSets = new Map<string, Set<SampleNetworkRelationType>>();
+  comparison.relations.forEach(
+    ({ designVillageRegionCode, relationType, samplePointId }) => {
+      const actual = actualSets.get(samplePointId) ?? new Set();
+      actual.add(relationType);
+      actualSets.set(samplePointId, actual);
+      const village = villageSets.get(designVillageRegionCode) ?? new Set();
+      village.add(relationType);
+      villageSets.set(designVillageRegionCode, village);
+    },
   );
-}
-
-function relationTypesForActual(
-  comparison: SampleNetworkComparison,
-  samplePointId: string,
-): readonly SampleNetworkRelationType[] {
-  return uniqueRelationTypes(
-    comparison.relations
-      .filter((relation) => relation.samplePointId === samplePointId)
-      .map(({ relationType }) => relationType),
-  );
-}
-
-function uniqueRelationTypes(
-  relationTypes: readonly SampleNetworkRelationType[],
-): readonly SampleNetworkRelationType[] {
-  return [...new Set(relationTypes)];
+  return {
+    byActual: new Map(
+      [...actualSets].map(([key, values]) => [key, [...values]] as const),
+    ),
+    byVillage: new Map(
+      [...villageSets].map(([key, values]) => [key, [...values]] as const),
+    ),
+  };
 }

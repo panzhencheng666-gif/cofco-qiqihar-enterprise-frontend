@@ -249,6 +249,7 @@ describe("HttpOverviewSamplePointRepository", () => {
           countyName: "龙沙区",
           designLongitude: 123.8,
           designLatitude: 47.2,
+          coordinateSource: "旧字段坐标来源",
         },
       ],
       actualPoints: [
@@ -291,6 +292,8 @@ describe("HttpOverviewSamplePointRepository", () => {
     );
     expect(result.designPointCount).toBe(1);
     expect(result.designPoints[0]?.villageRegionCode).toBe("230202997001");
+    expect(result.designPoints[0]?.coordinateSourceName).toBe("旧字段坐标来源");
+    expect(result.designPoints[0]).not.toHaveProperty("coordinateSource");
     expect(result.actualPoints[0]?.locatedRegionLevel).toBe("VILLAGE");
     expect(result.relations[0]?.relationType).toBe("EXACT_VILLAGE");
   });

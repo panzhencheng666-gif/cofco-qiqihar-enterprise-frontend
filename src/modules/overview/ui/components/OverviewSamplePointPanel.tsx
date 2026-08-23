@@ -55,6 +55,9 @@ export function OverviewSamplePointPanel({
   const [resultIssue, setResultIssue] = useState<string>();
   const [iconIssue, setIconIssue] = useState<string>();
   const [detailIssue, setDetailIssue] = useState<string>();
+  const comparisonRegionCode =
+    region.level === "VILLAGE" && region.parentCode ? region.parentCode : region.code;
+  const pointMapEnabled = region.level === "TOWNSHIP" || region.level === "VILLAGE";
 
   useEffect(() => {
     let active = true;
@@ -129,8 +132,6 @@ export function OverviewSamplePointPanel({
       setComparisonState("loading");
       setComparisonIssue(undefined);
     });
-    const comparisonRegionCode =
-      region.level === "VILLAGE" && region.parentCode ? region.parentCode : region.code;
     repository
       .comparison({ regionCode: comparisonRegionCode, year })
       .then((next) => {
@@ -147,7 +148,7 @@ export function OverviewSamplePointPanel({
     return () => {
       active = false;
     };
-  }, [refreshSequence, region.code, region.level, region.parentCode, repository, year]);
+  }, [comparisonRegionCode, refreshSequence, repository, year]);
 
   useEffect(() => {
     if (!categoryCode) {
@@ -190,7 +191,7 @@ export function OverviewSamplePointPanel({
         setResultState("unavailable");
         setResultIssue("样本点列表加载失败，请稍后重试。");
       });
-    if (region.level === "PREFECTURE") {
+    if (!pointMapEnabled) {
       void Promise.resolve().then(() => {
         if (!active) return;
         setPublishedIcons([]);
@@ -218,6 +219,7 @@ export function OverviewSamplePointPanel({
     refreshSequence,
     region.code,
     region.level,
+    pointMapEnabled,
     repository,
     typeCode,
     year,
@@ -229,6 +231,7 @@ export function OverviewSamplePointPanel({
       sampleNetworkLayerIcons(layerMode, publishedIcons, visibleComparison, {
         regionLevel: region.level,
         selectedRegionCode: region.code,
+        summaryAnchorRegionCode: comparisonRegionCode,
         showExactDesignLocations,
       }),
     );
@@ -237,6 +240,7 @@ export function OverviewSamplePointPanel({
     layerMode,
     onIconsChange,
     publishedIcons,
+    comparisonRegionCode,
     region.code,
     region.level,
     showExactDesignLocations,
@@ -358,9 +362,10 @@ export function OverviewSamplePointPanel({
   const duplicateCoordinateIconCount = publishedIcons.filter(
     (icon) => icon.dataQualityReason === "DUPLICATE_COORDINATE_UNVERIFIED",
   ).length;
-  const temporarilyHiddenCount = result
-    ? Math.max(0, result.items.length - publishedIcons.length)
-    : 0;
+  const temporarilyHiddenCount =
+    pointMapEnabled && result
+      ? Math.max(0, result.items.length - publishedIcons.length)
+      : 0;
   const availableDetailPeriods = detail ? detailPeriods(detail) : [];
   const visibleAssociations = detail
     ? detail.associations.filter(
@@ -395,7 +400,7 @@ export function OverviewSamplePointPanel({
             </button>
           ))}
         </div>
-        {comparison ? (
+        {comparisonState === "ready" && comparison ? (
           <p>
             设计行政村 {comparison.designPointCount} 个 · 年度现有样本点{" "}
             {comparison.activeSamplePointCount} 个
@@ -417,7 +422,7 @@ export function OverviewSamplePointPanel({
         layerMode !== "actual" ? (
           <small>行政村展示分区（非权威边界）；覆盖徽标不代表精确经纬度。</small>
         ) : null}
-        {layerMode !== "actual" ? (
+        {layerMode !== "actual" && comparisonState === "ready" && comparison ? (
           <label>
             <input
               checked={showExactDesignLocations}
@@ -439,31 +444,43 @@ export function OverviewSamplePointPanel({
             <span aria-hidden="true">◆</span>
             设计覆盖信息
           </h3>
-          <p>设计样本点不带年份，不承载产量、价格、库存等年度业务数据。</p>
-          <dl>
-            <div>
-              <dt>坐标来源</dt>
-              <dd>
-                {comparison?.designPoints.some(({ coordinateSource }) =>
-                  Boolean(coordinateSource),
-                )
-                  ? "已登记来源"
-                  : "待坐标治理登记"}
-              </dd>
-            </div>
-            <div>
-              <dt>坐标审核</dt>
-              <dd>已审核 {approvedDesignCoordinateCount} 个 · 其余不显示精确图钉</dd>
-            </div>
-            <div>
-              <dt>对照关系</dt>
-              <dd>
-                精确对应 {comparison?.exactCoveredDesignPointCount ?? 0} · 明确代表{" "}
-                {comparison?.representedDesignPointCount ?? 0} · 区域关联{" "}
-                {comparison?.regionalAssociationDesignPointCount ?? 0}
-              </dd>
-            </div>
-          </dl>
+          {comparisonState === "ready" && comparison ? (
+            <>
+              <p>设计样本点不带年份，不承载产量、价格、库存等年度业务数据。</p>
+              <dl>
+                <div>
+                  <dt>坐标来源</dt>
+                  <dd>
+                    {comparison.designPoints.some(({ coordinateSourceName }) =>
+                      Boolean(coordinateSourceName),
+                    )
+                      ? "已登记来源"
+                      : "待坐标治理登记"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>坐标审核</dt>
+                  <dd>
+                    已审核 {approvedDesignCoordinateCount} 个 · 其余不显示精确图钉
+                  </dd>
+                </div>
+                <div>
+                  <dt>对照关系</dt>
+                  <dd>
+                    精确对应 {comparison.exactCoveredDesignPointCount} · 明确代表{" "}
+                    {comparison.representedDesignPointCount} · 区域关联{" "}
+                    {comparison.regionalAssociationDesignPointCount}
+                  </dd>
+                </div>
+              </dl>
+            </>
+          ) : (
+            <p>
+              {comparisonState === "unavailable"
+                ? "年度样本网络不可用"
+                : "正在同步年度样本网络"}
+            </p>
+          )}
         </section>
       ) : (
         <>
@@ -537,18 +554,24 @@ export function OverviewSamplePointPanel({
 
             {resultState === "ready" && result ? (
               <p className="overview-sample-point-quality-summary" role="status">
-                <strong>
-                  地图显示 {publishedIcons.length} 个
-                  {duplicateCoordinateIconCount
-                    ? `，其中 ${duplicateCoordinateIconCount} 个坐标重合待核验`
-                    : ""}
-                </strong>
-                {temporarilyHiddenCount ? (
-                  <span>
-                    {temporarilyHiddenCount}{" "}
-                    个因坐标缺失或无效暂不显示，请在坐标治理中修正。
-                  </span>
-                ) : null}
+                {pointMapEnabled ? (
+                  <>
+                    <strong>
+                      地图显示 {publishedIcons.length} 个
+                      {duplicateCoordinateIconCount
+                        ? `，其中 ${duplicateCoordinateIconCount} 个坐标重合待核验`
+                        : ""}
+                    </strong>
+                    {temporarilyHiddenCount ? (
+                      <span>
+                        {temporarilyHiddenCount}{" "}
+                        个因坐标缺失或无效暂不显示，请在坐标治理中修正。
+                      </span>
+                    ) : null}
+                  </>
+                ) : (
+                  <strong>当前层级使用聚合统计，不显示单个样本点图标。</strong>
+                )}
               </p>
             ) : null}
 

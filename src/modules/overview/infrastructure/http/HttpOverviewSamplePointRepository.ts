@@ -129,6 +129,27 @@ const detailSchema = z.object({
   }),
 });
 
+const comparisonDesignPointSchema = z
+  .object({
+    villageRegionCode: z.string(),
+    villageName: z.string(),
+    townshipRegionCode: z.string(),
+    townshipName: z.string(),
+    countyRegionCode: z.string(),
+    countyName: z.string(),
+    designLongitude: z.number(),
+    designLatitude: z.number(),
+    coordinateReviewStatus: z.string().nullable().optional(),
+    coordinateSourceName: z.string().nullable().optional(),
+    coordinateSource: z.string().nullable().optional(),
+  })
+  .transform(({ coordinateSource, coordinateSourceName, ...point }) => {
+    return {
+      ...point,
+      coordinateSourceName: coordinateSourceName ?? coordinateSource,
+    };
+  });
+
 const comparisonSchema = z.object({
   data: z.object({
     networkYear: z.number().int(),
@@ -145,20 +166,7 @@ const comparisonSchema = z.object({
       township: z.number().int().nonnegative(),
       village: z.number().int().nonnegative(),
     }),
-    designPoints: z.array(
-      z.object({
-        villageRegionCode: z.string(),
-        villageName: z.string(),
-        townshipRegionCode: z.string(),
-        townshipName: z.string(),
-        countyRegionCode: z.string(),
-        countyName: z.string(),
-        designLongitude: z.number(),
-        designLatitude: z.number(),
-        coordinateReviewStatus: z.string().nullable().optional(),
-        coordinateSource: z.string().nullable().optional(),
-      }),
-    ),
+    designPoints: z.array(comparisonDesignPointSchema),
     actualPoints: z.array(
       z.object({
         samplePointId: uuidTextSchema,

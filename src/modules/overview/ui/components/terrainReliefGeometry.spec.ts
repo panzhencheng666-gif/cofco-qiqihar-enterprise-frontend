@@ -283,7 +283,7 @@ describe("projectReliefScene", () => {
     expect(projection.samplePointIcons[0]?.icon.latitude).toBe(55);
   });
 
-  it("anchors a coordinate-free regional actual badge to its administrative label", () => {
+  it("anchors an aggregated county actual badge to the current township summary", () => {
     const township = polygonFeature(
       "230202997",
       [
@@ -302,11 +302,15 @@ describe("projectReliefScene", () => {
       points: [],
       samplePointIcons: [
         {
-          samplePointId: "regional-actual:94000000-0000-0000-0000-000000000002",
-          name: "乡镇级现有样本",
+          samplePointId: "regional-actual:COUNTY:230202",
+          name: "龙沙区区域级现有样本（2个）",
           iconKey: "regional-actual",
           layerType: "REGIONAL_ACTUAL_BADGE",
           anchorRegionCode: "230202997",
+          representedRegionCode: "230202",
+          representedRegionName: "龙沙区",
+          representedRegionLevel: "COUNTY",
+          aggregateCount: 2,
           types: [
             {
               code: "TRADER",

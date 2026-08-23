@@ -1090,7 +1090,6 @@ export default function TerrainReliefBoundaryMap({
           const isDesignExact = icon.layerType === "DESIGN_EXACT_LOCATION";
           const isRegionalActual = icon.layerType === "REGIONAL_ACTUAL_BADGE";
           const isReferenceLayer = isDesignCoverage || isDesignExact;
-          const isInformationalBadge = isDesignCoverage || isRegionalActual;
           const expanded =
             Math.abs(anchorPoint.x - point.x) > 0.01 ||
             Math.abs(anchorPoint.y - point.y) > 0.01;
@@ -1112,60 +1111,53 @@ export default function TerrainReliefBoundaryMap({
                   }}
                 />
               )}
-              <button
-                aria-label={
-                  isDesignCoverage
-                    ? `${icon.name}，行政村展示分区覆盖徽标，不代表精确经纬度`
-                    : isDesignExact
-                      ? `${icon.name}，已审核设计样本点精确位置`
-                      : isRegionalActual
-                        ? `${icon.name}，仅确认到行政区域，不显示伪造图钉`
-                        : `${icon.name}，${icon.types.map((type) => type.name).join("、")}${icon.dataQualityReason === "DUPLICATE_COORDINATE_UNVERIFIED" ? "，坐标重合待核验" : ""}，点击查看样本点详情`
-                }
-                aria-pressed={
-                  isReferenceLayer || isRegionalActual
-                    ? undefined
-                    : selectedSamplePointId === icon.samplePointId
-                }
-                className={`overview-sample-point-map-icon is-${icon.iconKey ?? "unknown"} is-layer-${(icon.layerType ?? "ANNUAL_ACTUAL").toLowerCase()}${icon.visualState ? ` is-${icon.visualState}` : ""}${icon.dataQualityReason === "DUPLICATE_COORDINATE_UNVERIFIED" ? " has-coordinate-warning" : ""}${selectedSamplePointId === icon.samplePointId ? " is-selected" : ""}`}
-                data-anchor-latitude={icon.latitude ?? undefined}
-                data-anchor-longitude={icon.longitude ?? undefined}
-                data-layer-type={icon.layerType ?? "ANNUAL_ACTUAL"}
-                onClick={
-                  isInformationalBadge || isDesignExact
-                    ? undefined
-                    : () => onSamplePointSelect?.(icon.samplePointId)
-                }
-                style={{
-                  left: point.x,
-                  top: point.y,
-                  ...(isInformationalBadge
-                    ? {
-                        borderRadius: "50%",
-                        cursor: "default",
-                        transform: "translate(-50%, -50%)",
-                      }
-                    : {}),
-                  ...(icon.visualState === "muted" ? { opacity: 0.42 } : {}),
-                }}
-                title={
-                  isDesignCoverage
-                    ? "行政村设计覆盖；展示分区不是权威边界"
-                    : isDesignExact
-                      ? "原始设计样本点；已审核精确位置"
-                      : isRegionalActual
-                        ? "区域级现有样本；无精确坐标，不绘制图钉"
-                        : icon.dataQualityReason === "DUPLICATE_COORDINATE_UNVERIFIED"
-                          ? "坐标重合待核验；当前按原始坐标展开显示"
-                          : "点击查看样本点详情"
-                }
-                type="button"
-              >
-                <SamplePointMapSymbol
-                  iconKey={icon.iconKey}
-                  layerType={icon.layerType}
-                />
-              </button>
+              {isReferenceLayer || isRegionalActual ? (
+                <span
+                  aria-label={sampleNetworkMarkerLabel(icon)}
+                  className={`overview-sample-point-map-icon is-${icon.iconKey ?? "unknown"} is-layer-${(icon.layerType ?? "ANNUAL_ACTUAL").toLowerCase()}${icon.visualState ? ` is-${icon.visualState}` : ""}`}
+                  data-anchor-latitude={icon.latitude ?? undefined}
+                  data-anchor-longitude={icon.longitude ?? undefined}
+                  data-layer-type={icon.layerType}
+                  role="img"
+                  style={{
+                    left: point.x,
+                    top: point.y,
+                    borderRadius: "50%",
+                    cursor: "default",
+                    pointerEvents: "none",
+                    transform: "translate(-50%, -50%)",
+                    ...(icon.visualState === "muted" ? { opacity: 0.42 } : {}),
+                  }}
+                  title={sampleNetworkMarkerTitle(icon)}
+                >
+                  <SamplePointMapSymbol
+                    iconKey={icon.iconKey}
+                    layerType={icon.layerType}
+                  />
+                </span>
+              ) : (
+                <button
+                  aria-label={`${icon.name}，${icon.types.map((type) => type.name).join("、")}${icon.dataQualityReason === "DUPLICATE_COORDINATE_UNVERIFIED" ? "，坐标重合待核验" : ""}，点击查看样本点详情`}
+                  aria-pressed={selectedSamplePointId === icon.samplePointId}
+                  className={`overview-sample-point-map-icon is-${icon.iconKey ?? "unknown"} is-layer-${(icon.layerType ?? "ANNUAL_ACTUAL").toLowerCase()}${icon.dataQualityReason === "DUPLICATE_COORDINATE_UNVERIFIED" ? " has-coordinate-warning" : ""}${selectedSamplePointId === icon.samplePointId ? " is-selected" : ""}`}
+                  data-anchor-latitude={icon.latitude ?? undefined}
+                  data-anchor-longitude={icon.longitude ?? undefined}
+                  data-layer-type={icon.layerType ?? "ANNUAL_ACTUAL"}
+                  onClick={() => onSamplePointSelect?.(icon.samplePointId)}
+                  style={{ left: point.x, top: point.y }}
+                  title={
+                    icon.dataQualityReason === "DUPLICATE_COORDINATE_UNVERIFIED"
+                      ? "坐标重合待核验；当前按原始坐标展开显示"
+                      : "点击查看样本点详情"
+                  }
+                  type="button"
+                >
+                  <SamplePointMapSymbol
+                    iconKey={icon.iconKey}
+                    layerType={icon.layerType}
+                  />
+                </button>
+              )}
             </Fragment>
           );
         })}
@@ -1179,6 +1171,35 @@ export default function TerrainReliefBoundaryMap({
       </div>
     </div>
   );
+}
+
+function sampleNetworkMarkerLabel(icon: OverviewSamplePointIcon): string {
+  if (icon.layerType === "DESIGN_COVERAGE_BADGE") {
+    return `${icon.name}，行政村展示分区覆盖徽标，不代表精确经纬度`;
+  }
+  if (icon.layerType === "DESIGN_EXACT_LOCATION") {
+    return `${icon.name}，已审核设计样本点精确位置`;
+  }
+  return `${icon.name}，仅确认到${regionalActualLevelLabel(icon.representedRegionLevel)}，不显示伪造图钉`;
+}
+
+function sampleNetworkMarkerTitle(icon: OverviewSamplePointIcon): string {
+  if (icon.layerType === "DESIGN_COVERAGE_BADGE") {
+    return "行政村设计覆盖；展示分区不是权威边界";
+  }
+  if (icon.layerType === "DESIGN_EXACT_LOCATION") {
+    return "原始设计样本点；已审核精确位置";
+  }
+  return `区域级现有样本；仅确认到${regionalActualLevelLabel(icon.representedRegionLevel)}，不绘制图钉`;
+}
+
+function regionalActualLevelLabel(
+  level: OverviewSamplePointIcon["representedRegionLevel"],
+): string {
+  if (level === "PREFECTURE") return "地级市";
+  if (level === "COUNTY") return "区县";
+  if (level === "TOWNSHIP") return "乡镇";
+  return "行政区域";
 }
 
 function reliefRegionLabel({

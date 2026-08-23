@@ -80,6 +80,10 @@ export interface OverviewSamplePointIcon {
   villageRegionCode?: string;
   visualState?: "default" | "selected" | "muted";
   relationTypes?: readonly SampleNetworkRelationType[];
+  representedRegionCode?: string;
+  representedRegionName?: string;
+  representedRegionLevel?: "PREFECTURE" | "COUNTY" | "TOWNSHIP";
+  aggregateCount?: number;
   types: readonly OverviewSamplePointTypeRef[];
   longitude: number | null;
   latitude: number | null;
@@ -107,7 +111,7 @@ export interface SampleNetworkDesignPoint {
   designLongitude: number;
   designLatitude: number;
   coordinateReviewStatus?: string | null | undefined;
-  coordinateSource?: string | null | undefined;
+  coordinateSourceName?: string | null | undefined;
 }
 
 export interface SampleNetworkActualPoint {

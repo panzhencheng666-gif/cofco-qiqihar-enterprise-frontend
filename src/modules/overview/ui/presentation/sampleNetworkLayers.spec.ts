@@ -10,12 +10,12 @@ const comparison: SampleNetworkComparison = {
   networkYear: 2026,
   networkStatus: "PUBLISHED",
   designPointCount: 2,
-  activeSamplePointCount: 2,
+  activeSamplePointCount: 3,
   exactCoveredDesignPointCount: 1,
   representedDesignPointCount: 0,
   regionalAssociationDesignPointCount: 2,
   unrelatedDesignPointCount: 1,
-  actualLevelCounts: { prefecture: 0, county: 1, township: 0, village: 1 },
+  actualLevelCounts: { prefecture: 0, county: 2, township: 0, village: 1 },
   designPoints: [
     {
       villageRegionCode: "230202997001",
@@ -57,6 +57,18 @@ const comparison: SampleNetworkComparison = {
       samplePointId: "94000000-0000-0000-0000-000000000002",
       samplePointName: "区县级样本",
       samplePointKindCode: "TRADER",
+      membershipStatusCode: "ACTIVE",
+      locatedRegionCode: "230202",
+      locatedRegionName: "龙沙区",
+      locatedRegionLevel: "COUNTY",
+      actualLongitude: null,
+      actualLatitude: null,
+      locationState: "MISSING_COORDINATE",
+    },
+    {
+      samplePointId: "94000000-0000-0000-0000-000000000003",
+      samplePointName: "区县级样本二",
+      samplePointKindCode: "FEED_MILL",
       membershipStatusCode: "ACTIVE",
       locatedRegionCode: "230202",
       locatedRegionName: "龙沙区",
@@ -193,17 +205,24 @@ describe("sampleNetworkLayerIcons", () => {
     const result = sampleNetworkLayerIcons("actual", [], comparison, {
       regionLevel: "TOWNSHIP",
       selectedRegionCode: "230202997",
+      summaryAnchorRegionCode: "230202997",
     });
 
     expect(result).toContainEqual(
       expect.objectContaining({
-        samplePointId: "regional-actual:94000000-0000-0000-0000-000000000002",
-        anchorRegionCode: "230202",
+        samplePointId: "regional-actual:COUNTY:230202",
+        anchorRegionCode: "230202997",
+        representedRegionCode: "230202",
+        representedRegionLevel: "COUNTY",
         layerType: "REGIONAL_ACTUAL_BADGE",
         longitude: null,
         latitude: null,
+        aggregateCount: 2,
       }),
     );
+    expect(
+      result.filter((icon) => icon.layerType === "REGIONAL_ACTUAL_BADGE"),
+    ).toHaveLength(1);
   });
 
   it("keeps prefecture and county views aggregate-only", () => {

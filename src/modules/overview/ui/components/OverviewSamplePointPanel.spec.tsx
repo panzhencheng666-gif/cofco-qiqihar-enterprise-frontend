@@ -168,7 +168,7 @@ describe("OverviewSamplePointPanel", () => {
       <PanelHarness
         onIconsChange={vi.fn()}
         year={2026}
-        region={{ code: "230208", level: "COUNTY", name: "梅里斯达斡尔族区" }}
+        region={{ code: "230208997", level: "TOWNSHIP", name: "契约测试乡" }}
         repository={repository}
       />,
     );
@@ -271,7 +271,7 @@ describe("OverviewSamplePointPanel", () => {
       <PanelHarness
         onIconsChange={vi.fn()}
         year={2026}
-        region={{ code: "230202", level: "COUNTY", name: "龙沙区" }}
+        region={{ code: "230202997", level: "TOWNSHIP", name: "契约测试乡" }}
         repository={repository}
       />,
     );
@@ -282,7 +282,7 @@ describe("OverviewSamplePointPanel", () => {
 
     await waitFor(() =>
       expect(repository.list).toHaveBeenLastCalledWith({
-        regionCode: "230202",
+        regionCode: "230202997",
         categoryCode: "PRODUCTION",
         productCode: "CORN",
         typeCode: "FARMER",
@@ -291,7 +291,7 @@ describe("OverviewSamplePointPanel", () => {
       }),
     );
     expect(repository.icons).toHaveBeenLastCalledWith({
-      regionCode: "230202",
+      regionCode: "230202997",
       categoryCode: "PRODUCTION",
       productCode: "CORN",
       typeCode: "FARMER",
@@ -425,7 +425,11 @@ describe("OverviewSamplePointPanel", () => {
   it("refreshes the open classification, list, icons, and detail without losing filters", async () => {
     const repository = repositoryStub();
     const onIconsChange = vi.fn();
-    const region = { code: "230202", level: "COUNTY" as const, name: "龙沙区" };
+    const region = {
+      code: "230202997",
+      level: "TOWNSHIP" as const,
+      name: "契约测试乡",
+    };
     const { rerender } = render(
       <PanelHarness
         onIconsChange={onIconsChange}
@@ -455,25 +459,25 @@ describe("OverviewSamplePointPanel", () => {
 
     await waitFor(() => {
       expect(repository.list).toHaveBeenCalledWith({
-        regionCode: "230202",
+        regionCode: "230202997",
         productCode: "CORN",
         year: 2026,
       });
       expect(repository.list).toHaveBeenCalledWith({
-        regionCode: "230202",
+        regionCode: "230202997",
         categoryCode: "PRODUCTION",
         productCode: "CORN",
         year: 2026,
       });
       expect(repository.icons).toHaveBeenCalledWith({
-        regionCode: "230202",
+        regionCode: "230202997",
         categoryCode: "PRODUCTION",
         productCode: "CORN",
         year: 2026,
       });
       expect(repository.detail).toHaveBeenCalledWith({
         samplePointId: "94000000-0000-0000-0000-000000000001",
-        regionCode: "230202",
+        regionCode: "230202997",
         categoryCode: "PRODUCTION",
         productCode: "CORN",
         year: 2026,
@@ -635,6 +639,73 @@ describe("OverviewSamplePointPanel", () => {
       ]),
     );
   });
+
+  it("does not invent design counts or governance facts while comparison is loading", async () => {
+    const repository = repositoryStub();
+    repository.comparison.mockReturnValue(new Promise(() => undefined));
+
+    render(
+      <PanelHarness
+        onIconsChange={vi.fn()}
+        year={2026}
+        region={{ code: "230202997", level: "TOWNSHIP", name: "契约测试乡" }}
+        repository={repository}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "只看设计" }));
+    expect(screen.getAllByText("正在同步年度样本网络")[0]).toBeVisible();
+    expect(
+      screen.queryByText(/已审核 0 个|待坐标治理登记|精确对应 0/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not invent design counts or governance facts when comparison is unavailable", async () => {
+    const repository = repositoryStub();
+    repository.comparison.mockRejectedValue(new Error("unavailable"));
+
+    render(
+      <PanelHarness
+        onIconsChange={vi.fn()}
+        year={2026}
+        region={{ code: "230202997", level: "TOWNSHIP", name: "契约测试乡" }}
+        repository={repository}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "只看设计" }));
+    expect((await screen.findAllByText("年度样本网络不可用"))[0]).toBeVisible();
+    expect(
+      screen.queryByText(/已审核 0 个|待坐标治理登记|精确对应 0/),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["PREFECTURE", "230200", "齐齐哈尔市"],
+    ["COUNTY", "230202", "龙沙区"],
+  ] as const)(
+    "uses aggregate wording and skips icon requests at %s level",
+    async (level, code, name) => {
+      const repository = repositoryStub();
+
+      render(
+        <PanelHarness
+          onIconsChange={vi.fn()}
+          year={2026}
+          region={{ code, level, name }}
+          repository={repository}
+        />,
+      );
+
+      await userEvent.click(await screen.findByRole("button", { name: "产情类 1" }));
+      expect(
+        await screen.findByText("当前层级使用聚合统计，不显示单个样本点图标。"),
+      ).toBeVisible();
+      expect(repository.icons).not.toHaveBeenCalled();
+      expect(screen.queryByText(/地图显示 1 个/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/因坐标缺失或无效暂不显示/)).not.toBeInTheDocument();
+    },
+  );
 });
 
 function repositoryStub() {
@@ -663,7 +734,7 @@ function repositoryStub() {
           designLongitude: 123.8,
           designLatitude: 47.2,
           coordinateReviewStatus: "APPROVED",
-          coordinateSource: "村委会驻地复核",
+          coordinateSourceName: "村委会驻地复核",
         },
       ],
       actualPoints: [
