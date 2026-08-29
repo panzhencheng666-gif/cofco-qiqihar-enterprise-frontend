@@ -264,3 +264,40 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+@media (max-width: 700px) {
+  .overview-data-mode,
+  .overview-command-center.has-details .overview-data-mode,
+  .overview-command-center.has-side-data-panel .overview-data-mode {
+    position: relative;
+    inset: auto;
+    order: 1;
+    width: auto;
+    height: auto;
+    max-height: 76svh;
+    margin: 12px;
+    padding: 14px;
+    overflow: auto;
+    flex: 0 0 auto;
+  }
+
+  .overview-data-mode header {
+    flex-wrap: wrap;
+  }
+
+  .overview-data-mode__metrics,
+  .overview-data-mode__balance-metrics,
+  .overview-command-center.has-side-data-panel .overview-data-mode__balance-metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .overview-command-center.has-side-data-panel
+    .overview-data-mode__balance-metrics
+    > :last-child {
+    grid-column: auto;
+  }
+
+  .overview-data-mode__balance {
+    grid-template-rows: auto auto minmax(180px, 1fr);
+  }
+}

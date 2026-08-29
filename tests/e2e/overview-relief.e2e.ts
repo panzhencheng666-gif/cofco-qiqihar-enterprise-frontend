@@ -21,6 +21,57 @@ const township = region("230225204", "宝山乡", "TOWNSHIP", "230225");
 const village = region("230225204014", "宝山村", "VILLAGE", "230225204");
 
 test.describe("overview owned-relief interaction", () => {
+  test("keeps the overview canvas and key controls reachable at 390px", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ height: 844, width: 390 });
+    await installOverviewFixture(page);
+    await page.goto("/#/overview");
+
+    await expect(page.locator(".overview-command-center")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "样本点", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("选择地区", { exact: true })).toBeVisible();
+
+    const layout = await page.evaluate(() => {
+      const elementHeight = (selector: string) => {
+        const element = document.querySelector<HTMLElement>(selector);
+        return {
+          client: element?.clientHeight ?? 0,
+          scroll: element?.scrollHeight ?? 0,
+        };
+      };
+      return {
+        body: document.body.scrollWidth,
+        commandCenter:
+          document.querySelector<HTMLElement>(".overview-command-center")
+            ?.scrollWidth ?? 0,
+        header: elementHeight(".overview-command-header"),
+        html: document.documentElement.scrollWidth,
+        kpis: elementHeight(".overview-command-kpis"),
+        viewport: window.innerWidth,
+      };
+    });
+    expect(layout.html).toBeLessThanOrEqual(layout.viewport);
+    expect(layout.body).toBeLessThanOrEqual(layout.viewport);
+    expect(layout.commandCenter).toBeLessThanOrEqual(layout.viewport);
+    expect(layout.header.scroll).toBeLessThanOrEqual(layout.header.client);
+    expect(layout.kpis.scroll).toBeLessThanOrEqual(layout.kpis.client);
+
+    for (const control of [
+      page.getByRole("button", { name: "样本点", exact: true }),
+      page.getByText("选择地区", { exact: true }),
+    ]) {
+      const box = await control.boundingBox();
+      expect(box).not.toBeNull();
+      if (box) {
+        expect(box.x).toBeGreaterThanOrEqual(0);
+        expect(box.x + box.width).toBeLessThanOrEqual(layout.viewport);
+      }
+    }
+  });
+
   test("keeps map navigation below the KPI band at the formal acceptance viewport", async ({
     page,
   }) => {

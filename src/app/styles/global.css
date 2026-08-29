@@ -5310,3 +5310,172 @@ select:focus-visible {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+@media (max-width: 700px) {
+  html,
+  body,
+  #root {
+    width: 100%;
+    min-width: 0;
+    overflow-x: clip;
+  }
+
+  .overview-command-center {
+    position: fixed;
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    min-width: 0;
+    height: 100dvh;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    transform: none;
+  }
+
+  .overview-command-header {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    min-height: 0;
+    padding: 16px;
+    flex: 0 0 auto;
+  }
+
+  .overview-command-header h1 {
+    position: static;
+    font-size: 20px;
+    line-height: 1.35;
+    white-space: normal;
+  }
+
+  .overview-command-center .overview-cockpit-filters {
+    position: static;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    width: 100%;
+  }
+
+  .overview-command-status {
+    position: static;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    justify-content: flex-start;
+    white-space: normal;
+  }
+
+  .overview-command-status b {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .overview-command-kpis,
+  .overview-command-center.has-details .overview-command-kpis {
+    position: relative;
+    inset: auto;
+    order: 1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    height: auto;
+    margin: 12px;
+    padding: 0 8px;
+    flex: 0 0 auto;
+  }
+
+  .overview-command-kpis article {
+    min-height: 126px;
+    padding: 10px;
+  }
+
+  .overview-command-kpis article + article::before {
+    top: 10px;
+    bottom: 10px;
+  }
+
+  .overview-command-kpis p {
+    font-size: 14px;
+  }
+
+  .overview-command-kpis strong {
+    font-size: 20px;
+  }
+
+  .overview-command-tools,
+  .overview-command-center.has-details .overview-command-tools,
+  .overview-command-center.has-side-data-panel .overview-command-tools {
+    position: relative;
+    inset: auto;
+    order: 2;
+    flex-wrap: wrap;
+    margin: 0 12px 12px;
+    flex: 0 0 auto;
+  }
+
+  .overview-command-tools > .overview-cockpit-navigation {
+    flex-wrap: wrap;
+  }
+
+  .overview-command-center.has-details
+    .overview-command-tools
+    > .overview-cockpit-navigation {
+    display: flex;
+  }
+
+  .overview-sample-network-toolbar,
+  .overview-sample-network-toolbar > div[role="group"] {
+    flex-wrap: wrap;
+  }
+
+  .overview-command-map,
+  .overview-command-center.has-details .overview-command-map,
+  .overview-command-center.has-side-data-panel .overview-command-map {
+    position: relative;
+    inset: auto;
+    order: 3;
+    width: 100%;
+    height: max(520px, 64svh);
+    flex: 0 0 auto;
+    overflow: hidden;
+  }
+
+  .overview-command-legend {
+    position: relative;
+    inset: auto;
+    order: 4;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: auto;
+    margin: 12px;
+    flex: 0 0 auto;
+  }
+
+  .overview-command-legend h3 {
+    grid-column: 1 / -1;
+  }
+
+  .overview-command-details {
+    position: relative;
+    inset: auto;
+    order: 5;
+    width: auto;
+    max-height: 76svh;
+    margin: 0 12px 12px;
+    padding: 22px 16px 16px;
+    overflow: auto;
+    flex: 0 0 auto;
+  }
+
+  .overview-selection-link {
+    display: none;
+  }
+
+  .overview-command-footer,
+  .overview-command-center.has-details .overview-command-footer {
+    position: relative;
+    inset: auto;
+    order: 6;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    margin: 0 12px 12px;
+    flex: 0 0 auto;
+  }
+}
