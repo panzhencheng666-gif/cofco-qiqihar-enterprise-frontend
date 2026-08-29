@@ -32,7 +32,14 @@ test.describe("overview owned-relief interaction", () => {
     await expect(
       page.getByRole("button", { name: "样本点", exact: true }),
     ).toBeVisible();
-    await expect(page.getByText("选择地区", { exact: true })).toBeVisible();
+    const regionTrigger = page.getByText("选择地区", { exact: true });
+    await expect(regionTrigger).toBeVisible();
+    await regionTrigger.click();
+
+    const regionList = page.locator('[aria-label="行政区列表"]');
+    const regionButton = regionList.getByRole("button", { name: city.name });
+    await expect(regionList).toBeVisible();
+    await expect(regionButton).toBeVisible();
 
     const layout = await page.evaluate(() => {
       const elementHeight = (selector: string) => {
@@ -61,13 +68,51 @@ test.describe("overview owned-relief interaction", () => {
 
     for (const control of [
       page.getByRole("button", { name: "样本点", exact: true }),
-      page.getByText("选择地区", { exact: true }),
+      regionTrigger,
+      page.locator(".overview-command-tools"),
+      page.locator(".overview-cockpit-navigation"),
+      regionList,
+      regionButton,
     ]) {
       const box = await control.boundingBox();
       expect(box).not.toBeNull();
       if (box) {
         expect(box.x).toBeGreaterThanOrEqual(0);
         expect(box.x + box.width).toBeLessThanOrEqual(layout.viewport);
+      }
+    }
+  });
+
+  test("keeps the expanded region browser inside the 1440px desktop viewport", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ height: 900, width: 1440 });
+    await installOverviewFixture(page);
+    await page.goto("/#/overview");
+
+    await page.getByText("选择地区", { exact: true }).click();
+    const regionList = page.locator('[aria-label="行政区列表"]');
+    const regionButton = regionList.getByRole("button", { name: city.name });
+    await expect(regionList).toBeVisible();
+    await expect(regionButton).toBeVisible();
+
+    const { htmlWidth, viewport } = await page.evaluate(() => ({
+      htmlWidth: document.documentElement.scrollWidth,
+      viewport: window.innerWidth,
+    }));
+    expect(htmlWidth).toBeLessThanOrEqual(viewport);
+    for (const control of [
+      page.locator(".overview-command-center"),
+      page.locator(".overview-command-tools"),
+      page.locator(".overview-cockpit-navigation"),
+      regionList,
+      regionButton,
+    ]) {
+      const box = await control.boundingBox();
+      expect(box).not.toBeNull();
+      if (box) {
+        expect(box.x).toBeGreaterThanOrEqual(0);
+        expect(box.x + box.width).toBeLessThanOrEqual(viewport);
       }
     }
   });

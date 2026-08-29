@@ -5415,6 +5415,13 @@ select:focus-visible {
     flex-wrap: wrap;
   }
 
+  .overview-command-center .overview-region-browser > div {
+    right: 0;
+    left: auto;
+    width: min(245px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+  }
+
   .overview-command-center.has-details
     .overview-command-tools
     > .overview-cockpit-navigation {
