@@ -6,14 +6,19 @@ import type {
 } from "../../application/ports/OverviewRepository";
 import type { OverviewRealtimeStream } from "../../application/ports/OverviewRealtimeStream";
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
+import type { OverviewRegionalDataRepository } from "../../application/ports/OverviewRegionalDataRepository";
 import type {
-  OverviewDashboard,
-  OverviewIndicator,
+  OverviewDashboardSummary,
   OverviewMapScope,
   OverviewOptions,
   OverviewRegion,
 } from "../../domain/overview";
 import type { OverviewSamplePointAggregate } from "../../domain/overviewSamplePoint";
+import type {
+  OverviewDataMode,
+  RegionalCropSummary,
+  SupplyBalanceSummary,
+} from "../../domain/overviewRegionalData";
 import {
   BoundaryMap,
   toMapFeature,
@@ -22,10 +27,15 @@ import {
   type SamplePointAggregateStatus,
 } from "../components/BoundaryMap";
 import { OverviewCommandCenter } from "../components/OverviewCommandCenter";
+import {
+  OverviewDataModePanel,
+  OverviewDataModeTabs,
+} from "../components/OverviewDataModePanel";
 import { OverviewSampleNetworkToolbar } from "../components/OverviewSampleNetworkToolbar";
 import { OverviewSamplePointPanel } from "../components/OverviewSamplePointPanel";
 import { useOverviewRealtimeRefresh } from "../hooks/useOverviewRealtimeRefresh";
 import { useOverviewSampleNetworkLayers } from "../hooks/useOverviewSampleNetworkLayers";
+import { visibleSampleNetworkMapIcons } from "../presentation/sampleNetworkLayers";
 import { HttpContractError, HttpError } from "../../../../shared/api/HttpClient";
 
 const OVERALL_SCOPE = "__OVERALL__";
@@ -95,11 +105,14 @@ function preserveEquivalentAggregates(
     next,
     (aggregate, candidate) =>
       aggregate.regionCode === candidate.regionCode &&
+      aggregate.scopeKind === candidate.scopeKind &&
+      aggregate.anchorRegionCode === candidate.anchorRegionCode &&
       aggregate.regionName === candidate.regionName &&
       aggregate.regionLevel === candidate.regionLevel &&
       aggregate.samplePointCount === candidate.samplePointCount &&
       aggregate.productionCount === candidate.productionCount &&
       aggregate.marketCount === candidate.marketCount &&
+      (aggregate.logisticsCount ?? 0) === (candidate.logisticsCount ?? 0) &&
       aggregate.validCoordinateCount === candidate.validCoordinateCount &&
       aggregate.dataQualityIssueCount === candidate.dataQualityIssueCount &&
       aggregate.correctionSourceCount === candidate.correctionSourceCount &&
@@ -141,10 +154,12 @@ function mapRegionTimeScope(
 
 export function OverviewPage({
   realtimeStream,
+  regionalDataRepository,
   repository,
   samplePointRepository,
 }: {
   realtimeStream?: OverviewRealtimeStream;
+  regionalDataRepository?: OverviewRegionalDataRepository;
   repository: OverviewRepository;
   samplePointRepository?: OverviewSamplePointRepository;
 }) {
@@ -155,8 +170,7 @@ export function OverviewPage({
   const [regions, setRegions] = useState<readonly OverviewRegion[]>([]);
   const [childRegionQueryKey, setChildRegionQueryKey] = useState("");
   const [regionsParentCode, setRegionsParentCode] = useState("");
-  const [, setIndicators] = useState<readonly OverviewIndicator[]>([]);
-  const [dashboard, setDashboard] = useState<OverviewDashboard>();
+  const [dashboard, setDashboard] = useState<OverviewDashboardSummary>();
   const [productCode, setProductCode] = useState("");
   const [year, setYear] = useState<number>();
   const [selectedRegionCode, setSelectedRegionCode] = useState("");
@@ -169,8 +183,8 @@ export function OverviewPage({
   const [optionsReloadKey, setOptionsReloadKey] = useState(0);
   const [rootRegionIssue, setRootRegionIssue] = useState<string>();
   const [childRegionIssue, setChildRegionIssue] = useState<string>();
-  const [indicatorIssue, setIndicatorIssue] = useState<string>();
   const [dashboardIssue, setDashboardIssue] = useState<string>();
+  const [dashboardRefreshing, setDashboardRefreshing] = useState(false);
   const [mapScopeIssue, setMapScopeIssue] = useState<string>();
   const [mapSelectionPoint, setMapSelectionPoint] =
     useState<OverviewMapSelectionPoint>();
@@ -183,6 +197,21 @@ export function OverviewPage({
     useState<SamplePointAggregateStatus>("loading");
   const [samplePointAggregateIssue, setSamplePointAggregateIssue] = useState<string>();
   const [selectedSamplePointId, setSelectedSamplePointId] = useState<string>();
+  const [dataMode, setDataMode] = useState<OverviewDataMode>("SAMPLE_POINTS");
+  const [regionalSummary, setRegionalSummary] = useState<RegionalCropSummary>();
+  const [supplyBalance, setSupplyBalance] = useState<SupplyBalanceSummary>();
+  const [regionalDataLoading, setRegionalDataLoading] = useState(false);
+  const [regionalDataIssue, setRegionalDataIssue] = useState<string>();
+  const [sampleExportPending, setSampleExportPending] = useState(false);
+  const [sampleExportIssue, setSampleExportIssue] = useState<string>();
+  const [pendingNavigationLabel, setPendingNavigationLabel] = useState<string>();
+  const dashboardQueryKeyRef = useRef("");
+  const navigationRequestRef = useRef(0);
+  const embeddedInBusinessPlatform =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("embed") === "1";
+  const sampleMode = dataMode === "SAMPLE_POINTS";
+  const activeSamplePointRepository = sampleMode ? samplePointRepository : undefined;
   const availableYears = useMemo(
     () => selectableOverviewYears(options?.years ?? []),
     [options?.years],
@@ -194,15 +223,10 @@ export function OverviewPage({
       ? mapContextRegion.level
       : rootRegions.find((region) => region.code === parentCode)?.level
     : undefined;
-  const aggregateSelectionLevel = [...regions, ...rootRegions].find(
-    (region) => region.code === selectedRegionCode,
-  )?.level;
-  const hasDeepRegionSelection =
-    aggregateSelectionLevel === "COUNTY" ||
-    aggregateSelectionLevel === "TOWNSHIP" ||
-    aggregateSelectionLevel === "VILLAGE";
   const showSamplePointAggregates =
-    (!parentCode || aggregateParentLevel === "PREFECTURE") && !hasDeepRegionSelection;
+    !parentCode ||
+    aggregateParentLevel === "PREFECTURE" ||
+    aggregateParentLevel === "COUNTY";
   const realtimeRegionCode =
     selectedRegionCode ||
     mapContextRegion?.code ||
@@ -296,9 +320,9 @@ export function OverviewPage({
   }, [optionSequence, optionsReloadKey, repository]);
 
   useEffect(() => {
-    if (!samplePointRepository || !productCode) return;
+    if (!activeSamplePointRepository || !productCode) return;
     let active = true;
-    if (year === undefined || year < 2026) {
+    if (year === undefined) {
       void Promise.resolve().then(() => {
         if (!active) return;
         setSamplePointAggregates((current) =>
@@ -330,7 +354,7 @@ export function OverviewPage({
       setSamplePointAggregateStatus("loading");
       setSamplePointAggregateIssue(undefined);
     });
-    samplePointRepository
+    activeSamplePointRepository
       .aggregates({ productCode, year, ...(parentCode ? { parentCode } : {}) })
       .then((aggregates) => {
         if (!active) return;
@@ -355,7 +379,7 @@ export function OverviewPage({
     parentCode,
     productCode,
     samplePointSequence,
-    samplePointRepository,
+    activeSamplePointRepository,
     showSamplePointAggregates,
     year,
   ]);
@@ -496,57 +520,8 @@ export function OverviewPage({
   ]);
 
   useEffect(() => {
-    if (
-      !productCode ||
-      year === undefined ||
-      !hasApprovedBusinessYear ||
-      !selectedRegionCode
-    )
+    if (!sampleMode || !productCode || year === undefined || !hasApprovedBusinessYear)
       return;
-    const requestRegion = [...regions, ...rootRegions].find(
-      (region) => region.code === selectedRegionCode,
-    );
-    if (requestRegion?.mapContextOnly) {
-      return;
-    }
-    let live = true;
-    void Promise.resolve().then(() => {
-      if (!live) return;
-      setIndicators([]);
-      setIndicatorIssue(undefined);
-    });
-    repository
-      .indicators({
-        productCode,
-        regionCode: selectedRegionCode,
-        year,
-      })
-      .then((next) => {
-        if (!live) return;
-        setIndicators(next);
-        setIndicatorIssue(undefined);
-      })
-      .catch((error: unknown) => {
-        if (!live) return;
-        setIndicators([]);
-        setIndicatorIssue(overviewDataIssue(error, "核定指标加载失败，请稍后重试。"));
-      });
-    return () => {
-      live = false;
-    };
-  }, [
-    businessSequence,
-    hasApprovedBusinessYear,
-    productCode,
-    regions,
-    repository,
-    rootRegions,
-    selectedRegionCode,
-    year,
-  ]);
-
-  useEffect(() => {
-    if (!productCode || year === undefined || !hasApprovedBusinessYear) return;
     const requestRegion = [...regions, ...rootRegions].find(
       (region) => region.code === selectedRegionCode,
     );
@@ -556,10 +531,14 @@ export function OverviewPage({
       : selectedRegionCode ||
         mapContextRegion?.code ||
         (scopeRootCode !== OVERALL_SCOPE ? scopeRootCode : "");
+    const requestedDashboardQueryKey = `${productCode}:${year}:${businessRegionCode}`;
     let live = true;
     void Promise.resolve().then(() => {
       if (!live) return;
-      setDashboard(undefined);
+      if (dashboardQueryKeyRef.current !== requestedDashboardQueryKey) {
+        setDashboard(undefined);
+      }
+      setDashboardRefreshing(true);
       setDashboardIssue(undefined);
     });
     repository
@@ -570,12 +549,17 @@ export function OverviewPage({
       })
       .then((next) => {
         if (!live) return;
+        dashboardQueryKeyRef.current = requestedDashboardQueryKey;
         setDashboard(next);
+        setDashboardRefreshing(false);
         setDashboardIssue(undefined);
       })
       .catch((error: unknown) => {
         if (!live) return;
-        setDashboard(undefined);
+        if (dashboardQueryKeyRef.current !== requestedDashboardQueryKey) {
+          setDashboard(undefined);
+        }
+        setDashboardRefreshing(false);
         setDashboardIssue(
           overviewDataIssue(error, "总揽业务聚合数据加载失败，请稍后重试。"),
         );
@@ -594,6 +578,7 @@ export function OverviewPage({
     scopeRootCode,
     selectedRegionCode,
     year,
+    sampleMode,
   ]);
 
   const visibleRegions = useMemo(
@@ -616,11 +601,15 @@ export function OverviewPage({
     productCode,
     refreshSequence: samplePointSequence,
     region: sampleNetworkRegion,
-    repository: samplePointRepository,
+    repository: activeSamplePointRepository,
     year,
   });
   const showAggregateLayer =
-    sampleNetworkModel.applicable && sampleNetworkModel.mode !== "design";
+    sampleNetworkModel.applicable &&
+    sampleNetworkModel.mode !== "design" &&
+    (!sampleNetworkRegion ||
+      sampleNetworkRegion.level === "PREFECTURE" ||
+      sampleNetworkRegion.level === "COUNTY");
   const visibleSamplePointAggregates = selectVisibleSamplePointAggregates(
     showAggregateLayer,
     samplePointAggregates,
@@ -628,6 +617,86 @@ export function OverviewPage({
   const visibleSamplePointAggregateStatus = showAggregateLayer
     ? samplePointAggregateStatus
     : "hidden";
+  const visibleSampleNetworkIcons = useMemo(
+    () =>
+      sampleMode
+        ? visibleSampleNetworkMapIcons(
+            sampleNetworkRegion?.level,
+            selectedSamplePointId,
+            sampleNetworkModel.icons,
+          )
+        : [],
+    [
+      sampleMode,
+      sampleNetworkModel.icons,
+      sampleNetworkRegion?.level,
+      selectedSamplePointId,
+    ],
+  );
+
+  const regionalDataRegionCode =
+    selectedRegion?.code ||
+    mapContextRegion?.code ||
+    (scopeRootCode !== OVERALL_SCOPE ? scopeRootCode : "");
+
+  useEffect(() => {
+    if (!regionalDataRepository || dataMode === "SAMPLE_POINTS") return;
+    if (!regionalDataRegionCode || !productCode || year === undefined) return;
+    let active = true;
+    const query = { regionCode: regionalDataRegionCode, productCode, year };
+    const request =
+      dataMode === "REGIONAL_DATA"
+        ? regionalDataRepository.regionalSummary(query).then((next) => {
+            if (!active) return;
+            setRegionalSummary(next);
+            setSupplyBalance(undefined);
+          })
+        : regionalDataRepository.supplyBalance(query).then((next) => {
+            if (!active) return;
+            setSupplyBalance(next);
+            setRegionalSummary(undefined);
+          });
+    Promise.resolve()
+      .then(() => {
+        if (!active) return;
+        setRegionalDataLoading(true);
+        setRegionalDataIssue(undefined);
+      })
+      .then(() => request)
+      .then(() => {
+        if (!active) return;
+        setRegionalDataLoading(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setRegionalDataLoading(false);
+        setRegionalDataIssue("所选地区的正式数据加载失败，请稍后重试。");
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    businessSequence,
+    dataMode,
+    productCode,
+    regionalDataRegionCode,
+    regionalDataRepository,
+    year,
+  ]);
+  const currentRegionalSummary =
+    regionalSummary &&
+    regionalSummary.regionCode === regionalDataRegionCode &&
+    regionalSummary.productCode === productCode &&
+    regionalSummary.year === year
+      ? regionalSummary
+      : undefined;
+  const currentSupplyBalance =
+    supplyBalance &&
+    supplyBalance.regionCode === regionalDataRegionCode &&
+    supplyBalance.productCode === productCode &&
+    supplyBalance.surveyYear === year
+      ? supplyBalance
+      : undefined;
   const visibleRegionCountsCurrent = parentCode
     ? childRegionQueryKey === desiredChildRegionQueryKey
     : rootRegionQueryKey === desiredRootRegionQueryKey;
@@ -639,9 +708,11 @@ export function OverviewPage({
       visibleRegions
         .filter(({ mapContextOnly }) => !mapContextOnly)
         .map((region) =>
-          visibleRegionCountsUsable ? region : { ...region, approvedRecordCount: null },
+          sampleMode && visibleRegionCountsUsable
+            ? region
+            : { ...region, approvedRecordCount: null },
         ),
-    [visibleRegionCountsUsable, visibleRegions],
+    [sampleMode, visibleRegionCountsUsable, visibleRegions],
   );
   const mapFeatures = useMemo(
     () => interactiveMapRegions.flatMap(toMapFeature),
@@ -675,25 +746,18 @@ export function OverviewPage({
     options?.products.find((product) => product.code === productCode)?.label ??
     "粮食产品";
   const yearLabel = year === undefined ? undefined : `${year}年`;
-  const issue =
-    optionsIssue ??
-    rootRegionIssue ??
-    childRegionIssue ??
-    indicatorIssue ??
-    dashboardIssue;
+  const issue = optionsIssue ?? rootRegionIssue ?? childRegionIssue ?? dashboardIssue;
   function changeScopeRoot(code: string) {
     setScopeRootCode(code);
     setParentCode(code === OVERALL_SCOPE ? undefined : code);
     setParentTrail([]);
     setSelectedRegionCode("");
     setSelectedRegionSnapshot(undefined);
-    setIndicators([]);
     setDashboard(undefined);
     setMapContextRegion(undefined);
     setMapContextTrail([]);
     setRootRegionIssue(undefined);
     setChildRegionIssue(undefined);
-    setIndicatorIssue(undefined);
     setDashboardIssue(undefined);
   }
 
@@ -701,12 +765,32 @@ export function OverviewPage({
     if (selectedRegionCode !== region.code) {
       setSelectedRegionCode(region.code);
       setSelectedRegionSnapshot(region);
-      setIndicators([]);
       setDashboard(undefined);
     }
     prefetchRegionChildren(region);
-    setIndicatorIssue(undefined);
     setDashboardIssue(undefined);
+  }
+
+  async function exportFormalSamples() {
+    if (!activeSamplePointRepository?.exportInventory || year === undefined) return;
+    setSampleExportPending(true);
+    setSampleExportIssue(undefined);
+    try {
+      const file = await activeSamplePointRepository.exportInventory({
+        year,
+        ...(scopeRootCode !== OVERALL_SCOPE ? { regionCode: scopeRootCode } : {}),
+      });
+      const url = URL.createObjectURL(file.content);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = file.filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setSampleExportIssue("正式样本清单导出失败，请稍后重试。");
+    } finally {
+      setSampleExportPending(false);
+    }
   }
 
   function prefetchRegionChildren(region: OverviewRegion) {
@@ -729,34 +813,95 @@ export function OverviewPage({
   }
 
   function drillDown(region: OverviewRegion) {
-    if (region.mapContextOnly || region.level === "VILLAGE") return;
+    if (
+      region.mapContextOnly ||
+      region.level === "VILLAGE" ||
+      !productCode ||
+      !mapRegionScope
+    )
+      return;
+    const requestId = navigationRequestRef.current + 1;
+    navigationRequestRef.current = requestId;
     const currentContext =
       mapContextRegion ?? rootRegions.find((item) => item.code === scopeRootCode);
-    if (currentContext) setMapContextTrail((trail) => [...trail, currentContext]);
-    setMapContextRegion(region);
-    setParentTrail((trail) => [...trail, parentCode ?? ""]);
-    setParentCode(region.code);
-    setSelectedRegionCode("");
-    setSelectedRegionSnapshot(undefined);
-    setIndicators([]);
-    setDashboard(undefined);
+    setPendingNavigationLabel(`正在加载${region.name}下级行政区`);
     setChildRegionIssue(undefined);
-    setIndicatorIssue(undefined);
-    setDashboardIssue(undefined);
+    repository
+      .regions({ productCode, parentCode: region.code, ...mapRegionScope })
+      .then((next) => {
+        if (navigationRequestRef.current !== requestId) return;
+        setPendingNavigationLabel(undefined);
+        if (!next.length) {
+          setChildRegionIssue(`${region.name}暂无可展示的下级行政边界。`);
+          return;
+        }
+        setRegions((current) => preserveEquivalentRegions(current, next));
+        setRegionsParentCode(region.code);
+        setChildRegionQueryKey(`${desiredRootRegionQueryKey}:${region.code}`);
+        if (currentContext) {
+          setMapContextTrail((trail) => [...trail, currentContext]);
+        }
+        setMapContextRegion(region);
+        setParentTrail((trail) => [...trail, parentCode ?? ""]);
+        setParentCode(region.code);
+        setSelectedRegionCode("");
+        setSelectedRegionSnapshot(undefined);
+        setDashboard(undefined);
+        setDashboardIssue(undefined);
+      })
+      .catch(() => {
+        if (navigationRequestRef.current !== requestId) return;
+        setPendingNavigationLabel(undefined);
+        setChildRegionIssue("总览地区边界或统计范围加载失败，请重试。");
+      });
   }
 
   function returnToParent() {
     if (!parentCode) return;
     const priorParent = parentTrail[parentTrail.length - 1];
     const priorContext = mapContextTrail[mapContextTrail.length - 1];
-    setParentCode(priorParent || undefined);
-    setParentTrail((trail) => trail.slice(0, -1));
-    setMapContextRegion(priorContext);
-    setMapContextTrail((trail) => trail.slice(0, -1));
-    setSelectedRegionCode("");
-    setSelectedRegionSnapshot(undefined);
-    setIndicators([]);
-    setDashboard(undefined);
+    const requestId = navigationRequestRef.current + 1;
+    navigationRequestRef.current = requestId;
+    const commitNavigation = (next: readonly OverviewRegion[] | undefined) => {
+      if (navigationRequestRef.current !== requestId) return;
+      if (priorParent && next) {
+        setRegions((current) => preserveEquivalentRegions(current, next));
+        setRegionsParentCode(priorParent);
+        setChildRegionQueryKey(`${desiredRootRegionQueryKey}:${priorParent}`);
+      }
+      setPendingNavigationLabel(undefined);
+      setParentCode(priorParent || undefined);
+      setParentTrail((trail) => trail.slice(0, -1));
+      setMapContextRegion(priorContext);
+      setMapContextTrail((trail) => trail.slice(0, -1));
+      setSelectedRegionCode("");
+      setSelectedRegionSnapshot(undefined);
+      setDashboard(undefined);
+      setChildRegionIssue(undefined);
+      setDashboardIssue(undefined);
+    };
+    if (!priorParent) {
+      commitNavigation(undefined);
+      return;
+    }
+    if (!productCode || !mapRegionScope) return;
+    setPendingNavigationLabel(`正在返回${priorContext?.name ?? "上级行政区"}`);
+    repository
+      .regions({ productCode, parentCode: priorParent, ...mapRegionScope })
+      .then((next) => {
+        if (navigationRequestRef.current !== requestId) return;
+        if (!next.length) {
+          setPendingNavigationLabel(undefined);
+          setChildRegionIssue("上级行政区边界暂不可用，当前完整地图已保留。");
+          return;
+        }
+        commitNavigation(next);
+      })
+      .catch(() => {
+        if (navigationRequestRef.current !== requestId) return;
+        setPendingNavigationLabel(undefined);
+        setChildRegionIssue("上级行政区边界加载失败，当前完整地图已保留。");
+      });
   }
 
   if (!options) {
@@ -795,6 +940,53 @@ export function OverviewPage({
             }
           : {})}
         {...(dashboard ? { dashboard } : {})}
+        dashboardLoading={
+          sampleMode &&
+          hasApprovedBusinessYear &&
+          !dashboard &&
+          dashboardIssue === undefined
+        }
+        {...(regionalDataRepository
+          ? {
+              dataModeControls: (
+                <OverviewDataModeTabs
+                  mode={dataMode}
+                  onModeChange={(nextMode) => {
+                    setDataMode(nextMode);
+                    setRegionalDataIssue(undefined);
+                    clearSamplePointSelection();
+                  }}
+                />
+              ),
+            }
+          : {})}
+        {...(regionalDataRepository && !sampleMode
+          ? {
+              dataModePanel: (
+                <OverviewDataModePanel
+                  loading={regionalDataLoading}
+                  mode={dataMode}
+                  productLabel={productLabel}
+                  {...(regionalDataIssue ? { issue: regionalDataIssue } : {})}
+                  {...(currentRegionalSummary
+                    ? { regionalSummary: currentRegionalSummary }
+                    : {})}
+                  {...(currentSupplyBalance
+                    ? { supplyBalance: currentSupplyBalance }
+                    : {})}
+                />
+              ),
+              sideDataPanel: dataMode === "SUPPLY_BALANCE",
+              scopeLabel: "地区填报范围：当前授权地区及全部下级地区",
+              dataSourceLabel:
+                "地区与供需数据保存后即为正式数据；历史版本由系统自动留存",
+              dataStatusText: regionalDataLoading
+                ? "正在同步地区正式数据"
+                : currentRegionalSummary || currentSupplyBalance
+                  ? "已同步地区正式数据"
+                  : "等待地区填报",
+            }
+          : {})}
         filters={
           <section className="overview-cockpit-filters" aria-label="总览筛选条件">
             <label>
@@ -820,7 +1012,6 @@ export function OverviewPage({
                 onChange={(event) => {
                   setProductCode(event.target.value);
                   clearSamplePointSelection();
-                  setIndicators([]);
                   setDashboard(undefined);
                 }}
               >
@@ -839,7 +1030,6 @@ export function OverviewPage({
                 onChange={(event) => {
                   setYear(Number(event.target.value));
                   clearSamplePointSelection();
-                  setIndicators([]);
                   setDashboard(undefined);
                 }}
               >
@@ -857,12 +1047,13 @@ export function OverviewPage({
             {...(mapBackdrop ? { backdrop: mapBackdrop } : {})}
             features={mapFeatures}
             points={mapPoints}
-            samplePointAggregates={visibleSamplePointAggregates}
-            {...(samplePointRepository
+            samplePointAggregates={sampleMode ? visibleSamplePointAggregates : []}
+            {...(activeSamplePointRepository
               ? { samplePointAggregateStatus: visibleSamplePointAggregateStatus }
               : {})}
-            samplePointIcons={sampleNetworkModel.icons}
+            samplePointIcons={visibleSampleNetworkIcons}
             onSamplePointSelect={updateSelectedSamplePoint}
+            reserveRightPanel={dataMode === "SUPPLY_BALANCE"}
             selectedCode={selectedRegionCode}
             {...(selectedSamplePointId ? { selectedSamplePointId } : {})}
             onSelect={selectRegion}
@@ -871,7 +1062,15 @@ export function OverviewPage({
           />
         }
         navigation={
-          <nav className="overview-cockpit-navigation" aria-label="行政区导航">
+          <nav
+            className={`overview-cockpit-navigation${embeddedInBusinessPlatform ? " is-embedded" : ""}`}
+            aria-label="行政区导航"
+          >
+            {embeddedInBusinessPlatform && (
+              <a href="/#/我的工作/待我处理" target="_top">
+                返回业务目录
+              </a>
+            )}
             <details className="overview-region-browser">
               <summary>选择地区</summary>
               <div aria-label="行政区列表">
@@ -895,65 +1094,74 @@ export function OverviewPage({
             )}
           </nav>
         }
-        {...(samplePointRepository
+        {...(activeSamplePointRepository
           ? {
               sampleNetworkControls: (
-                <OverviewSampleNetworkToolbar model={sampleNetworkModel} />
+                <OverviewSampleNetworkToolbar
+                  exportPending={sampleExportPending}
+                  model={sampleNetworkModel}
+                  {...(activeSamplePointRepository.exportInventory
+                    ? { onExport: () => void exportFormalSamples() }
+                    : {})}
+                />
               ),
             }
           : {})}
         {...(yearLabel ? { periodLabel: yearLabel } : {})}
         productLabel={productLabel}
-        {...(samplePointRepository &&
+        {...(activeSamplePointRepository &&
         productCode &&
         year !== undefined &&
         selectedRegion &&
         !selectedRegion.mapContextOnly
           ? {
-              samplePoints:
-                year >= 2026 ? (
-                  <OverviewSamplePointPanel
-                    key={`${productCode}:${year}:${selectedRegion.code}`}
-                    networkModel={sampleNetworkModel}
-                    onIconsChange={IGNORE_SAMPLE_POINT_ICONS}
-                    onSelectedSamplePointChange={updateSelectedSamplePoint}
-                    productCode={productCode}
-                    refreshSequence={samplePointSequence}
-                    region={selectedRegion}
-                    repository={samplePointRepository}
-                    selectedSamplePointId={selectedSamplePointId}
-                    year={year}
-                  />
-                ) : (
-                  <section
-                    aria-label="历史业务记录说明"
-                    className="overview-sample-point-panel overview-historical-record-notice"
-                  >
-                    <h3>{year}年历史业务记录</h3>
-                    <p>现有样本网络自2026年启用，当前年度仅展示历史业务记录。</p>
-                    <p>
-                      产情、市场和物流记录仍按原业务页面查询，但不计入现有样本点数量、分类或地图图标。
-                    </p>
-                  </section>
-                ),
+              samplePoints: (
+                <OverviewSamplePointPanel
+                  key={`${productCode}:${year}:${selectedRegion.code}`}
+                  networkModel={sampleNetworkModel}
+                  onIconsChange={IGNORE_SAMPLE_POINT_ICONS}
+                  onSelectedSamplePointChange={updateSelectedSamplePoint}
+                  productCode={productCode}
+                  refreshSequence={samplePointSequence}
+                  region={selectedRegion}
+                  repository={activeSamplePointRepository}
+                  selectedSamplePointId={selectedSamplePointId}
+                  year={year}
+                />
+              ),
             }
           : {})}
         {...(mapSelectionPoint ? { selectionPoint: mapSelectionPoint } : {})}
-        {...(selectedRegion ? { selectedRegion } : {})}
+        {...(sampleMode && selectedRegion ? { selectedRegion } : {})}
+        sampleMode={sampleMode}
         onEnterSelectedRegion={drillDown}
         onCloseDetails={() => {
           setSelectedRegionCode("");
           setSelectedRegionSnapshot(undefined);
           sampleNetworkModel.setCategoryCode(undefined);
           clearSamplePointSelection();
-          setIndicators([]);
           setDashboard(undefined);
         }}
       />
-      {year !== undefined && !hasApprovedBusinessYear && (
+      {sampleMode && year !== undefined && !hasApprovedBusinessYear && (
         <p className="overview-cockpit-guidance" role="status">
           {year}
           年度暂无审核正式业务数据：样本网络可查看，业务指标将在平台完成正式填报并审核后自动接入。
+        </p>
+      )}
+      {pendingNavigationLabel && (
+        <p className="overview-cockpit-guidance" role="status">
+          {pendingNavigationLabel}
+        </p>
+      )}
+      {sampleExportIssue && (
+        <p className="overview-cockpit-guidance is-error" role="alert">
+          {sampleExportIssue}
+        </p>
+      )}
+      {dashboardRefreshing && dashboard && (
+        <p className="overview-sr-only" role="status">
+          正在更新已核验业务指标
         </p>
       )}
       {issue && (

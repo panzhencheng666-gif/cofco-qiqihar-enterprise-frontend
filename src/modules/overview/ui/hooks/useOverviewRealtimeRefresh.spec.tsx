@@ -154,6 +154,23 @@ describe("useOverviewRealtimeRefresh", () => {
     expect(screen.getByText("0:1:2")).toBeInTheDocument();
   });
 
+  it("refreshes the current sample projection for global identity or coordinate events without a year", () => {
+    vi.useFakeTimers();
+    const stream = new FakeRealtimeStream();
+    render(<Harness productCode="CORN" stream={stream} />);
+
+    act(() => {
+      stream.callbacks.onBusinessChange({
+        aggregateType: "SAMPLE_POINT_IDENTITY",
+        actionCode: "SAMPLE_POINT_COORDINATE_GOVERNED",
+        regionCodes: [],
+      });
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(screen.getByText("1:1:1")).toBeInTheDocument();
+  });
+
   it("turns a large historical replay into one refresh instead of rebuilding the map per event", () => {
     vi.useFakeTimers();
     const stream = new FakeRealtimeStream();

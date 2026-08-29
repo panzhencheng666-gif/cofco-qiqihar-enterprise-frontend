@@ -112,9 +112,27 @@ export interface ReliefSamplePointAggregatePlacement
   radius: number;
 }
 
+export interface ReliefSamplePointIconPlacement
+  extends ReliefOverlayPlacement, ReliefSamplePointIcon {
+  glyphFootprint: ReliefOverlayFootprint;
+  glyphPolygonContained: boolean;
+  glyphPlacement:
+    | "above"
+    | "above-left"
+    | "above-right"
+    | "below"
+    | "below-left"
+    | "below-right"
+    | "center"
+    | "left"
+    | "right";
+  radius: number;
+}
+
 export interface ReliefOverlayLayout {
   labels: readonly ReliefLabelPlacement[];
   samplePointAggregates: readonly ReliefSamplePointAggregatePlacement[];
+  samplePointIcons: readonly ReliefSamplePointIconPlacement[];
 }
 
 export interface ReliefLabel {
@@ -139,6 +157,7 @@ export interface ReliefSceneProjection {
   points: readonly ReliefLocationPoint[];
   samplePointAggregates: readonly ReliefSamplePointAggregate[];
   samplePointIcons: readonly ReliefSamplePointIcon[];
+  sourceBounds?: SourceBounds;
 }
 
 interface SourceBounds {
@@ -152,12 +171,14 @@ const FRAME_INSET = 0.035;
 const MAX_POINT_LABELS = 24;
 const OVERLAY_CANDIDATE_STEPS = 24;
 const OVERLAY_SAFE_MARGIN = 2;
+const COMPARISON_MARKER_GAP = 8;
 const MIN_AGGREGATE_SCALE = 0.58;
+const RELIEF_SAMPLE_POINT_ICON_RADIUS = 17;
 export const RELIEF_SAMPLE_POINT_AGGREGATE_RADIUS = 34;
 export const OVERVIEW_RELIEF_DEPTH = 34;
 export const OVERVIEW_DETAILS_MAP_SAFE_GAP = 32;
 const OVERVIEW_DETAILS_PANEL_RIGHT = 11;
-const OVERVIEW_DETAILS_PANEL_WIDTH = 540;
+export const OVERVIEW_DETAILS_PANEL_WIDTH = 540;
 const OVERVIEW_MINIMUM_STAGE_WIDTH = 1280;
 
 const COMPACT_ADMINISTRATIVE_NAME_OVERRIDES: Readonly<Record<string, string>> = {
@@ -174,9 +195,9 @@ export function compactAdministrativeName(name: string) {
 }
 
 /**
- * Fixed 1920×1080 presentation frames. They reserve the KPI band, map tools,
- * navigation, persistent footer, and (when open) the detail drawer. The map
- * uses the full vertical space released by removing the former analysis band;
+ * Fixed 1920×1080 presentation frames. They reserve the KPI band, a dedicated
+ * map-control band, the left legend rail, persistent footer, and (when open)
+ * the detail drawer. Administrative geometry never renders beneath controls;
  * the relief depth and its contact shadow still remain above the footer.
  */
 export function overviewDetailsPanelLeft(stageWidth: number) {
@@ -191,7 +212,7 @@ export function overviewReliefFrame(
   detailsOpen: boolean,
   stageWidth = 1920,
 ): ReliefFrame {
-  const x = 100;
+  const x = 180;
   const right = detailsOpen
     ? Math.min(
         1300,
@@ -200,9 +221,9 @@ export function overviewReliefFrame(
     : 1820;
   return {
     x,
-    y: 226,
+    y: 290,
     width: Math.max(1, right - x),
-    height: 770,
+    height: 706,
   };
 }
 
@@ -277,7 +298,7 @@ export function projectReliefScene({
   const pointByRegion = new Map(
     projectedPoints.map((location) => [location.region.code, location.point]),
   );
-  const projectedSamplePointIcons = expandColocatedSamplePointIcons(
+  const projectedSamplePointIcons = expandRegionalSummaryBadges(
     samplePointIcons.flatMap((icon) => {
       if (icon.anchorRegionCode) {
         const regionAnchor =
@@ -289,13 +310,23 @@ export function projectReliefScene({
       }
       if (icon.longitude === null || icon.latitude === null) return [];
       const anchorPoint = project([icon.longitude, icon.latitude]);
-      return [{ anchorPoint, icon, point: anchorPoint }];
+      // Formal sample markers are exact coordinate evidence. Presentation layout
+      // must never replace that evidence with an in-polygon collision position.
+      return [{ anchorPoint, icon, point: { ...anchorPoint } }];
     }),
     projectedSurfaces,
   );
   // One administrative region is one map entity even when its source geometry
   // is a MultiPolygon. A single canonical label selects the complete boundary;
   // detached components must never become independently raised overlays.
+  const aggregateByRegion = new Map(
+    samplePointAggregates
+      .filter(({ regionLevel }) => regionLevel !== "VILLAGE")
+      .map((aggregate) => [
+        aggregate.anchorRegionCode ?? aggregate.regionCode,
+        aggregate,
+      ]),
+  );
   const labels: ReliefLabel[] = projectedFeatures.flatMap((surface) =>
     surface.raiseablePolygonIndices.length
       ? [
@@ -308,19 +339,25 @@ export function projectReliefScene({
         ]
       : [],
   );
+  const parentDirectAggregate = projectedBackdrop
+    ? aggregateByRegion.get(projectedBackdrop.region.code)
+    : undefined;
+  if (projectedBackdrop && parentDirectAggregate?.scopeKind === "PARENT_DIRECT") {
+    labels.push({
+      componentId: projectedBackdrop.primaryPolygonIndex,
+      kind: "region",
+      point: projectedBackdrop.anchor,
+      region: projectedBackdrop.region,
+    });
+  }
   if (projectedPoints.length <= MAX_POINT_LABELS) {
     projectedPoints.forEach(({ point, region }) => {
       labels.push({ kind: "point", point, region });
     });
   }
-  const aggregateByRegion = new Map(
-    samplePointAggregates
-      .filter(({ regionLevel }) => regionLevel !== "VILLAGE")
-      .map((aggregate) => [aggregate.regionCode, aggregate]),
-  );
   const projectedSamplePointAggregates: ReliefSamplePointAggregate[] = [];
   const projectedAggregateRegions = new Set<string>();
-  projectedFeatures.forEach((surface) => {
+  projectedSurfaces.forEach((surface) => {
     const aggregate = aggregateByRegion.get(surface.region.code);
     if (!aggregate || surface.region.level === "VILLAGE") return;
     const primaryPolygon = surface.polygons[surface.primaryPolygonIndex];
@@ -358,27 +395,115 @@ export function projectReliefScene({
     points: projectedPoints,
     samplePointAggregates: projectedSamplePointAggregates,
     samplePointIcons: projectedSamplePointIcons,
+    sourceBounds: bounds,
+  };
+}
+
+export function projectReliefOverlays(
+  scene: ReliefSceneProjection,
+  samplePointAggregates: readonly OverviewSamplePointAggregate[],
+  samplePointIcons: readonly OverviewSamplePointIcon[],
+): ReliefSceneProjection {
+  if (!scene.sourceBounds) {
+    return { ...scene, samplePointAggregates: [], samplePointIcons: [] };
+  }
+  const project = createProjector(scene.sourceBounds, scene.frame);
+  const surfaces = [...(scene.backdrop ? [scene.backdrop] : []), ...scene.features];
+  const surfaceByRegion = new Map(
+    surfaces.map((surface) => [surface.region.code, surface]),
+  );
+  const pointByRegion = new Map(
+    scene.points.map((location) => [location.region.code, location.point]),
+  );
+  const projectedIcons = expandRegionalSummaryBadges(
+    samplePointIcons.flatMap((icon) => {
+      if (icon.anchorRegionCode) {
+        const anchor =
+          surfaceByRegion.get(icon.anchorRegionCode)?.anchor ??
+          pointByRegion.get(icon.anchorRegionCode);
+        if (!anchor) return [];
+        const anchorPoint = { ...anchor };
+        return [{ anchorPoint, icon, point: { ...anchorPoint } }];
+      }
+      if (icon.longitude === null || icon.latitude === null) return [];
+      const anchorPoint = project([icon.longitude, icon.latitude]);
+      return [{ anchorPoint, icon, point: { ...anchorPoint } }];
+    }),
+    surfaces,
+  );
+  const aggregateByRegion = new Map(
+    samplePointAggregates
+      .filter(({ regionLevel }) => regionLevel !== "VILLAGE")
+      .map((aggregate) => [
+        aggregate.anchorRegionCode ?? aggregate.regionCode,
+        aggregate,
+      ]),
+  );
+  const projectedAggregates: ReliefSamplePointAggregate[] = [];
+  const projectedRegions = new Set<string>();
+  surfaces.forEach((surface) => {
+    const aggregate = aggregateByRegion.get(surface.region.code);
+    const polygon = surface.polygons[surface.primaryPolygonIndex];
+    if (!aggregate || surface.region.level === "VILLAGE" || !polygon) return;
+    projectedRegions.add(surface.region.code);
+    projectedAggregates.push({
+      aggregate,
+      point: reliefPolygonInteriorAnchor(polygon),
+    });
+  });
+  scene.points.forEach(({ point, region }) => {
+    const aggregate = aggregateByRegion.get(region.code);
+    if (!aggregate || region.level === "VILLAGE" || projectedRegions.has(region.code)) {
+      return;
+    }
+    projectedRegions.add(region.code);
+    projectedAggregates.push({ aggregate, point: { ...point } });
+  });
+  const backdropDirectAggregate = scene.backdrop
+    ? aggregateByRegion.get(scene.backdrop.region.code)
+    : undefined;
+  const labels = scene.backdrop
+    ? [
+        ...scene.labels.filter(
+          ({ region }) => region.code !== scene.backdrop?.region.code,
+        ),
+        ...(backdropDirectAggregate?.scopeKind === "PARENT_DIRECT"
+          ? [
+              {
+                componentId: scene.backdrop.primaryPolygonIndex,
+                kind: "region" as const,
+                point: scene.backdrop.anchor,
+                region: scene.backdrop.region,
+              },
+            ]
+          : []),
+      ]
+    : scene.labels;
+  return {
+    ...scene,
+    labels,
+    samplePointAggregates: projectedAggregates,
+    samplePointIcons: projectedIcons,
   };
 }
 
 /**
- * Exact co-location is a presentation collision, never an entity merge or a
- * coordinate rewrite. One marker remains on the governed anchor and the other
- * markers expand to nearby in-polygon display points. Every result retains its
- * immutable anchor so the UI can draw a leader and expose the true longitude
- * and latitude to assistive technology.
+ * Regional summary badges explicitly do not represent precise coordinates. If
+ * several administrative-level summaries share one regional anchor, separate
+ * only those badges. Exact annual and approved design locations never enter
+ * this presentation-only path.
  */
-function expandColocatedSamplePointIcons(
+function expandRegionalSummaryBadges(
   icons: readonly ReliefSamplePointIcon[],
   surfaces: readonly ReliefSurface[],
 ) {
   const groups = new Map<string, ReliefSamplePointIcon[]>();
-  icons.forEach((icon) => {
-    const key = `${icon.anchorPoint.x.toFixed(12)}:${icon.anchorPoint.y.toFixed(12)}`;
-    const group = groups.get(key) ?? [];
-    group.push(icon);
-    groups.set(key, group);
-  });
+  icons
+    .filter(({ icon }) => icon.layerType === "REGIONAL_ACTUAL_BADGE")
+    .forEach((icon) => {
+      const key = `${icon.anchorPoint.x.toFixed(12)}:${icon.anchorPoint.y.toFixed(12)}`;
+      groups.set(key, [...(groups.get(key) ?? []), icon]);
+    });
 
   groups.forEach((group) => {
     if (group.length < 2) return;
@@ -388,7 +513,6 @@ function expandColocatedSamplePointIcons(
       .flatMap(({ polygons }) => polygons)
       .find((candidate) => pointInReliefPolygon(anchor, candidate));
     if (!polygon) return;
-
     const occupied = new Set([reliefPointKey(anchor)]);
     [...group]
       .sort((left, right) =>
@@ -396,21 +520,21 @@ function expandColocatedSamplePointIcons(
       )
       .slice(1)
       .forEach((entry, index) => {
-        const expanded = colocatedDisplayPoint(
+        const point = regionalSummaryDisplayPoint(
           anchor,
           polygon,
           index + 1,
           group.length,
           occupied,
         );
-        entry.point = expanded;
-        occupied.add(reliefPointKey(expanded));
+        entry.point = point;
+        occupied.add(reliefPointKey(point));
       });
   });
   return icons;
 }
 
-function colocatedDisplayPoint(
+function regionalSummaryDisplayPoint(
   anchor: ReliefPoint,
   polygon: ReliefPolygon,
   ordinal: number,
@@ -418,18 +542,13 @@ function colocatedDisplayPoint(
   occupied: ReadonlySet<string>,
 ) {
   const preferredAngle = -Math.PI / 2 + (Math.PI * 2 * ordinal) / count;
-  const radii = [30, 24, 18, 14, 10, 7, 4, 2, 1, 0.5];
-  const angleOffsets = Array.from({ length: 48 }, (_, index) => {
-    if (index === 0) return 0;
-    const step = Math.ceil(index / 2);
-    return ((index % 2 ? step : -step) * Math.PI) / 24;
-  });
-  for (const radius of radii) {
-    for (const angleOffset of angleOffsets) {
-      const angle = preferredAngle + angleOffset;
+  for (const radius of [30, 24, 18, 14, 10, 7, 4, 2, 1, 0.5]) {
+    for (let index = 0; index < 48; index += 1) {
+      const step = Math.ceil(index / 2);
+      const angleOffset = index === 0 ? 0 : ((index % 2 ? step : -step) * Math.PI) / 24;
       const candidate = {
-        x: anchor.x + Math.cos(angle) * radius,
-        y: anchor.y + Math.sin(angle) * radius,
+        x: anchor.x + Math.cos(preferredAngle + angleOffset) * radius,
+        y: anchor.y + Math.sin(preferredAngle + angleOffset) * radius,
       };
       if (
         pointInReliefPolygon(candidate, polygon) &&
@@ -667,23 +786,75 @@ export function reliefPolygonInteriorAnchor(polygon: ReliefPolygon): ReliefPoint
     }
   }
   const inside = candidates.filter((point) => pointInReliefPolygon(point, polygon));
-  if (!inside.length) return outer[0] ?? { x: 0, y: 0 };
-  return inside.reduce((best, candidate) =>
+  const positiveClearance = inside.filter(
+    (point) => distanceToPolygonEdges(point, polygon) > 0,
+  );
+  const scanlineInterior = reliefScanlineInteriorPoint(polygon);
+  if (scanlineInterior) positiveClearance.push(scanlineInterior);
+  if (!positiveClearance.length) return outer[0] ?? { x: 0, y: 0 };
+  return positiveClearance.reduce((best, candidate) =>
     distanceToPolygonEdges(candidate, polygon) > distanceToPolygonEdges(best, polygon)
       ? candidate
       : best,
   );
 }
 
+/** Finds a strict interior point even when a narrow polygon misses the regular grid. */
+function reliefScanlineInteriorPoint(polygon: ReliefPolygon): ReliefPoint | undefined {
+  const outer = polygon.rings.find(({ isHole }) => !isHole)?.points ?? [];
+  for (let edgeIndex = 0; edgeIndex < outer.length; edgeIndex += 1) {
+    const start = outer[edgeIndex];
+    const end = outer[(edgeIndex + 1) % outer.length];
+    if (!start || !end || start.y === end.y) continue;
+    const y = (start.y + end.y) / 2;
+    const intersections = polygon.rings
+      .flatMap(({ points }) =>
+        points.flatMap((point, index) => {
+          const next = points[(index + 1) % points.length];
+          if (!next || point.y > y === next.y > y) return [];
+          return [point.x + ((y - point.y) * (next.x - point.x)) / (next.y - point.y)];
+        }),
+      )
+      .sort((left, right) => left - right);
+    const candidates: ReliefPoint[] = [];
+    for (let index = 0; index + 1 < intersections.length; index += 1) {
+      const candidate = {
+        x: (intersections[index]! + intersections[index + 1]!) / 2,
+        y,
+      };
+      if (
+        pointInReliefPolygon(candidate, polygon) &&
+        distanceToPolygonEdges(candidate, polygon) > 0
+      ) {
+        candidates.push(candidate);
+      }
+    }
+    if (candidates.length) {
+      return candidates.reduce((best, candidate) =>
+        distanceToPolygonEdges(candidate, polygon) >
+        distanceToPolygonEdges(best, polygon)
+          ? candidate
+          : best,
+      );
+    }
+  }
+  return undefined;
+}
+
 export function pointInReliefPolygon(point: ReliefPoint, polygon: ReliefPolygon) {
   const outer = polygon.rings.find(({ isHole }) => !isHole);
-  if (!outer || !pointInReliefRing(point, outer.points)) return false;
+  if (!outer || classifyPointInReliefRing(point, outer.points) === "outside")
+    return false;
   return !polygon.rings.some(
-    ({ isHole, points }) => isHole && pointInReliefRing(point, points),
+    ({ isHole, points }) =>
+      isHole && classifyPointInReliefRing(point, points) === "inside",
   );
 }
 
-function pointInReliefRing(point: ReliefPoint, ring: readonly ReliefPoint[]) {
+function classifyPointInReliefRing(
+  point: ReliefPoint,
+  ring: readonly ReliefPoint[],
+): "boundary" | "inside" | "outside" {
   let inside = false;
   for (
     let index = 0, previous = ring.length - 1;
@@ -693,6 +864,7 @@ function pointInReliefRing(point: ReliefPoint, ring: readonly ReliefPoint[]) {
     const current = ring[index];
     const before = ring[previous];
     if (!current || !before) continue;
+    if (squaredSegmentDistance(point, current, before) <= 1e-12) return "boundary";
     const crosses =
       current.y > point.y !== before.y > point.y &&
       point.x <
@@ -701,7 +873,7 @@ function pointInReliefRing(point: ReliefPoint, ring: readonly ReliefPoint[]) {
           current.x;
     if (crosses) inside = !inside;
   }
-  return inside;
+  return inside ? "inside" : "outside";
 }
 
 export function distanceToPolygonEdges(point: ReliefPoint, polygon: ReliefPolygon) {
@@ -788,9 +960,13 @@ export function reliefLabelFootprint(label: ReliefLabel): ReliefOverlayFootprint
       ? 0.025
       : 0.045;
   const glyphCount = Array.from(compactAdministrativeName(label.region.name)).length;
+  const baseHeight = fontSize + 6;
+  const baseWidth = Math.ceil(glyphCount * fontSize * (1 + letterSpacing) + 14);
+  const canDisplayAggregateCount =
+    label.kind === "region" && label.region.level !== "VILLAGE";
   return {
-    height: fontSize + 6,
-    width: Math.ceil(glyphCount * fontSize * (1 + letterSpacing) + 14),
+    height: canDisplayAggregateCount ? baseHeight + 12 : baseHeight,
+    width: canDisplayAggregateCount ? Math.max(baseWidth, 72) : baseWidth,
   };
 }
 
@@ -802,7 +978,9 @@ export function createReliefOverlayLayout(
     surfaces.map((surface) => [surface.region.code, surface]),
   );
   const samplePointAggregates = scene.samplePointAggregates.map((item) => {
-    const surface = surfaceByRegion.get(item.aggregate.regionCode);
+    const surface = surfaceByRegion.get(
+      item.aggregate.anchorRegionCode ?? item.aggregate.regionCode,
+    );
     const polygon = surface?.polygons[surface.primaryPolygonIndex ?? 0];
     if (!polygon) {
       return {
@@ -823,8 +1001,68 @@ export function createReliefOverlayLayout(
     };
   });
   const aggregateByRegion = new Map(
-    samplePointAggregates.map((item) => [item.aggregate.regionCode, item]),
+    samplePointAggregates.map((item) => [
+      item.aggregate.anchorRegionCode ?? item.aggregate.regionCode,
+      item,
+    ]),
   );
+  const samplePointIcons = scene.samplePointIcons.map((item) => {
+    const regionCode = samplePointIconRegionCode(item.icon);
+    const aggregate = regionCode ? aggregateByRegion.get(regionCode) : undefined;
+    const governedSurface = regionCode ? surfaceByRegion.get(regionCode) : undefined;
+    const displayedSurface =
+      governedSurface ??
+      surfaces.find((candidate) =>
+        candidate.polygons.some((polygon) =>
+          pointInReliefPolygon(item.anchorPoint, polygon),
+        ),
+      );
+    const polygon =
+      displayedSurface?.polygons.find((candidate) =>
+        pointInReliefPolygon(item.anchorPoint, candidate),
+      ) ?? governedSurface?.polygons[governedSurface.primaryPolygonIndex ?? 0];
+    const glyphFootprint = reliefSamplePointGlyphFootprint(
+      item.icon,
+      scene.frame.width < 1300,
+    );
+    if (
+      item.icon.layerType !== "DESIGN_COVERAGE_BADGE" ||
+      !aggregate?.visible ||
+      !polygon
+    ) {
+      return {
+        ...item,
+        ...((item.icon.layerType ?? "ANNUAL_ACTUAL") === "ANNUAL_ACTUAL" && polygon
+          ? placeExactReliefGlyphInsidePolygon(
+              item.anchorPoint,
+              displayedSurface?.anchor,
+              polygon,
+              glyphFootprint,
+            )
+          : {
+              glyphPlacement: "center" as const,
+              glyphPolygonContained: true,
+              scale: 1,
+              visible: true,
+            }),
+        glyphFootprint,
+        radius: RELIEF_SAMPLE_POINT_ICON_RADIUS,
+      };
+    }
+    return {
+      ...item,
+      ...placeReliefComparisonBadge(
+        polygon,
+        item.point,
+        RELIEF_SAMPLE_POINT_ICON_RADIUS,
+        aggregate,
+      ),
+      glyphPlacement: "center" as const,
+      glyphFootprint,
+      glyphPolygonContained: true,
+      radius: RELIEF_SAMPLE_POINT_ICON_RADIUS,
+    };
+  });
   const labels = scene.labels.map((label) => {
     const footprint = reliefLabelFootprint(label);
     const surface = surfaceByRegion.get(label.region.code);
@@ -832,23 +1070,220 @@ export function createReliefOverlayLayout(
     if (!polygon) {
       return { ...label, footprint, scale: 1, visible: true };
     }
-    const aggregate = aggregateByRegion.get(label.region.code);
-    const exclusions =
-      aggregate?.visible === true
-        ? [
-            {
-              point: aggregate.point,
-              radius: aggregate.radius * aggregate.scale + OVERLAY_SAFE_MARGIN,
-            },
-          ]
-        : [];
     return {
       ...label,
       footprint,
-      ...placeReliefRectInsidePolygon(polygon, label.point, footprint, exclusions),
+      // Administrative names belong to the boundary layer. Sample-network
+      // modes are independent overlays and must never make the same region
+      // name jump between actual, design, and comparison views.
+      ...placeReliefRectInsidePolygon(polygon, label.point, footprint, []),
     };
   });
-  return { labels, samplePointAggregates };
+  return { labels, samplePointAggregates, samplePointIcons };
+}
+
+function samplePointIconRegionCode(icon: OverviewSamplePointIcon) {
+  return icon.anchorRegionCode ?? icon.villageRegionCode ?? icon.regionCode;
+}
+
+export function inwardGlyphPlacement(
+  anchor: ReliefPoint,
+  interior?: ReliefPoint,
+): ReliefSamplePointIconPlacement["glyphPlacement"] {
+  if (!interior) return "above";
+  const dx = interior.x - anchor.x;
+  const dy = interior.y - anchor.y;
+  if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? "right" : "left";
+  return dy >= 0 ? "below" : "above";
+}
+
+export function reliefSamplePointGlyphFootprint(
+  icon: OverviewSamplePointIcon,
+  compact = false,
+): ReliefOverlayFootprint {
+  const roleCount = Math.max(1, icon.roles?.length ?? 1);
+  const multiRoleSize = compact ? 26 : 34;
+  const singleRoleSize = compact ? 30 : 42;
+  const width =
+    roleCount === 1
+      ? singleRoleSize
+      : Math.max(singleRoleSize, roleCount * multiRoleSize - (roleCount - 1) * 9);
+  return { height: compact ? 34 : 48, width };
+}
+
+export function reliefDirectionalRectInsidePolygon(
+  anchor: ReliefPoint,
+  footprint: ReliefOverlayFootprint,
+  placement: ReliefSamplePointIconPlacement["glyphPlacement"],
+  polygon: ReliefPolygon,
+  scale = 1,
+) {
+  if (placement === "center") {
+    return reliefRectInsidePolygon(
+      anchor,
+      { height: footprint.height * scale, width: footprint.width * scale },
+      polygon,
+    );
+  }
+  const width = footprint.width * scale;
+  const height = footprint.height * scale;
+  const center =
+    placement === "above"
+      ? { x: anchor.x, y: anchor.y - height / 2 }
+      : placement === "above-left"
+        ? { x: anchor.x - width / 2, y: anchor.y - height / 2 }
+        : placement === "above-right"
+          ? { x: anchor.x + width / 2, y: anchor.y - height / 2 }
+          : placement === "below"
+            ? { x: anchor.x, y: anchor.y + height / 2 }
+            : placement === "below-left"
+              ? { x: anchor.x - width / 2, y: anchor.y + height / 2 }
+              : placement === "below-right"
+                ? { x: anchor.x + width / 2, y: anchor.y + height / 2 }
+                : placement === "left"
+                  ? { x: anchor.x - width / 2, y: anchor.y }
+                  : { x: anchor.x + width / 2, y: anchor.y };
+  return reliefRectInsidePolygon(center, { height, width }, polygon);
+}
+
+function placeExactReliefGlyphInsidePolygon(
+  anchor: ReliefPoint,
+  interior: ReliefPoint | undefined,
+  polygon: ReliefPolygon,
+  footprint: ReliefOverlayFootprint,
+): Pick<
+  ReliefSamplePointIconPlacement,
+  "glyphPlacement" | "glyphPolygonContained" | "point" | "scale" | "visible"
+> {
+  const preferred = inwardGlyphPlacement(anchor, interior);
+  const placements = (
+    [
+      preferred,
+      "above",
+      "below",
+      "left",
+      "right",
+      "above-left",
+      "above-right",
+      "below-left",
+      "below-right",
+    ] as const
+  ).filter((placement, index, values) => values.indexOf(placement) === index);
+  const scales = [1, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.15, 0.1];
+  for (const scale of scales) {
+    const placement = placements.find((candidate) =>
+      reliefDirectionalRectInsidePolygon(anchor, footprint, candidate, polygon, scale),
+    );
+    if (placement) {
+      return {
+        glyphPlacement: placement,
+        glyphPolygonContained: true,
+        point: anchor,
+        scale,
+        visible: true,
+      };
+    }
+  }
+  // A finite axis-aligned glyph cannot share an acute polygon vertex as one of
+  // its edges/corners. Keep the governed coordinate as anchor and use the
+  // nearest contained cartographic callout instead of hiding a formal identity.
+  const calloutCandidates = reliefPlacementCandidates(polygon, anchor);
+  for (const point of calloutCandidates) {
+    for (const scale of scales) {
+      const scaled = {
+        height: footprint.height * scale,
+        width: footprint.width * scale,
+      };
+      if (reliefRectInsidePolygon(point, scaled, polygon)) {
+        return {
+          glyphPlacement: "center",
+          glyphPolygonContained: true,
+          point,
+          scale,
+          visible: true,
+        };
+      }
+    }
+  }
+  const safeInterior = [
+    ...(interior && pointInReliefPolygon(interior, polygon) ? [interior] : []),
+    ...calloutCandidates,
+  ].reduce<ReliefPoint | undefined>((best, candidate) => {
+    if (!best) return candidate;
+    return distanceToPolygonEdges(candidate, polygon) >
+      distanceToPolygonEdges(best, polygon)
+      ? candidate
+      : best;
+  }, undefined);
+  if (safeInterior) {
+    const clearance = distanceToPolygonEdges(safeInterior, polygon);
+    const halfDiagonal = Math.hypot(footprint.width / 2, footprint.height / 2);
+    const scale = Math.min(0.1, (clearance * 0.9) / halfDiagonal);
+    if (
+      scale > 0 &&
+      reliefRectInsidePolygon(
+        safeInterior,
+        { height: footprint.height * scale, width: footprint.width * scale },
+        polygon,
+      )
+    ) {
+      return {
+        glyphPlacement: "center",
+        glyphPolygonContained: true,
+        point: safeInterior,
+        scale,
+        visible: true,
+      };
+    }
+  }
+  // Valid administrative polygons have a positive-area point-on-surface. If a
+  // malformed render polygon violates that invariant, keep the formal identity
+  // out of the visual layer rather than asserting a false contained position.
+  return {
+    glyphPlacement: "center",
+    glyphPolygonContained: false,
+    point: anchor,
+    scale: 0,
+    visible: false,
+  };
+}
+
+function placeReliefComparisonBadge(
+  polygon: ReliefPolygon,
+  preferred: ReliefPoint,
+  radius: number,
+  aggregate: ReliefSamplePointAggregatePlacement,
+): ReliefOverlayPlacement {
+  const aggregateRadius = aggregate.radius * aggregate.scale;
+  const offset = aggregateRadius + radius + COMPARISON_MARKER_GAP;
+  const diagonal = offset / Math.sqrt(2);
+  const directionalCandidates = [
+    { x: aggregate.point.x + diagonal, y: aggregate.point.y - diagonal },
+    { x: aggregate.point.x + offset, y: aggregate.point.y },
+    { x: aggregate.point.x - diagonal, y: aggregate.point.y - diagonal },
+    { x: aggregate.point.x - offset, y: aggregate.point.y },
+    { x: aggregate.point.x + diagonal, y: aggregate.point.y + diagonal },
+    { x: aggregate.point.x - diagonal, y: aggregate.point.y + diagonal },
+    { x: aggregate.point.x, y: aggregate.point.y - offset },
+    { x: aggregate.point.x, y: aggregate.point.y + offset },
+  ];
+  const minimumDistance = aggregateRadius + radius + OVERLAY_SAFE_MARGIN;
+  const candidates = [
+    ...directionalCandidates,
+    ...reliefPlacementCandidates(polygon, preferred),
+  ];
+  const point = candidates.find(
+    (candidate) =>
+      reliefCircleInsidePolygon(candidate, radius, polygon, OVERLAY_SAFE_MARGIN) &&
+      Math.hypot(candidate.x - aggregate.point.x, candidate.y - aggregate.point.y) >=
+        minimumDistance,
+  );
+  if (point) return { point, scale: 1, visible: true };
+
+  return {
+    ...placeReliefCircleInsidePolygon(polygon, preferred, radius),
+    visible: false,
+  };
 }
 
 function placeReliefCircleInsidePolygon(

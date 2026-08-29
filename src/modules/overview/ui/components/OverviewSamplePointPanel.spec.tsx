@@ -60,7 +60,7 @@ const list = {
 };
 
 describe("OverviewSamplePointPanel", () => {
-  it("keeps category, scrollable list, and business information as separate sections", async () => {
+  it("gives the list the full workspace until a sample is selected, then opens its detail", async () => {
     render(
       <PanelHarness
         onIconsChange={vi.fn()}
@@ -70,15 +70,34 @@ describe("OverviewSamplePointPanel", () => {
       />,
     );
 
-    expect(await screen.findByRole("heading", { name: "样本点分类" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "地区样本总览" })).toBeVisible();
+    expect(screen.getByText("正式坐标生成，可点击")).toBeVisible();
     expect(screen.getByRole("heading", { name: "样本点列表" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "样本点业务信息" })).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "样本点业务信息" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByLabelText("样本点列表")).toHaveClass(
       "overview-sample-point-list",
     );
+    expect(
+      screen.getByLabelText("样本点列表").closest(".overview-sample-point-workspace"),
+    ).not.toHaveClass("has-selection");
+
+    await userEvent.click(screen.getByText("同一跨产品样本点"));
+    expect(
+      await screen.findByRole("heading", { name: "样本点业务信息" }),
+    ).toBeVisible();
+    expect(
+      screen.getByLabelText("样本点列表").closest(".overview-sample-point-workspace"),
+    ).toHaveClass("has-selection");
+
+    await userEvent.click(screen.getByRole("button", { name: "返回样本列表" }));
+    expect(
+      screen.queryByRole("heading", { name: "样本点业务信息" }),
+    ).not.toBeInTheDocument();
   });
 
-  it("shows category counts but no concrete result before a category is selected", async () => {
+  it("shows all stable identities before an optional role filter is selected", async () => {
     const repository = repositoryStub();
     const onIconsChange = vi.fn<(icons: readonly OverviewSamplePointIcon[]) => void>();
 
@@ -92,11 +111,18 @@ describe("OverviewSamplePointPanel", () => {
     );
 
     expect(await screen.findByRole("button", { name: "产情类 1" })).toBeVisible();
-    expect(screen.queryByText("同一跨产品样本点")).not.toBeInTheDocument();
-    expect(screen.getByText("请选择分类后查看 1 个样本点")).toBeVisible();
-    expect(repository.icons).not.toHaveBeenCalled();
+    expect(screen.getByText("地图汇总")).toBeVisible();
+    expect(screen.getByText("区县按乡镇唯一分桶，列表选择后定位")).toBeVisible();
+    expect(await screen.findByText("同一跨产品样本点")).toBeVisible();
+    expect(repository.icons).toHaveBeenCalledWith({
+      productCode: "CORN",
+      regionCode: "230202",
+      year: 2026,
+    });
     expect(repository.detail).not.toHaveBeenCalled();
-    expect(onIconsChange).toHaveBeenCalledWith([]);
+    expect(onIconsChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({ samplePointId: list.items[0]?.samplePointId }),
+    ]);
   });
 
   it("shows every drawable entity and explains coordinate warnings in the active filter", async () => {
@@ -166,17 +192,7 @@ describe("OverviewSamplePointPanel", () => {
       })),
     });
     repository.list.mockResolvedValue(qualityList);
-    repository.icons.mockResolvedValue(
-      qualityItems.map((item) => ({
-        samplePointId: item.samplePointId,
-        name: item.name,
-        iconKey: item.types[0]!.iconKey,
-        types: item.types,
-        longitude: 123.5,
-        latitude: 47.5,
-        dataQualityReason: "DUPLICATE_COORDINATE_UNVERIFIED",
-      })),
-    );
+    repository.icons.mockResolvedValue([]);
     repository.detail.mockResolvedValue({
       samplePointId: qualityItems[0]!.samplePointId,
       name: qualityItems[0]!.name,
@@ -196,26 +212,27 @@ describe("OverviewSamplePointPanel", () => {
       />,
     );
 
-    expect(await screen.findByText("请选择分类后查看 3 个样本点")).toBeVisible();
+    expect(await screen.findByText("贸易商甲")).toBeVisible();
     expect(screen.getByRole("button", { name: "产情类 0" })).toBeDisabled();
 
     await userEvent.click(screen.getByRole("button", { name: "市场类 3" }));
+    expect(await screen.findByText("当前条件：正式样本 3 · 地图图标 0")).toBeVisible();
     expect(
-      await screen.findByText("精确业务图标 3 个，其中 3 个坐标重合待核验"),
+      screen.getByText("系统契约异常：另有 3 条审核通过样本未生成地图图标"),
     ).toBeVisible();
     expect(await screen.findByText("贸易商甲")).toBeVisible();
     expect(screen.getByText("贸易商乙")).toBeVisible();
     expect(screen.getByText("饲料厂丙")).toBeVisible();
     expect(
       within(screen.getByRole("button", { name: /贸易商甲/ })).getByText(
-        "地图已显示 · 坐标重合待核验",
+        "地图未生成 · 导入坐标契约异常（坐标重复）",
       ),
     ).toBeVisible();
     await userEvent.click(screen.getByText("贸易商甲"));
     expect(
       await within(screen.getByLabelText("所选样本点详情")).findByText("贸易商甲"),
     ).toBeVisible();
-    expect(screen.getByText("坐标重合待核验，地图按原始坐标显示")).toBeVisible();
+    expect(screen.getByText("导入坐标契约异常（坐标重复），地图未生成")).toBeVisible();
   });
 
   it("keeps governance correction diagnostics out of the ordinary business panel", async () => {
@@ -234,7 +251,9 @@ describe("OverviewSamplePointPanel", () => {
       items: [],
     };
     const repository = repositoryStub();
-    repository.list.mockResolvedValueOnce(catalog).mockResolvedValueOnce(market);
+    repository.list.mockImplementation((filters) =>
+      Promise.resolve(filters.categoryCode === "MARKET" ? market : catalog),
+    );
 
     render(
       <PanelHarness
@@ -245,7 +264,7 @@ describe("OverviewSamplePointPanel", () => {
       />,
     );
 
-    expect(await screen.findByText("请选择分类后查看 3 个样本点")).toBeVisible();
+    expect(await screen.findByRole("button", { name: "全部样本 3" })).toBeVisible();
     expect(screen.queryByText(/纠错数|未解决数|稳定主体/)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "市场类 1" }));
@@ -276,8 +295,11 @@ describe("OverviewSamplePointPanel", () => {
     );
 
     await screen.findByRole("button", { name: "产情类 1" });
-    expect(repository.icons).not.toHaveBeenCalled();
-
+    expect(repository.icons).toHaveBeenCalledWith({
+      regionCode: code,
+      productCode: "CORN",
+      year: 2026,
+    });
     await userEvent.click(screen.getByRole("button", { name: "产情类 1" }));
 
     await waitFor(() =>
@@ -353,7 +375,12 @@ describe("OverviewSamplePointPanel", () => {
     expect(
       within(screen.getByLabelText("所选样本点详情")).getByText("13900000000"),
     ).toBeVisible();
-    expect(onIconsChange).toHaveBeenLastCalledWith([]);
+    expect(onIconsChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({
+        iconKey: "farmer",
+        samplePointId: "94000000-0000-0000-0000-000000000001",
+      }),
+    ]);
   });
 
   it("loads stable-id business detail without map geometry", async () => {
@@ -444,10 +471,16 @@ describe("OverviewSamplePointPanel", () => {
     );
     expect(screen.getByText("15 亩")).toBeVisible();
     expect(screen.queryByText("10 亩")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("审核来源历史：调研填报 · 业务日期 2026年9月5日 · 第0版"),
+    ).toBeVisible();
 
     await userEvent.click(screen.getByRole("button", { name: "2026年5月" }));
     expect(screen.getByText("10 亩")).toBeVisible();
     expect(screen.queryByText("15 亩")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("审核来源历史：调研填报 · 业务日期 2026年5月5日 · 第0版"),
+    ).toBeVisible();
   });
 
   it("refreshes the open classification, list, icons, and detail without losing filters", async () => {
@@ -710,7 +743,7 @@ describe("OverviewSamplePointPanel", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("fails closed when a village has no parent township", async () => {
+  it("keeps approved actual icons while failing closed on a village without a parent township", async () => {
     const repository = repositoryStub();
     const onIconsChange = vi.fn();
 
@@ -724,7 +757,13 @@ describe("OverviewSamplePointPanel", () => {
     );
 
     await userEvent.click(await screen.findByRole("button", { name: "产情类 1" }));
-    await waitFor(() => expect(onIconsChange).toHaveBeenLastCalledWith([]));
+    await waitFor(() =>
+      expect(onIconsChange).toHaveBeenLastCalledWith([
+        expect.objectContaining({
+          samplePointId: "94000000-0000-0000-0000-000000000001",
+        }),
+      ]),
+    );
     await userEvent.click(screen.getByRole("button", { name: "网络覆盖对照" }));
     expect(
       await screen.findByText(
@@ -732,7 +771,11 @@ describe("OverviewSamplePointPanel", () => {
       ),
     ).toBeVisible();
     expect(repository.comparison).not.toHaveBeenCalled();
-    expect(onIconsChange).toHaveBeenLastCalledWith([]);
+    expect(onIconsChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({
+        samplePointId: "94000000-0000-0000-0000-000000000001",
+      }),
+    ]);
   });
 
   it("applies the selected category to precise icons and regional summaries", async () => {
@@ -775,8 +818,7 @@ describe("OverviewSamplePointPanel", () => {
     );
 
     await userEvent.click(await screen.findByRole("button", { name: "产情类 1" }));
-    expect(await screen.findByText("精确业务图标 1 个")).toBeVisible();
-    expect(screen.getByText("当前筛选区域汇总标识 0 个")).toBeVisible();
+    expect(await screen.findByText("当前条件：正式样本 1 · 地图图标 1")).toBeVisible();
     await waitFor(() => {
       const layers = onIconsChange.mock.calls.at(-1)?.[0] ?? [];
       expect(

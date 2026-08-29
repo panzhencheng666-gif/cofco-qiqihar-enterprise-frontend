@@ -55,7 +55,6 @@ function metric(
   >,
 ): OverviewDashboardMetric {
   return {
-    auditSources: [],
     code: "PRODUCTION_CULTIVATED_AREA",
     coverageStatus: "AVAILABLE",
     name: "种植面积",

@@ -1,12 +1,18 @@
-export type OverviewSamplePointCategoryCode = "PRODUCTION" | "MARKET";
+export type OverviewSamplePointCategoryCode = "PRODUCTION" | "MARKET" | "LOGISTICS";
 
 export interface OverviewSamplePointAggregate {
   regionCode: string;
   regionName: string;
   regionLevel: "PREFECTURE" | "COUNTY" | "TOWNSHIP" | "VILLAGE";
+  /** Required by the live HTTP contract; optional only for legacy in-memory fixtures. */
+  scopeKind?: "CHILD_REGION" | "PARENT_DIRECT";
+  /** Real administrative region used to place the aggregate without fabricating coordinates. */
+  anchorRegionCode?: string;
   samplePointCount: number;
   productionCount: number;
   marketCount: number;
+  /** Required by the live HTTP contract; optional only for legacy in-memory fixtures. */
+  logisticsCount?: number;
   validCoordinateCount: number;
   dataQualityIssueCount: number;
   correctionSourceCount: number;
@@ -17,6 +23,12 @@ export interface OverviewSamplePointTypeRef {
   code: string;
   name: string;
   iconKey: string;
+}
+
+export interface OverviewSamplePointRoleRef {
+  code: OverviewSamplePointCategoryCode;
+  name: string;
+  iconKey: "production" | "market" | "logistics";
 }
 
 export interface OverviewSamplePointCategoryRef {
@@ -48,7 +60,7 @@ export interface OverviewSamplePointListItem {
   categories: readonly OverviewSamplePointCategoryRef[];
   types: readonly OverviewSamplePointTypeRef[];
   products: readonly OverviewSamplePointProductRef[];
-  latestBusinessDate: string;
+  latestBusinessDate: string | null;
   summaryValues: Readonly<Record<string, OverviewSamplePointBusinessValue>>;
 }
 
@@ -74,7 +86,10 @@ export interface OverviewSamplePointCorrectionSource {
 export interface OverviewSamplePointIcon {
   samplePointId: string;
   name: string;
+  /** Formal administrative ownership of this exact governed coordinate. */
+  regionCode?: string;
   iconKey: string;
+  roles?: readonly OverviewSamplePointRoleRef[];
   layerType?: SampleNetworkLayerType;
   anchorRegionCode?: string;
   villageRegionCode?: string;
@@ -166,6 +181,16 @@ export interface SampleNetworkComparison {
   relations: readonly SampleNetworkRelation[];
 }
 
+export interface SampleNetworkDesignComparison {
+  networkYear: number;
+  networkStatus: string;
+  designPointCount: number;
+  designCoordinateCount: number;
+  pendingVerificationDesignPointCount: number;
+  designPoints: readonly SampleNetworkDesignPoint[];
+  relations: readonly SampleNetworkRelation[];
+}
+
 export interface OverviewSamplePointBusinessValue {
   label: string;
   value: string;
@@ -192,5 +217,7 @@ export interface OverviewSamplePointDetail {
   regionName: string;
   locationState: string;
   dataQualityReason: string | null;
+  /** Required by the live HTTP contract; optional only for legacy in-memory fixtures. */
+  roles?: readonly OverviewSamplePointRoleRef[];
   associations: readonly OverviewSamplePointAssociation[];
 }

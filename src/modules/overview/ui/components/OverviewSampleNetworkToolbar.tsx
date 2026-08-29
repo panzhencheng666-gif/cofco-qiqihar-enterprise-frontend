@@ -1,11 +1,50 @@
+import { useEffect, useRef, useState } from "react";
+
 import type { SampleNetworkLayerMode } from "../../domain/overviewSamplePoint";
 import type { OverviewSampleNetworkLayerModel } from "../hooks/useOverviewSampleNetworkLayers";
 
 export function OverviewSampleNetworkToolbar({
   model,
+  onExport,
+  exportPending = false,
 }: {
   model: OverviewSampleNetworkLayerModel;
+  onExport?: () => void;
+  exportPending?: boolean;
 }) {
+  const [pendingSelection, setPendingSelection] = useState<{
+    from: SampleNetworkLayerMode;
+    to: SampleNetworkLayerMode;
+  }>();
+  const firstFrameRef = useRef<number | undefined>(undefined);
+  const commitTimerRef = useRef<number | undefined>(undefined);
+  const displayMode =
+    pendingSelection?.from === model.mode ? pendingSelection.to : model.mode;
+  useEffect(
+    () => () => {
+      if (firstFrameRef.current !== undefined) {
+        window.cancelAnimationFrame(firstFrameRef.current);
+      }
+      if (commitTimerRef.current !== undefined) {
+        window.clearTimeout(commitTimerRef.current);
+      }
+    },
+    [],
+  );
+  const selectMode = (nextMode: SampleNetworkLayerMode) => {
+    setPendingSelection({ from: model.mode, to: nextMode });
+    if (firstFrameRef.current !== undefined) {
+      window.cancelAnimationFrame(firstFrameRef.current);
+    }
+    if (commitTimerRef.current !== undefined) {
+      window.clearTimeout(commitTimerRef.current);
+    }
+    firstFrameRef.current = window.requestAnimationFrame(() => {
+      commitTimerRef.current = window.setTimeout(() => {
+        model.setMode(nextMode);
+      }, 0);
+    });
+  };
   const approvedDesignCoordinateCount =
     model.comparison?.designPoints.filter(
       ({ coordinateReviewStatus }) => coordinateReviewStatus === "AUTHORITY_APPROVED",
@@ -16,35 +55,39 @@ export function OverviewSampleNetworkToolbar({
     ["design", "设计样本"],
   ] as const satisfies readonly (readonly [SampleNetworkLayerMode, string])[];
   const mapLevelGuidance = !model.applicable
-    ? "现有样本网络自2026年启用，当前年度仅展示历史业务记录。"
-    : model.region?.level === "PREFECTURE"
-      ? "市级显示区县汇总"
-      : model.region?.level === "COUNTY"
-        ? "区县级显示乡镇汇总"
-        : model.region?.level === "TOWNSHIP" || model.region?.level === "VILLAGE"
-          ? model.state === "ready" && model.comparison
-            ? `${model.comparison.designPointCount} 个行政村设计覆盖 · ${model.comparison.activeSamplePointCount} 个年度现有样本`
-            : model.state === "unavailable"
-              ? "样本网络暂不可用"
-              : "正在同步样本网络"
-          : "进入区县或乡镇查看样本网络";
+    ? "请选择年度查看样本网络与已审核业务样本。"
+    : model.state === "unavailable"
+      ? "样本网络暂不可用"
+      : model.state === "loading" || model.catalogState === "loading"
+        ? "正在同步样本网络"
+        : undefined;
 
   return (
     <section className="overview-sample-network-toolbar" aria-label="样本网络图层">
       <div role="group" aria-label="样本网络图层">
         {controls.map(([mode, label]) => (
           <button
-            aria-pressed={model.mode === mode}
+            aria-pressed={displayMode === mode}
             disabled={!model.applicable}
             key={mode}
-            onClick={() => model.setMode(mode)}
+            onClick={() => selectMode(mode)}
             type="button"
           >
             {label}
           </button>
         ))}
       </div>
-      <span aria-live="polite">{mapLevelGuidance}</span>
+      {onExport && (
+        <button
+          aria-label="导出正式样本清单"
+          disabled={exportPending || !model.applicable}
+          onClick={onExport}
+          type="button"
+        >
+          {exportPending ? "正在导出" : "导出正式样本"}
+        </button>
+      )}
+      {mapLevelGuidance ? <span aria-live="polite">{mapLevelGuidance}</span> : null}
       {model.applicable &&
       model.mode !== "actual" &&
       approvedDesignCoordinateCount > 0 ? (

@@ -5,7 +5,12 @@ import type { OverviewSamplePointCategoryCode } from "../../domain/overviewSampl
 import type { HttpClient } from "../../../../shared/api/HttpClient";
 import { queryString } from "../../../../shared/api/HttpClient";
 
-const categoryCodeSchema = z.enum(["PRODUCTION", "MARKET"]);
+const categoryCodeSchema = z.enum(["PRODUCTION", "MARKET", "LOGISTICS"]);
+const roleRefSchema = z.object({
+  code: categoryCodeSchema,
+  name: z.string(),
+  iconKey: z.enum(["production", "market", "logistics"]),
+});
 const regionLevelSchema = z.enum(["PREFECTURE", "COUNTY", "TOWNSHIP", "VILLAGE"]);
 const uuidTextSchema = z
   .string()
@@ -26,18 +31,21 @@ const aggregateSchema = z
     regionCode: z.string(),
     regionName: z.string(),
     regionLevel: regionLevelSchema,
+    scopeKind: z.enum(["CHILD_REGION", "PARENT_DIRECT"]),
+    anchorRegionCode: z.string(),
     samplePointCount: z.number().int().nonnegative(),
     productionCount: z.number().int().nonnegative(),
     marketCount: z.number().int().nonnegative(),
+    logisticsCount: z.number().int().nonnegative(),
     validCoordinateCount: z.number(),
     dataQualityIssueCount: z.number(),
     correctionSourceCount: z.number(),
     unresolvedSourceCount: z.number(),
   })
   .refine(
-    ({ marketCount, productionCount, samplePointCount }) =>
-      samplePointCount >= Math.max(productionCount, marketCount) &&
-      samplePointCount <= productionCount + marketCount,
+    ({ logisticsCount, marketCount, productionCount, samplePointCount }) =>
+      samplePointCount >= Math.max(productionCount, marketCount, logisticsCount) &&
+      samplePointCount <= productionCount + marketCount + logisticsCount,
     {
       message: "samplePointCount must stay within distinct-point bounds",
       path: ["samplePointCount"],
@@ -75,7 +83,7 @@ const listSchema = z.object({
         categories: z.array(z.object({ code: categoryCodeSchema, name: z.string() })),
         types: z.array(typeRefSchema),
         products: z.array(z.object({ code: z.string(), name: z.string() })),
-        latestBusinessDate: z.string(),
+        latestBusinessDate: z.string().nullable(),
         summaryValues: z.record(z.string(), businessValueSchema),
       }),
     ),
@@ -95,13 +103,22 @@ const iconsSchema = z.object({
     z.object({
       samplePointId: uuidTextSchema,
       name: z.string(),
+      regionCode: z.string().min(1),
       iconKey: z.string().min(1),
+      roles: z.array(roleRefSchema).min(1),
       types: z.array(typeRefSchema),
       longitude: z.number(),
       latitude: z.number(),
       dataQualityReason: z.string().nullable().default(null),
     }),
   ),
+});
+
+const snapshotSchema = z.object({
+  data: z.object({
+    list: listSchema.shape.data,
+    icons: iconsSchema.shape.data,
+  }),
 });
 
 const detailSchema = z.object({
@@ -112,6 +129,7 @@ const detailSchema = z.object({
     regionName: z.string(),
     locationState: z.string(),
     dataQualityReason: z.string().nullable(),
+    roles: z.array(roleRefSchema).min(1),
     associations: z.array(
       z.object({
         categoryCode: categoryCodeSchema,
@@ -208,8 +226,28 @@ const comparisonSchema = z.object({
   }),
 });
 
+const designComparisonSchema = z.object({
+  data: z.object({
+    networkYear: z.number().int(),
+    networkStatus: z.string(),
+    designPointCount: z.number().int().nonnegative(),
+    designCoordinateCount: z.number().int().nonnegative(),
+    pendingVerificationDesignPointCount: z.number().int().nonnegative(),
+    designPoints: z.array(comparisonDesignPointSchema),
+    relations: comparisonSchema.shape.data.shape.relations,
+  }),
+});
+
 export class HttpOverviewSamplePointRepository implements OverviewSamplePointRepository {
   constructor(private readonly http: HttpClient) {}
+
+  async exportInventory(query: { year: number; regionCode?: string }) {
+    if (!this.http.download)
+      throw new Error("Sample inventory download is unavailable");
+    return this.http.download(
+      `/api/v1/overview/sample-points/export${queryString(query)}`,
+    );
+  }
 
   async comparison(query: { year: number; productCode: string; regionCode?: string }) {
     return (
@@ -219,6 +257,17 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
           ...(query.regionCode ? { regionCode: query.regionCode } : {}),
         })}`,
         comparisonSchema,
+      )
+    ).data;
+  }
+
+  async designComparison(query: { year: number; regionCode?: string }) {
+    return (
+      await this.http.get(
+        `/api/v1/sample-networks/${query.year}/design-comparison${queryString({
+          ...(query.regionCode ? { regionCode: query.regionCode } : {}),
+        })}`,
+        designComparisonSchema,
       )
     ).data;
   }
@@ -257,7 +306,7 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
     regionCode: string;
     productCode: string;
     year: number;
-    categoryCode: OverviewSamplePointCategoryCode;
+    categoryCode?: OverviewSamplePointCategoryCode;
     typeCode?: string;
     query?: string;
   }) {
@@ -269,19 +318,35 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
     ).data;
   }
 
+  async snapshot(query: {
+    regionCode: string;
+    productCode: string;
+    year: number;
+    categoryCode?: OverviewSamplePointCategoryCode;
+    typeCode?: string;
+    query?: string;
+  }) {
+    return (
+      await this.http.get(
+        `/api/v1/overview/sample-point-snapshot${queryString(query)}`,
+        snapshotSchema,
+      )
+    ).data;
+  }
+
   async detail(query: {
     samplePointId: string;
     regionCode: string;
     productCode: string;
     year: number;
-    categoryCode: OverviewSamplePointCategoryCode;
+    categoryCode?: OverviewSamplePointCategoryCode;
     typeCode?: string;
   }) {
     const parameters = {
       year: query.year,
       productCode: query.productCode,
       regionCode: query.regionCode,
-      categoryCode: query.categoryCode,
+      ...(query.categoryCode ? { categoryCode: query.categoryCode } : {}),
       ...(query.typeCode ? { typeCode: query.typeCode } : {}),
     };
     return (

@@ -11,8 +11,10 @@ import {
   overviewReliefFrame,
   overviewSelectionConnector,
   pointInReliefPolygon,
+  projectReliefOverlays,
   projectReliefScene,
   reliefCircleInsidePolygon,
+  reliefDirectionalRectInsidePolygon,
   reliefRectInsidePolygon,
   type ReliefFrame,
 } from "./terrainReliefGeometry";
@@ -22,6 +24,7 @@ import {
   COMPONENT_HIGHLIGHT_LIFT,
   createVisibleWallGeometries,
   measureWallCompleteness,
+  overviewWideStageOffset,
   reframeReliefScene,
   RELIEF_LAYER_Z,
   reliefComponentKey,
@@ -65,6 +68,83 @@ function polygonFeature(
 }
 
 describe("projectReliefScene", () => {
+  it("keeps a parent-direct sample bucket attached to a stable backdrop label", () => {
+    const backdrop = polygonFeature(
+      "230200",
+      [
+        [0, 0],
+        [20, 0],
+        [20, 10],
+        [0, 10],
+        [0, 0],
+      ],
+      "PREFECTURE",
+    );
+    backdrop.region.name = "齐齐哈尔市";
+    const child = polygonFeature(
+      "230281",
+      [
+        [2, 2],
+        [8, 2],
+        [8, 8],
+        [2, 8],
+        [2, 2],
+      ],
+      "COUNTY",
+    );
+    const baseScene = projectReliefScene({
+      backdrop,
+      features: [child],
+      frame,
+      points: [],
+    });
+    const scene = projectReliefOverlays(
+      baseScene,
+      [
+        {
+          anchorRegionCode: "230200",
+          scopeKind: "PARENT_DIRECT",
+          regionCode: "PARENT_DIRECT:230200",
+          regionName: "齐齐哈尔市本级",
+          regionLevel: "PREFECTURE",
+          samplePointCount: 3,
+          productionCount: 2,
+          marketCount: 1,
+          validCoordinateCount: 3,
+          dataQualityIssueCount: 0,
+          correctionSourceCount: 0,
+          unresolvedSourceCount: 0,
+        },
+      ],
+      [],
+    );
+
+    expect(scene.labels.find(({ region }) => region.code === "230200")).toBeDefined();
+    expect(
+      createReliefOverlayLayout(scene).labels.find(
+        ({ region }) => region.code === "230200",
+      )?.visible,
+    ).toBe(true);
+  });
+
+  it("centers the fixed relief composition inside a wider command stage", () => {
+    expect(overviewWideStageOffset(1920)).toBe(0);
+    expect(overviewWideStageOffset(2048)).toBe(64);
+    expect(overviewWideStageOffset(3456)).toBe(768);
+  });
+
+  it("reserves a clear band below the KPI cards for map controls", () => {
+    const fullFrame = overviewReliefFrame(false);
+    const detailsFrame = overviewReliefFrame(true, 1920);
+
+    expect(fullFrame.y).toBeGreaterThanOrEqual(290);
+    expect(detailsFrame.y).toBeGreaterThanOrEqual(290);
+    expect(fullFrame.x).toBeGreaterThanOrEqual(176);
+    expect(detailsFrame.x).toBeGreaterThanOrEqual(176);
+    expect(fullFrame.y + fullFrame.height).toBeLessThanOrEqual(996);
+    expect(detailsFrame.y + detailsFrame.height).toBeLessThanOrEqual(996);
+  });
+
   it("clears a rejected terrain resource promise so the next load can retry", async () => {
     const createRetryableResourceLoader = reliefRuntime.createRetryableResourceLoader;
     expect(createRetryableResourceLoader).toBeTypeOf("function");
@@ -147,6 +227,63 @@ describe("projectReliefScene", () => {
     );
     expect(projection.samplePointAggregates[0]?.point).not.toBe(
       projection.features[0]?.anchor,
+    );
+  });
+
+  it("anchors the explicit local-sample bucket to the real parent backdrop", () => {
+    const parent = polygonFeature(
+      "230202",
+      [
+        [123, 47],
+        [125, 47],
+        [125, 49],
+        [123, 49],
+        [123, 47],
+      ],
+      "COUNTY",
+    );
+    const child = polygonFeature(
+      "230202997",
+      [
+        [123.2, 47.2],
+        [124, 47.2],
+        [124, 48],
+        [123.2, 48],
+        [123.2, 47.2],
+      ],
+      "TOWNSHIP",
+    );
+
+    const projection = projectReliefScene({
+      backdrop: parent,
+      features: [child],
+      frame,
+      points: [],
+      samplePointAggregates: [
+        {
+          regionCode: parent.region.code,
+          regionName: "本级样本",
+          regionLevel: "COUNTY",
+          scopeKind: "PARENT_DIRECT",
+          anchorRegionCode: parent.region.code,
+          samplePointCount: 1,
+          productionCount: 1,
+          marketCount: 0,
+          logisticsCount: 0,
+          validCoordinateCount: 0,
+          dataQualityIssueCount: 1,
+          correctionSourceCount: 0,
+          unresolvedSourceCount: 1,
+        },
+      ],
+    });
+
+    expect(projection.samplePointAggregates).toHaveLength(1);
+    expect(projection.samplePointAggregates[0]?.aggregate.scopeKind).toBe(
+      "PARENT_DIRECT",
+    );
+    expect(projection.samplePointAggregates[0]?.point).toEqual(
+      projection.backdrop?.anchor,
     );
   });
 
@@ -379,7 +516,7 @@ describe("projectReliefScene", () => {
     });
   });
 
-  it("expands verified colocated entities without changing their true anchor", () => {
+  it("keeps verified colocated entities on their exact governed coordinate", () => {
     const samplePointFrame = overviewReliefFrame(false);
     const shared = {
       name: "并址主体",
@@ -415,12 +552,113 @@ describe("projectReliefScene", () => {
     expect(
       new Set(projection.samplePointIcons.map(({ point }) => `${point.x}:${point.y}`))
         .size,
-    ).toBe(3);
+    ).toBe(1);
     projection.samplePointIcons.forEach((projected) => {
       expect(projected).toHaveProperty("anchorPoint");
+      expect(projected.point).toEqual(projected.anchorPoint);
       expect(projected.icon.longitude).toBe(123.5);
       expect(projected.icon.latitude).toBe(47.5);
     });
+  });
+
+  it("does not relocate nearby governed markers to presentation grid points", () => {
+    const samplePointFrame = overviewReliefFrame(false);
+    const projection = projectReliefScene({
+      features: [
+        polygonFeature(
+          "230202997001",
+          [
+            [123, 47],
+            [124, 47],
+            [124, 48],
+            [123, 48],
+            [123, 47],
+          ],
+          "VILLAGE",
+        ),
+      ],
+      frame: samplePointFrame,
+      points: [],
+      samplePointIcons: [
+        {
+          samplePointId: "94000000-0000-0000-0000-000000000021",
+          name: "相邻市场样本",
+          iconKey: "market",
+          roles: [{ code: "MARKET", name: "市场类", iconKey: "market" }],
+          types: [{ code: "TRADER", name: "贸易商", iconKey: "trader" }],
+          longitude: 123.5,
+          latitude: 47.5,
+          dataQualityReason: null,
+        },
+        {
+          samplePointId: "94000000-0000-0000-0000-000000000022",
+          name: "相邻物流样本",
+          iconKey: "logistics",
+          roles: [{ code: "LOGISTICS", name: "物流类", iconKey: "logistics" }],
+          types: [{ code: "RAIL", name: "铁路站点", iconKey: "logistics" }],
+          longitude: 123.505,
+          latitude: 47.505,
+          dataQualityReason: null,
+        },
+      ],
+    });
+
+    const [market, logistics] = projection.samplePointIcons;
+    expect(market?.anchorPoint).toEqual(market?.point);
+    expect(logistics?.anchorPoint).toEqual(logistics?.point);
+    expect(
+      Math.hypot(
+        (market?.point.x ?? 0) - (logistics?.point.x ?? 0),
+        (market?.point.y ?? 0) - (logistics?.point.y ?? 0),
+      ),
+    ).toBeLessThan(52);
+    expect(logistics?.icon.longitude).toBe(123.505);
+    expect(logistics?.icon.latitude).toBe(47.505);
+  });
+
+  it("keeps every dense governed identity at its one true coordinate", () => {
+    const projection = projectReliefScene({
+      features: [
+        polygonFeature(
+          "230202997001",
+          [
+            [123, 47],
+            [124, 47],
+            [124, 48],
+            [123, 48],
+            [123, 47],
+          ],
+          "VILLAGE",
+        ),
+      ],
+      frame: overviewReliefFrame(false),
+      points: [],
+      samplePointIcons: Array.from({ length: 36 }, (_, index) => ({
+        samplePointId: `94000000-0000-0000-0000-${String(index + 100).padStart(12, "0")}`,
+        name: `密集样本${index + 1}`,
+        iconKey: index % 2 ? "market" : "production",
+        roles: [
+          index % 2
+            ? { code: "MARKET" as const, name: "市场类", iconKey: "market" }
+            : { code: "PRODUCTION" as const, name: "产情类", iconKey: "production" },
+        ],
+        types: [],
+        longitude: 123.5,
+        latitude: 47.5,
+        dataQualityReason: null,
+      })),
+    });
+
+    expect(projection.samplePointIcons).toHaveLength(36);
+    projection.samplePointIcons.forEach((current) => {
+      expect(current.icon.longitude).toBe(123.5);
+      expect(current.icon.latitude).toBe(47.5);
+      expect(current.point).toEqual(current.anchorPoint);
+    });
+    expect(
+      new Set(projection.samplePointIcons.map(({ point }) => `${point.x}:${point.y}`))
+        .size,
+    ).toBe(1);
   });
 
   it("provides one non-reused professional SVG path for every retained object type", () => {
@@ -436,8 +674,11 @@ describe("projectReliefScene", () => {
       "reserve-enterprise",
       "breeding-factory",
       "feed-mill",
+      "rice-mill",
+      "rail-node",
+      "road-node",
     ]);
-    expect(new Set(Object.values(iconPaths ?? {})).size).toBe(9);
+    expect(new Set(Object.values(iconPaths ?? {})).size).toBe(12);
   });
   it("hides only the raised component's stationary ground outline", () => {
     expect(shouldShowGroundOutlineSegment(["230200"], "")).toBe(true);
@@ -458,14 +699,14 @@ describe("projectReliefScene", () => {
     ).toBe("友谊乡");
   });
 
-  it("uses the full map viewport after the bottom analysis band is removed", () => {
+  it("uses the available map viewport outside the control and legend safe bands", () => {
     const openFrame = overviewReliefFrame(false);
     const detailsFrame = overviewReliefFrame(true);
 
     expect(openFrame.y).toBeGreaterThanOrEqual(220);
     expect(openFrame.y + openFrame.height).toBeGreaterThanOrEqual(980);
     expect(openFrame.y + openFrame.height).toBeLessThanOrEqual(1010);
-    expect(openFrame.x).toBeLessThanOrEqual(110);
+    expect(openFrame.x).toBeGreaterThanOrEqual(176);
     expect(openFrame.x + openFrame.width).toBeGreaterThanOrEqual(1810);
     expect(detailsFrame.y).toBe(openFrame.y);
     expect(detailsFrame.height).toBe(openFrame.height);
@@ -1383,6 +1624,358 @@ describe("polygon-contained relief overlay layout", () => {
     ["行政村", "VILLAGE"],
   ] as const;
 
+  it("reuses projected administrative geometry when only the sample layer changes", () => {
+    const county = polygonFeature(
+      "230225",
+      [
+        [0, 0],
+        [20, 0],
+        [20, 12],
+        [0, 12],
+        [0, 0],
+      ],
+      "COUNTY",
+    );
+    const base = projectReliefScene({
+      features: [county],
+      frame: overviewReliefFrame(false),
+      points: [],
+    });
+    const overlay = projectReliefOverlays(
+      base,
+      [],
+      [
+        {
+          samplePointId: "design-coverage:230225",
+          name: "甘南县设计覆盖",
+          iconKey: "design-coverage",
+          layerType: "DESIGN_COVERAGE_BADGE",
+          anchorRegionCode: county.region.code,
+          aggregateCount: 95,
+          types: [
+            {
+              code: "DESIGN_COVERAGE",
+              name: "行政村设计覆盖",
+              iconKey: "design-coverage",
+            },
+          ],
+          longitude: null,
+          latitude: null,
+          dataQualityReason: null,
+        },
+      ],
+    );
+
+    expect(overlay.features).toBe(base.features);
+    expect(overlay.labels).toBe(base.labels);
+    expect(overlay.samplePointIcons).toHaveLength(1);
+  });
+
+  it("keeps an administrative label at the same anchor when sample layers change", () => {
+    const county = polygonFeature(
+      "230225",
+      [
+        [0, 0],
+        [20, 0],
+        [20, 12],
+        [0, 12],
+        [0, 0],
+      ],
+      "COUNTY",
+    );
+    county.region.name = "甘南县";
+    const withoutSampleLayer = projectReliefScene({
+      features: [county],
+      frame: overviewReliefFrame(false),
+      points: [],
+    });
+    const withDesignLayer = projectReliefScene({
+      features: [county],
+      frame: overviewReliefFrame(false),
+      points: [],
+      samplePointIcons: [
+        {
+          samplePointId: "design-coverage:230225",
+          name: "甘南县设计覆盖",
+          iconKey: "design-coverage",
+          layerType: "DESIGN_COVERAGE_BADGE",
+          anchorRegionCode: county.region.code,
+          aggregateCount: 95,
+          types: [
+            {
+              code: "DESIGN_COVERAGE",
+              name: "行政村设计覆盖",
+              iconKey: "design-coverage",
+            },
+          ],
+          longitude: null,
+          latitude: null,
+          dataQualityReason: null,
+        },
+      ],
+    });
+
+    const baseLabel = createReliefOverlayLayout(withoutSampleLayer).labels[0];
+    const designLabel = createReliefOverlayLayout(withDesignLayer).labels[0];
+
+    expect(designLabel?.point).toEqual(baseLabel?.point);
+    expect(designLabel?.scale).toEqual(baseLabel?.scale);
+  });
+
+  it("keeps an exact edge coordinate fixed while facing the glyph toward the region interior", () => {
+    const village = polygonFeature(
+      "230202997001",
+      [
+        [0, 0],
+        [10, 10],
+        [0, 10],
+        [0, 0],
+      ],
+      "VILLAGE",
+    );
+    const scene = projectReliefScene({
+      features: [village],
+      frame: overviewReliefFrame(false),
+      points: [],
+      samplePointIcons: [
+        {
+          samplePointId: "94000000-0000-0000-0000-000000000001",
+          name: "边缘正式样本",
+          regionCode: village.region.code,
+          iconKey: "farmer",
+          layerType: "ANNUAL_ACTUAL",
+          types: [{ code: "FARMER", name: "农户", iconKey: "farmer" }],
+          longitude: 5,
+          latitude: 5,
+          dataQualityReason: null,
+        },
+      ],
+    });
+
+    const projected = scene.samplePointIcons[0];
+    const placed = createReliefOverlayLayout(scene).samplePointIcons[0];
+
+    expect(placed?.anchorPoint).toEqual(projected?.anchorPoint);
+    expect(placed?.point).toEqual(projected?.point);
+    expect(placed?.glyphPlacement).toBe("above-left");
+    expect(placed?.glyphFootprint).toBeDefined();
+    expect(
+      reliefDirectionalRectInsidePolygon(
+        placed!.anchorPoint,
+        placed!.glyphFootprint,
+        placed!.glyphPlacement,
+        scene.features[0]!.polygons[0]!,
+        placed!.scale,
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps an acute-vertex identity visible as an anchored contained callout", () => {
+    const village = polygonFeature(
+      "230202997002",
+      [
+        [0, 0],
+        [10, 5],
+        [0, 10],
+        [0, 0],
+      ],
+      "VILLAGE",
+    );
+    const scene = projectReliefScene({
+      features: [village],
+      frame: overviewReliefFrame(false),
+      points: [],
+      samplePointIcons: [
+        {
+          samplePointId: "94000000-0000-0000-0000-000000000002",
+          name: "锐角顶点正式样本",
+          regionCode: village.region.code,
+          iconKey: "farmer",
+          layerType: "ANNUAL_ACTUAL",
+          types: [{ code: "FARMER", name: "农户", iconKey: "farmer" }],
+          longitude: 10,
+          latitude: 5,
+          dataQualityReason: null,
+        },
+      ],
+    });
+
+    const projected = scene.samplePointIcons[0]!;
+    const placed = createReliefOverlayLayout(scene).samplePointIcons[0]!;
+
+    expect(placed.anchorPoint).toEqual(projected.anchorPoint);
+    expect(placed.visible).toBe(true);
+    expect(placed.glyphPlacement).toBe("center");
+    expect(placed.point).not.toEqual(placed.anchorPoint);
+    expect(
+      reliefRectInsidePolygon(
+        placed.point,
+        {
+          height: placed.glyphFootprint.height * placed.scale,
+          width: placed.glyphFootprint.width * placed.scale,
+        },
+        scene.features[0]!.polygons[0]!,
+      ),
+    ).toBe(true);
+  });
+
+  it("uses a positive-clearance micro callout for a valid extremely narrow region", () => {
+    const village = polygonFeature(
+      "230202997003",
+      [
+        [0, 0],
+        [10, 0.001],
+        [0, 0.002],
+        [0, 0],
+      ],
+      "VILLAGE",
+    );
+    const scene = projectReliefScene({
+      features: [village],
+      frame: overviewReliefFrame(false),
+      points: [],
+      samplePointIcons: [
+        {
+          samplePointId: "94000000-0000-0000-0000-000000000003",
+          name: "狭长区域正式样本",
+          regionCode: village.region.code,
+          iconKey: "farmer",
+          layerType: "ANNUAL_ACTUAL",
+          types: [{ code: "FARMER", name: "农户", iconKey: "farmer" }],
+          longitude: 10,
+          latitude: 0.001,
+          dataQualityReason: null,
+        },
+      ],
+    });
+
+    const placed = createReliefOverlayLayout(scene).samplePointIcons[0]!;
+    expect(placed.visible).toBe(true);
+    expect(placed.glyphPolygonContained).toBe(true);
+    expect(placed.scale).toBeGreaterThan(0);
+    expect(placed.scale).toBeLessThan(0.1);
+    expect(
+      reliefRectInsidePolygon(
+        placed.point,
+        {
+          height: placed.glyphFootprint.height * placed.scale,
+          width: placed.glyphFootprint.width * placed.scale,
+        },
+        scene.features[0]!.polygons[0]!,
+      ),
+    ).toBe(true);
+  });
+
+  it("contains a child identity in the displayed ancestor when its own boundary is not rendered", () => {
+    const township = polygonFeature(
+      "230202998",
+      [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+        [0, 10],
+        [0, 0],
+      ],
+      "TOWNSHIP",
+    );
+    const scene = projectReliefScene({
+      features: [township],
+      frame: overviewReliefFrame(false),
+      points: [],
+      samplePointIcons: [
+        {
+          samplePointId: "94000000-0000-0000-0000-000000000004",
+          name: "未单独绘制村界的正式样本",
+          regionCode: "230202998001",
+          iconKey: "farmer",
+          layerType: "ANNUAL_ACTUAL",
+          types: [{ code: "FARMER", name: "农户", iconKey: "farmer" }],
+          longitude: 10,
+          latitude: 5,
+          dataQualityReason: null,
+        },
+      ],
+    });
+
+    const placed = createReliefOverlayLayout(scene).samplePointIcons[0]!;
+    expect(placed.visible).toBe(true);
+    expect(placed.glyphPolygonContained).toBe(true);
+    expect(placed.glyphPlacement).toBe("left");
+  });
+
+  it("separates a design coverage badge from the actual aggregate at the same region anchor", () => {
+    const county = polygonFeature(
+      "230202",
+      [
+        [0, 0],
+        [20, 0],
+        [20, 12],
+        [0, 12],
+        [0, 0],
+      ],
+      "COUNTY",
+    );
+    county.region.name = "测试区";
+    const scene = projectReliefScene({
+      features: [county],
+      frame: overviewReliefFrame(false),
+      points: [],
+      samplePointAggregates: [
+        {
+          regionCode: county.region.code,
+          regionName: county.region.name,
+          regionLevel: county.region.level,
+          samplePointCount: 0,
+          productionCount: 0,
+          marketCount: 0,
+          validCoordinateCount: 0,
+          dataQualityIssueCount: 0,
+          correctionSourceCount: 0,
+          unresolvedSourceCount: 0,
+        },
+      ],
+      samplePointIcons: [
+        {
+          samplePointId: "design-coverage:230202",
+          name: "测试区设计覆盖",
+          iconKey: "design-coverage",
+          layerType: "DESIGN_COVERAGE_BADGE",
+          anchorRegionCode: county.region.code,
+          aggregateCount: 95,
+          types: [
+            {
+              code: "DESIGN_COVERAGE",
+              name: "行政村设计覆盖",
+              iconKey: "design-coverage",
+            },
+          ],
+          longitude: null,
+          latitude: null,
+          dataQualityReason: null,
+        },
+      ],
+    });
+
+    const layout = createReliefOverlayLayout(scene);
+    const positionedIcons = layout.samplePointIcons;
+    const aggregate = layout.samplePointAggregates[0];
+    const designBadge = positionedIcons[0];
+
+    expect(positionedIcons).toHaveLength(1);
+    expect(aggregate?.visible).toBe(true);
+    expect(designBadge?.visible).toBe(true);
+    if (aggregate && designBadge) {
+      expect(
+        Math.hypot(
+          designBadge.point.x - aggregate.point.x,
+          designBadge.point.y - aggregate.point.y,
+        ),
+      ).toBeGreaterThanOrEqual(
+        aggregate.radius * aggregate.scale + designBadge.radius * designBadge.scale + 2,
+      );
+    }
+  });
+
   it.each(views)(
     "%s在右栏关闭、打开、关闭回位时约束完整 label bbox 与 aggregate footprint",
     (_view, level) => {
@@ -1428,7 +2021,7 @@ describe("polygon-contained relief overlay layout", () => {
                 regionCode: target.region.code,
                 regionName: target.region.name,
                 regionLevel: level,
-                samplePointCount: 7,
+                samplePointCount: 1234,
                 productionCount: 4,
                 marketCount: 3,
                 validCoordinateCount: 7,
@@ -1464,6 +2057,16 @@ describe("polygon-contained relief overlay layout", () => {
         expect(label, `${name} label`).toBeDefined();
         expect(label?.visible, `${name} label visibility`).toBe(true);
         if (polygon && label?.visible) {
+          if (level !== "VILLAGE") {
+            expect(
+              label.footprint.width,
+              `${name} count gutter width`,
+            ).toBeGreaterThanOrEqual(72);
+            expect(
+              label.footprint.height,
+              `${name} count gutter height`,
+            ).toBeGreaterThanOrEqual(34);
+          }
           expect(
             reliefRectInsidePolygon(
               label.point,

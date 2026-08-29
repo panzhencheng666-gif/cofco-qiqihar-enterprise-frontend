@@ -4,6 +4,7 @@ import type { SampleNetworkComparison } from "../../domain/overviewSamplePoint";
 import {
   designReferenceIconPathData,
   sampleNetworkLayerIcons,
+  visibleSampleNetworkMapIcons,
 } from "./sampleNetworkLayers";
 
 const comparison: SampleNetworkComparison = {
@@ -129,7 +130,7 @@ describe("sampleNetworkLayerIcons", () => {
     ).toContainEqual(actualIcon);
   });
 
-  it("does not render draft annual members or monthly icons as formal current points", () => {
+  it("keeps approved business icons visible while the separate annual network is draft", () => {
     expect(
       sampleNetworkLayerIcons(
         "actual",
@@ -140,10 +141,35 @@ describe("sampleNetworkLayerIcons", () => {
           selectedRegionCode: "230202997",
         },
       ),
-    ).toEqual([]);
+    ).toContainEqual(actualIcon);
   });
 
-  it("filters approved monthly business icons through the published annual member list", () => {
+  it("keeps the fixed design baseline visible while the annual network is still a draft", () => {
+    expect(
+      sampleNetworkLayerIcons(
+        "design",
+        [actualIcon],
+        { ...comparison, networkStatus: "DRAFT" },
+        {
+          regionLevel: "TOWNSHIP",
+          selectedRegionCode: "230202997",
+        },
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          samplePointId: "design-coverage:230202997001",
+          layerType: "DESIGN_COVERAGE_BADGE",
+        }),
+        expect.objectContaining({
+          samplePointId: "design-coverage:230202997002",
+          layerType: "DESIGN_COVERAGE_BADGE",
+        }),
+      ]),
+    );
+  });
+
+  it("does not let product-scoped annual membership hide approved stable identities", () => {
     const nonMemberIcon = {
       ...actualIcon,
       samplePointId: "94000000-0000-0000-0000-000000000099",
@@ -161,24 +187,16 @@ describe("sampleNetworkLayerIcons", () => {
     );
 
     expect(result).toContainEqual(actualIcon);
-    expect(result).not.toContainEqual(nonMemberIcon);
+    expect(result).toContainEqual(nonMemberIcon);
   });
 
-  it("keeps a published annual member visible even before it has a monthly business icon", () => {
+  it("does not fabricate a business-role icon from annual membership alone", () => {
     const result = sampleNetworkLayerIcons("actual", [], comparison, {
       regionLevel: "TOWNSHIP",
       selectedRegionCode: "230202997",
     });
 
-    expect(result).toContainEqual(
-      expect.objectContaining({
-        samplePointId: "94000000-0000-0000-0000-000000000001",
-        name: "同一跨产品样本点",
-        layerType: "ANNUAL_ACTUAL",
-        longitude: 123.9,
-        latitude: 47.3,
-      }),
-    );
+    expect(result).toEqual([]);
   });
 
   it("does not turn an invalid governed coordinate into a precise annual icon", () => {
@@ -307,31 +325,17 @@ describe("sampleNetworkLayerIcons", () => {
     ).toHaveLength(1);
   });
 
-  it("uses a regional badge rather than a fabricated pin for an actual point without coordinates", () => {
+  it("keeps coordinate-less annual identities off the map instead of fabricating a badge", () => {
     const result = sampleNetworkLayerIcons("actual", [], comparison, {
       regionLevel: "TOWNSHIP",
       selectedRegionCode: "230202997",
       summaryAnchorRegionCode: "230202997",
     });
 
-    expect(result).toContainEqual(
-      expect.objectContaining({
-        samplePointId: "regional-actual:COUNTY:230202",
-        anchorRegionCode: "230202997",
-        representedRegionCode: "230202",
-        representedRegionLevel: "COUNTY",
-        layerType: "REGIONAL_ACTUAL_BADGE",
-        longitude: null,
-        latitude: null,
-        aggregateCount: 2,
-      }),
-    );
-    expect(
-      result.filter((icon) => icon.layerType === "REGIONAL_ACTUAL_BADGE"),
-    ).toHaveLength(1);
+    expect(result).toEqual([]);
   });
 
-  it("excludes candidate, paused, and removed actual points from regional layers", () => {
+  it("never promotes annual status rows into business-role map symbols", () => {
     const mixedStatusComparison: SampleNetworkComparison = {
       ...comparison,
       actualPoints: [
@@ -359,57 +363,86 @@ describe("sampleNetworkLayerIcons", () => {
       summaryAnchorRegionCode: "230202997",
     });
 
-    expect(result).toContainEqual(
-      expect.objectContaining({
-        samplePointId: "regional-actual:COUNTY:230202",
-        aggregateCount: 2,
-      }),
-    );
-    expect(
-      result.filter(({ samplePointId }) => samplePointId.startsWith("95000000-")),
-    ).toEqual([]);
+    expect(result).toEqual([]);
   });
 
-  it("keeps high-level descendants aggregated while retaining native-level actual points", () => {
+  it("keeps high-level actual points visible and aggregates the fixed design baseline", () => {
     expect(
       sampleNetworkLayerIcons("actual", [actualIcon], comparison, {
         regionLevel: "COUNTY",
         selectedRegionCode: "230202",
         actualKindCodes: ["FARMER"],
       }),
-    ).toEqual([]);
+    ).toContainEqual(actualIcon);
     expect(
       sampleNetworkLayerIcons("actual", [], comparison, {
         regionLevel: "COUNTY",
         selectedRegionCode: "230202",
         actualKindCodes: ["TRADER"],
       }),
-    ).toContainEqual(
-      expect.objectContaining({
-        aggregateCount: 1,
-        representedRegionLevel: "COUNTY",
-        samplePointId: "regional-actual:COUNTY:230202",
-      }),
-    );
+    ).toEqual([]);
     expect(
       sampleNetworkLayerIcons("design", [actualIcon], comparison, {
         regionLevel: "COUNTY",
         selectedRegionCode: "230202",
       }),
-    ).toEqual([]);
+    ).toContainEqual(
+      expect.objectContaining({
+        aggregateCount: 2,
+        anchorRegionCode: "230202997",
+        layerType: "DESIGN_COVERAGE_BADGE",
+        name: "契约测试乡设计样本",
+      }),
+    );
   });
 
-  it("applies a concrete kind filter to every annual actual source", () => {
+  it("uses regional summaries through county level and reveals only the list-selected exact sample", () => {
+    const anotherIcon = {
+      ...actualIcon,
+      samplePointId: "94000000-0000-0000-0000-000000000099",
+      name: "另一个正式样本",
+    };
+    const designBadge = {
+      ...actualIcon,
+      samplePointId: "design-coverage-summary:230202",
+      layerType: "DESIGN_COVERAGE_BADGE" as const,
+    };
+
+    expect(
+      visibleSampleNetworkMapIcons("PREFECTURE", undefined, [
+        actualIcon,
+        anotherIcon,
+        designBadge,
+      ]),
+    ).toEqual([designBadge]);
+    expect(
+      visibleSampleNetworkMapIcons("PREFECTURE", actualIcon.samplePointId, [
+        actualIcon,
+        anotherIcon,
+        designBadge,
+      ]),
+    ).toEqual([actualIcon, designBadge]);
+    expect(
+      visibleSampleNetworkMapIcons("COUNTY", undefined, [actualIcon, anotherIcon]),
+    ).toEqual([]);
+    expect(
+      visibleSampleNetworkMapIcons("COUNTY", actualIcon.samplePointId, [
+        actualIcon,
+        anotherIcon,
+      ]),
+    ).toEqual([actualIcon]);
+    expect(
+      visibleSampleNetworkMapIcons("TOWNSHIP", undefined, [actualIcon, anotherIcon]),
+    ).toEqual([actualIcon, anotherIcon]);
+  });
+
+  it("does not reconstruct a filtered business icon from annual object kinds", () => {
     const result = sampleNetworkLayerIcons("actual", [], comparison, {
       regionLevel: "TOWNSHIP",
       selectedRegionCode: "230202997",
       actualKindCodes: ["FARMER"],
     });
 
-    expect(result).toEqual([
-      expect.objectContaining({
-        samplePointId: "94000000-0000-0000-0000-000000000001",
-      }),
-    ]);
+    expect(result).toEqual([]);
   });
 });

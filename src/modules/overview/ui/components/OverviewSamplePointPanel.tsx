@@ -65,6 +65,10 @@ export function OverviewSamplePointPanel({
   const controlledNetwork = networkModel !== undefined;
   const catalog = networkModel?.catalog ?? localCatalog;
   const effectiveCatalogState = networkModel?.catalogState ?? catalogState;
+  const effectiveQuery = networkModel?.query ?? query;
+  const effectiveResult = networkModel?.filteredList ?? result;
+  const effectiveResultState = networkModel?.filteredState ?? resultState;
+  const effectivePublishedIcons = networkModel?.actualIcons ?? publishedIcons;
   const comparisonRegionCode = missingVillageParent
     ? undefined
     : region.level === "VILLAGE"
@@ -134,7 +138,7 @@ export function OverviewSamplePointPanel({
         if (!active) return;
         setLocalCatalog(undefined);
         setCatalogState("unavailable");
-        setCatalogIssue("样本点分类加载失败，请稍后重试。");
+        setCatalogIssue("样本角色加载失败，请稍后重试。");
       });
     return () => {
       active = false;
@@ -185,24 +189,19 @@ export function OverviewSamplePointPanel({
   ]);
 
   useEffect(() => {
-    if (!categoryCode) {
-      let active = true;
-      void Promise.resolve().then(() => {
-        if (!active) return;
-        setPublishedIcons([]);
-      });
+    let active = true;
+    if (controlledNetwork) {
       return () => {
         active = false;
       };
     }
-    let active = true;
     const filters = {
       productCode,
       regionCode: region.code,
       year,
-      categoryCode,
+      ...(categoryCode ? { categoryCode } : {}),
       ...(typeCode ? { typeCode } : {}),
-      ...(query.trim() ? { query: query.trim() } : {}),
+      ...(effectiveQuery.trim() ? { query: effectiveQuery.trim() } : {}),
     };
     void Promise.resolve().then(() => {
       if (!active) return;
@@ -212,28 +211,19 @@ export function OverviewSamplePointPanel({
       setResultIssue(undefined);
       setIconIssue(undefined);
     });
-    repository
-      .list(filters)
-      .then((next) => {
+    Promise.all([repository.list(filters), repository.icons(filters)])
+      .then(([next, icons]) => {
         if (!active) return;
         setResult(next);
+        setPublishedIcons(icons);
         setResultState("ready");
       })
       .catch(() => {
         if (!active) return;
         setResult(undefined);
+        setPublishedIcons([]);
         setResultState("unavailable");
         setResultIssue("样本点列表加载失败，请稍后重试。");
-      });
-    repository
-      .icons(filters)
-      .then((icons) => {
-        if (!active) return;
-        setPublishedIcons(icons);
-      })
-      .catch(() => {
-        if (!active) return;
-        setPublishedIcons([]);
         setIconIssue("样本点图标加载失败，请稍后重试。");
       });
     return () => {
@@ -241,8 +231,9 @@ export function OverviewSamplePointPanel({
     };
   }, [
     categoryCode,
+    controlledNetwork,
+    effectiveQuery,
     productCode,
-    query,
     refreshSequence,
     region.code,
     region.level,
@@ -269,7 +260,14 @@ export function OverviewSamplePointPanel({
     [categoryCode, selectedCategory, typeCode],
   );
   const visibleLayerIcons = useMemo(() => {
-    if (missingVillageParent && effectiveLayerMode !== "actual") return [];
+    if (missingVillageParent) {
+      if (effectiveLayerMode === "design") return [];
+      return sampleNetworkLayerIcons("actual", publishedIcons, undefined, {
+        ...(actualKindCodes ? { actualKindCodes } : {}),
+        regionLevel: region.level,
+        selectedRegionCode: region.code,
+      });
+    }
     const visibleComparison =
       comparisonRegionCode && region.level !== "PREFECTURE"
         ? effectiveComparison
@@ -299,14 +297,12 @@ export function OverviewSamplePointPanel({
     region.code,
     region.level,
   ]);
-  const displayedLayerIcons = networkModel?.icons ?? visibleLayerIcons;
+  useEffect(() => {
+    onIconsChange(controlledNetwork ? effectivePublishedIcons : visibleLayerIcons);
+  }, [controlledNetwork, effectivePublishedIcons, onIconsChange, visibleLayerIcons]);
 
   useEffect(() => {
-    onIconsChange(controlledNetwork ? publishedIcons : visibleLayerIcons);
-  }, [controlledNetwork, onIconsChange, publishedIcons, visibleLayerIcons]);
-
-  useEffect(() => {
-    if (!selectedSamplePointId || !categoryCode) {
+    if (!selectedSamplePointId) {
       return;
     }
     let active = true;
@@ -323,7 +319,7 @@ export function OverviewSamplePointPanel({
         productCode,
         regionCode: region.code,
         year,
-        categoryCode,
+        ...(categoryCode ? { categoryCode } : {}),
         ...(typeCode ? { typeCode } : {}),
       })
       .then((next) => {
@@ -353,9 +349,9 @@ export function OverviewSamplePointPanel({
   useEffect(() => {
     if (
       !selectedSamplePointId ||
-      resultState !== "ready" ||
-      !result ||
-      result.items.some((item) => item.samplePointId === selectedSamplePointId)
+      effectiveResultState !== "ready" ||
+      !effectiveResult ||
+      effectiveResult.items.some((item) => item.samplePointId === selectedSamplePointId)
     ) {
       return;
     }
@@ -371,7 +367,12 @@ export function OverviewSamplePointPanel({
     return () => {
       active = false;
     };
-  }, [onSelectedSamplePointChange, result, resultState, selectedSamplePointId]);
+  }, [
+    effectiveResult,
+    effectiveResultState,
+    onSelectedSamplePointChange,
+    selectedSamplePointId,
+  ]);
 
   function clearConcreteResults() {
     setResult(undefined);
@@ -387,16 +388,17 @@ export function OverviewSamplePointPanel({
     onIconsChange([]);
   }
 
-  function selectCategory(next: OverviewSamplePointCategoryCode) {
+  function selectCategory(next: OverviewSamplePointCategoryCode | undefined) {
     if (categoryCode === next) return;
     clearConcreteResults();
     if (networkModel) {
       networkModel.setCategoryCode(next);
+      networkModel.setQuery?.("");
     } else {
       setLocalCategoryCode(next);
       setLocalTypeCode(undefined);
+      setQuery("");
     }
-    setQuery("");
   }
 
   function selectType(next: string) {
@@ -411,7 +413,11 @@ export function OverviewSamplePointPanel({
 
   function changeQuery(next: string) {
     clearConcreteResults();
-    setQuery(next);
+    if (networkModel?.setQuery) {
+      networkModel.setQuery(next);
+    } else {
+      setQuery(next);
+    }
   }
 
   function selectItem(samplePointId: string) {
@@ -422,6 +428,14 @@ export function OverviewSamplePointPanel({
     onSelectedSamplePointChange(samplePointId);
   }
 
+  function returnToList() {
+    setDetail(undefined);
+    setDetailPeriod(undefined);
+    setDetailUnavailable(false);
+    setDetailIssue(undefined);
+    onSelectedSamplePointChange(undefined);
+  }
+
   const issue =
     detailIssue ??
     iconIssue ??
@@ -429,19 +443,11 @@ export function OverviewSamplePointPanel({
     catalogIssue ??
     networkModel?.issue ??
     comparisonIssue;
-  const duplicateCoordinateIconCount = displayedLayerIcons.filter(
-    (icon) => icon.dataQualityReason === "DUPLICATE_COORDINATE_UNVERIFIED",
-  ).length;
-  const preciseBusinessIconCount = displayedLayerIcons.filter(
-    (icon) => !icon.layerType || icon.layerType === "ANNUAL_ACTUAL",
-  ).length;
-  const regionalSummaryBadgeCount = displayedLayerIcons.filter(
-    (icon) => icon.layerType === "REGIONAL_ACTUAL_BADGE",
-  ).length;
-  const temporarilyHiddenCount =
-    !missingVillageParent && result
-      ? Math.max(0, result.items.length - publishedIcons.length)
+  const blockedLocationCount =
+    !missingVillageParent && effectiveResult
+      ? Math.max(0, effectiveResult.items.length - effectivePublishedIcons.length)
       : 0;
+  const visibleItems = effectiveResult?.items ?? [];
   const availableDetailPeriods = detail ? detailPeriods(detail) : [];
   const visibleAssociations = detail
     ? detail.associations.filter(
@@ -461,6 +467,9 @@ export function OverviewSamplePointPanel({
     : effectiveComparisonState === "unavailable"
       ? "年度样本网络不可用"
       : "正在同步年度样本网络";
+  const usesRegionalSummary =
+    region.level === "PREFECTURE" || region.level === "COUNTY";
+  const locationCountLabel = usesRegionalSummary ? "地图汇总" : "地图图标";
 
   return (
     <section aria-label="样本点业务信息" className="overview-sample-point-panel">
@@ -575,7 +584,7 @@ export function OverviewSamplePointPanel({
           <section className="overview-detail-section overview-sample-point-categories">
             <h3>
               <span aria-hidden="true">◆</span>
-              样本点分类
+              地区样本总览
               <i aria-hidden="true">
                 {catalog
                   ? `${catalog.totalCount} 个`
@@ -583,30 +592,70 @@ export function OverviewSamplePointPanel({
               </i>
             </h3>
             {catalog ? (
-              <nav aria-label="样本点分类">
-                {catalog.categories.map((category) => (
+              <>
+                <dl
+                  aria-label="地区正式样本定位账"
+                  className="overview-sample-point-location-ledger"
+                >
+                  <div>
+                    <dt>正式样本</dt>
+                    <dd>{catalog.totalCount}</dd>
+                    <small>业务目录稳定身份</small>
+                  </div>
+                  <div>
+                    <dt>{locationCountLabel}</dt>
+                    <dd>{catalog.validCoordinateCount}</dd>
+                    <small>
+                      {usesRegionalSummary
+                        ? `${region.level === "PREFECTURE" ? "市级按区县" : "区县按乡镇"}唯一分桶，列表选择后定位`
+                        : "正式坐标生成，可点击"}
+                    </small>
+                  </div>
+                </dl>
+                {catalog.dataQualityIssueCount ? (
+                  <p className="overview-sample-point-location-blocked" role="status">
+                    系统契约异常：{catalog.dataQualityIssueCount}{" "}
+                    条审核通过样本未生成地图图标；请回填报导入环节治理，系统不会推测坐标。
+                  </p>
+                ) : null}
+                <p className="overview-sample-point-filter-label">
+                  按样本角色筛选（同一样本可有多个角色，分项不相加）
+                </p>
+                <nav aria-label="样本角色">
                   <button
-                    aria-label={`${category.name} ${category.count}`}
-                    aria-pressed={categoryCode === category.code}
-                    disabled={category.count === 0}
-                    key={category.code}
-                    onClick={() => selectCategory(category.code)}
+                    aria-label={`全部样本 ${catalog.totalCount}`}
+                    aria-pressed={!categoryCode}
+                    onClick={() => selectCategory(undefined)}
                     type="button"
                   >
-                    <span>{category.name}</span>
-                    <strong>{category.count}</strong>
-                    <small>个样本点</small>
+                    <span>全部样本</span>
+                    <strong>{catalog.totalCount}</strong>
+                    <small>个稳定身份</small>
                   </button>
-                ))}
-              </nav>
+                  {catalog.categories.map((category) => (
+                    <button
+                      aria-label={`${category.name} ${category.count}`}
+                      aria-pressed={categoryCode === category.code}
+                      disabled={category.count === 0}
+                      key={category.code}
+                      onClick={() => selectCategory(category.code)}
+                      type="button"
+                    >
+                      <span>{category.name}</span>
+                      <strong>{category.count}</strong>
+                      <small>个样本点</small>
+                    </button>
+                  ))}
+                </nav>
+              </>
             ) : (
               <p className="overview-sample-point-state">
                 {effectiveCatalogState === "unavailable"
                   ? "样本点数据不可用"
-                  : "正在同步样本点分类"}
+                  : "正在同步样本角色"}
               </p>
             )}
-            <div aria-label="样本点细分类型">
+            <div aria-label="当前品种对象类型">
               {selectedCategory ? (
                 selectedCategory.types.map((type) => (
                   <button
@@ -620,175 +669,204 @@ export function OverviewSamplePointPanel({
                   </button>
                 ))
               ) : (
-                <p>{catalog ? "选择分类后查看细分类型" : "细分类型数据不可用"}</p>
+                <p>
+                  {catalog
+                    ? "选择样本角色后查看当前品种对象类型"
+                    : "当前品种对象类型不可用"}
+                </p>
               )}
             </div>
           </section>
 
-          <section className="overview-detail-section overview-sample-point-list-section">
-            <h3>
-              <span aria-hidden="true">◆</span>
-              样本点列表
-              <i aria-hidden="true">⌃</i>
-            </h3>
-            <label>
-              <span>搜索样本点</span>
-              <input
-                disabled={!catalog || !categoryCode}
-                onChange={(event) => changeQuery(event.target.value)}
-                placeholder="输入样本点名称、地区或联系方式"
-                type="search"
-                value={query}
-              />
-            </label>
+          <div
+            className={`overview-sample-point-workspace${selectedSamplePointId ? " has-selection" : ""}`}
+          >
+            <section className="overview-detail-section overview-sample-point-list-section">
+              <h3>
+                <span aria-hidden="true">◆</span>
+                样本点列表
+                <i aria-hidden="true">⌃</i>
+              </h3>
+              <label>
+                <span>搜索样本点</span>
+                <input
+                  disabled={!catalog}
+                  onChange={(event) => changeQuery(event.target.value)}
+                  placeholder="输入样本点名称、地区或联系方式"
+                  type="search"
+                  value={effectiveQuery}
+                />
+              </label>
 
-            {resultState === "ready" && result ? (
-              <p className="overview-sample-point-quality-summary" role="status">
-                <strong>
-                  精确业务图标 {preciseBusinessIconCount} 个
-                  {duplicateCoordinateIconCount
-                    ? `，其中 ${duplicateCoordinateIconCount} 个坐标重合待核验`
-                    : ""}
-                </strong>
-                <span>
-                  {!missingVillageParent &&
-                  effectiveComparisonState === "ready" &&
-                  effectiveComparison
-                    ? `当前筛选区域汇总标识 ${regionalSummaryBadgeCount} 个`
-                    : effectiveComparisonState === "unavailable"
-                      ? "年度区域汇总标识不可用"
-                      : "年度区域汇总标识加载中"}
-                </span>
-                {temporarilyHiddenCount ? (
-                  <span>
-                    {temporarilyHiddenCount}{" "}
-                    个因坐标缺失或无效暂不显示，请在坐标治理中修正。
-                  </span>
-                ) : null}
-              </p>
-            ) : null}
-
-            <div aria-label="样本点列表" className="overview-sample-point-list">
-              {!categoryCode ? (
-                <p>
-                  {catalog
-                    ? `请选择分类后查看 ${catalog.totalCount} 个样本点`
-                    : "请选择分类后查看样本点"}
-                </p>
-              ) : null}
-              {result?.items.map((item) => (
-                <button
-                  aria-pressed={selectedSamplePointId === item.samplePointId}
-                  key={item.samplePointId}
-                  onClick={() => selectItem(item.samplePointId)}
-                  type="button"
-                >
-                  <strong>{item.name}</strong>
-                  <span>
-                    {item.types.map((type) => type.name).join(" / ")} ·{" "}
-                    {item.regionName}
-                  </span>
-                  <small>
-                    {item.products.map((product) => product.name).join("、")} · 最近业务
-                    {formatChineseDate(item.latestBusinessDate)}
-                  </small>
-                  {item.dataQualityReason ? (
-                    <span className="overview-sample-point-list-quality">
-                      {listQualityLabel(item.dataQualityReason)}
+              {effectiveResultState === "ready" && effectiveResult ? (
+                <div className="overview-sample-point-quality-summary" role="status">
+                  <strong>
+                    当前条件：正式样本 {effectiveResult.items.length} ·{" "}
+                    {locationCountLabel} {effectivePublishedIcons.length}
+                  </strong>
+                  {blockedLocationCount ? (
+                    <span>
+                      系统契约异常：另有 {blockedLocationCount}{" "}
+                      条审核通过样本未生成地图图标
                     </span>
                   ) : null}
-                  <span className="overview-sample-point-list-summary">
-                    {Object.entries(item.summaryValues).map(([code, value]) => (
-                      <span key={code}>
-                        {value.label}：{value.value}
-                        {value.unitCode ? ` ${value.unitCode}` : ""}
-                      </span>
-                    ))}
-                  </span>
-                </button>
-              ))}
-              {result && !result.items.length ? <p>当前条件下暂无样本点。</p> : null}
-              {categoryCode && !result ? (
-                <p>
-                  {resultState === "unavailable"
-                    ? "样本点列表数据不可用"
-                    : "正在同步样本点列表"}
-                </p>
+                </div>
               ) : null}
-            </div>
-          </section>
 
-          <section className="overview-detail-section overview-sample-point-business">
-            <h3>
-              <span aria-hidden="true">◆</span>
-              样本点业务信息
-              <i aria-hidden="true">⌃</i>
-            </h3>
-            {detail ? (
-              <div aria-label="所选样本点详情" className="overview-sample-point-detail">
-                <header>
-                  <h4>{detail.name}</h4>
-                  <span>{detail.regionName}</span>
-                </header>
-                {detail.dataQualityReason ? (
-                  <p className="overview-sample-point-detail-quality">
-                    {detailQualityLabel(detail.dataQualityReason)}
+              <div aria-label="样本点列表" className="overview-sample-point-list">
+                {visibleItems.map((item) => (
+                  <button
+                    aria-pressed={selectedSamplePointId === item.samplePointId}
+                    key={item.samplePointId}
+                    onClick={() => selectItem(item.samplePointId)}
+                    type="button"
+                  >
+                    <strong>{item.name}</strong>
+                    <span>
+                      {item.types.length
+                        ? item.types.map((type) => type.name).join(" / ")
+                        : `${item.categories.map((role) => role.name).join(" / ")} · 当前品种暂无审核通过对象类型`}{" "}
+                      · {item.regionName}
+                    </span>
+                    <small>
+                      当前品种 ·{" "}
+                      {item.latestBusinessDate
+                        ? `最近业务 ${formatChineseDate(item.latestBusinessDate)}`
+                        : "暂无审核通过业务数据"}
+                    </small>
+                    {item.dataQualityReason ? (
+                      <span className="overview-sample-point-list-quality">
+                        {listQualityLabel(item.dataQualityReason)}
+                      </span>
+                    ) : null}
+                    <span className="overview-sample-point-list-summary">
+                      {Object.entries(item.summaryValues).map(([code, value]) => (
+                        <span key={code}>
+                          {value.label}：{value.value}
+                          {value.unitCode ? ` ${value.unitCode}` : ""}
+                        </span>
+                      ))}
+                    </span>
+                  </button>
+                ))}
+                {effectiveResult && !visibleItems.length ? (
+                  <p>当前条件下暂无样本点。</p>
+                ) : null}
+                {!effectiveResult ? (
+                  <p>
+                    {effectiveResultState === "unavailable"
+                      ? "样本点列表数据不可用"
+                      : "正在同步样本点列表"}
                   </p>
                 ) : null}
-                <div aria-label="核定月份" className="overview-sample-point-periods">
-                  <span>核定月份</span>
-                  {availableDetailPeriods.map((period) => (
-                    <button
-                      aria-label={formatChineseMonth(period)}
-                      aria-pressed={detailPeriod === period}
-                      key={period}
-                      onClick={() => setDetailPeriod(period)}
-                      type="button"
-                    >
-                      {formatChineseMonth(period)}
-                    </button>
-                  ))}
-                </div>
-                <p className="overview-sample-point-period-note">
-                  默认显示最新核定月份，可切换查看该样本点的历史核定记录。
-                </p>
-                {visibleAssociations.map((association, index) => (
-                  <article
-                    key={`${association.categoryCode}-${association.typeCode}-${association.productCode}-${association.sourceRole}-${association.occurrenceDate}-${index}`}
-                  >
-                    <h5>
-                      {association.categoryName} · {association.typeName}
-                    </h5>
-                    <p>
-                      {association.productName} · 业务日期
-                      {formatChineseDate(association.occurrenceDate)}
-                    </p>
-                    <dl>
-                      {Object.entries(association.businessValues).map(
-                        ([code, value]) => (
-                          <div key={code}>
-                            <dt>{value.label}</dt>
-                            <dd>
-                              {value.value}
-                              {value.unitCode ? ` ${value.unitCode}` : ""}
-                            </dd>
-                          </div>
-                        ),
-                      )}
-                    </dl>
-                  </article>
-                ))}
               </div>
-            ) : (
-              <p className="overview-sample-point-state">
-                {detailUnavailable
-                  ? "样本点业务信息不可用"
-                  : selectedSamplePointId
-                    ? "正在同步样本点业务信息"
-                    : "请选择样本点查看业务信息"}
-              </p>
-            )}
-          </section>
+            </section>
+
+            {selectedSamplePointId ? (
+              <section className="overview-detail-section overview-sample-point-business">
+                <h3 aria-label="样本点业务信息">
+                  <span aria-hidden="true">◆</span>
+                  样本点业务信息
+                  <button
+                    className="overview-sample-point-back-to-list"
+                    onClick={returnToList}
+                    type="button"
+                  >
+                    返回样本列表
+                  </button>
+                </h3>
+                {detail ? (
+                  <div
+                    aria-label="所选样本点详情"
+                    className="overview-sample-point-detail"
+                  >
+                    <header>
+                      <h4>{detail.name}</h4>
+                      <span>{detail.regionName}</span>
+                    </header>
+                    {detail.dataQualityReason ? (
+                      <p className="overview-sample-point-detail-quality">
+                        {detailQualityLabel(detail.dataQualityReason)}
+                      </p>
+                    ) : null}
+                    {detail.roles?.length ? (
+                      <p className="overview-sample-point-period-note">
+                        稳定样本角色：
+                        {detail.roles.map((role) => role.name).join(" / ")}
+                      </p>
+                    ) : null}
+                    {availableDetailPeriods.length ? (
+                      <>
+                        <div
+                          aria-label="核定月份"
+                          className="overview-sample-point-periods"
+                        >
+                          <span>核定月份</span>
+                          {availableDetailPeriods.map((period) => (
+                            <button
+                              aria-label={formatChineseMonth(period)}
+                              aria-pressed={detailPeriod === period}
+                              key={period}
+                              onClick={() => setDetailPeriod(period)}
+                              type="button"
+                            >
+                              {formatChineseMonth(period)}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="overview-sample-point-period-note">
+                          默认显示最新核定月份，可切换查看该样本点的历史核定记录。
+                        </p>
+                      </>
+                    ) : (
+                      <p className="overview-sample-point-period-note">
+                        该样本身份已正式入网；当前品种暂无审核通过业务记录。
+                      </p>
+                    )}
+                    {visibleAssociations.map((association, index) => (
+                      <article
+                        key={`${association.categoryCode}-${association.typeCode}-${association.productCode}-${association.sourceRole}-${association.occurrenceDate}-${index}`}
+                      >
+                        <h5>
+                          {association.categoryName} · {association.typeName}
+                        </h5>
+                        <p>
+                          {association.productName} · 业务日期
+                          {formatChineseDate(association.occurrenceDate)}
+                        </p>
+                        <p>
+                          审核来源历史：{sourceRoleLabel(association.sourceRole)} ·
+                          业务日期 {formatChineseDate(association.occurrenceDate)} · 第
+                          {association.sourceVersion}版
+                        </p>
+                        <dl>
+                          {Object.entries(association.businessValues).map(
+                            ([code, value]) => (
+                              <div key={code}>
+                                <dt>{value.label}</dt>
+                                <dd>
+                                  {value.value}
+                                  {value.unitCode ? ` ${value.unitCode}` : ""}
+                                </dd>
+                              </div>
+                            ),
+                          )}
+                        </dl>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="overview-sample-point-state">
+                    {detailUnavailable
+                      ? "样本点业务信息不可用"
+                      : selectedSamplePointId
+                        ? "正在同步样本点业务信息"
+                        : "请选择样本点查看业务信息"}
+                  </p>
+                )}
+              </section>
+            ) : null}
+          </div>
         </>
       )}
     </section>
@@ -799,6 +877,12 @@ function formatChineseDate(value: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) return value;
   return `${match[1]}年${Number(match[2])}月${Number(match[3])}日`;
+}
+
+function sourceRoleLabel(sourceRole: string) {
+  if (sourceRole === "ORIGIN") return "发运端核定记录";
+  if (sourceRole === "DESTINATION") return "到达端核定记录";
+  return "调研填报";
 }
 
 function loadStateLabel(state: LoadState) {
@@ -827,22 +911,28 @@ function formatChineseMonth(value: string) {
 
 function listQualityLabel(reason: string) {
   if (reason === "DUPLICATE_COORDINATE_UNVERIFIED") {
-    return "地图已显示 · 坐标重合待核验";
+    return "地图未生成 · 导入坐标契约异常（坐标重复）";
   }
-  return `地图暂未显示 · ${qualityReasonLabel(reason)}`;
+  return `地图未生成 · ${qualityReasonLabel(reason)}`;
 }
 
 function detailQualityLabel(reason: string) {
   if (reason === "DUPLICATE_COORDINATE_UNVERIFIED") {
-    return "坐标重合待核验，地图按原始坐标显示";
+    return "导入坐标契约异常（坐标重复），地图未生成";
   }
-  return `${qualityReasonLabel(reason)}，地图暂不显示`;
+  return `${qualityReasonLabel(reason)}，地图未生成`;
 }
 
 function qualityReasonLabel(reason: string) {
-  if (reason === "MISSING_COORDINATE") return "缺少坐标";
-  if (reason === "INVALID_COORDINATE") return "坐标无效";
-  if (reason === "OUT_OF_REGION") return "坐标超出所属地区";
-  if (reason === "SUBJECT_IDENTITY_MISSING") return "样本点身份待治理";
-  return "坐标质量待治理";
+  if (reason === "MISSING_COORDINATE" || reason === "LOCATION_MISSING") {
+    return "导入坐标缺失";
+  }
+  if (reason === "INVALID_COORDINATE" || reason === "COORDINATE_OUT_OF_RANGE") {
+    return "导入坐标超出有效范围";
+  }
+  if (reason === "OUT_OF_REGION") return "导入坐标与所属地区不匹配";
+  if (reason === "OBSERVED_COORDINATE_CONFLICT") return "导入坐标记录不一致";
+  if (reason === "REGION_MISSING") return "导入归属缺失";
+  if (reason === "SUBJECT_IDENTITY_MISSING") return "导入身份缺失";
+  return "导入坐标契约异常";
 }

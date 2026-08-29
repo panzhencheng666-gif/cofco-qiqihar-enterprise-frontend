@@ -1,5 +1,5 @@
 import type {
-  OverviewDashboard,
+  OverviewDashboardSummary,
   OverviewIndicator,
   OverviewMapScope,
   OverviewOptions,
@@ -34,5 +34,5 @@ export interface OverviewRepository {
     productCode: string;
     regionCode?: string;
     year: number;
-  }): Promise<OverviewDashboard>;
+  }): Promise<OverviewDashboardSummary>;
 }

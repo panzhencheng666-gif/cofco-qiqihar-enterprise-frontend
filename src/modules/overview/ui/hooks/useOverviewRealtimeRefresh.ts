@@ -129,8 +129,10 @@ function affectsYearAndRegion(
   year: number | undefined,
   selectedRegions: readonly string[],
 ) {
-  if (year === undefined || change.surveyYear !== year) return false;
+  if (year === undefined) return false;
+  if (change.surveyYear !== undefined && change.surveyYear !== year) return false;
   return (
+    change.regionCodes.length === 0 ||
     selectedRegions.length === 0 ||
     change.regionCodes.some((regionCode) => selectedRegions.includes(regionCode))
   );

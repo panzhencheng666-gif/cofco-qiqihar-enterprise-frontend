@@ -24,6 +24,19 @@ export interface SampleNetworkLayerContext {
   showExactDesignLocations?: boolean;
 }
 
+export function visibleSampleNetworkMapIcons(
+  regionLevel: RegionLevel | undefined,
+  selectedSamplePointId: string | undefined,
+  icons: readonly OverviewSamplePointIcon[],
+): readonly OverviewSamplePointIcon[] {
+  if (regionLevel === "TOWNSHIP" || regionLevel === "VILLAGE") return icons;
+  return icons.filter(
+    (icon) =>
+      (icon.layerType ?? "ANNUAL_ACTUAL") !== "ANNUAL_ACTUAL" ||
+      icon.samplePointId === selectedSamplePointId,
+  );
+}
+
 export function sampleNetworkLayerIcons(
   mode: SampleNetworkLayerMode,
   actualIcons: readonly OverviewSamplePointIcon[],
@@ -33,67 +46,24 @@ export function sampleNetworkLayerIcons(
     selectedRegionCode: "",
   },
 ): readonly OverviewSamplePointIcon[] {
-  const formalComparison =
+  const formalAnnualComparison =
     comparison && ["PUBLISHED", "RETIRED"].includes(comparison.networkStatus)
       ? comparison
       : undefined;
-  const relationIndexes = formalComparison
-    ? indexRelationTypes(formalComparison)
+  const relationIndexes = formalAnnualComparison
+    ? indexRelationTypes(formalAnnualComparison)
     : undefined;
-  const actualKindCodes = context.actualKindCodes
-    ? new Set(context.actualKindCodes)
-    : undefined;
-  const activeActualPoints =
-    formalComparison?.actualPoints.filter(
-      ({ membershipStatusCode, samplePointKindCode }) =>
-        membershipStatusCode === "ACTIVE" &&
-        (!actualKindCodes || actualKindCodes.has(samplePointKindCode)),
-    ) ?? [];
-  const activeIds = new Set(
-    activeActualPoints.map(({ samplePointId }) => samplePointId),
-  );
-  const approvedBusinessIcons = actualIcons.filter(
-    ({ samplePointId, types }) =>
-      activeIds.has(samplePointId) &&
-      (!actualKindCodes || types.some(({ code }) => actualKindCodes.has(code))),
-  );
-  const approvedBusinessIconIds = new Set(
-    approvedBusinessIcons.map(({ samplePointId }) => samplePointId),
-  );
-  const annualPrecise = activeActualPoints
-    .filter(
-      (point) =>
-        !approvedBusinessIconIds.has(point.samplePointId) &&
-        point.locationState === "VALID" &&
-        Number.isFinite(point.actualLongitude) &&
-        Number.isFinite(point.actualLatitude),
-    )
-    .map((point) => annualPreciseActual(point, relationIndexes?.byActual));
-  const regionalActual = regionalActualBadges(
-    activeActualPoints,
-    context,
-    relationIndexes?.byActual,
-  );
-  const actual = [...approvedBusinessIcons, ...annualPrecise, ...regionalActual];
-  const aggregateOnlyLevel =
-    context.regionLevel === "PREFECTURE" || context.regionLevel === "COUNTY";
-  if (aggregateOnlyLevel) {
-    if (mode === "design") return [];
-    const nativeActualIds = new Set(
-      activeActualPoints
-        .filter(({ locatedRegionLevel }) => locatedRegionLevel === context.regionLevel)
-        .map(({ samplePointId }) => samplePointId),
-    );
-    return actual.filter(({ layerType, representedRegionLevel, samplePointId }) =>
-      layerType === "REGIONAL_ACTUAL_BADGE"
-        ? representedRegionLevel === context.regionLevel
-        : nativeActualIds.has(samplePointId),
-    );
-  }
+  // Approved overview icons and annual-network membership are orthogonal facts.
+  // The annual network may be draft or product-scoped, while sample identity and
+  // its governed business roles remain stable across products.  Never let that
+  // separate publication state hide an already approved, precisely located icon.
+  const actual = actualIcons;
   if (mode === "actual") return actual;
 
   const coverage = comparison
-    ? designCoverageBadges(comparison, context, relationIndexes?.byVillage)
+    ? context.regionLevel === "PREFECTURE" || context.regionLevel === "COUNTY"
+      ? regionalDesignCoverageBadges(comparison, context)
+      : designCoverageBadges(comparison, context, relationIndexes?.byVillage)
     : [];
   const exact =
     comparison && context.showExactDesignLocations
@@ -103,32 +73,44 @@ export function sampleNetworkLayerIcons(
   return mode === "design" ? design : [...actual, ...design];
 }
 
-function annualPreciseActual(
-  point: SampleNetworkComparison["actualPoints"][number],
-  relationTypesByActual: ReadonlyMap<
+function regionalDesignCoverageBadges(
+  comparison: SampleNetworkComparison,
+  context: SampleNetworkLayerContext,
+): readonly OverviewSamplePointIcon[] {
+  const groups = new Map<
     string,
-    readonly SampleNetworkRelationType[]
-  > = new Map(),
-): OverviewSamplePointIcon {
-  return {
-    samplePointId: point.samplePointId,
-    name: point.samplePointName,
-    iconKey: "regional-actual",
-    layerType: "ANNUAL_ACTUAL",
-    representedRegionCode: point.locatedRegionCode,
-    representedRegionName: point.locatedRegionName,
-    relationTypes: relationTypesByActual.get(point.samplePointId) ?? [],
+    { count: number; regionCode: string; regionName: string }
+  >();
+  comparison.designPoints.forEach((point) => {
+    const regionCode =
+      context.regionLevel === "PREFECTURE"
+        ? point.countyRegionCode
+        : point.townshipRegionCode;
+    const regionName =
+      context.regionLevel === "PREFECTURE" ? point.countyName : point.townshipName;
+    const current = groups.get(regionCode) ?? { count: 0, regionCode, regionName };
+    current.count += 1;
+    groups.set(regionCode, current);
+  });
+  return [...groups.values()].map(({ count, regionCode, regionName }) => ({
+    samplePointId: `design-coverage-summary:${regionCode}`,
+    name: `${regionName}设计样本`,
+    iconKey: "design-reference",
+    layerType: "DESIGN_COVERAGE_BADGE",
+    anchorRegionCode: regionCode,
+    aggregateCount: count,
+    relationTypes: [],
     types: [
       {
-        code: point.samplePointKindCode,
-        name: "年度在网样本点",
-        iconKey: "regional-actual",
+        code: "DESIGN_COVERAGE",
+        name: `${count} 个行政村设计样本`,
+        iconKey: "design-reference",
       },
     ],
-    longitude: point.actualLongitude,
-    latitude: point.actualLatitude,
+    longitude: null,
+    latitude: null,
     dataQualityReason: null,
-  };
+  }));
 }
 
 function designCoverageBadges(
@@ -201,75 +183,6 @@ function exactDesignLocation(point: SampleNetworkDesignPoint): OverviewSamplePoi
     latitude: point.designLatitude,
     dataQualityReason: null,
   };
-}
-
-function regionalActualBadges(
-  actualPoints: SampleNetworkComparison["actualPoints"],
-  context: SampleNetworkLayerContext,
-  relationTypesByActual: ReadonlyMap<
-    string,
-    readonly SampleNetworkRelationType[]
-  > = new Map(),
-): readonly OverviewSamplePointIcon[] {
-  const groups = new Map<
-    string,
-    {
-      count: number;
-      kindCodes: Set<string>;
-      level: "PREFECTURE" | "COUNTY" | "TOWNSHIP";
-      regionCode: string;
-      regionName: string;
-      relationTypes: Set<SampleNetworkRelationType>;
-    }
-  >();
-
-  actualPoints.forEach((point) => {
-    if (
-      point.membershipStatusCode !== "ACTIVE" ||
-      point.locatedRegionLevel === "VILLAGE" ||
-      (point.actualLongitude !== null && point.actualLatitude !== null)
-    ) {
-      return;
-    }
-    const key = `${point.locatedRegionLevel}:${point.locatedRegionCode}`;
-    const existing = groups.get(key) ?? {
-      count: 0,
-      kindCodes: new Set<string>(),
-      level: point.locatedRegionLevel,
-      regionCode: point.locatedRegionCode,
-      regionName: point.locatedRegionName,
-      relationTypes: new Set<SampleNetworkRelationType>(),
-    };
-    existing.count += 1;
-    existing.kindCodes.add(point.samplePointKindCode);
-    (relationTypesByActual.get(point.samplePointId) ?? []).forEach((relationType) =>
-      existing.relationTypes.add(relationType),
-    );
-    groups.set(key, existing);
-  });
-
-  return [...groups.values()].map((group) => ({
-    samplePointId: `regional-actual:${group.level}:${group.regionCode}`,
-    name: `${group.regionName}区域级现有样本（${group.count}个）`,
-    iconKey: "regional-actual",
-    layerType: "REGIONAL_ACTUAL_BADGE" as const,
-    // A parent-level actual point has no village coordinate. Anchor its summary
-    // to the current township backdrop, never to an arbitrary child polygon.
-    anchorRegionCode: context.summaryAnchorRegionCode ?? group.regionCode,
-    representedRegionCode: group.regionCode,
-    representedRegionName: group.regionName,
-    representedRegionLevel: group.level,
-    aggregateCount: group.count,
-    relationTypes: [...group.relationTypes],
-    types: [...group.kindCodes].map((code) => ({
-      code,
-      name: "区域级现有样本",
-      iconKey: "regional-actual",
-    })),
-    longitude: null,
-    latitude: null,
-    dataQualityReason: "MISSING_COORDINATE",
-  }));
 }
 
 function indexRelationTypes(comparison: SampleNetworkComparison): {

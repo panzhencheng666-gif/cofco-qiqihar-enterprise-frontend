@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Logistics sample</title>
+  <defs>
+    <linearGradient id="bg" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f2b84b"/>
+      <stop offset="1" stop-color="#9b531e"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="32" r="29" fill="url(#bg)" stroke="#fff1c2" stroke-width="2"/>
+  <path fill="#fff7d7" d="M11 21h28v24H11V21Zm28 8h8l7 9v7H39V29Z"/>
+  <path fill="#b36224" d="M43 32h3l4 6h-7v-6Z"/>
+  <circle cx="22" cy="47" r="6" fill="#59361f" stroke="#fff1c2" stroke-width="3"/>
+  <circle cx="46" cy="47" r="6" fill="#59361f" stroke="#fff1c2" stroke-width="3"/>
+  <path fill="none" stroke="#ffe49c" stroke-linecap="round" stroke-width="2" d="M12 17h21M8 12h17"/>
+</svg>

@@ -51,7 +51,7 @@ export interface OverviewIndicator {
   name: string;
   unitCode: string;
   value: string | null;
-  sourceDomain: "PRODUCTION" | "MARKET" | "LOGISTICS" | "SUPPLY";
+  sourceDomain: "PRODUCTION" | "MARKET" | "LOGISTICS";
   sourceCount: number;
   sourcePath: string;
   formula: string;
@@ -78,27 +78,10 @@ export interface OverviewDashboardMetric {
     | "UNRELIABLE_SOURCE_CONTRACT"
     | "MUTUAL_EXCLUSIVITY_VIOLATION";
   calculationVersion: string;
-  auditSources: readonly OverviewRegionSurplusAuditSource[];
   formula: string;
   sourcePath: string;
   sourceRelation: string;
   coverageScope: string;
-}
-
-export interface OverviewRegionSurplusAuditSource {
-  sourceDomain: "PRODUCTION" | "MARKET";
-  sourceRecordId: string;
-  sourceVersion: number;
-  subjectKey: string | null;
-  inventoryHolderKey?: string;
-  cargoOwnerKey: string | null;
-  ownershipType: "PRODUCTION_SURPLUS" | "OWNED" | "CUSTODIAL" | null;
-  regionCode: string | null;
-  dataCutoff: string | null;
-  valueTonnes: number;
-  approvedAt: string;
-  adopted: boolean;
-  adoptionReason: string;
 }
 
 export interface OverviewPriceTrendPoint {
@@ -161,7 +144,7 @@ export interface OverviewBusinessTableRow {
 }
 
 export interface OverviewBusinessTable {
-  code: "PRODUCTION" | "MARKET" | "LOGISTICS" | "SUPPLY";
+  code: "PRODUCTION" | "MARKET" | "LOGISTICS";
   title: string;
   coverageStatus: "AVAILABLE" | "NO_APPROVED_SOURCES";
   columns: readonly OverviewBusinessTableColumn[];
@@ -170,6 +153,7 @@ export interface OverviewBusinessTable {
 
 export interface OverviewDashboard {
   scope: {
+    prefectureCount: number;
     countyCount: number;
     townshipCount: number;
     villageCount: number;
@@ -186,4 +170,14 @@ export interface OverviewDashboard {
   cultivatedAreaYoY: readonly OverviewYoYComparison[];
   outputYoY: readonly OverviewYoYComparison[];
   businessTables: readonly OverviewBusinessTable[];
+}
+
+export interface OverviewDashboardSummary {
+  scope: {
+    prefectureCount: number;
+    countyCount: number;
+    townshipCount: number;
+    villageCount: number;
+  };
+  metrics: readonly OverviewDashboardMetric[];
 }

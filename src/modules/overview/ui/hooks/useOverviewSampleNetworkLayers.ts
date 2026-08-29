@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
 import type {
@@ -6,6 +6,7 @@ import type {
   OverviewSamplePointIcon,
   OverviewSamplePointList,
   SampleNetworkComparison,
+  SampleNetworkDesignComparison,
   SampleNetworkLayerMode,
 } from "../../domain/overviewSamplePoint";
 import { sampleNetworkLayerIcons } from "../presentation/sampleNetworkLayers";
@@ -27,12 +28,17 @@ export interface OverviewSampleNetworkLayerModel {
   catalogState: SampleNetworkLoadState;
   categoryCode: OverviewSamplePointCategoryCode | undefined;
   comparison: SampleNetworkComparison | undefined;
+  actualIcons?: readonly OverviewSamplePointIcon[];
+  filteredList?: OverviewSamplePointList;
+  filteredState?: SampleNetworkLoadState;
   icons: readonly OverviewSamplePointIcon[];
   issue: string | undefined;
   mode: SampleNetworkLayerMode;
+  query?: string;
   region: OverviewSampleNetworkRegion | undefined;
   setCategoryCode: (categoryCode: OverviewSamplePointCategoryCode | undefined) => void;
   setMode: (mode: SampleNetworkLayerMode) => void;
+  setQuery?: (query: string) => void;
   setShowExactDesignLocations: (show: boolean) => void;
   showExactDesignLocations: boolean;
   state: SampleNetworkLoadState;
@@ -53,8 +59,11 @@ export function useOverviewSampleNetworkLayers({
   repository: OverviewSamplePointRepository | undefined;
   year: number | undefined;
 }): OverviewSampleNetworkLayerModel {
-  const applicable = year !== undefined && year >= 2026;
-  const filterScopeKey = `${productCode}:${year ?? ""}`;
+  const applicable = year !== undefined;
+  const regionCode = region?.code;
+  const regionLevel = region?.level;
+  const regionParentCode = region?.parentCode;
+  const filterScopeKey = `${productCode}:${year ?? ""}:${regionCode ?? ""}`;
   const [mode, setMode] = useState<SampleNetworkLayerMode>("comparison");
   const [filterStateScopeKey, setFilterStateScopeKey] = useState(filterScopeKey);
   const [storedCategoryCode, setCategoryCodeState] =
@@ -66,24 +75,35 @@ export function useOverviewSampleNetworkLayers({
   const [actualIcons, setActualIcons] = useState<readonly OverviewSamplePointIcon[]>(
     [],
   );
+  const [filteredList, setFilteredList] = useState<OverviewSamplePointList>();
+  const [filteredState, setFilteredState] = useState<SampleNetworkLoadState>("idle");
+  const [storedQuery, setQueryState] = useState("");
   const [showExactDesignLocations, setShowExactDesignLocations] = useState(false);
-  const [comparison, setComparison] = useState<SampleNetworkComparison>();
+  const [comparisonSource, setComparisonSource] = useState<
+    SampleNetworkComparison | SampleNetworkDesignComparison
+  >();
   const [state, setState] = useState<SampleNetworkLoadState>("idle");
   const [issue, setIssue] = useState<string>();
   const categoryCode =
     filterStateScopeKey === filterScopeKey ? storedCategoryCode : undefined;
   const typeCode = filterStateScopeKey === filterScopeKey ? storedTypeCode : undefined;
+  const query = filterStateScopeKey === filterScopeKey ? storedQuery : "";
   const comparisonRegionCode =
-    region?.level === "VILLAGE" ? region.parentCode : region?.code;
-  const canLoad = Boolean(
-    applicable && repository && productCode && comparisonRegionCode,
-  );
+    regionLevel === "VILLAGE" ? regionParentCode : regionCode;
+  const comparisonScopeKey = `${productCode}:${year ?? ""}:${comparisonRegionCode ?? ""}`;
+  const filteredScopeKey = `${filterScopeKey}:${categoryCode ?? ""}:${typeCode ?? ""}:${query.trim()}`;
+  const comparisonSnapshotScopeRef = useRef("");
+  const catalogSnapshotScopeRef = useRef("");
+  const filteredSnapshotScopeRef = useRef("");
+  const canLoadComparison = Boolean(applicable && repository && productCode);
+  const canLoadCatalog = Boolean(applicable && repository && productCode && regionCode);
 
   const setCategoryCode = useCallback(
     (next: OverviewSamplePointCategoryCode | undefined) => {
       setFilterStateScopeKey(filterScopeKey);
       setCategoryCodeState(next);
       setTypeCodeState(undefined);
+      setQueryState("");
     },
     [filterScopeKey],
   );
@@ -91,6 +111,13 @@ export function useOverviewSampleNetworkLayers({
     (next: string | undefined) => {
       setFilterStateScopeKey(filterScopeKey);
       setTypeCodeState(next);
+    },
+    [filterScopeKey],
+  );
+  const setQuery = useCallback(
+    (next: string) => {
+      setFilterStateScopeKey(filterScopeKey);
+      setQueryState(next);
     },
     [filterScopeKey],
   );
@@ -102,6 +129,7 @@ export function useOverviewSampleNetworkLayers({
       setFilterStateScopeKey(filterScopeKey);
       setCategoryCodeState(undefined);
       setTypeCodeState(undefined);
+      setQueryState("");
     });
     return () => {
       active = false;
@@ -110,66 +138,57 @@ export function useOverviewSampleNetworkLayers({
 
   useEffect(() => {
     let active = true;
+    const sameScope = comparisonSnapshotScopeRef.current === comparisonScopeKey;
     void Promise.resolve().then(() => {
       if (!active) return;
-      setComparison(undefined);
-      setState(canLoad ? "loading" : "idle");
+      if (!sameScope) {
+        setComparisonSource(undefined);
+      }
+      setState(canLoadComparison ? "loading" : "idle");
       setIssue(undefined);
     });
-    if (!canLoad || !repository || year === undefined || !comparisonRegionCode) {
+    if (!canLoadComparison || !repository || year === undefined) {
       return () => {
         active = false;
       };
     }
-    repository
-      .comparison({ productCode, regionCode: comparisonRegionCode, year })
+    const comparisonRequest = repository.designComparison
+      ? repository.designComparison({
+          year,
+          ...(comparisonRegionCode ? { regionCode: comparisonRegionCode } : {}),
+        })
+      : repository.comparison({
+          productCode,
+          year,
+          ...(comparisonRegionCode ? { regionCode: comparisonRegionCode } : {}),
+        });
+    comparisonRequest
       .then((next) => {
         if (!active) return;
-        setComparison(next);
+        comparisonSnapshotScopeRef.current = comparisonScopeKey;
+        setComparisonSource(next);
         setState("ready");
       })
       .catch(() => {
         if (!active) return;
-        setComparison(undefined);
+        if (!sameScope) {
+          setComparisonSource(undefined);
+        }
         setState("unavailable");
         setIssue("设计样本点与年度样本网络加载失败，请稍后重试。");
       });
     return () => {
       active = false;
     };
-  }, [canLoad, comparisonRegionCode, productCode, refreshSequence, repository, year]);
-
-  useEffect(() => {
-    let active = true;
-    void Promise.resolve().then(() => {
-      if (!active) return;
-      setCatalog(undefined);
-      setCatalogState(canLoad ? "loading" : "idle");
-      setCatalogIssue(undefined);
-      setActualIcons([]);
-    });
-    if (!canLoad || !repository || year === undefined || !region) {
-      return () => {
-        active = false;
-      };
-    }
-    repository
-      .list({ productCode, regionCode: region.code, year })
-      .then((next) => {
-        if (!active) return;
-        setCatalog(next);
-        setCatalogState("ready");
-      })
-      .catch(() => {
-        if (!active) return;
-        setCatalog(undefined);
-        setCatalogState("unavailable");
-        setCatalogIssue("样本点分类加载失败，请稍后重试。");
-      });
-    return () => {
-      active = false;
-    };
-  }, [canLoad, productCode, refreshSequence, region, repository, year]);
+  }, [
+    canLoadComparison,
+    comparisonScopeKey,
+    comparisonRegionCode,
+    productCode,
+    refreshSequence,
+    repository,
+    year,
+  ]);
 
   const selectedCategory = catalog?.categories.find(
     (category) => category.code === categoryCode,
@@ -186,53 +205,112 @@ export function useOverviewSampleNetworkLayers({
 
   useEffect(() => {
     let active = true;
+    const sameScope = filteredSnapshotScopeRef.current === filteredScopeKey;
+    const sameCatalogScope = catalogSnapshotScopeRef.current === filterScopeKey;
+    const unfiltered = !categoryCode && !typeCode && !query.trim();
+    const filters = {
+      productCode,
+      regionCode: regionCode ?? "",
+      year: year ?? 0,
+      ...(categoryCode ? { categoryCode } : {}),
+      ...(typeCode ? { typeCode } : {}),
+      ...(query.trim() ? { query: query.trim() } : {}),
+    };
     void Promise.resolve().then(() => {
       if (!active) return;
-      setActualIcons([]);
+      if (!sameScope) {
+        setActualIcons([]);
+        setFilteredList(undefined);
+      }
+      if (unfiltered) {
+        if (!sameCatalogScope) setCatalog(undefined);
+        setCatalogState(canLoadCatalog ? "loading" : "idle");
+        setCatalogIssue(undefined);
+      }
+      setFilteredState(canLoadCatalog ? "loading" : "idle");
     });
-    if (!canLoad || !repository || year === undefined || !region || !categoryCode) {
+    if (!canLoadCatalog || !repository || year === undefined || !regionCode) {
       return () => {
         active = false;
       };
     }
-    repository
-      .icons({
-        categoryCode,
-        productCode,
-        regionCode: region.code,
-        year,
-        ...(typeCode ? { typeCode } : {}),
-      })
-      .then((next) => {
+    const snapshotRequest = repository.snapshot
+      ? repository.snapshot(filters)
+      : Promise.all([repository.list(filters), repository.icons(filters)]).then(
+          ([list, icons]) => ({ icons, list }),
+        );
+    snapshotRequest
+      .then(({ icons: nextIcons, list: nextList }) => {
         if (!active) return;
-        setActualIcons(next);
+        filteredSnapshotScopeRef.current = filteredScopeKey;
+        setFilteredList(nextList);
+        setActualIcons(nextIcons);
+        setFilteredState("ready");
+        if (unfiltered) {
+          catalogSnapshotScopeRef.current = filterScopeKey;
+          setCatalog(nextList);
+          setCatalogState("ready");
+          setCatalogIssue(undefined);
+        }
       })
       .catch(() => {
         if (!active) return;
-        setActualIcons([]);
+        if (!sameScope) {
+          setFilteredList(undefined);
+          setActualIcons([]);
+        }
+        setFilteredState("unavailable");
+        if (unfiltered) {
+          if (!sameCatalogScope) setCatalog(undefined);
+          setCatalogState("unavailable");
+          setCatalogIssue("样本点分类加载失败，请稍后重试。");
+        }
       });
     return () => {
       active = false;
     };
   }, [
-    canLoad,
+    canLoadCatalog,
     categoryCode,
+    filterScopeKey,
+    filteredScopeKey,
     productCode,
+    query,
     refreshSequence,
-    region,
+    regionCode,
     repository,
     typeCode,
     year,
   ]);
 
+  const comparison = useMemo(
+    () =>
+      comparisonSource
+        ? synchronizeDesignComparison(
+            comparisonSource,
+            catalog && catalog.items.length === catalog.totalCount
+              ? catalog.items.map(({ samplePointId }) => samplePointId)
+              : actualIcons.map(({ samplePointId }) => samplePointId),
+          )
+        : undefined,
+    [actualIcons, catalog, comparisonSource],
+  );
+
   const icons = useMemo(() => {
-    if (!region) return [];
-    const missingVillageParent = region.level === "VILLAGE" && !region.parentCode;
-    if (missingVillageParent && mode !== "actual") return [];
+    if (!regionCode || !regionLevel) return [];
+    const missingVillageParent = regionLevel === "VILLAGE" && !regionParentCode;
+    if (missingVillageParent) {
+      if (mode === "design") return [];
+      return sampleNetworkLayerIcons("actual", actualIcons, undefined, {
+        ...(actualKindCodes ? { actualKindCodes } : {}),
+        regionLevel,
+        selectedRegionCode: regionCode,
+      });
+    }
     return sampleNetworkLayerIcons(mode, actualIcons, comparison, {
       ...(actualKindCodes ? { actualKindCodes } : {}),
-      regionLevel: region.level,
-      selectedRegionCode: region.code,
+      regionLevel,
+      selectedRegionCode: regionCode,
       ...(comparisonRegionCode
         ? { summaryAnchorRegionCode: comparisonRegionCode }
         : {}),
@@ -244,26 +322,111 @@ export function useOverviewSampleNetworkLayers({
     comparison,
     comparisonRegionCode,
     mode,
-    region,
+    regionCode,
+    regionLevel,
+    regionParentCode,
     showExactDesignLocations,
   ]);
 
   return {
     applicable,
+    actualIcons,
     catalog,
     catalogState,
     categoryCode,
     comparison,
+    ...(filteredList ? { filteredList } : {}),
+    filteredState,
     icons,
     issue: catalogIssue ?? issue,
     mode,
+    query,
     region,
     setCategoryCode,
     setMode,
+    setQuery,
     setShowExactDesignLocations,
     showExactDesignLocations,
     state,
     setTypeCode,
     typeCode,
+  };
+}
+
+function synchronizeDesignComparison(
+  source: SampleNetworkComparison | SampleNetworkDesignComparison,
+  samplePointIds: readonly string[],
+): SampleNetworkComparison {
+  const activeIds = new Set(samplePointIds);
+  const exact = new Set<string>();
+  const represented = new Set<string>();
+  const regional = new Set<string>();
+  source.relations
+    .filter(
+      (relation) =>
+        activeIds.has(relation.samplePointId) &&
+        relation.reviewStatus === "APPROVED" &&
+        relation.relationType === "EXACT_VILLAGE",
+    )
+    .forEach(({ designVillageRegionCode }) => exact.add(designVillageRegionCode));
+  source.relations
+    .filter(
+      (relation) =>
+        activeIds.has(relation.samplePointId) &&
+        relation.reviewStatus === "APPROVED" &&
+        relation.relationType === "EXPLICIT_REPRESENTATION" &&
+        !exact.has(relation.designVillageRegionCode),
+    )
+    .forEach(({ designVillageRegionCode }) => represented.add(designVillageRegionCode));
+  source.relations
+    .filter(
+      (relation) =>
+        activeIds.has(relation.samplePointId) &&
+        relation.relationType === "REGIONAL_ASSOCIATION" &&
+        !exact.has(relation.designVillageRegionCode) &&
+        !represented.has(relation.designVillageRegionCode),
+    )
+    .forEach(({ designVillageRegionCode }) => regional.add(designVillageRegionCode));
+  const multipleActualPerDesignPointCount = [
+    ...source.relations
+      .filter(
+        (relation) =>
+          activeIds.has(relation.samplePointId) &&
+          relation.reviewStatus === "APPROVED" &&
+          (relation.relationType === "EXACT_VILLAGE" ||
+            relation.relationType === "EXPLICIT_REPRESENTATION"),
+      )
+      .reduce((byVillage, relation) => {
+        const ids =
+          byVillage.get(relation.designVillageRegionCode) ?? new Set<string>();
+        ids.add(relation.samplePointId);
+        byVillage.set(relation.designVillageRegionCode, ids);
+        return byVillage;
+      }, new Map<string, Set<string>>())
+      .values(),
+  ].filter((ids) => ids.size > 1).length;
+  const full = "actualPoints" in source ? source : undefined;
+  const associated = exact.size + represented.size + regional.size;
+  return {
+    ...source,
+    activeSamplePointCount: activeIds.size,
+    approvedSubmissionSamplePointCount: activeIds.size,
+    multipleActualPerDesignPointCount,
+    anomalyCount:
+      source.designPoints.filter(
+        ({ coordinateMatchConfidence }) => coordinateMatchConfidence === "LOW",
+      ).length +
+      source.relations.filter(({ reviewStatus }) => reviewStatus === "RETURNED").length,
+    exactCoveredDesignPointCount: exact.size,
+    representedDesignPointCount: represented.size,
+    regionalAssociationDesignPointCount: regional.size,
+    unrelatedDesignPointCount: Math.max(0, source.designPointCount - associated),
+    actualLevelCounts: full?.actualLevelCounts ?? {
+      prefecture: 0,
+      county: 0,
+      township: 0,
+      village: 0,
+    },
+    actualPoints: full?.actualPoints ?? [],
   };
 }
