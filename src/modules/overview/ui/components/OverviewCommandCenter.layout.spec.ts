@@ -23,9 +23,7 @@ describe("Overview command center navigation layout", () => {
     const css = readFileSync(resolve("src/app/styles/global.css"), "utf8");
     const commandRule = css.match(/\.overview-command-center\s*\{([^}]*)\}/s)?.[1];
     const kpiRule = css.match(/\.overview-command-kpis\s*\{([^}]*)\}/s)?.[1];
-    const navigationRule = css.match(
-      /\.overview-command-center > \.overview-cockpit-navigation\s*\{([^}]*)\}/s,
-    )?.[1];
+    const navigationRule = css.match(/\.overview-command-tools\s*\{([^}]*)\}/s)?.[1];
     const metricValueRule = css.match(
       /\.overview-command-kpis strong\s*\{([^}]*)\}/s,
     )?.[1];
@@ -35,6 +33,9 @@ describe("Overview command center navigation layout", () => {
     expect(commandRule).toMatch(/--command-map-tools-gap:\s*\d+px/);
     expect(kpiRule).toMatch(/top:\s*var\(--command-kpi-top\)/);
     expect(kpiRule).toMatch(/height:\s*var\(--command-kpi-height\)/);
+    expect(kpiRule).toMatch(
+      /grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/,
+    );
     expect(navigationRule).toMatch(
       /top:\s*calc\(\s*var\(--command-kpi-top\)\s*\+\s*var\(--command-kpi-height\)\s*\+\s*var\(--command-map-tools-gap\)\s*\)/,
     );
@@ -49,24 +50,63 @@ describe("Overview command center navigation layout", () => {
     );
   });
 
-  it("uses a centered non-interactive data-driven ring instead of a label-offset capsule", () => {
+  it("does not paint regional sample totals as standalone map circles", () => {
     const css = readFileSync(resolve("src/app/styles/global.css"), "utf8");
     const source = readFileSync(
       resolve("src/modules/overview/ui/components/TerrainReliefBoundaryMap.tsx"),
       "utf8",
     );
-    const markerRule = css.match(
-      /\.overview-sample-point-aggregate-marker\s*\{([^}]*)\}/s,
+    expect(css).not.toContain(".overview-sample-point-aggregate-marker");
+    expect(source).not.toContain("samplePointAggregateRing(aggregate)");
+    expect(source).not.toContain("sample-point-aggregate-${aggregate.regionCode}");
+  });
+
+  it("reserves exactly the same details width in CSS and the relief frame", () => {
+    const css = readFileSync(resolve("src/app/styles/global.css"), "utf8");
+    const geometry = readFileSync(
+      resolve("src/modules/overview/ui/components/terrainReliefGeometry.ts"),
+      "utf8",
+    );
+    const cssWidth = css.match(/--command-details-width:\s*(\d+)px/)?.[1];
+    const frameWidth = geometry.match(/OVERVIEW_DETAILS_PANEL_WIDTH\s*=\s*(\d+)/)?.[1];
+
+    expect(cssWidth).toBeDefined();
+    expect(cssWidth).toBe(frameWidth);
+  });
+
+  it("opens the relief safe frame whenever supply balance owns the right panel", () => {
+    const page = readFileSync(
+      resolve("src/modules/overview/ui/pages/OverviewPage.tsx"),
+      "utf8",
+    );
+    const boundaryMap = readFileSync(
+      resolve("src/modules/overview/ui/components/BoundaryMap.tsx"),
+      "utf8",
+    );
+    const reliefMap = readFileSync(
+      resolve("src/modules/overview/ui/components/TerrainReliefBoundaryMap.tsx"),
+      "utf8",
     );
 
-    expect(markerRule?.[1]).toMatch(/width:\s*\d+px/);
-    expect(markerRule?.[1]).toMatch(/height:\s*\d+px/);
-    expect(markerRule?.[1]).toMatch(/border-radius:\s*50%/);
-    expect(markerRule?.[1]).not.toMatch(/conic-gradient/);
-    expect(markerRule?.[1]).toMatch(/pointer-events:\s*none/);
-    expect(markerRule?.[1]).toMatch(/transform:\s*translate\(-50%,\s*-50%\)/);
-    expect(source).toContain("samplePointAggregateRing(aggregate)");
-    expect(css).not.toContain("#71b9ff");
+    expect(page).toMatch(
+      /<BoundaryMap[\s\S]*?reserveRightPanel=\{dataMode === "SUPPLY_BALANCE"\}/,
+    );
+    expect(boundaryMap).toContain("reserveRightPanel={reserveRightPanel}");
+    expect(reliefMap).toMatch(/activeDetailLayout\s*=\s*reserveRightPanel\s*\|\|/);
+  });
+
+  it("supports inward-facing actual icons without changing their coordinate anchor", () => {
+    const css = readFileSync(resolve("src/app/styles/global.css"), "utf8");
+    const source = readFileSync(
+      resolve("src/modules/overview/ui/components/TerrainReliefBoundaryMap.tsx"),
+      "utf8",
+    );
+
+    expect(source).toContain("data-glyph-placement");
+    expect(source).toContain("anchorPoint");
+    expect(css).toMatch(/data-glyph-placement="below"/);
+    expect(css).toMatch(/data-glyph-placement="left"/);
+    expect(css).toMatch(/data-glyph-placement="right"/);
   });
 
   it("keeps concrete map symbols keyboard inspectable for collision disclosure", () => {
@@ -75,6 +115,13 @@ describe("Overview command center navigation layout", () => {
 
     expect(iconRule?.[1]).toMatch(/pointer-events:\s*auto/);
     expect(iconRule?.[1]).toMatch(/cursor:\s*pointer/);
+  });
+
+  it("keeps administrative-name drill-down targets above overlapping sample icons", () => {
+    const css = readFileSync(resolve("src/app/styles/global.css"), "utf8");
+    const labelRule = css.match(/\.overview-relief-label\s*\{([^}]*)\}/s)?.[1];
+
+    expect(labelRule).toMatch(/z-index:\s*100/);
   });
 
   it("does not let a renderer rebuild cancel the independently owned details-frame transition", () => {

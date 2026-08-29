@@ -38,46 +38,6 @@ describe("HttpOverviewRepository request cache", () => {
     ).rejects.toThrow();
   });
 
-  it("accepts partial coverage for automatically calculated supply indicators", async () => {
-    const get = vi.fn<HttpClient["get"]>((_path, schema) =>
-      Promise.resolve(
-        schema.parse({
-          contractVersion: "overview-audit-v2",
-          data: [
-            {
-              calculationVersion: "审核数据自动供需口径第1版",
-              code: "SUPPLY_ADOPTED_ENDING_INVENTORY",
-              coverageScope: "所选地区及全部下级地区、所选产品、2024年度",
-              coverageStatus: "PARTIAL",
-              dataCutoff: "2026年08月19日 05:37:58",
-              formula: "核定生产端和企业端期末库存自动合计",
-              name: "正式采用期末库存",
-              sourceCount: 195,
-              sourceDomain: "SUPPLY",
-              sourcePath: "/api/v1/observable-analysis/snapshots",
-              sourceRelation: "审核通过的产情、市场和物流数据自动计算结果",
-              unitCode: "万吨",
-              value: "155.10517",
-            },
-          ],
-        }),
-      ),
-    );
-    const repository = new HttpOverviewRepository({
-      get: get as unknown as HttpClient["get"],
-    });
-
-    await expect(
-      repository.indicators({ productCode: "CORN", regionCode: "230200", year: 2024 }),
-    ).resolves.toEqual([
-      expect.objectContaining({
-        code: "SUPPLY_ADOPTED_ENDING_INVENTORY",
-        coverageStatus: "PARTIAL",
-        value: "155.10517",
-      }),
-    ]);
-  });
-
   it("preserves every dashboard metric audit dimension from the server contract", async () => {
     const get = vi.fn<HttpClient["get"]>((_path, schema) =>
       Promise.resolve(
@@ -106,7 +66,6 @@ describe("HttpOverviewRepository request cache", () => {
             cultivatedAreaYoY: [],
             metrics: [
               {
-                auditSources: [],
                 calculationVersion: "OVERVIEW_METRIC_V1",
                 code: "PRODUCTION_CULTIVATED_AREA",
                 coverageScope:
@@ -129,6 +88,7 @@ describe("HttpOverviewRepository request cache", () => {
             regionPath: [],
             scope: {
               approvedRecordCount: 2,
+              prefectureCount: 1,
               countyCount: 1,
               reportingUnitCount: 1,
               townshipCount: 0,
@@ -153,76 +113,12 @@ describe("HttpOverviewRepository request cache", () => {
           sourceRelation: "production.production_record",
         },
       ],
-      businessTables: [
-        expect.objectContaining({
-          code: "PRODUCTION",
-          rows: [
-            expect.objectContaining({
-              completenessStatus: "PARTIAL",
-              values: { PROD_AREA_MU: { value: "0", sourceCount: 1 } },
-            }),
-          ],
-        }),
-      ],
-    });
-  });
-
-  it("accepts the public region-surplus partial coverage contract", async () => {
-    const get = vi.fn<HttpClient["get"]>((_path, schema) =>
-      Promise.resolve(
-        schema.parse({
-          contractVersion: "overview-audit-v2",
-          data: {
-            alerts: [],
-            businessTables: [],
-            cultivatedAreaYoY: [],
-            metrics: [
-              {
-                auditSources: [],
-                calculationVersion: "地区余粮公开填报口径第1版",
-                code: "REGION_SURPLUS",
-                coverageScope: "所选地区及全部下级地区、所选产品、2024年度",
-                coverageStatus: "PARTIAL",
-                dataCutoff: "2024年11月30日",
-                formula: "按公开样本身份采用最新产情期末余粮与市场现有库存后合计",
-                name: "地区余粮",
-                sourceCount: 235,
-                sourcePath: "/api/v1/overview/dashboard",
-                sourceRelation: "已审核产情与市场公开填报字段",
-                unitCode: "吨",
-                value: "82297",
-              },
-            ],
-            outputYoY: [],
-            priceTrend: [],
-            productStructure: [],
-            regionActivity: [],
-            regionPath: [],
-            scope: {
-              approvedRecordCount: 235,
-              countyCount: 20,
-              reportingUnitCount: 1,
-              townshipCount: 232,
-              villageCount: 2332,
-            },
-          },
-        }),
-      ),
-    );
-    const repository = new HttpOverviewRepository({
-      get: get as unknown as HttpClient["get"],
-    });
-
-    await expect(
-      repository.dashboard({ productCode: "CORN", year: 2024 }),
-    ).resolves.toMatchObject({
-      metrics: [
-        expect.objectContaining({
-          code: "REGION_SURPLUS",
-          coverageStatus: "PARTIAL",
-          value: "82297",
-        }),
-      ],
+      scope: {
+        prefectureCount: 1,
+        countyCount: 1,
+        townshipCount: 0,
+        villageCount: 0,
+      },
     });
   });
 
@@ -251,6 +147,7 @@ describe("HttpOverviewRepository request cache", () => {
             regionPath: [],
             scope: {
               approvedRecordCount: 1,
+              prefectureCount: 1,
               countyCount: 1,
               reportingUnitCount: 1,
               townshipCount: 0,
@@ -297,6 +194,7 @@ describe("HttpOverviewRepository request cache", () => {
             regionPath: [],
             scope: {
               approvedRecordCount: 0,
+              prefectureCount: 0,
               countyCount: 0,
               reportingUnitCount: 0,
               townshipCount: 0,
@@ -322,89 +220,8 @@ describe("HttpOverviewRepository request cache", () => {
     });
 
     expect(get.mock.calls.map(([path]) => path)).toContain(
-      "/api/v1/overview/dashboard?productCode=CORN&regionCode=230200&year=2025",
+      "/api/v1/overview/dashboard-summary?productCode=CORN&regionCode=230200&year=2025",
     );
-  });
-
-  it("keeps rejected region-surplus audit sources with missing contract fields", async () => {
-    const get = vi.fn<HttpClient["get"]>((_path, schema) =>
-      Promise.resolve(
-        schema.parse({
-          contractVersion: "overview-audit-v2",
-          data: {
-            alerts: [],
-            businessTables: [],
-            cultivatedAreaYoY: [],
-            metrics: [
-              {
-                auditSources: [
-                  {
-                    adopted: false,
-                    adoptionReason: "REQUIRED_FIELD_MISSING",
-                    approvedAt: "2026-08-11T03:20:03Z",
-                    cargoOwnerKey: null,
-                    dataCutoff: null,
-                    inventoryHolderKey: null,
-                    ownershipType: null,
-                    regionCode: null,
-                    sourceDomain: "MARKET",
-                    sourceRecordId: "record-1",
-                    sourceVersion: 5,
-                    subjectKey: null,
-                    valueTonnes: 351,
-                  },
-                ],
-                calculationVersion: "REGION_SURPLUS_V1",
-                code: "REGION_SURPLUS",
-                coverageScope:
-                  "region=230200;product=SOYBEAN;year=2026;descendants=included",
-                coverageStatus: "UNRELIABLE_SOURCE_CONTRACT",
-                dataCutoff: null,
-                formula: "SUM(adopted approved inventory)",
-                name: "地区余粮",
-                sourceCount: 0,
-                sourcePath: "/api/v1/overview/dashboard",
-                sourceRelation: "production.production_record + market.market_record",
-                unitCode: "吨",
-                value: null,
-              },
-            ],
-            outputYoY: [],
-            priceTrend: [],
-            productStructure: [],
-            regionActivity: [],
-            regionPath: [],
-            scope: {
-              approvedRecordCount: 0,
-              countyCount: 0,
-              reportingUnitCount: 0,
-              townshipCount: 0,
-              villageCount: 0,
-            },
-          },
-        }),
-      ),
-    );
-    const repository = new HttpOverviewRepository({
-      get: get as unknown as HttpClient["get"],
-    });
-
-    await expect(
-      repository.dashboard({ productCode: "SOYBEAN", year: 2026 }),
-    ).resolves.toMatchObject({
-      metrics: [
-        {
-          auditSources: [
-            {
-              cargoOwnerKey: null,
-              ownershipType: null,
-              regionCode: null,
-              subjectKey: null,
-            },
-          ],
-        },
-      ],
-    });
   });
 
   it("deduplicates concurrent and repeated geography requests", async () => {
@@ -475,6 +292,7 @@ describe("HttpOverviewRepository request cache", () => {
             regionPath: [],
             scope: {
               approvedRecordCount: 0,
+              prefectureCount: 1,
               countyCount: 1,
               reportingUnitCount: 0,
               townshipCount: 2,
@@ -500,8 +318,8 @@ describe("HttpOverviewRepository request cache", () => {
     });
 
     expect(get.mock.calls.map(([path]) => path)).toEqual([
-      "/api/v1/overview/dashboard?productCode=CORN&regionCode=230200&year=2026",
-      "/api/v1/overview/dashboard?productCode=CORN&regionCode=230281&year=2026",
+      "/api/v1/overview/dashboard-summary?productCode=CORN&regionCode=230200&year=2026",
+      "/api/v1/overview/dashboard-summary?productCode=CORN&regionCode=230281&year=2026",
     ]);
   });
 });

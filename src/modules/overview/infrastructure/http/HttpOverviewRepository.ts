@@ -50,7 +50,7 @@ const indicatorsSchema = z
         name: z.string(),
         unitCode: z.string(),
         value: z.string().nullable(),
-        sourceDomain: z.enum(["PRODUCTION", "MARKET", "LOGISTICS", "SUPPLY"]),
+        sourceDomain: z.enum(["PRODUCTION", "MARKET", "LOGISTICS"]),
         sourceCount: z.number(),
         sourcePath: z.string(),
         formula: z.string(),
@@ -63,45 +63,16 @@ const indicatorsSchema = z
     ),
   })
   .describe(OVERVIEW_AUDIT_CONTRACT_VERSION);
-const businessTableCellSchema = z.object({
-  value: z.string().nullable(),
-  sourceCount: z.number().int().nonnegative(),
-});
-const businessTableSchema = z.object({
-  code: z.enum(["PRODUCTION", "MARKET", "LOGISTICS", "SUPPLY"]),
-  title: z.string(),
-  coverageStatus: z.enum(["AVAILABLE", "NO_APPROVED_SOURCES"]),
-  columns: z.array(
-    z.object({
-      code: z.string(),
-      label: z.string(),
-      unitCode: z.string().nullable(),
-    }),
-  ),
-  rows: z.array(
-    z.object({
-      regionCode: z.string(),
-      regionName: z.string(),
-      sourceCount: z.number().int().nonnegative(),
-      latestApprovedAt: z.string().nullable(),
-      completenessStatus: z.enum(["COMPLETE", "PARTIAL", "NO_APPROVED_SOURCES"]),
-      values: z.record(z.string(), businessTableCellSchema),
-    }),
-  ),
-});
-const dashboardSchema = z
+const dashboardSummarySchema = z
   .object({
     contractVersion: z.literal(OVERVIEW_AUDIT_CONTRACT_VERSION),
     data: z.object({
       scope: z.object({
+        prefectureCount: z.number(),
         countyCount: z.number(),
         townshipCount: z.number(),
         villageCount: z.number(),
-        reportingUnitCount: z.number(),
-        approvedRecordCount: z.number(),
-        latestUpdatedAt: z.string().nullable().optional(),
       }),
-      businessTables: z.array(businessTableSchema),
       metrics: z.array(
         z.object({
           code: z.string(),
@@ -124,81 +95,6 @@ const dashboardSchema = z
           sourcePath: z.string(),
           sourceRelation: z.string(),
           coverageScope: z.string(),
-          auditSources: z.array(
-            z.object({
-              sourceDomain: z.enum(["PRODUCTION", "MARKET"]),
-              sourceRecordId: z.string(),
-              sourceVersion: z.number(),
-              subjectKey: z.string().nullable(),
-              inventoryHolderKey: z.string().nullable().optional(),
-              cargoOwnerKey: z.string().nullable(),
-              ownershipType: z
-                .enum(["PRODUCTION_SURPLUS", "OWNED", "CUSTODIAL"])
-                .nullable(),
-              regionCode: z.string().nullable(),
-              dataCutoff: z.string().nullable(),
-              valueTonnes: z.number(),
-              approvedAt: z.string(),
-              adopted: z.boolean(),
-              adoptionReason: z.string(),
-            }),
-          ),
-        }),
-      ),
-      regionPath: z.array(optionSchema),
-      priceTrend: z.array(
-        z.object({
-          periodLabel: z.string(),
-          value: z.string(),
-          sourceCount: z.number(),
-        }),
-      ),
-      productStructure: z.array(
-        z.object({
-          productCode: z.string(),
-          productName: z.string(),
-          value: z.string(),
-          unitCode: z.string(),
-          sourceCount: z.number(),
-        }),
-      ),
-      regionActivity: z.array(
-        z.object({
-          regionCode: z.string(),
-          regionName: z.string(),
-          approvedCount: z.number(),
-          totalCount: z.number(),
-        }),
-      ),
-      alerts: z.array(
-        z.object({
-          code: z.string(),
-          severity: z.enum(["INFO", "WARNING", "CRITICAL"]),
-          regionName: z.string(),
-          message: z.string(),
-          occurredOn: z.string(),
-        }),
-      ),
-      cultivatedAreaYoY: z.array(
-        z.object({
-          regionCode: z.string(),
-          regionName: z.string(),
-          currentValue: z.string().nullable(),
-          previousValue: z.string().nullable(),
-          unitCode: z.string(),
-          currentSourceCount: z.number(),
-          previousSourceCount: z.number(),
-        }),
-      ),
-      outputYoY: z.array(
-        z.object({
-          regionCode: z.string(),
-          regionName: z.string(),
-          currentValue: z.string().nullable(),
-          previousValue: z.string().nullable(),
-          unitCode: z.string(),
-          currentSourceCount: z.number(),
-          previousSourceCount: z.number(),
         }),
       ),
     }),
@@ -278,24 +174,9 @@ export class HttpOverviewRepository implements OverviewRepository {
   }
 
   async dashboard(query: { productCode: string; regionCode?: string; year: number }) {
-    const path = `/api/v1/overview/dashboard${queryString(query)}`;
+    const path = `/api/v1/overview/dashboard-summary${queryString(query)}`;
     return this.cached(path, BUSINESS_CACHE_TTL_MS, async () => {
-      const dashboard = (await this.http.get(path, dashboardSchema)).data;
-      const { latestUpdatedAt, ...scope } = dashboard.scope;
-      return {
-        ...dashboard,
-        metrics: dashboard.metrics.map(({ auditSources, ...metric }) => ({
-          ...metric,
-          auditSources: auditSources.map(({ inventoryHolderKey, ...source }) => ({
-            ...source,
-            ...(inventoryHolderKey ? { inventoryHolderKey } : {}),
-          })),
-        })),
-        scope: {
-          ...scope,
-          ...(latestUpdatedAt ? { latestUpdatedAt } : {}),
-        },
-      };
+      return (await this.http.get(path, dashboardSummarySchema)).data;
     });
   }
 

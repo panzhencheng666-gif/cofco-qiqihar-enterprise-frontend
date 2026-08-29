@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Market sample</title>
+  <defs>
+    <linearGradient id="bg" x1="8" y1="7" x2="56" y2="57" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#34c5d8"/>
+      <stop offset="1" stop-color="#125686"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="12" fill="url(#bg)" stroke="#dffbff" stroke-width="2"/>
+  <path fill="#e8fbff" d="M13 23h38l-4-10H17l-4 10Zm3 4h32v23H16V27Z"/>
+  <path fill="#17688e" d="M21 31h8v19h-8V31Zm13 8h9v11h-9V39Z"/>
+  <path fill="none" stroke="#8cecf2" stroke-linecap="round" stroke-width="3" d="M14 54h36"/>
+  <path fill="none" stroke="#17688e" stroke-width="2" d="M14 23c2 5 7 5 9 0 2 5 7 5 9 0 2 5 7 5 9 0 2 5 7 5 9 0"/>
+</svg>

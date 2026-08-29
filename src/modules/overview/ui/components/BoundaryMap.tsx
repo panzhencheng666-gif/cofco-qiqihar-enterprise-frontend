@@ -6,6 +6,7 @@ import type {
   OverviewSamplePointIcon,
 } from "../../domain/overviewSamplePoint";
 import { samplePointAggregateLabel } from "../presentation/samplePointAggregateRing";
+import { sampleNetworkMarkerAccessibilityLabel } from "../presentation/sampleNetworkMarkerAccessibility";
 import { publicAssetUrl } from "../../../../shared/assets/publicAssetUrl";
 import {
   flattenCoordinates,
@@ -36,6 +37,7 @@ export function BoundaryMap({
   samplePointAggregates = EMPTY_SAMPLE_POINT_AGGREGATES,
   samplePointAggregateStatus,
   samplePointIcons = EMPTY_SAMPLE_POINT_ICONS,
+  reserveRightPanel = false,
   selectedCode,
   selectedSamplePointId,
   command,
@@ -50,6 +52,7 @@ export function BoundaryMap({
   samplePointAggregates?: readonly OverviewSamplePointAggregate[];
   samplePointAggregateStatus?: SamplePointAggregateStatus;
   samplePointIcons?: readonly OverviewSamplePointIcon[];
+  reserveRightPanel?: boolean;
   selectedCode: string;
   selectedSamplePointId?: string;
   command?: OverviewMapCommand;
@@ -57,8 +60,8 @@ export function BoundaryMap({
   const [webGlEnabled, setWebGlEnabled] = useState(canRenderWebGlMap);
   const [fallbackReason, setFallbackReason] = useState("");
   const sceneRevision = useMemo(
-    () => ({ backdrop, features, points, samplePointAggregates, samplePointIcons }),
-    [backdrop, features, points, samplePointAggregates, samplePointIcons],
+    () => ({ backdrop, features, points }),
+    [backdrop, features, points],
   );
   const [readySceneRevision, setReadySceneRevision] = useState<object>();
   const sceneReady = readySceneRevision === sceneRevision;
@@ -92,6 +95,7 @@ export function BoundaryMap({
           reason={fallbackReason}
         />
         <BoundaryMapAccessibility
+          {...(backdrop ? { backdrop } : {})}
           features={features}
           points={points}
           samplePointAggregates={samplePointAggregates}
@@ -111,6 +115,7 @@ export function BoundaryMap({
         <div className="overview-map-loading" role="status">
           <TerrainScenePlaceholder message="正在建立地面一体化地理场景" />
           <BoundaryMapAccessibility
+            {...(backdrop ? { backdrop } : {})}
             features={features}
             points={points}
             samplePointAggregates={samplePointAggregates}
@@ -132,6 +137,7 @@ export function BoundaryMap({
         samplePointAggregates={samplePointAggregates}
         {...(samplePointAggregateStatus ? { samplePointAggregateStatus } : {})}
         samplePointIcons={samplePointIcons}
+        reserveRightPanel={reserveRightPanel}
         {...(onSamplePointSelect ? { onSamplePointSelect } : {})}
         {...(selectedSamplePointId ? { selectedSamplePointId } : {})}
         selectedCode={selectedCode}
@@ -156,6 +162,7 @@ export function BoundaryMap({
 
 function BoundaryMapAccessibility({
   features,
+  backdrop,
   points,
   samplePointAggregates,
   samplePointIcons,
@@ -165,6 +172,7 @@ function BoundaryMapAccessibility({
   onDrill,
   onSelect,
 }: {
+  backdrop?: MapFeature;
   features: readonly MapFeature[];
   points: readonly MapPointFeature[];
   samplePointAggregates: readonly OverviewSamplePointAggregate[];
@@ -175,22 +183,47 @@ function BoundaryMapAccessibility({
   onDrill: (region: OverviewRegion) => void;
   onSelect: (region: OverviewRegion) => void;
 }) {
+  const accessibleFeatures =
+    backdrop &&
+    samplePointAggregates.some(
+      (aggregate) =>
+        aggregate.scopeKind === "PARENT_DIRECT" &&
+        (aggregate.anchorRegionCode ?? aggregate.regionCode) === backdrop.region.code,
+    )
+      ? [
+          backdrop,
+          ...features.filter(({ region }) => region.code !== backdrop.region.code),
+        ]
+      : features;
   return (
     <div className="overview-map-accessibility-layer overview-sr-only">
       <span aria-label="行政区边界地图" role="img" />
-      {features.map(({ region }) => (
-        <button
-          aria-label={accessibleRegionLabel(
-            region,
-            samplePointAggregates,
-            samplePointAggregateStatus,
-          )}
-          key={`accessible-boundary-${region.code}`}
-          onClick={() => onSelect(region)}
-          onDoubleClick={() => onDrill(region)}
-          type="button"
-        />
-      ))}
+      {accessibleFeatures.map(({ region }) => {
+        const aggregate = aggregateForRegion(samplePointAggregates, region.code);
+        const countLabel =
+          samplePointAggregateStatus === "ready" &&
+          aggregate &&
+          aggregate.samplePointCount > 0
+            ? aggregate.scopeKind === "PARENT_DIRECT"
+              ? `本级${aggregate.samplePointCount}个`
+              : `${aggregate.samplePointCount}个`
+            : undefined;
+        return (
+          <button
+            aria-label={accessibleRegionLabel(
+              region,
+              samplePointAggregates,
+              samplePointAggregateStatus,
+            )}
+            key={`accessible-boundary-${region.code}`}
+            onClick={() => onSelect(region)}
+            onDoubleClick={() => onDrill(region)}
+            type="button"
+          >
+            {countLabel ? <span>{countLabel}</span> : null}
+          </button>
+        );
+      })}
       {points.map(({ region }) => (
         <button
           aria-label={`${region.name}，${locationStatusLabel(region.locationReviewStatus)}`}
@@ -200,17 +233,33 @@ function BoundaryMapAccessibility({
           type="button"
         />
       ))}
-      {samplePointIcons.map((icon) => (
-        <button
-          aria-label={`${icon.name}，${icon.types.map((type) => type.name).join("、")}，点击查看样本点详情`}
-          aria-pressed={selectedSamplePointId === icon.samplePointId}
-          key={`accessible-sample-point-${icon.samplePointId}`}
-          onClick={() => onSamplePointSelect?.(icon.samplePointId)}
-          type="button"
-        />
-      ))}
+      {samplePointIcons.map((icon) => {
+        const informational = Boolean(
+          icon.layerType && icon.layerType !== "ANNUAL_ACTUAL",
+        );
+        const label = samplePointAccessibilityLabel(icon);
+        return informational ? (
+          <span
+            aria-label={label}
+            key={`accessible-sample-point-${icon.samplePointId}`}
+            role="img"
+          />
+        ) : (
+          <button
+            aria-label={label}
+            aria-pressed={selectedSamplePointId === icon.samplePointId}
+            key={`accessible-sample-point-${icon.samplePointId}`}
+            onClick={() => onSamplePointSelect?.(icon.samplePointId)}
+            type="button"
+          />
+        );
+      })}
     </div>
   );
+}
+
+function samplePointAccessibilityLabel(icon: OverviewSamplePointIcon): string {
+  return sampleNetworkMarkerAccessibilityLabel(icon);
 }
 
 function accessibleRegionLabel(
@@ -226,10 +275,19 @@ function accessibleRegionLabel(
   if (status === "hidden") return region.name;
   if (status === "loading") return `${region.name}，样本点聚合数据加载中`;
   if (status === "unavailable") return `${region.name}，样本点聚合数据不可用`;
-  const aggregate = aggregates.find(({ regionCode }) => regionCode === region.code);
+  const aggregate = aggregateForRegion(aggregates, region.code);
   return aggregate
     ? `${region.name}，${samplePointAggregateLabel(aggregate)}`
     : `${region.name}，样本点聚合数据不可用`;
+}
+
+function aggregateForRegion(
+  aggregates: readonly OverviewSamplePointAggregate[],
+  regionCode: string,
+) {
+  return aggregates.find(
+    (aggregate) => (aggregate.anchorRegionCode ?? aggregate.regionCode) === regionCode,
+  );
 }
 
 /**

@@ -28,8 +28,10 @@ import { WorkItemsPage } from "../modules/work-management/ui/pages/WorkItemsPage
 import type { OverviewRepository } from "../modules/overview/application/ports/OverviewRepository";
 import type { OverviewRealtimeStream } from "../modules/overview/application/ports/OverviewRealtimeStream";
 import type { OverviewSamplePointRepository } from "../modules/overview/application/ports/OverviewSamplePointRepository";
+import type { OverviewRegionalDataRepository } from "../modules/overview/application/ports/OverviewRegionalDataRepository";
 import { HttpOverviewRepository } from "../modules/overview/infrastructure/http/HttpOverviewRepository";
 import { HttpOverviewSamplePointRepository } from "../modules/overview/infrastructure/http/HttpOverviewSamplePointRepository";
+import { HttpOverviewRegionalDataRepository } from "../modules/overview/infrastructure/http/HttpOverviewRegionalDataRepository";
 import { BrowserOverviewRealtimeStream } from "../modules/overview/infrastructure/realtime/BrowserOverviewRealtimeStream";
 import { OverviewPage } from "../modules/overview/ui/pages/OverviewPage";
 import type { WorkItemScope } from "../modules/work-management/domain/workItem";
@@ -57,6 +59,9 @@ const reportingRepository = new HttpReportingRepository(httpClient);
 const workItemRepository = new HttpWorkItemRepository(httpClient);
 const overviewRepository = new HttpOverviewRepository(httpClient);
 const overviewSamplePointRepository = new HttpOverviewSamplePointRepository(httpClient);
+const overviewRegionalDataRepository = new HttpOverviewRegionalDataRepository(
+  httpClient,
+);
 const overviewRealtimeStream = new BrowserOverviewRealtimeStream();
 
 export interface AppDependencies {
@@ -70,6 +75,7 @@ export interface AppDependencies {
   overviewRepository?: OverviewRepository;
   overviewRealtimeStream?: OverviewRealtimeStream;
   overviewSamplePointRepository?: OverviewSamplePointRepository;
+  overviewRegionalDataRepository?: OverviewRegionalDataRepository;
   workItemRepository: WorkItemRepository;
 }
 
@@ -84,6 +90,7 @@ const productionDependencies: AppDependencies = {
   overviewRepository,
   overviewRealtimeStream,
   overviewSamplePointRepository,
+  overviewRegionalDataRepository,
   workItemRepository,
 };
 
@@ -390,6 +397,9 @@ export function App({
         realtimeStream={dependencies.overviewRealtimeStream ?? overviewRealtimeStream}
         samplePointRepository={
           dependencies.overviewSamplePointRepository ?? overviewSamplePointRepository
+        }
+        regionalDataRepository={
+          dependencies.overviewRegionalDataRepository ?? overviewRegionalDataRepository
         }
       />
     );

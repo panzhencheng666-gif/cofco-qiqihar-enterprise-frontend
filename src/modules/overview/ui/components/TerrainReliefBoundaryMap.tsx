@@ -11,10 +11,13 @@ import type {
   OverviewSamplePointAggregate,
   OverviewSamplePointIcon,
 } from "../../domain/overviewSamplePoint";
+import { samplePointAggregateLabel } from "../presentation/samplePointAggregateRing";
+import { sampleNetworkMarkerAccessibilityLabel } from "../presentation/sampleNetworkMarkerAccessibility";
 import {
-  samplePointAggregateLabel,
-  samplePointAggregateRing,
-} from "../presentation/samplePointAggregateRing";
+  designCoverageBadgePathData,
+  designReferenceIconPathData,
+  regionalActualBadgePathData,
+} from "../presentation/sampleNetworkLayers";
 import type {
   MapFeature,
   MapPointFeature,
@@ -27,6 +30,7 @@ import {
   OVERVIEW_RELIEF_DEPTH,
   overviewDetailsPanelLeft,
   overviewReliefFrame,
+  projectReliefOverlays,
   projectReliefScene,
   type ReliefPoint,
   type ReliefPolygon,
@@ -57,10 +61,19 @@ export const RELIEF_LAYER_Z = {
 } as const;
 const RELIEF_FRAME_INSET = 0.035;
 const TERRAIN_URL = publicAssetUrl("overview/command-terrain-v2.webp");
+const samplePointRoleAssetUrl = {
+  PRODUCTION: publicAssetUrl("overview/sample-points/production-rice.svg"),
+  MARKET: publicAssetUrl("overview/sample-points/market-bank.svg"),
+  LOGISTICS: publicAssetUrl("overview/sample-points/logistics-car.svg"),
+} as const;
 const BACKGROUND_Z = -900;
 // Keep hit/line overlays just above the textured top. A very large z value
 // makes internal boundaries render through the parent's vertical wall.
 const OVERLAY_Z = 4;
+
+export function overviewWideStageOffset(stageWidth: number) {
+  return Math.max(0, (stageWidth - STAGE_WIDTH) / 2);
+}
 
 /**
  * Presentation assets keyed only by the authoritative object-type iconKey.
@@ -82,6 +95,10 @@ export const samplePointIconPathData: Readonly<Record<string, string>> = {
     "M6 21V8a6 4 0 0 1 12 0v13M6 8h12M8 12h8m-8 4h8m-8 4h8M3 21h18M12 3v5",
   "breeding-factory": "M3 21V9l9-6 9 6v12M7 21v-8h10v8M9 13l3 3 3-3M6 8h12M5 21h14",
   "feed-mill": "M7 3h10l-1 7-4 5-4-5-1-7Zm5 12v6m-4 0h8M5 10h14M9 7h6m-1 10h4l2 4",
+  "rice-mill": "M4 21V9l8-5 8 5v12M7 21v-7h10v7M8 10h8M9 17h6M12 4V2m-3 4L7 3m8 3 2-3",
+  "rail-node":
+    "M7 3h10a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Zm0 4h10M8 14h.01M16 14h.01M7 18l-2 3m12-3 2 3M8 21h8",
+  "road-node": "M5 21 9 3h6l4 18M12 3v4m0 4v4m0 4v2M6 17h12M8 8h8",
 };
 
 function commandStageWidth() {
@@ -156,6 +173,7 @@ export default function TerrainReliefBoundaryMap({
   samplePointAggregates = [],
   samplePointAggregateStatus,
   samplePointIcons = [],
+  reserveRightPanel = false,
   selectedCode,
   selectedSamplePointId,
 }: {
@@ -172,6 +190,7 @@ export default function TerrainReliefBoundaryMap({
   samplePointAggregates?: readonly OverviewSamplePointAggregate[];
   samplePointAggregateStatus?: "hidden" | "loading" | "ready" | "unavailable";
   samplePointIcons?: readonly OverviewSamplePointIcon[];
+  reserveRightPanel?: boolean;
   selectedCode: string;
   selectedSamplePointId?: string;
 }) {
@@ -204,37 +223,60 @@ export default function TerrainReliefBoundaryMap({
   const layoutTimerRef = useRef<number | undefined>(undefined);
   const detailsOpen = Boolean(selectedCode);
   const [detailLayoutOpen, setDetailLayoutOpen] = useState(false);
-  const activeDetailLayout = detailsOpen && detailLayoutOpen;
+  const activeDetailLayout = reserveRightPanel || (detailsOpen && detailLayoutOpen);
   const detailLayoutOpenRef = useRef(false);
   const [stageWidth, setStageWidth] = useState(commandStageWidth);
+  const renderedStageWidth = Math.max(STAGE_WIDTH, Math.ceil(stageWidth));
+  const wideStageOffset = overviewWideStageOffset(renderedStageWidth);
   const fullMapFrame = useMemo(() => overviewReliefFrame(false), []);
   const detailMapFrame = useMemo(
     () => overviewReliefFrame(true, stageWidth),
     [stageWidth],
   );
-  const sceneProjectionResult = useMemo(() => {
+  const terrainProjectionResult = useMemo(() => {
     const startedAt = window.performance.now();
     const projection = projectReliefScene({
       ...(backdrop ? { backdrop } : {}),
       features,
       frame: fullMapFrame,
       points,
-      samplePointAggregates,
-      samplePointIcons,
     });
     return {
       duration: window.performance.now() - startedAt,
       projection,
     };
+  }, [backdrop, features, fullMapFrame, points]);
+  const terrainProjection = terrainProjectionResult.projection;
+  const sceneProjectionResult = useMemo(() => {
+    if (!samplePointAggregates.length && !samplePointIcons.length) {
+      return terrainProjectionResult;
+    }
+    const startedAt = window.performance.now();
+    const projection = projectReliefOverlays(
+      terrainProjection,
+      samplePointAggregates,
+      samplePointIcons,
+    );
+    return {
+      duration: window.performance.now() - startedAt,
+      projection,
+    };
   }, [
-    backdrop,
-    features,
-    fullMapFrame,
-    points,
     samplePointAggregates,
     samplePointIcons,
+    terrainProjection,
+    terrainProjectionResult,
   ]);
   const sceneProjection = sceneProjectionResult.projection;
+  const terrainDetailProjectionResult = useMemo(() => {
+    const startedAt = window.performance.now();
+    const projection = reframeReliefScene(terrainProjection, detailMapFrame);
+    return {
+      duration: window.performance.now() - startedAt,
+      projection,
+    };
+  }, [detailMapFrame, terrainProjection]);
+  const terrainDetailProjection = terrainDetailProjectionResult.projection;
   const detailProjectionResult = useMemo(() => {
     const startedAt = window.performance.now();
     const projection = reframeReliefScene(sceneProjection, detailMapFrame);
@@ -244,8 +286,8 @@ export default function TerrainReliefBoundaryMap({
     };
   }, [detailMapFrame, sceneProjection]);
   const detailProjection = detailProjectionResult.projection;
-  const projectionDurationMs =
-    sceneProjectionResult.duration + detailProjectionResult.duration;
+  const rendererProjectionDurationMs =
+    terrainProjectionResult.duration + terrainDetailProjectionResult.duration;
   const activeProjection = activeDetailLayout ? detailProjection : sceneProjection;
   const activeSurfaceBounds = reliefSceneBounds(activeProjection);
   const activeLayoutTransform = activeDetailLayout
@@ -256,12 +298,37 @@ export default function TerrainReliefBoundaryMap({
     () => createReliefOverlayLayout(activeProjection),
     [activeProjection],
   );
+  const coordinateGroupBySamplePointId = useMemo(() => {
+    const groups = new Map<string, OverviewSamplePointIcon[]>();
+    activeProjection.samplePointIcons.forEach(({ icon }) => {
+      if (
+        (icon.layerType ?? "ANNUAL_ACTUAL") !== "ANNUAL_ACTUAL" ||
+        icon.longitude === null ||
+        icon.latitude === null
+      ) {
+        return;
+      }
+      const key = `${icon.longitude.toFixed(12)}:${icon.latitude.toFixed(12)}`;
+      groups.set(key, [...(groups.get(key) ?? []), icon]);
+    });
+    const byId = new Map<string, { count: number; index: number }>();
+    groups.forEach((icons) => {
+      [...icons]
+        .sort((left, right) => left.samplePointId.localeCompare(right.samplePointId))
+        .forEach((icon, index) =>
+          byId.set(icon.samplePointId, { count: icons.length, index: index + 1 }),
+        );
+    });
+    return byId;
+  }, [activeProjection.samplePointIcons]);
   const aggregateRegionCodes = new Set(
-    activeProjection.samplePointAggregates.map(({ aggregate }) => aggregate.regionCode),
+    activeProjection.samplePointAggregates.map(
+      ({ aggregate }) => aggregate.anchorRegionCode ?? aggregate.regionCode,
+    ),
   );
   const aggregateByRegion = new Map(
     activeProjection.samplePointAggregates.map(({ aggregate }) => [
-      aggregate.regionCode,
+      aggregate.anchorRegionCode ?? aggregate.regionCode,
       aggregate,
     ]),
   );
@@ -387,7 +454,9 @@ export default function TerrainReliefBoundaryMap({
     // MSAA can remove edge stair-stepping without restoring the former Turf
     // union or per-interaction projection bottleneck.
     renderer.setPixelRatio(RENDER_SCALE);
-    renderer.setSize(STAGE_WIDTH, STAGE_HEIGHT, false);
+    renderer.setSize(renderedStageWidth, STAGE_HEIGHT, false);
+    renderer.domElement.style.width = `${renderedStageWidth}px`;
+    renderer.domElement.style.height = `${STAGE_HEIGHT}px`;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 0.98;
@@ -409,26 +478,28 @@ export default function TerrainReliefBoundaryMap({
       sceneHost.dataset.wallMaterial = "opaque-depth-gradient-prism-wall";
       sceneHost.dataset.interactionCapLayerCount = "1";
       sceneHost.dataset.interactionSocketLayerCount = "0";
-      sceneHost.dataset.reliefMode = sceneProjection.backdrop
+      sceneHost.dataset.reliefMode = terrainProjection.backdrop
         ? "continuous-backdrop"
-        : sceneProjection.features.length
+        : terrainProjection.features.length
           ? "real-feature-fallback"
           : "empty";
-      sceneHost.dataset.featureCount = String(sceneProjection.features.length);
-      sceneHost.dataset.pointCount = String(sceneProjection.points.length);
+      sceneHost.dataset.featureCount = String(terrainProjection.features.length);
+      sceneHost.dataset.pointCount = String(terrainProjection.points.length);
       sceneHost.dataset.rendererInitDurationMs = String(
         Math.round(window.performance.now() - buildStartedAt),
       );
-      sceneHost.dataset.projectionDurationMs = String(Math.round(projectionDurationMs));
-      if (sceneProjection.diagnostics) {
+      sceneHost.dataset.projectionDurationMs = String(
+        Math.round(rendererProjectionDurationMs),
+      );
+      if (terrainProjection.diagnostics) {
         sceneHost.dataset.projectionSourceBoundsMs = String(
-          Math.round(sceneProjection.diagnostics.sourceBoundsMs),
+          Math.round(terrainProjection.diagnostics.sourceBoundsMs),
         );
         sceneHost.dataset.projectionSurfaceMs = String(
-          Math.round(sceneProjection.diagnostics.surfaceProjectionMs),
+          Math.round(terrainProjection.diagnostics.surfaceProjectionMs),
         );
         sceneHost.dataset.projectionUnionMs = String(
-          Math.round(sceneProjection.diagnostics.unionMs),
+          Math.round(terrainProjection.diagnostics.unionMs),
         );
       }
     }
@@ -451,8 +522,8 @@ export default function TerrainReliefBoundaryMap({
     keyLight.position.set(-0.55, 0.7, 1.8).normalize();
     scene.add(ambientLight, keyLight);
     const camera = new THREE.OrthographicCamera(
-      -STAGE_WIDTH / 2,
-      STAGE_WIDTH / 2,
+      -renderedStageWidth / 2,
+      renderedStageWidth / 2,
       STAGE_HEIGHT / 2,
       -STAGE_HEIGHT / 2,
       0.1,
@@ -498,14 +569,17 @@ export default function TerrainReliefBoundaryMap({
         terrainTexture.magFilter = THREE.LinearFilter;
         resources.push(terrainTexture);
 
-        const backgroundGeometry = new THREE.PlaneGeometry(STAGE_WIDTH, STAGE_HEIGHT);
+        const backgroundGeometry = new THREE.PlaneGeometry(
+          renderedStageWidth,
+          STAGE_HEIGHT,
+        );
         const backgroundMaterial = new THREE.MeshBasicMaterial({ map: terrainTexture });
         const background = new THREE.Mesh(backgroundGeometry, backgroundMaterial);
         background.position.z = BACKGROUND_Z;
         scene.add(background);
         resources.push(backgroundGeometry, backgroundMaterial);
 
-        const hazeGeometry = new THREE.PlaneGeometry(STAGE_WIDTH, STAGE_HEIGHT);
+        const hazeGeometry = new THREE.PlaneGeometry(renderedStageWidth, STAGE_HEIGHT);
         const hazeMaterial = new THREE.MeshBasicMaterial({
           color: 0x043d59,
           opacity: 0.38,
@@ -576,7 +650,7 @@ export default function TerrainReliefBoundaryMap({
         // beneath every movable administrative component. It sits below the
         // component caps, so it cannot become a pasted interaction overlay;
         // it only prevents transparent voids from appearing when a cap rises.
-        const renderBodies = selectReliefRenderBodies(sceneProjection);
+        const renderBodies = selectReliefRenderBodies(terrainProjection);
         const earthWallBodies = renderBodies.walls;
         const earthTopBodies = renderBodies.tops;
         if (sceneHost) {
@@ -605,20 +679,20 @@ export default function TerrainReliefBoundaryMap({
           if (sceneHost) {
             sceneHost.dataset.reliefWallGeometryCount = String(earthWalls.length);
             sceneHost.dataset.reliefSolidVisible = earthWalls.length ? "true" : "false";
-            sceneHost.dataset.parentOuterLayerCount = sceneProjection.backdrop
+            sceneHost.dataset.parentOuterLayerCount = terrainProjection.backdrop
               ? "1"
               : "0";
           }
         }
 
         const selectableSurfaces = new Map<string, ReliefSurface>();
-        sceneProjection.features
+        terrainProjection.features
           .filter(({ region }) => !region.mapContextOnly)
           .forEach((surface) => selectableSurfaces.set(surface.region.code, surface));
-        if (!sceneProjection.features.length && sceneProjection.backdrop) {
+        if (!terrainProjection.features.length && terrainProjection.backdrop) {
           selectableSurfaces.set(
-            sceneProjection.backdrop.region.code,
-            sceneProjection.backdrop,
+            terrainProjection.backdrop.region.code,
+            terrainProjection.backdrop,
           );
         }
         const primaryComponentByRegion = new Map<string, ReliefComponentIdentity>();
@@ -710,8 +784,8 @@ export default function TerrainReliefBoundaryMap({
         // When a component rises, only segments owned by that region disappear;
         // the rest of the administrative structure remains on the ground.
         const groundOutlineSurfaces =
-          sceneProjection.features.length && sceneProjection.backdrop
-            ? [...renderBodies.outlines, sceneProjection.backdrop]
+          terrainProjection.features.length && terrainProjection.backdrop
+            ? [...renderBodies.outlines, terrainProjection.backdrop]
             : renderBodies.outlines;
         const activeOutline = createUniqueOutlineGroup(
           groundOutlineSurfaces,
@@ -721,10 +795,11 @@ export default function TerrainReliefBoundaryMap({
         );
         reliefRoot.add(activeOutline.group);
         if (sceneHost) {
-          sceneHost.dataset.parentOutlineLayerCount = sceneProjection.backdrop
+          sceneHost.dataset.parentOutlineLayerCount = terrainProjection.backdrop
             ? "1"
             : "0";
-          sceneHost.dataset.childrenInternalLayerCount = sceneProjection.features.length
+          sceneHost.dataset.childrenInternalLayerCount = terrainProjection.features
+            .length
             ? "1"
             : "0";
           sceneHost.dataset.duplicateOutlineSegmentCount = "0";
@@ -788,8 +863,8 @@ export default function TerrainReliefBoundaryMap({
           render();
         };
 
-        sceneProjection.points.forEach(({ point, region }) => {
-          const densePoints = sceneProjection.points.length > 32;
+        terrainProjection.points.forEach(({ point, region }) => {
+          const densePoints = terrainProjection.points.length > 32;
           const geometry = new THREE.CircleGeometry(
             densePoints ? 1.65 : region.level === "VILLAGE" ? 3.8 : 5.1,
             densePoints ? 12 : 24,
@@ -847,7 +922,7 @@ export default function TerrainReliefBoundaryMap({
         ];
         layoutUpdateRef.current = (open) => {
           const transform = open
-            ? calculateLayoutTransform(sceneProjection, detailProjection)
+            ? calculateLayoutTransform(terrainProjection, terrainDetailProjection)
             : IDENTITY_LAYOUT_TRANSFORM;
           applyReliefLayoutMatrix(reliefRoot, transform);
           surfaceMaterials.forEach((material) =>
@@ -859,13 +934,13 @@ export default function TerrainReliefBoundaryMap({
         const geometryReadyAt = window.performance.now();
         if (sceneHost) {
           sceneHost.dataset.projectedVertexCount = String(
-            countProjectedVertices(sceneProjection),
+            countProjectedVertices(terrainProjection),
           );
           sceneHost.dataset.earthVertexCount = String(
-            countEarthVertices(sceneProjection),
+            countEarthVertices(terrainProjection),
           );
           sceneHost.dataset.hitTestVertexCount = String(
-            countHitTestVertices(sceneProjection),
+            countHitTestVertices(terrainProjection),
           );
           sceneHost.dataset.geometryCpuDurationMs = String(
             Math.round(geometryReadyAt - terrainReadyAt),
@@ -890,7 +965,7 @@ export default function TerrainReliefBoundaryMap({
         }
         callbacksRef.current.onReady();
         reportSelectionPosition(
-          selectedRef.current ? detailProjection : sceneProjection,
+          selectedRef.current ? terrainDetailProjection : terrainProjection,
           selectedRef.current,
           positionCallbackRef.current,
           stageWidth,
@@ -965,13 +1040,14 @@ export default function TerrainReliefBoundaryMap({
     };
   }, [
     cancelLayoutTimer,
-    detailProjection,
+    terrainDetailProjection,
     drillImmediately,
-    projectionDurationMs,
-    sceneProjection,
+    rendererProjectionDurationMs,
+    renderedStageWidth,
     scheduleComponentSelection,
     scheduleSelection,
     stageWidth,
+    terrainProjection,
   ]);
 
   return (
@@ -984,14 +1060,31 @@ export default function TerrainReliefBoundaryMap({
       data-visible-surface-min-x={activeSurfaceBounds?.minX}
       data-visible-surface-min-y={activeSurfaceBounds?.minY}
     >
-      <div className="overview-terrain-relief-canvas" ref={hostRef} />
-      <div aria-label="行政区地图标签" className="overview-relief-label-layer">
+      <div
+        className="overview-terrain-relief-canvas"
+        ref={hostRef}
+        style={{ width: renderedStageWidth }}
+      />
+      <div
+        aria-label="行政区地图标签"
+        className="overview-relief-label-layer"
+        style={{ transform: `translateX(${wideStageOffset}px)` }}
+      >
         {overlayLayout.labels
           .filter(({ region, visible }) => visible && !region.mapContextOnly)
-          .map(({ componentId, kind, point, region, scale }) => {
+          .map(({ componentId, footprint, kind, point, region, scale }) => {
             const identity = primaryComponentIdentity(activeProjection, region);
             const isLeaf = region.mapContextOnly || region.level === "VILLAGE";
             const selectedLift = region.code === selectedCode ? selectedOverlayLift : 0;
+            const aggregate = aggregateByRegion.get(region.code);
+            const visibleAggregateCount =
+              samplePointAggregateStatus === "ready" &&
+              aggregate &&
+              aggregate.samplePointCount > 0
+                ? aggregate.scopeKind === "PARENT_DIRECT"
+                  ? `本级${aggregate.samplePointCount}个`
+                  : `${aggregate.samplePointCount}个`
+                : undefined;
             return (
               <Fragment key={`${kind}-${region.code}-${componentId ?? "point"}`}>
                 <button
@@ -1001,7 +1094,7 @@ export default function TerrainReliefBoundaryMap({
                     region,
                     status: samplePointAggregateStatus,
                   })}
-                  className={`overview-relief-label is-${kind} is-${region.level.toLowerCase()}${aggregateRegionCodes.has(region.code) ? " has-sample-point-aggregate" : ""}${region.code === selectedCode ? " is-selected" : ""}`}
+                  className={`overview-relief-label is-${kind} is-${region.level.toLowerCase()}${kind === "region" && region.level !== "VILLAGE" ? " can-have-count" : ""}${aggregateRegionCodes.has(region.code) ? " has-sample-point-aggregate" : ""}${region.code === selectedCode ? " is-selected" : ""}`}
                   onClick={() =>
                     identity
                       ? scheduleComponentSelection(region, identity.componentId)
@@ -1017,44 +1110,22 @@ export default function TerrainReliefBoundaryMap({
                   style={{
                     left: point.x,
                     top: point.y - selectedLift,
+                    width: footprint.width,
+                    height: footprint.height,
                     transform: `translate(-50%, -50%) scale(${scale})`,
                   }}
                   type="button"
                 >
-                  <span aria-hidden="true">
+                  <span aria-hidden="true" className="overview-relief-label-name">
                     {compactAdministrativeName(region.name)}
                   </span>
+                  {visibleAggregateCount ? (
+                    <span aria-hidden="true" className="overview-relief-label-count">
+                      {visibleAggregateCount}
+                    </span>
+                  ) : null}
                 </button>
               </Fragment>
-            );
-          })}
-        {overlayLayout.samplePointAggregates
-          .filter(({ visible }) => visible)
-          .map(({ aggregate, point, scale }) => {
-            const ring = samplePointAggregateRing(aggregate);
-            return (
-              <span
-                aria-label={`${aggregate.regionName}，${samplePointAggregateLabel(aggregate)}`}
-                className="overview-sample-point-aggregate-marker"
-                data-layout-scale={scale}
-                data-market-count={aggregate.marketCount}
-                data-production-count={aggregate.productionCount}
-                data-region-code={aggregate.regionCode}
-                data-state={ring.state}
-                key={`sample-point-aggregate-${aggregate.regionCode}`}
-                role="img"
-                style={{
-                  background: ring.background,
-                  left: point.x,
-                  top:
-                    point.y -
-                    (aggregate.regionCode === selectedCode ? selectedOverlayLift : 0),
-                  transform: `translate(-50%, -50%) scale(${scale})`,
-                }}
-              >
-                <strong>{aggregate.samplePointCount}</strong>
-                <small>{ring.state === "empty" ? "暂无样本点" : "样本点"}</small>
-              </span>
             );
           })}
         {activeProjection.points
@@ -1080,48 +1151,138 @@ export default function TerrainReliefBoundaryMap({
               </button>
             );
           })}
-        {activeProjection.samplePointIcons.map(({ anchorPoint, icon, point }) => {
-          const expanded =
-            Math.abs(anchorPoint.x - point.x) > 0.01 ||
-            Math.abs(anchorPoint.y - point.y) > 0.01;
-          const distance = Math.hypot(point.x - anchorPoint.x, point.y - anchorPoint.y);
-          const angle =
-            (Math.atan2(point.y - anchorPoint.y, point.x - anchorPoint.x) * 180) /
-            Math.PI;
-          return (
-            <Fragment key={icon.samplePointId}>
-              {expanded && (
-                <span
-                  aria-hidden="true"
-                  className="overview-sample-point-map-leader"
-                  style={{
-                    left: anchorPoint.x,
-                    top: anchorPoint.y,
-                    transform: `rotate(${angle}deg)`,
-                    width: distance,
-                  }}
-                />
-              )}
-              <button
-                aria-label={`${icon.name}，${icon.types.map((type) => type.name).join("、")}${icon.dataQualityReason === "DUPLICATE_COORDINATE_UNVERIFIED" ? "，坐标重合待核验" : ""}，点击查看样本点详情`}
-                aria-pressed={selectedSamplePointId === icon.samplePointId}
-                className={`overview-sample-point-map-icon is-${icon.iconKey ?? "unknown"}${icon.dataQualityReason === "DUPLICATE_COORDINATE_UNVERIFIED" ? " has-coordinate-warning" : ""}${selectedSamplePointId === icon.samplePointId ? " is-selected" : ""}`}
-                data-anchor-latitude={icon.latitude}
-                data-anchor-longitude={icon.longitude}
-                onClick={() => onSamplePointSelect?.(icon.samplePointId)}
-                style={{ left: point.x, top: point.y }}
-                title={
-                  icon.dataQualityReason === "DUPLICATE_COORDINATE_UNVERIFIED"
-                    ? "坐标重合待核验；当前按原始坐标展开显示"
-                    : "点击查看样本点详情"
-                }
-                type="button"
-              >
-                <SamplePointMapSymbol iconKey={icon.iconKey} />
-              </button>
-            </Fragment>
-          );
-        })}
+        {overlayLayout.samplePointIcons
+          .filter(({ visible }) => visible)
+          .map(
+            ({
+              anchorPoint,
+              glyphFootprint,
+              glyphPlacement,
+              glyphPolygonContained,
+              icon,
+              point,
+              scale,
+            }) => {
+              const isDesignCoverage = icon.layerType === "DESIGN_COVERAGE_BADGE";
+              const isDesignExact = icon.layerType === "DESIGN_EXACT_LOCATION";
+              const isRegionalActual = icon.layerType === "REGIONAL_ACTUAL_BADGE";
+              const isReferenceLayer = isDesignCoverage || isDesignExact;
+              const expanded =
+                Math.abs(anchorPoint.x - point.x) > 0.01 ||
+                Math.abs(anchorPoint.y - point.y) > 0.01;
+              const distance = Math.hypot(
+                point.x - anchorPoint.x,
+                point.y - anchorPoint.y,
+              );
+              const angle =
+                (Math.atan2(point.y - anchorPoint.y, point.x - anchorPoint.x) * 180) /
+                Math.PI;
+              const domainClass = samplePointDomainClass(icon);
+              const coordinateGroup = coordinateGroupBySamplePointId.get(
+                icon.samplePointId,
+              );
+              return (
+                <Fragment key={icon.samplePointId}>
+                  {expanded && (
+                    <>
+                      <span
+                        aria-hidden="true"
+                        className="overview-sample-point-map-leader"
+                        style={{
+                          left: anchorPoint.x,
+                          top: anchorPoint.y,
+                          transform: `rotate(${angle}deg)`,
+                          width: distance,
+                        }}
+                      />
+                      <span
+                        aria-hidden="true"
+                        className="overview-sample-point-map-exact-anchor"
+                        style={{ left: anchorPoint.x, top: anchorPoint.y }}
+                      />
+                    </>
+                  )}
+                  {isReferenceLayer || isRegionalActual ? (
+                    <span
+                      aria-label={sampleNetworkMarkerLabel(icon)}
+                      className={`overview-sample-point-map-icon is-${icon.iconKey ?? "unknown"} is-layer-${(icon.layerType ?? "ANNUAL_ACTUAL").toLowerCase()}${domainClass}${icon.visualState ? ` is-${icon.visualState}` : ""}`}
+                      data-anchor-latitude={icon.latitude ?? undefined}
+                      data-anchor-longitude={icon.longitude ?? undefined}
+                      data-layer-type={icon.layerType}
+                      role="img"
+                      style={{
+                        left: point.x,
+                        top: point.y,
+                        borderRadius: "50%",
+                        cursor: "default",
+                        pointerEvents: "none",
+                        transform: "translate(-50%, -50%)",
+                        ...(icon.visualState === "muted" ? { opacity: 0.42 } : {}),
+                      }}
+                      title={sampleNetworkMarkerTitle(icon)}
+                    >
+                      <SamplePointMapSymbol
+                        {...(icon.aggregateCount !== undefined
+                          ? { aggregateCount: icon.aggregateCount }
+                          : {})}
+                        iconKey={icon.iconKey}
+                        layerType={icon.layerType}
+                        roles={icon.roles}
+                      />
+                    </span>
+                  ) : (
+                    <button
+                      aria-label={`${icon.name}，${(icon.roles ?? []).map((role) => role.name).join("、")}${icon.types.length ? `，当前品种对象类型：${icon.types.map((type) => type.name).join("、")}` : "，当前品种暂无审核通过业务数据"}${coordinateGroup && coordinateGroup.count > 1 ? `，该真实坐标共有 ${coordinateGroup.count} 个正式样本身份` : ""}${expanded ? "，图标为区域内标注，引线起点是真实经纬度" : "，图标锚点是真实经纬度"}，点击查看样本点详情`}
+                      aria-pressed={selectedSamplePointId === icon.samplePointId}
+                      className={`overview-sample-point-map-icon is-${icon.iconKey ?? "unknown"} is-layer-${(icon.layerType ?? "ANNUAL_ACTUAL").toLowerCase()}${domainClass}${icon.dataQualityReason === "DUPLICATE_COORDINATE_UNVERIFIED" ? " has-coordinate-warning" : ""}${selectedSamplePointId === icon.samplePointId ? " is-selected" : ""}`}
+                      data-anchor-latitude={icon.latitude ?? undefined}
+                      data-anchor-longitude={icon.longitude ?? undefined}
+                      data-coordinate-identity-count={coordinateGroup?.count ?? 1}
+                      data-coordinate-identity-index={coordinateGroup?.index ?? 1}
+                      data-glyph-placement={glyphPlacement}
+                      data-glyph-polygon-contained={glyphPolygonContained}
+                      data-glyph-positioning={
+                        expanded ? "inset-callout" : "exact-anchor"
+                      }
+                      data-projected-anchor-x={anchorPoint.x}
+                      data-projected-anchor-y={anchorPoint.y}
+                      data-glyph-footprint-height={glyphFootprint.height}
+                      data-glyph-footprint-width={glyphFootprint.width}
+                      data-layout-scale={scale}
+                      data-region-code={icon.regionCode}
+                      data-layer-type={icon.layerType ?? "ANNUAL_ACTUAL"}
+                      onClick={() => onSamplePointSelect?.(icon.samplePointId)}
+                      style={{
+                        left: point.x,
+                        top: point.y,
+                        zIndex: coordinateGroup?.index ?? 1,
+                        ["--overview-icon-scale" as string]: scale,
+                      }}
+                      title={
+                        expanded
+                          ? "区域内样本标注；引线起点为真实经纬度；点击查看样本点详情"
+                          : coordinateGroup && coordinateGroup.count > 1
+                            ? `真实坐标同址 ${coordinateGroup.count} 个正式样本；点击查看当前样本详情`
+                            : "真实经纬度位置；点击查看样本点详情"
+                      }
+                      type="button"
+                    >
+                      <SamplePointMapSymbol
+                        {...(coordinateGroup &&
+                        coordinateGroup.count > 1 &&
+                        coordinateGroup.index === coordinateGroup.count
+                          ? { aggregateCount: coordinateGroup.count }
+                          : {})}
+                        iconKey={icon.iconKey}
+                        layerType={icon.layerType}
+                        roles={icon.roles}
+                      />
+                    </button>
+                  )}
+                </Fragment>
+              );
+            },
+          )}
         {!activeProjection.backdrop &&
           !activeProjection.features.length &&
           activeProjection.points.length > 0 && (
@@ -1132,6 +1293,29 @@ export default function TerrainReliefBoundaryMap({
       </div>
     </div>
   );
+}
+
+function sampleNetworkMarkerLabel(icon: OverviewSamplePointIcon): string {
+  return sampleNetworkMarkerAccessibilityLabel(icon);
+}
+
+function sampleNetworkMarkerTitle(icon: OverviewSamplePointIcon): string {
+  if (icon.layerType === "DESIGN_COVERAGE_BADGE") {
+    return "行政村设计覆盖；展示分区不是权威边界";
+  }
+  if (icon.layerType === "DESIGN_EXACT_LOCATION") {
+    return "原始设计样本点；已审核精确位置";
+  }
+  return `区域级现有样本；仅确认到${regionalActualLevelLabel(icon.representedRegionLevel)}，不绘制图钉`;
+}
+
+function regionalActualLevelLabel(
+  level: OverviewSamplePointIcon["representedRegionLevel"],
+): string {
+  if (level === "PREFECTURE") return "地级市";
+  if (level === "COUNTY") return "区县";
+  if (level === "TOWNSHIP") return "乡镇";
+  return "行政区域";
 }
 
 function reliefRegionLabel({
@@ -1163,14 +1347,70 @@ function reliefRegionLabel({
   return `${region.name}，已核定 ${region.approvedRecordCount} 个样本点，${action}`;
 }
 
-function SamplePointMapSymbol({ iconKey }: { iconKey: string | undefined }) {
-  const pathData = iconKey ? samplePointIconPathData[iconKey] : undefined;
+function SamplePointMapSymbol({
+  aggregateCount,
+  iconKey,
+  layerType,
+  roles,
+}: {
+  aggregateCount?: number;
+  iconKey: string | undefined;
+  layerType?: OverviewSamplePointIcon["layerType"];
+  roles?: OverviewSamplePointIcon["roles"];
+}) {
+  if ((!layerType || layerType === "ANNUAL_ACTUAL") && roles?.length) {
+    return (
+      <>
+        <span className="overview-sample-point-role-icons">
+          {roles.map((role) => (
+            <img
+              alt=""
+              aria-hidden="true"
+              key={role.code}
+              src={samplePointRoleAssetUrl[role.code]}
+            />
+          ))}
+        </span>
+        {aggregateCount && aggregateCount > 1 ? (
+          <strong aria-hidden="true" className="overview-sample-point-map-count">
+            {aggregateCount}
+          </strong>
+        ) : null}
+      </>
+    );
+  }
+  const pathData =
+    layerType === "DESIGN_COVERAGE_BADGE"
+      ? designCoverageBadgePathData
+      : iconKey === "design-reference"
+        ? designReferenceIconPathData
+        : iconKey === "regional-actual"
+          ? regionalActualBadgePathData
+          : iconKey
+            ? samplePointIconPathData[iconKey]
+            : undefined;
   if (!pathData) return null;
   return (
-    <svg aria-hidden="true" viewBox="0 0 24 24">
-      <path d={pathData} />
-    </svg>
+    <>
+      <svg aria-hidden="true" viewBox="0 0 24 24">
+        <path d={pathData} />
+      </svg>
+      {aggregateCount ? (
+        <strong aria-hidden="true" className="overview-sample-point-map-count">
+          {aggregateCount}
+        </strong>
+      ) : null}
+    </>
   );
+}
+
+function samplePointDomainClass(icon: OverviewSamplePointIcon): string {
+  const roles = new Set(icon.roles?.map(({ code }) => code) ?? []);
+  if (roles.size > 1) return " is-domain-cross";
+  if (roles.has("PRODUCTION")) return " is-domain-production";
+  if (roles.has("MARKET")) return " is-domain-market";
+  if (roles.has("LOGISTICS")) return " is-domain-logistics";
+  return "";
 }
 
 export function createRetryableResourceLoader<T>(load: () => Promise<T>) {
@@ -2007,7 +2247,7 @@ function reportSelectionPosition(
       ? {
           height: STAGE_HEIGHT,
           width: stageWidth,
-          x: anchor.x,
+          x: anchor.x + overviewWideStageOffset(Math.max(STAGE_WIDTH, stageWidth)),
           y: anchor.y,
         }
       : undefined,

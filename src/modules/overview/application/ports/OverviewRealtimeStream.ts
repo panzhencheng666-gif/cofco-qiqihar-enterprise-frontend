@@ -1,4 +1,6 @@
 export interface OverviewBusinessChange {
+  aggregateType?: string;
+  actionCode?: string;
   productCode?: string;
   regionCodes: readonly string[];
   surveyYear?: number;

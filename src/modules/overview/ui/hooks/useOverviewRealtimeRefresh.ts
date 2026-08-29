@@ -84,6 +84,13 @@ export function useOverviewRealtimeRefresh(
       const affectsProduct =
         change.productCode === undefined ||
         change.productCode === currentSelection.productCode;
+      if (change.aggregateType === "SAMPLE_NETWORK_YEAR") {
+        scheduleRefresh({
+          options: true,
+          samplePoints: affectsSelection,
+        });
+        return;
+      }
       scheduleRefresh({
         options: true,
         samplePoints: affectsSelection && affectsProduct,
@@ -122,8 +129,10 @@ function affectsYearAndRegion(
   year: number | undefined,
   selectedRegions: readonly string[],
 ) {
-  if (year === undefined || change.surveyYear !== year) return false;
+  if (year === undefined) return false;
+  if (change.surveyYear !== undefined && change.surveyYear !== year) return false;
   return (
+    change.regionCodes.length === 0 ||
     selectedRegions.length === 0 ||
     change.regionCodes.some((regionCode) => selectedRegions.includes(regionCode))
   );

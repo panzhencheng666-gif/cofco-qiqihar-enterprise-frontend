@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Production rice sample</title>
+  <defs>
+    <linearGradient id="bg" x1="8" y1="6" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#a8d85f"/>
+      <stop offset="1" stop-color="#356b2e"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#bg)" stroke="#eef8b8" stroke-width="2" d="M32 3c16 0 27 11 27 26 0 17-17 29-27 32C22 58 5 46 5 29 5 14 16 3 32 3Z"/>
+  <path fill="none" stroke="#fff7bd" stroke-linecap="round" stroke-width="3" d="M32 49V19m0 7c-7 0-11-4-12-9 7 0 11 3 12 9Zm0 8c7 0 11-4 12-9-7 0-11 3-12 9Zm0 8c-7 0-11-4-12-9 7 0 11 3 12 9Zm0 7c7 0 11-4 12-9-7 0-11 3-12 9Z"/>
+  <path fill="none" stroke="#d5ee86" stroke-linecap="round" stroke-width="2" d="M25 52h14"/>
+</svg>

@@ -1,18 +1,24 @@
 import type { ReactNode } from "react";
 
 import type {
-  OverviewDashboard,
   OverviewDashboardMetric,
+  OverviewDashboardSummary,
   OverviewRegion,
 } from "../../domain/overview";
+import { publicAssetUrl } from "../../../../shared/assets/publicAssetUrl";
 import { formatMetricAuditLabel } from "../presentation/metricAuditLabel";
 import type { OverviewMapSelectionPoint } from "./boundaryGeometry";
-import { businessPlatformLedgerUrl } from "../businessPlatformNavigation";
 import { overviewSelectionConnector } from "./terrainReliefGeometry";
 
 export function OverviewCommandCenter({
   boundarySource,
   dashboard,
+  dashboardLoading = false,
+  dataModePanel,
+  dataModeControls,
+  sideDataPanel = false,
+  dataSourceLabel = "业务数据仅展示已填报并审核内容",
+  dataStatusText,
   filters,
   map,
   navigation,
@@ -20,7 +26,12 @@ export function OverviewCommandCenter({
   onEnterSelectedRegion,
   periodLabel,
   productLabel,
+  sampleNetworkControls,
+  sampleMode = true,
+  scopeLabel,
   samplePoints,
+  selectedSamplePoint,
+  onCloseSelectedSamplePoint,
   selectedRegion,
   selectionPoint,
 }: {
@@ -29,7 +40,13 @@ export function OverviewCommandCenter({
     name: string;
     revision: string;
   };
-  dashboard?: OverviewDashboard;
+  dashboard?: OverviewDashboardSummary;
+  dashboardLoading?: boolean;
+  dataModePanel?: ReactNode;
+  dataModeControls?: ReactNode;
+  sideDataPanel?: boolean;
+  dataSourceLabel?: string;
+  dataStatusText?: string;
   filters: ReactNode;
   map: ReactNode;
   navigation: ReactNode;
@@ -37,26 +54,57 @@ export function OverviewCommandCenter({
   onEnterSelectedRegion: (region: OverviewRegion) => void;
   periodLabel?: string;
   productLabel: string;
+  sampleNetworkControls?: ReactNode;
+  sampleMode?: boolean;
+  scopeLabel?: string;
   samplePoints?: ReactNode;
+  selectedSamplePoint?: { details: ReactNode; name: string };
+  onCloseSelectedSamplePoint?: () => void;
   selectedRegion?: OverviewRegion;
   selectionPoint?: OverviewMapSelectionPoint;
 }) {
   const metricByCode = new Map(dashboard?.metrics.map((item) => [item.code, item]));
   const overtureBoundary = boundarySource?.name.includes("Overture") ?? false;
-  const path = dashboard?.regionPath.map((item) => item.label) ?? [];
-  const selectedPath = path.length ? path.join(" / ") : selectedRegion?.name;
+  const selectedPath = selectedRegion?.name;
+  const awaitingDashboard = dashboardLoading && !dashboard;
+  const hasApprovedSources =
+    dashboard?.metrics.some((item) => item.sourceCount > 0) ?? false;
+  const latestUpdatedAt = dashboard?.metrics
+    .map((item) => item.dataCutoff)
+    .filter((value): value is string => Boolean(value))
+    .sort()
+    .at(-1);
   const metrics = [
-    metric("粮食播种面积", metricByCode.get("PRODUCTION_CULTIVATED_AREA"), "area"),
-    metric("预计总产量", metricByCode.get("PRODUCTION_ESTIMATED_OUTPUT"), "output"),
-    metric("平均收购价", metricByCode.get("MARKET_AVERAGE_PURCHASE_PRICE"), "price"),
-    metric("平均销售价", metricByCode.get("MARKET_AVERAGE_SALE_PRICE"), "price"),
-    metric("总供给", metricByCode.get("SUPPLY_TOTAL_SUPPLY"), "supply"),
-    metric("总需求", metricByCode.get("SUPPLY_TOTAL_USE"), "demand"),
-    regionSurplusMetric(metricByCode.get("REGION_SURPLUS")),
+    metric(
+      "粮食播种面积",
+      metricByCode.get("PRODUCTION_CULTIVATED_AREA"),
+      "area",
+      awaitingDashboard,
+    ),
+    metric(
+      "预计总产量",
+      metricByCode.get("PRODUCTION_ESTIMATED_OUTPUT"),
+      "output",
+      awaitingDashboard,
+    ),
+    metric(
+      "平均收购价",
+      metricByCode.get("MARKET_AVERAGE_PURCHASE_PRICE"),
+      "price",
+      awaitingDashboard,
+    ),
+    metric(
+      "平均销售价",
+      metricByCode.get("MARKET_AVERAGE_SALE_PRICE"),
+      "price",
+      awaitingDashboard,
+    ),
   ];
 
   return (
-    <main className={`overview-command-center${selectedRegion ? " has-details" : ""}`}>
+    <main
+      className={`overview-command-center${selectedRegion || selectedSamplePoint ? " has-details" : ""}${sideDataPanel ? " has-side-data-panel" : ""}`}
+    >
       <h2 className="overview-sr-only">粮食商情总览</h2>
 
       <section aria-label="粮食商情总览地图" className="overview-command-map">
@@ -72,29 +120,42 @@ export function OverviewCommandCenter({
         <div className="overview-command-status">
           <span>
             <i />
-            {dashboard?.scope.approvedRecordCount ? "已核验数据" : "等待审核数据"}
+            {dataStatusText ??
+              (awaitingDashboard
+                ? "正在同步审核数据"
+                : hasApprovedSources
+                  ? "已核验数据"
+                  : "等待审核数据")}
           </span>
           <b>更新于</b>
-          <strong>{formatDateTime(dashboard?.scope.latestUpdatedAt)}</strong>
+          <strong>
+            {dataStatusText
+              ? "实时联动"
+              : awaitingDashboard
+                ? "正在同步"
+                : formatDateTime(latestUpdatedAt)}
+          </strong>
         </div>
       </header>
 
-      <section aria-label="总揽关键指标" className="overview-command-kpis">
-        {metrics.map((item) => (
-          <article
-            aria-label={item.label}
-            className={`is-${item.tone}`}
-            key={item.label}
-          >
-            <p>{item.label}</p>
-            <div>
-              <strong>{item.value}</strong>
-              <small>{item.unit}</small>
-            </div>
-            <span>{item.sourceLabel}</span>
-          </article>
-        ))}
-      </section>
+      {dataModePanel ?? (
+        <section aria-label="总揽关键指标" className="overview-command-kpis">
+          {metrics.map((item) => (
+            <article
+              aria-label={item.label}
+              className={`is-${item.tone}`}
+              key={item.label}
+            >
+              <p>{item.label}</p>
+              <div>
+                <strong>{item.value}</strong>
+                <small>{item.unit}</small>
+              </div>
+              <span>{item.sourceLabel}</span>
+            </article>
+          ))}
+        </section>
+      )}
 
       <aside className="overview-command-legend">
         <h3>图例</h3>
@@ -114,20 +175,72 @@ export function OverviewCommandCenter({
           <i className="is-village" />
           行政村界
         </span>
-        <span>
-          <i className="is-production-sample" />
-          生产类样本点
-        </span>
-        <span>
-          <i className="is-market-sample" />
-          市场类样本点
-        </span>
+        {sampleMode && (
+          <>
+            <span>
+              <img
+                alt=""
+                className="is-production-sample"
+                src={publicAssetUrl("overview/sample-points/production-rice.svg")}
+              />
+              产情类样本点
+            </span>
+            <span>
+              <img
+                alt=""
+                className="is-market-sample"
+                src={publicAssetUrl("overview/sample-points/market-bank.svg")}
+              />
+              市场类样本点
+            </span>
+            <span>
+              <img
+                alt=""
+                className="is-logistics-sample"
+                src={publicAssetUrl("overview/sample-points/logistics-car.svg")}
+              />
+              物流类样本点
+            </span>
+            <span>
+              <i className="is-design-coverage" />
+              设计覆盖
+            </span>
+            <span>
+              <i className="is-design-exact" />
+              已核验设计位置
+            </span>
+          </>
+        )}
       </aside>
-      {navigation}
+      <div className="overview-command-tools">
+        {dataModeControls}
+        {navigation}
+        {sampleNetworkControls}
+      </div>
 
       {selectedRegion && selectionPoint && <SelectionLink point={selectionPoint} />}
 
-      {selectedRegion && (
+      {selectedSamplePoint ? (
+        <aside
+          aria-label="所选现有样本详情"
+          className="overview-command-details overview-command-sample-details"
+        >
+          <header>
+            <div>
+              <h2>现有样本详情</h2>
+              <p>{selectedSamplePoint.name}</p>
+            </div>
+            <button
+              aria-label="关闭现有样本详情"
+              onClick={onCloseSelectedSamplePoint}
+              type="button"
+            >
+              ×
+            </button>
+          </header>
+          {selectedSamplePoint.details}
+        </aside>
+      ) : selectedRegion ? (
         <aside aria-label="所选地区样本点详情" className="overview-command-details">
           <header>
             <div>
@@ -140,9 +253,6 @@ export function OverviewCommandCenter({
           </header>
           {samplePoints ?? <UnavailableSamplePointPanel />}
           <nav className="overview-detail-actions">
-            <a href={businessPlatformLedgerUrl()} target="_top">
-              查看样本点台账
-            </a>
             <button
               disabled={selectedRegion.level === "VILLAGE"}
               onClick={() => onEnterSelectedRegion(selectedRegion)}
@@ -150,18 +260,18 @@ export function OverviewCommandCenter({
             >
               {selectedRegion.level === "VILLAGE"
                 ? "行政村样本点末级"
-                : "进入样本点监测"}
+                : `进入${selectedRegion.name}，查看${selectedRegion.level === "PREFECTURE" ? "区县" : selectedRegion.level === "COUNTY" ? "乡镇" : "行政村"}样本`}
             </button>
           </nav>
         </aside>
-      )}
+      ) : null}
 
       <footer className="overview-command-footer">
-        <span>{scopeText(dashboard)}</span>
+        <span>{scopeLabel ?? scopeText(dashboard)}</span>
         <span>
           {productLabel} · {periodLabel ?? "未选择业务期间"}
         </span>
-        <span>业务数据仅展示已填报并审核内容</span>
+        <span>{dataSourceLabel}</span>
         {boundarySource && (
           <span
             className="overview-boundary-provenance"
@@ -249,78 +359,29 @@ function metric(
   label: string,
   value: OverviewDashboardMetric | undefined,
   tone: string,
+  loading = false,
 ) {
+  if (loading) {
+    return {
+      label,
+      sourceLabel: "正在同步审核数据",
+      tone,
+      unit: "",
+      value: "正在同步",
+    };
+  }
   return {
     label,
     sourceLabel: value?.sourceCount ? formatMetricAuditLabel(value) : "暂无审核数据",
     tone,
     unit: value?.unitCode ?? "",
     value:
-      value?.sourceCount && value.value !== null ? formatNumber(value.value) : "— —",
-  };
-}
-
-function regionSurplusMetric(value: OverviewDashboardMetric | undefined) {
-  const available =
-    value?.coverageStatus === "AVAILABLE" &&
-    value.sourceCount > 0 &&
-    value.value !== null;
-  const partial =
-    value?.coverageStatus === "PARTIAL" &&
-    value.sourceCount > 0 &&
-    value.value !== null;
-  const missing = !value || value.coverageStatus === "NO_APPROVED_SOURCES";
-  return {
-    label: "地区余粮",
-    sourceLabel: available
-      ? `${value.sourceCount} 条审核来源${value.dataCutoff ? ` · 截止 ${value.dataCutoff}` : ""}`
-      : partial
-        ? partialRegionSurplusLabel(value)
-        : missing
-          ? "暂无审核来源"
-          : regionSurplusReliabilityLabel(value.coverageStatus),
-    tone: "surplus",
-    unit: value?.unitCode ?? "吨",
-    value:
-      (available || partial) && value?.value !== null && value?.value !== undefined
+      value?.sourceCount && value.value !== null
         ? formatNumber(value.value)
-        : missing
-          ? "暂无审核数据"
-          : "暂无可靠数据",
+        : value?.sourceCount
+          ? "计算条件未完整"
+          : "暂无审核数据",
   };
-}
-
-function partialRegionSurplusLabel(value: OverviewDashboardMetric) {
-  const adoptedDomains = new Set(
-    value.auditSources
-      .filter((source) => source.adopted)
-      .map((source) => source.sourceDomain),
-  );
-  const coverageLabel = adoptedDomains.has("PRODUCTION")
-    ? "产情审核来源 · 市场暂无审核来源"
-    : adoptedDomains.has("MARKET")
-      ? "市场审核来源 · 产情暂无审核来源"
-      : "审核来源 · 来源范围不完整";
-  return `${value.sourceCount} 条${coverageLabel}${value.dataCutoff ? ` · 截止 ${value.dataCutoff}` : ""}`;
-}
-
-function regionSurplusReliabilityLabel(
-  status: OverviewDashboardMetric["coverageStatus"],
-) {
-  switch (status) {
-    case "PARTIAL":
-      return "审核来源范围不完整";
-    case "INSUFFICIENT_COVERAGE":
-      return "审核来源覆盖不足";
-    case "CUTOFF_MISMATCH":
-      return "审核来源统计截止日不一致";
-    case "UNRELIABLE_SOURCE_CONTRACT":
-      return "审核来源契约不可靠";
-    case "MUTUAL_EXCLUSIVITY_VIOLATION":
-      return "审核来源存在重复归属";
-    default:
-      return "后端可靠性校验未通过";
-  }
 }
 
 function formatNumber(value: string) {
@@ -345,7 +406,7 @@ function formatDateTime(value?: string) {
       }).format(date);
 }
 
-function scopeText(dashboard?: OverviewDashboard) {
+function scopeText(dashboard?: OverviewDashboardSummary) {
   if (!dashboard) return "正在读取平台治理主数据";
-  return `数据范围：${dashboard.scope.countyCount}个县区、${dashboard.scope.townshipCount}个乡镇、${dashboard.scope.villageCount}个行政村`;
+  return `数据范围：${dashboard.scope.prefectureCount}个地级范围、${dashboard.scope.countyCount}个县区、${dashboard.scope.townshipCount}个乡镇、${dashboard.scope.villageCount}个行政村`;
 }
