@@ -51,6 +51,35 @@ describe("HttpOverviewSamplePointRepository", () => {
     expect(result.icons).toEqual([]);
   });
 
+  it("forwards cancellation to the atomic snapshot request", async () => {
+    const get = respondingWith({
+      list: {
+        regionCode: "230202",
+        totalCount: 0,
+        validCoordinateCount: 0,
+        dataQualityIssueCount: 0,
+        correctionSourceCount: 0,
+        unresolvedSourceCount: 0,
+        categories: [],
+        items: [],
+        correctionSources: [],
+      },
+      icons: [],
+    });
+    const controller = new AbortController();
+
+    await repositoryWith(get).snapshot(
+      { productCode: "CORN", regionCode: "230202", year: 2026 },
+      { signal: controller.signal },
+    );
+
+    expect(get).toHaveBeenCalledWith(
+      expect.stringContaining("/api/v1/overview/sample-point-snapshot"),
+      expect.anything(),
+      { signal: controller.signal },
+    );
+  });
+
   it("keeps stable role icons separate from product-scoped object types", async () => {
     const get = respondingWith([
       {

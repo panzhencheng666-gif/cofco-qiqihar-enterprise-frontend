@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
+import type { OverviewSamplePointRequestOptions } from "../../application/ports/OverviewSamplePointRepository";
 import type { OverviewSamplePointCategoryCode } from "../../domain/overviewSamplePoint";
 import type { HttpClient } from "../../../../shared/api/HttpClient";
 import { queryString } from "../../../../shared/api/HttpClient";
@@ -286,51 +287,60 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
     ).data;
   }
 
-  async list(query: {
-    regionCode: string;
-    productCode: string;
-    year: number;
-    categoryCode?: OverviewSamplePointCategoryCode;
-    typeCode?: string;
-    query?: string;
-  }) {
+  async list(
+    query: {
+      regionCode: string;
+      productCode: string;
+      year: number;
+      categoryCode?: OverviewSamplePointCategoryCode;
+      typeCode?: string;
+      query?: string;
+    },
+    options?: OverviewSamplePointRequestOptions,
+  ) {
+    const path = `/api/v1/overview/sample-points${queryString(query)}`;
     return (
-      await this.http.get(
-        `/api/v1/overview/sample-points${queryString(query)}`,
-        listSchema,
-      )
+      await (options
+        ? this.http.get(path, listSchema, options)
+        : this.http.get(path, listSchema))
     ).data;
   }
 
-  async icons(query: {
-    regionCode: string;
-    productCode: string;
-    year: number;
-    categoryCode?: OverviewSamplePointCategoryCode;
-    typeCode?: string;
-    query?: string;
-  }) {
+  async icons(
+    query: {
+      regionCode: string;
+      productCode: string;
+      year: number;
+      categoryCode?: OverviewSamplePointCategoryCode;
+      typeCode?: string;
+      query?: string;
+    },
+    options?: OverviewSamplePointRequestOptions,
+  ) {
+    const path = `/api/v1/overview/sample-point-icons${queryString(query)}`;
     return (
-      await this.http.get(
-        `/api/v1/overview/sample-point-icons${queryString(query)}`,
-        iconsSchema,
-      )
+      await (options
+        ? this.http.get(path, iconsSchema, options)
+        : this.http.get(path, iconsSchema))
     ).data;
   }
 
-  async snapshot(query: {
-    regionCode: string;
-    productCode: string;
-    year: number;
-    categoryCode?: OverviewSamplePointCategoryCode;
-    typeCode?: string;
-    query?: string;
-  }) {
+  async snapshot(
+    query: {
+      regionCode: string;
+      productCode: string;
+      year: number;
+      categoryCode?: OverviewSamplePointCategoryCode;
+      typeCode?: string;
+      query?: string;
+    },
+    options?: OverviewSamplePointRequestOptions,
+  ) {
+    const path = `/api/v1/overview/sample-point-snapshot${queryString(query)}`;
     return (
-      await this.http.get(
-        `/api/v1/overview/sample-point-snapshot${queryString(query)}`,
-        snapshotSchema,
-      )
+      await (options
+        ? this.http.get(path, snapshotSchema, options)
+        : this.http.get(path, snapshotSchema))
     ).data;
   }
 

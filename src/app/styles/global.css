@@ -4655,27 +4655,31 @@ select:focus-visible {
   padding: 0 10px 10px;
   overflow-y: auto;
 }
-.overview-sample-point-list > button {
+.overview-sample-point-list > [role="listitem"] > button {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 3px 8px;
+  width: 100%;
   padding: 9px 10px;
   text-align: left;
 }
-.overview-sample-point-list > button strong {
+.overview-sample-point-list > [role="listitem"] > button strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.overview-sample-point-list > button span,
-.overview-sample-point-list > button small {
+.overview-sample-point-list > [role="listitem"] > button span,
+.overview-sample-point-list > [role="listitem"] > button small {
   color: #b8e4f2;
   font-size: 10px;
 }
-.overview-sample-point-list > button small {
+.overview-sample-point-list > [role="listitem"] > button small {
   grid-column: 1 / -1;
 }
-.overview-sample-point-list > button .overview-sample-point-list-summary {
+.overview-sample-point-list
+  > [role="listitem"]
+  > button
+  .overview-sample-point-list-summary {
   display: flex;
   grid-column: 1 / -1;
   flex-wrap: wrap;
@@ -4683,14 +4687,39 @@ select:focus-visible {
   padding-top: 3px;
   border-top: 1px solid rgb(151 221 239 / 14%);
 }
-.overview-sample-point-list > button .overview-sample-point-list-quality {
+.overview-sample-point-list
+  > [role="listitem"]
+  > button
+  .overview-sample-point-list-quality {
   grid-column: 1 / -1;
   color: #ffe2a0;
   font-size: 9px;
 }
-.overview-sample-point-list > button .overview-sample-point-list-summary > span {
+.overview-sample-point-list
+  > [role="listitem"]
+  > button
+  .overview-sample-point-list-summary
+  > span {
   color: #d9f4fb;
   white-space: nowrap;
+}
+.overview-sample-point-pagination {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px 10px;
+  border-top: 1px solid rgb(151 221 239 / 14%);
+}
+.overview-sample-point-pagination button {
+  min-height: 30px;
+  padding: 4px 10px;
+  font-size: 10px;
+}
+.overview-sample-point-pagination span {
+  color: #c4e8f4;
+  font-size: 10px;
+  text-align: center;
 }
 .overview-sample-point-business {
   flex: 1 1 0;
@@ -5311,7 +5340,7 @@ select:focus-visible {
   white-space: nowrap;
 }
 
-@media (max-width: 700px) {
+@media (max-width: 800px) {
   html,
   body,
   #root {
@@ -5460,14 +5489,15 @@ select:focus-visible {
   }
 
   .overview-command-details {
-    position: relative;
-    inset: auto;
+    position: fixed;
+    inset: 12px;
     order: 5;
     width: auto;
-    max-height: 76svh;
-    margin: 0 12px 12px;
+    height: calc(100dvh - 24px);
+    max-height: none;
+    margin: 0;
     padding: 22px 16px 16px;
-    overflow: auto;
+    overflow: hidden;
     flex: 0 0 auto;
   }
 

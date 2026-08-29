@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { vi } from "vitest";
+import { afterEach, vi } from "vitest";
 
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
 import type { SampleNetworkComparison } from "../../domain/overviewSamplePoint";
@@ -31,6 +31,142 @@ const comparison: SampleNetworkComparison = {
 };
 
 describe("useOverviewSampleNetworkLayers", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("debounces search, suppresses IME composition, and clears immediately", async () => {
+    vi.useFakeTimers();
+    const repository = repositoryWithSnapshot();
+    const { result } = renderHook(() =>
+      useOverviewSampleNetworkLayers({
+        productCode: "CORN",
+        refreshSequence: 0,
+        region: { code: "230281", level: "COUNTY", name: "讷河市" },
+        repository,
+        year: 2026,
+      }),
+    );
+
+    await act(() => Promise.resolve());
+    expect(repository.snapshot).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      result.current.setQueryComposition?.(true);
+      result.current.setQuery?.("n");
+      result.current.setQuery?.("ne");
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(repository.snapshot).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      result.current.setQuery?.("讷河");
+      result.current.setQueryComposition?.(false);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(249);
+    });
+    expect(repository.snapshot).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(repository.snapshot.mock.calls.at(-1)?.[0]).toEqual(
+      expect.objectContaining({ query: "讷河" }),
+    );
+    expect(repository.snapshot.mock.calls.at(-1)?.[1]?.signal).toBeInstanceOf(
+      AbortSignal,
+    );
+
+    act(() => result.current.setQuery?.(""));
+    await act(() => Promise.resolve());
+    expect(repository.snapshot.mock.calls.at(-1)?.[0]).not.toHaveProperty("query");
+    expect(repository.snapshot.mock.calls.at(-1)?.[1]?.signal).toBeInstanceOf(
+      AbortSignal,
+    );
+  });
+
+  it("aborts superseded searches and ignores a late response from an older scope", async () => {
+    vi.useFakeTimers();
+    const firstSearch = deferredSnapshot();
+    const secondSearch = deferredSnapshot();
+    const repository = repositoryWithSnapshot((query) => {
+      if (query.query === "旧") return firstSearch.promise;
+      if (query.query === "新") return secondSearch.promise;
+      return Promise.resolve(emptySnapshot(query.regionCode));
+    });
+    const { result } = renderHook(() =>
+      useOverviewSampleNetworkLayers({
+        productCode: "CORN",
+        refreshSequence: 0,
+        region: { code: "230281", level: "COUNTY", name: "讷河市" },
+        repository,
+        year: 2026,
+      }),
+    );
+    await act(() => Promise.resolve());
+
+    act(() => result.current.setQuery?.("旧"));
+    await act(() => vi.advanceTimersByTimeAsync(250));
+    const oldSignal = repository.snapshot.mock.calls.at(-1)?.[1]?.signal;
+    expect(oldSignal?.aborted).toBe(false);
+
+    act(() => result.current.setQuery?.("新"));
+    await act(() => vi.advanceTimersByTimeAsync(250));
+    expect(oldSignal?.aborted).toBe(true);
+
+    secondSearch.resolve(snapshotNamed("230281", "新结果"));
+    await act(() => Promise.resolve());
+    expect(result.current.filteredList?.items[0]?.name).toBe("新结果");
+
+    firstSearch.resolve(snapshotNamed("230281", "旧结果"));
+    await act(() => Promise.resolve());
+    expect(result.current.filteredList?.items[0]?.name).toBe("新结果");
+  });
+
+  it.each([
+    ["region", { productCode: "CORN", regionCode: "230225", year: 2026 }],
+    ["product", { productCode: "SOYBEAN", regionCode: "230281", year: 2026 }],
+    ["year", { productCode: "CORN", regionCode: "230281", year: 2025 }],
+  ] as const)(
+    "aborts the active search when %s scope changes",
+    async (_label, next) => {
+      const pending = deferredSnapshot();
+      let firstSnapshot = true;
+      const repository = repositoryWithSnapshot((query) => {
+        if (firstSnapshot) {
+          firstSnapshot = false;
+          return pending.promise;
+        }
+        return Promise.resolve(emptySnapshot(query.regionCode));
+      });
+      let scope = { productCode: "CORN", regionCode: "230281", year: 2026 };
+      const { rerender } = renderHook(() =>
+        useOverviewSampleNetworkLayers({
+          productCode: scope.productCode,
+          refreshSequence: 0,
+          region: { code: scope.regionCode, level: "COUNTY", name: "测试地区" },
+          repository,
+          year: scope.year,
+        }),
+      );
+      await act(() => Promise.resolve());
+      const oldSignal = repository.snapshot.mock.calls[0]?.[1]?.signal;
+      expect(oldSignal?.aborted).toBe(false);
+
+      scope = next;
+      rerender();
+      await act(() => Promise.resolve());
+      expect(oldSignal?.aborted).toBe(true);
+      expect(repository.snapshot.mock.calls.at(-1)?.[0]).toEqual(
+        expect.objectContaining(next),
+      );
+      expect(repository.snapshot.mock.calls.at(-1)?.[1]?.signal).toBeInstanceOf(
+        AbortSignal,
+      );
+    },
+  );
   it("keeps one confirmed map and list snapshot during a same-scope realtime refresh", async () => {
     const list = {
       regionCode: "230281",
@@ -174,7 +310,7 @@ describe("useOverviewSampleNetworkLayers", () => {
         }),
       ),
       aggregates: vi.fn(),
-      list: vi.fn(() =>
+      list: vi.fn<OverviewSamplePointRepository["list"]>(() =>
         Promise.resolve({
           regionCode: "230200",
           totalCount: 1,
@@ -187,7 +323,7 @@ describe("useOverviewSampleNetworkLayers", () => {
           correctionSources: [],
         }),
       ),
-      icons: vi.fn(() => Promise.resolve([])),
+      icons: vi.fn<OverviewSamplePointRepository["icons"]>(() => Promise.resolve([])),
       detail: vi.fn(),
     } satisfies OverviewSamplePointRepository;
 
@@ -202,12 +338,12 @@ describe("useOverviewSampleNetworkLayers", () => {
     );
 
     await waitFor(() => expect(result.current.catalogState).toBe("ready"));
-    expect(repository.list).toHaveBeenCalledWith({
+    expect(repository.list.mock.calls.map(([request]) => request)).toContainEqual({
       productCode: "RICE",
       regionCode: "230200",
       year: 2025,
     });
-    expect(repository.icons).toHaveBeenCalledWith({
+    expect(repository.icons.mock.calls.map(([request]) => request)).toContainEqual({
       productCode: "RICE",
       regionCode: "230200",
       year: 2025,
@@ -226,7 +362,7 @@ describe("useOverviewSampleNetworkLayers", () => {
         Promise.resolve({ ...comparison, networkStatus: "PUBLISHED" }),
       ),
       aggregates: vi.fn(),
-      list: vi.fn(() =>
+      list: vi.fn<OverviewSamplePointRepository["list"]>(() =>
         Promise.resolve({
           regionCode: "230200",
           totalCount: 1,
@@ -239,7 +375,7 @@ describe("useOverviewSampleNetworkLayers", () => {
           correctionSources: [],
         }),
       ),
-      icons: vi.fn(() => Promise.resolve([])),
+      icons: vi.fn<OverviewSamplePointRepository["icons"]>(() => Promise.resolve([])),
       detail: vi.fn(),
     } satisfies OverviewSamplePointRepository;
 
@@ -254,7 +390,7 @@ describe("useOverviewSampleNetworkLayers", () => {
     );
 
     await waitFor(() => expect(result.current.catalogState).toBe("ready"));
-    expect(repository.icons).toHaveBeenCalledWith({
+    expect(repository.icons.mock.calls.map(([request]) => request)).toContainEqual({
       productCode: "RICE",
       regionCode: "230200",
       year: 2026,
@@ -374,3 +510,68 @@ describe("useOverviewSampleNetworkLayers", () => {
     expect(result.current.comparison?.exactCoveredDesignPointCount).toBe(1);
   });
 });
+
+function repositoryWithSnapshot(
+  implementation: OverviewSamplePointRepository["snapshot"] = (query) =>
+    Promise.resolve(emptySnapshot(query.regionCode)),
+) {
+  return {
+    comparison: vi.fn(() => Promise.resolve(comparison)),
+    aggregates: vi.fn(),
+    snapshot: vi.fn(implementation),
+    list: vi.fn(),
+    icons: vi.fn(),
+    detail: vi.fn(),
+  } satisfies OverviewSamplePointRepository;
+}
+
+function emptySnapshot(regionCode: string) {
+  return {
+    list: {
+      regionCode,
+      totalCount: 0,
+      validCoordinateCount: 0,
+      dataQualityIssueCount: 0,
+      correctionSourceCount: 0,
+      unresolvedSourceCount: 0,
+      categories: [],
+      items: [],
+      correctionSources: [],
+    },
+    icons: [],
+  };
+}
+
+function snapshotNamed(regionCode: string, name: string) {
+  const snapshot = emptySnapshot(regionCode);
+  return {
+    ...snapshot,
+    list: {
+      ...snapshot.list,
+      totalCount: 1,
+      items: [
+        {
+          samplePointId: "94000000-0000-0000-0000-000000000001",
+          name,
+          regionCode,
+          regionName: "测试地区",
+          locationState: "VALID",
+          dataQualityReason: null,
+          categories: [],
+          types: [],
+          products: [],
+          latestBusinessDate: null,
+          summaryValues: {},
+        },
+      ],
+    },
+  };
+}
+
+function deferredSnapshot() {
+  let resolve!: (value: ReturnType<typeof snapshotNamed>) => void;
+  const promise = new Promise<ReturnType<typeof snapshotNamed>>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}

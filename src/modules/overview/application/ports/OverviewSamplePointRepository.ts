@@ -9,6 +9,10 @@ import type {
 } from "../../domain/overviewSamplePoint";
 import type { HttpDownload } from "../../../../shared/api/HttpClient";
 
+export interface OverviewSamplePointRequestOptions {
+  signal?: AbortSignal;
+}
+
 export interface OverviewSamplePointRepository {
   exportInventory?(query: { year: number; regionCode?: string }): Promise<HttpDownload>;
   designComparison?(query: {
@@ -25,30 +29,39 @@ export interface OverviewSamplePointRepository {
     productCode: string;
     year: number;
   }): Promise<readonly OverviewSamplePointAggregate[]>;
-  list(query: {
-    regionCode: string;
-    productCode: string;
-    year: number;
-    categoryCode?: OverviewSamplePointCategoryCode;
-    typeCode?: string;
-    query?: string;
-  }): Promise<OverviewSamplePointList>;
-  icons(query: {
-    regionCode: string;
-    productCode: string;
-    year: number;
-    categoryCode?: OverviewSamplePointCategoryCode;
-    typeCode?: string;
-    query?: string;
-  }): Promise<readonly OverviewSamplePointIcon[]>;
-  snapshot?(query: {
-    regionCode: string;
-    productCode: string;
-    year: number;
-    categoryCode?: OverviewSamplePointCategoryCode;
-    typeCode?: string;
-    query?: string;
-  }): Promise<{
+  list(
+    query: {
+      regionCode: string;
+      productCode: string;
+      year: number;
+      categoryCode?: OverviewSamplePointCategoryCode;
+      typeCode?: string;
+      query?: string;
+    },
+    options?: OverviewSamplePointRequestOptions,
+  ): Promise<OverviewSamplePointList>;
+  icons(
+    query: {
+      regionCode: string;
+      productCode: string;
+      year: number;
+      categoryCode?: OverviewSamplePointCategoryCode;
+      typeCode?: string;
+      query?: string;
+    },
+    options?: OverviewSamplePointRequestOptions,
+  ): Promise<readonly OverviewSamplePointIcon[]>;
+  snapshot?(
+    query: {
+      regionCode: string;
+      productCode: string;
+      year: number;
+      categoryCode?: OverviewSamplePointCategoryCode;
+      typeCode?: string;
+      query?: string;
+    },
+    options?: OverviewSamplePointRequestOptions,
+  ): Promise<{
     list: OverviewSamplePointList;
     icons: readonly OverviewSamplePointIcon[];
   }>;

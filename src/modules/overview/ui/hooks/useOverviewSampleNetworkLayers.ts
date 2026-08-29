@@ -35,16 +35,20 @@ export interface OverviewSampleNetworkLayerModel {
   issue: string | undefined;
   mode: SampleNetworkLayerMode;
   query?: string;
+  retryFiltered?: () => void;
   region: OverviewSampleNetworkRegion | undefined;
   setCategoryCode: (categoryCode: OverviewSamplePointCategoryCode | undefined) => void;
   setMode: (mode: SampleNetworkLayerMode) => void;
   setQuery?: (query: string) => void;
+  setQueryComposition?: (composing: boolean) => void;
   setShowExactDesignLocations: (show: boolean) => void;
   showExactDesignLocations: boolean;
   state: SampleNetworkLoadState;
   setTypeCode: (typeCode: string | undefined) => void;
   typeCode: string | undefined;
 }
+
+const SEARCH_DEBOUNCE_MS = 250;
 
 export function useOverviewSampleNetworkLayers({
   productCode,
@@ -78,6 +82,9 @@ export function useOverviewSampleNetworkLayers({
   const [filteredList, setFilteredList] = useState<OverviewSamplePointList>();
   const [filteredState, setFilteredState] = useState<SampleNetworkLoadState>("idle");
   const [storedQuery, setQueryState] = useState("");
+  const [requestQuery, setRequestQuery] = useState("");
+  const [queryComposing, setQueryComposition] = useState(false);
+  const [filteredRetrySequence, setFilteredRetrySequence] = useState(0);
   const [showExactDesignLocations, setShowExactDesignLocations] = useState(false);
   const [comparisonSource, setComparisonSource] = useState<
     SampleNetworkComparison | SampleNetworkDesignComparison
@@ -91,7 +98,7 @@ export function useOverviewSampleNetworkLayers({
   const comparisonRegionCode =
     regionLevel === "VILLAGE" ? regionParentCode : regionCode;
   const comparisonScopeKey = `${productCode}:${year ?? ""}:${comparisonRegionCode ?? ""}`;
-  const filteredScopeKey = `${filterScopeKey}:${categoryCode ?? ""}:${typeCode ?? ""}:${query.trim()}`;
+  const filteredScopeKey = `${filterScopeKey}:${categoryCode ?? ""}:${typeCode ?? ""}:${requestQuery.trim()}`;
   const comparisonSnapshotScopeRef = useRef("");
   const catalogSnapshotScopeRef = useRef("");
   const filteredSnapshotScopeRef = useRef("");
@@ -104,6 +111,8 @@ export function useOverviewSampleNetworkLayers({
       setCategoryCodeState(next);
       setTypeCodeState(undefined);
       setQueryState("");
+      setRequestQuery("");
+      setQueryComposition(false);
     },
     [filterScopeKey],
   );
@@ -118,9 +127,23 @@ export function useOverviewSampleNetworkLayers({
     (next: string) => {
       setFilterStateScopeKey(filterScopeKey);
       setQueryState(next);
+      if (!next.trim()) setRequestQuery("");
     },
     [filterScopeKey],
   );
+  const retryFiltered = useCallback(() => {
+    setFilteredRetrySequence((current) => current + 1);
+  }, []);
+
+  useEffect(() => {
+    if (queryComposing) return;
+    const trimmed = storedQuery.trim();
+    if (!trimmed) return;
+    const timer = window.setTimeout(() => {
+      setRequestQuery(trimmed);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [queryComposing, storedQuery]);
 
   useEffect(() => {
     let active = true;
@@ -130,6 +153,8 @@ export function useOverviewSampleNetworkLayers({
       setCategoryCodeState(undefined);
       setTypeCodeState(undefined);
       setQueryState("");
+      setRequestQuery("");
+      setQueryComposition(false);
     });
     return () => {
       active = false;
@@ -207,14 +232,15 @@ export function useOverviewSampleNetworkLayers({
     let active = true;
     const sameScope = filteredSnapshotScopeRef.current === filteredScopeKey;
     const sameCatalogScope = catalogSnapshotScopeRef.current === filterScopeKey;
-    const unfiltered = !categoryCode && !typeCode && !query.trim();
+    const unfiltered = !categoryCode && !typeCode && !requestQuery.trim();
+    const controller = new AbortController();
     const filters = {
       productCode,
       regionCode: regionCode ?? "",
       year: year ?? 0,
       ...(categoryCode ? { categoryCode } : {}),
       ...(typeCode ? { typeCode } : {}),
-      ...(query.trim() ? { query: query.trim() } : {}),
+      ...(requestQuery.trim() ? { query: requestQuery.trim() } : {}),
     };
     void Promise.resolve().then(() => {
       if (!active) return;
@@ -232,13 +258,15 @@ export function useOverviewSampleNetworkLayers({
     if (!canLoadCatalog || !repository || year === undefined || !regionCode) {
       return () => {
         active = false;
+        controller.abort();
       };
     }
     const snapshotRequest = repository.snapshot
-      ? repository.snapshot(filters)
-      : Promise.all([repository.list(filters), repository.icons(filters)]).then(
-          ([list, icons]) => ({ icons, list }),
-        );
+      ? repository.snapshot(filters, { signal: controller.signal })
+      : Promise.all([
+          repository.list(filters, { signal: controller.signal }),
+          repository.icons(filters, { signal: controller.signal }),
+        ]).then(([list, icons]) => ({ icons, list }));
     snapshotRequest
       .then(({ icons: nextIcons, list: nextList }) => {
         if (!active) return;
@@ -268,14 +296,16 @@ export function useOverviewSampleNetworkLayers({
       });
     return () => {
       active = false;
+      controller.abort();
     };
   }, [
     canLoadCatalog,
     categoryCode,
     filterScopeKey,
     filteredScopeKey,
+    filteredRetrySequence,
     productCode,
-    query,
+    requestQuery,
     refreshSequence,
     regionCode,
     repository,
@@ -341,10 +371,12 @@ export function useOverviewSampleNetworkLayers({
     issue: catalogIssue ?? issue,
     mode,
     query,
+    retryFiltered,
     region,
     setCategoryCode,
     setMode,
     setQuery,
+    setQueryComposition,
     setShowExactDesignLocations,
     showExactDesignLocations,
     state,
