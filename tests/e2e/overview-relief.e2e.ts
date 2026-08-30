@@ -21,6 +21,145 @@ const township = region("230225204", "宝山乡", "TOWNSHIP", "230225");
 const village = region("230225204014", "宝山村", "VILLAGE", "230225204");
 
 test.describe("overview owned-relief interaction", () => {
+  for (const viewport of [
+    { height: 844, label: "390x844 mobile", width: 390 },
+    { height: 1024, label: "768 tablet", width: 768 },
+    { height: 900, label: "1440 desktop", width: 1440 },
+  ]) {
+    test(`keeps sample search, results, close, and bottom action reachable at ${viewport.label}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ height: viewport.height, width: viewport.width });
+      await installOverviewFixture(page, { sampleCount: 53 });
+      await page.goto("/#/overview");
+      await page
+        .getByRole("button", {
+          name: /^齐齐哈尔市，.*点击选中，双击进入下一级$/,
+        })
+        .click();
+
+      const search = page.getByLabel("搜索样本点");
+      const sampleList = page.getByRole("list", { name: "样本点列表" });
+      const close = page.getByRole("button", { name: "关闭地区详情" });
+      const bottomAction = page.getByRole("button", {
+        name: "进入齐齐哈尔市，查看区县样本",
+      });
+      await expect(search).toBeVisible();
+      await expect(sampleList).toBeVisible();
+      await expect(close).toBeVisible();
+      await expect(bottomAction).toBeVisible();
+      await expect(sampleList.getByRole("listitem")).toHaveCount(30);
+
+      const [rawBottomActionBox, rawCloseBox, layout] = await Promise.all([
+        bottomAction.boundingBox(),
+        close.boundingBox(),
+        page.evaluate(() => {
+          const rect = (selector: string) => {
+            const box = document
+              .querySelector<HTMLElement>(selector)
+              ?.getBoundingClientRect();
+            return box
+              ? {
+                  bottom: box.bottom,
+                  height: box.height,
+                  left: box.left,
+                  right: box.right,
+                  top: box.top,
+                }
+              : undefined;
+          };
+          return {
+            details: rect(".overview-command-details"),
+            list: rect(".overview-sample-point-list"),
+            search: rect('.overview-sample-point-list-section input[type="search"]'),
+            viewport: { height: window.innerHeight, width: window.innerWidth },
+          };
+        }),
+      ]);
+      const toViewportBox = (
+        box: { height: number; width: number; x: number; y: number } | null,
+      ) =>
+        box
+          ? {
+              bottom: box.y + box.height,
+              height: box.height,
+              left: box.x,
+              right: box.x + box.width,
+              top: box.y,
+            }
+          : undefined;
+      const bottomActionBox = toViewportBox(rawBottomActionBox);
+      const closeBox = toViewportBox(rawCloseBox);
+      for (const box of [
+        layout.details,
+        layout.search,
+        layout.list,
+        closeBox,
+        bottomActionBox,
+      ]) {
+        expect(box).toBeDefined();
+        if (!box) continue;
+        expect(box.left).toBeGreaterThanOrEqual(0);
+        expect(box.right).toBeLessThanOrEqual(layout.viewport.width);
+        expect(box.top).toBeGreaterThanOrEqual(0);
+        expect(box.bottom).toBeLessThanOrEqual(layout.viewport.height);
+        expect(box.height).toBeGreaterThan(0);
+      }
+    });
+  }
+
+  test("bounds 1000 results and emits one request for a rapid or composed search", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ height: 844, width: 390 });
+    const snapshotQueries: string[] = [];
+    await installOverviewFixture(page, {
+      onSnapshotQuery: (query) => snapshotQueries.push(query),
+      sampleCount: 1000,
+    });
+    await page.goto("/#/overview");
+    await page
+      .getByRole("button", {
+        name: /^齐齐哈尔市，.*点击选中，双击进入下一级$/,
+      })
+      .click();
+    const search = page.getByLabel("搜索样本点");
+    const sampleList = page.getByRole("list", { name: "样本点列表" });
+    await expect(sampleList.getByRole("listitem")).toHaveCount(30);
+
+    const inputLatencyMs = await search.evaluate(
+      (element) =>
+        new Promise<number>((resolveLatency) => {
+          const input = element as HTMLInputElement;
+          const startedAt = performance.now();
+          input.value = "高";
+          input.dispatchEvent(new InputEvent("input", { bubbles: true, data: "高" }));
+          requestAnimationFrame(() => resolveLatency(performance.now() - startedAt));
+        }),
+    );
+    expect(inputLatencyMs).toBeLessThan(100);
+    await search.fill("");
+    await expect.poll(() => snapshotQueries.at(-1)).toBe("");
+
+    const rapidStart = snapshotQueries.length;
+    await search.pressSequentially("嫩江", { delay: 20 });
+    // This timeout is the behavior under test: 250ms debounce plus scheduling margin.
+    await page.waitForTimeout(320);
+    expect(snapshotQueries.slice(rapidStart)).toEqual(["嫩江"]);
+
+    await search.fill("");
+    await expect.poll(() => snapshotQueries.at(-1)).toBe("");
+    const compositionStart = snapshotQueries.length;
+    await search.dispatchEvent("compositionstart", { data: "nen" });
+    await search.fill("nen");
+    await page.waitForTimeout(320);
+    expect(snapshotQueries).toHaveLength(compositionStart);
+    await search.fill("嫩江");
+    await search.dispatchEvent("compositionend", { data: "嫩江" });
+    await page.waitForTimeout(320);
+    expect(snapshotQueries.slice(compositionStart)).toEqual(["嫩江"]);
+  });
+
   test("keeps the overview canvas and key controls reachable at 390px", async ({
     page,
   }) => {
@@ -273,7 +412,13 @@ async function enterSelectedRegion(page: Page) {
   await action.click();
 }
 
-async function installOverviewFixture(page: Page) {
+async function installOverviewFixture(
+  page: Page,
+  options: {
+    onSnapshotQuery?: (query: string) => void;
+    sampleCount?: number;
+  } = {},
+) {
   await page.route("**/api/v1/notifications", (route) =>
     route.fulfill({ json: { data: [] } }),
   );
@@ -285,6 +430,21 @@ async function installOverviewFixture(page: Page) {
       contentType: "image/webp",
       path: resolve("public/overview/command-terrain-v2.webp"),
       status: 200,
+    }),
+  );
+  await page.route("**/api/v1/sample-networks/*/design-comparison**", (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          designCoordinateCount: 0,
+          designPointCount: 0,
+          designPoints: [],
+          networkStatus: "PUBLISHED",
+          networkYear: 2026,
+          pendingVerificationDesignPointCount: 0,
+          relations: [],
+        },
+      },
     }),
   );
   await page.route("**/api/v1/overview/**", async (route) => {
@@ -320,15 +480,26 @@ async function installOverviewFixture(page: Page) {
           ? regionsFor(parentCode)
           : pathname.endsWith("/sample-point-aggregates")
             ? []
-            : pathname.endsWith("/sample-points")
-              ? emptySamplePointList(regionCode)
-              : pathname.endsWith("/locations")
-                ? []
-                : pathname.endsWith("/indicators")
+            : pathname.endsWith("/sample-point-snapshot")
+              ? samplePointSnapshot(
+                  regionCode,
+                  options.sampleCount ?? 0,
+                  requestUrl.searchParams.get("query") ?? "",
+                  options.onSnapshotQuery,
+                )
+              : pathname.endsWith("/sample-points")
+                ? samplePointList(
+                    regionCode,
+                    options.sampleCount ?? 0,
+                    requestUrl.searchParams.get("query") ?? "",
+                  )
+                : pathname.endsWith("/locations")
                   ? []
-                  : pathname.endsWith("/dashboard")
-                    ? dashboardFor(regionCode)
-                    : undefined;
+                  : pathname.endsWith("/indicators")
+                    ? []
+                    : pathname.endsWith("/dashboard")
+                      ? dashboardFor(regionCode)
+                      : undefined;
 
     if (data === undefined) {
       await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
@@ -343,15 +514,69 @@ async function installOverviewFixture(page: Page) {
   });
 }
 
-function emptySamplePointList(regionCode: string | null) {
+function samplePointSnapshot(
+  regionCode: string | null,
+  count: number,
+  query: string,
+  onQuery?: (query: string) => void,
+) {
+  onQuery?.(query);
+  return { icons: [], list: samplePointList(regionCode, count, query) };
+}
+
+function samplePointList(regionCode: string | null, count: number, query: string) {
+  const items = Array.from({ length: count }, (_, index) => {
+    const order = index + 1;
+    return {
+      categories: [{ code: "PRODUCTION", name: "产情类" }],
+      dataQualityReason: null,
+      latestBusinessDate: "2026-08-05",
+      locationState: "VALID",
+      name: `高量样本 ${String(order).padStart(4, "0")}`,
+      products: [{ code: "CORN", name: "玉米" }],
+      regionCode: regionCode ?? city.code,
+      regionName: city.name,
+      samplePointId: `94000000-0000-0000-0000-${String(order).padStart(12, "0")}`,
+      summaryValues: {
+        SAMPLE_CONTACT: {
+          label: "样本点联系方式",
+          unitCode: null,
+          value: `138${String(order).padStart(8, "0")}`,
+        },
+      },
+      types: [{ code: "FARMER", iconKey: "farmer", name: "农户" }],
+    };
+  }).filter((item) => {
+    const keyword = query.trim().toLowerCase();
+    return (
+      !keyword ||
+      item.name.toLowerCase().includes(keyword) ||
+      item.regionName.toLowerCase().includes(keyword) ||
+      item.summaryValues.SAMPLE_CONTACT.value.includes(keyword)
+    );
+  });
   return {
-    categories: [],
+    categories: [
+      {
+        code: "PRODUCTION",
+        count: items.length,
+        name: "产情类",
+        types: [
+          {
+            code: "FARMER",
+            count: items.length,
+            iconKey: "farmer",
+            name: "农户",
+          },
+        ],
+      },
+    ],
     correctionSourceCount: 0,
     correctionSources: [],
     dataQualityIssueCount: 0,
-    items: [],
+    items,
     regionCode: regionCode ?? "",
-    totalCount: 0,
+    totalCount: items.length,
     unresolvedSourceCount: 0,
     validCoordinateCount: 0,
   };

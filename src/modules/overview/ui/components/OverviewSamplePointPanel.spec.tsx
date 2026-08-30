@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ComponentProps, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -60,6 +60,93 @@ const list = {
 };
 
 describe("OverviewSamplePointPanel", () => {
+  it("waits for IME composition to finish before issuing one debounced search", async () => {
+    const repository = repositoryStub();
+    render(
+      <PanelHarness
+        onIconsChange={vi.fn()}
+        year={2026}
+        region={{ code: "230202997", level: "TOWNSHIP", name: "契约测试乡" }}
+        repository={repository}
+      />,
+    );
+    const input = await screen.findByLabelText("搜索样本点");
+    await waitFor(() => expect(repository.list).toHaveBeenCalled());
+    repository.list.mockClear();
+    repository.icons.mockClear();
+
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: "nen" } });
+    await new Promise((resolve) => setTimeout(resolve, 320));
+    expect(repository.list).not.toHaveBeenCalled();
+    expect(repository.icons).not.toHaveBeenCalled();
+
+    fireEvent.change(input, { target: { value: "嫩江" } });
+    fireEvent.compositionEnd(input);
+    await waitFor(() =>
+      expect(repository.list.mock.calls.map(([request]) => request)).toContainEqual(
+        expect.objectContaining({ query: "嫩江" }),
+      ),
+    );
+    const searchCall = repository.list.mock.calls.find(
+      ([request]) => request.query === "嫩江",
+    );
+    expect(searchCall?.[1]?.signal).toBeInstanceOf(AbortSignal);
+    expect(repository.list).toHaveBeenCalledTimes(1);
+    expect(repository.icons).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders a bounded accessible page for 1000 samples and preserves focus", async () => {
+    const repository = repositoryStub();
+    const largeList = listWithItems(1000);
+    repository.list.mockResolvedValue(largeList);
+    repository.icons.mockResolvedValue([]);
+
+    render(
+      <PanelHarness
+        onIconsChange={vi.fn()}
+        year={2026}
+        region={{ code: "230202997", level: "TOWNSHIP", name: "契约测试乡" }}
+        repository={repository}
+      />,
+    );
+
+    const sampleList = await screen.findByRole("list", { name: "样本点列表" });
+    expect(within(sampleList).getAllByRole("listitem")).toHaveLength(30);
+    expect(within(sampleList).getAllByRole("button")).toHaveLength(30);
+    expect(screen.getByText("第 1 / 34 页")).toBeVisible();
+    expect(within(sampleList).getByText("高量样本 0001")).toBeVisible();
+    expect(within(sampleList).queryByText("高量样本 0031")).not.toBeInTheDocument();
+
+    const nextPage = screen.getByRole("button", { name: "下一页" });
+    nextPage.focus();
+    await userEvent.click(nextPage);
+    expect(nextPage).toHaveFocus();
+    expect(screen.getByText("第 2 / 34 页")).toBeVisible();
+    expect(within(sampleList).getByText("高量样本 0031")).toBeVisible();
+    expect(within(sampleList).queryByText("高量样本 0001")).not.toBeInTheDocument();
+  });
+
+  it("offers a retry that reissues an unavailable sample search", async () => {
+    const repository = repositoryStub();
+    repository.list.mockRejectedValue(new Error("network unavailable"));
+    repository.icons.mockRejectedValue(new Error("network unavailable"));
+
+    render(
+      <PanelHarness
+        onIconsChange={vi.fn()}
+        year={2026}
+        region={{ code: "230202997", level: "TOWNSHIP", name: "契约测试乡" }}
+        repository={repository}
+      />,
+    );
+
+    expect(await screen.findByRole("button", { name: "重试样本点列表" })).toBeVisible();
+    repository.list.mockResolvedValue(list);
+    repository.icons.mockResolvedValue([]);
+    await userEvent.click(screen.getByRole("button", { name: "重试样本点列表" }));
+    expect(await screen.findByText("同一跨产品样本点")).toBeVisible();
+  });
   it("gives the list the full workspace until a sample is selected, then opens its detail", async () => {
     render(
       <PanelHarness
@@ -114,7 +201,7 @@ describe("OverviewSamplePointPanel", () => {
     expect(screen.getByText("地图汇总")).toBeVisible();
     expect(screen.getByText("区县按乡镇唯一分桶，列表选择后定位")).toBeVisible();
     expect(await screen.findByText("同一跨产品样本点")).toBeVisible();
-    expect(repository.icons).toHaveBeenCalledWith({
+    expect(repository.icons.mock.calls.map(([request]) => request)).toContainEqual({
       productCode: "CORN",
       regionCode: "230202",
       year: 2026,
@@ -295,7 +382,7 @@ describe("OverviewSamplePointPanel", () => {
     );
 
     await screen.findByRole("button", { name: "产情类 1" });
-    expect(repository.icons).toHaveBeenCalledWith({
+    expect(repository.icons.mock.calls.map(([request]) => request)).toContainEqual({
       regionCode: code,
       productCode: "CORN",
       year: 2026,
@@ -303,7 +390,7 @@ describe("OverviewSamplePointPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: "产情类 1" }));
 
     await waitFor(() =>
-      expect(repository.icons).toHaveBeenCalledWith({
+      expect(repository.icons.mock.calls.map(([request]) => request)).toContainEqual({
         regionCode: code,
         categoryCode: "PRODUCTION",
         productCode: "CORN",
@@ -331,7 +418,7 @@ describe("OverviewSamplePointPanel", () => {
     await userEvent.type(screen.getByLabelText("搜索样本点"), "同一");
 
     await waitFor(() =>
-      expect(repository.list).toHaveBeenLastCalledWith({
+      expect(repository.list.mock.calls.at(-1)?.[0]).toEqual({
         regionCode: "230202997",
         categoryCode: "PRODUCTION",
         productCode: "CORN",
@@ -340,7 +427,7 @@ describe("OverviewSamplePointPanel", () => {
         year: 2026,
       }),
     );
-    expect(repository.icons).toHaveBeenLastCalledWith({
+    expect(repository.icons.mock.calls.at(-1)?.[0]).toEqual({
       regionCode: "230202997",
       categoryCode: "PRODUCTION",
       productCode: "CORN",
@@ -519,18 +606,18 @@ describe("OverviewSamplePointPanel", () => {
     );
 
     await waitFor(() => {
-      expect(repository.list).toHaveBeenCalledWith({
+      expect(repository.list.mock.calls.map(([request]) => request)).toContainEqual({
         regionCode: "230202997",
         productCode: "CORN",
         year: 2026,
       });
-      expect(repository.list).toHaveBeenCalledWith({
+      expect(repository.list.mock.calls.map(([request]) => request)).toContainEqual({
         regionCode: "230202997",
         categoryCode: "PRODUCTION",
         productCode: "CORN",
         year: 2026,
       });
-      expect(repository.icons).toHaveBeenCalledWith({
+      expect(repository.icons.mock.calls.map(([request]) => request)).toContainEqual({
         regionCode: "230202997",
         categoryCode: "PRODUCTION",
         productCode: "CORN",
@@ -903,7 +990,7 @@ describe("OverviewSamplePointPanel", () => {
 
       await userEvent.click(await screen.findByRole("button", { name: "产情类 1" }));
       await waitFor(() =>
-        expect(repository.icons).toHaveBeenCalledWith({
+        expect(repository.icons.mock.calls.map(([request]) => request)).toContainEqual({
           categoryCode: "PRODUCTION",
           productCode: "CORN",
           regionCode: code,
@@ -1021,6 +1108,19 @@ function repositoryStub() {
         },
       ],
     }),
+  };
+}
+
+function listWithItems(count: number) {
+  return {
+    ...list,
+    totalCount: count,
+    validCoordinateCount: 0,
+    items: Array.from({ length: count }, (_, index) => ({
+      ...list.items[0]!,
+      samplePointId: `94000000-0000-0000-0000-${String(index + 1).padStart(12, "0")}`,
+      name: `高量样本 ${String(index + 1).padStart(4, "0")}`,
+    })),
   };
 }
 

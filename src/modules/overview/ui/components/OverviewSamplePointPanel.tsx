@@ -14,6 +14,8 @@ import type { OverviewSampleNetworkLayerModel } from "../hooks/useOverviewSample
 
 type RegionLevel = "PREFECTURE" | "COUNTY" | "TOWNSHIP" | "VILLAGE";
 type LoadState = "idle" | "loading" | "ready" | "unavailable";
+const SAMPLE_PAGE_SIZE = 30;
+const SEARCH_DEBOUNCE_MS = 250;
 
 export function OverviewSamplePointPanel({
   networkModel,
@@ -40,6 +42,10 @@ export function OverviewSamplePointPanel({
     useState<OverviewSamplePointCategoryCode>();
   const [localTypeCode, setLocalTypeCode] = useState<string>();
   const [query, setQuery] = useState("");
+  const [localRequestQuery, setLocalRequestQuery] = useState("");
+  const [localQueryComposing, setLocalQueryComposing] = useState(false);
+  const [localRetrySequence, setLocalRetrySequence] = useState(0);
+  const [pageIndex, setPageIndex] = useState(0);
   const [localCatalog, setLocalCatalog] = useState<OverviewSamplePointList>();
   const [result, setResult] = useState<OverviewSamplePointList>();
   const [publishedIcons, setPublishedIcons] = useState<
@@ -82,6 +88,9 @@ export function OverviewSamplePointPanel({
       setLocalCategoryCode(undefined);
       setLocalTypeCode(undefined);
       setQuery("");
+      setLocalRequestQuery("");
+      setLocalQueryComposing(false);
+      setPageIndex(0);
       setLocalCatalog(undefined);
       setResult(undefined);
       setPublishedIcons([]);
@@ -115,10 +124,22 @@ export function OverviewSamplePointPanel({
   ]);
 
   useEffect(() => {
+    if (controlledNetwork || localQueryComposing) return;
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    const timer = window.setTimeout(() => {
+      setLocalRequestQuery(trimmed);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [controlledNetwork, localQueryComposing, query]);
+
+  useEffect(() => {
     let active = true;
+    const controller = new AbortController();
     if (controlledNetwork) {
       return () => {
         active = false;
+        controller.abort();
       };
     }
     void Promise.resolve().then(() => {
@@ -128,7 +149,10 @@ export function OverviewSamplePointPanel({
       setCatalogIssue(undefined);
     });
     repository
-      .list({ productCode, regionCode: region.code, year })
+      .list(
+        { productCode, regionCode: region.code, year },
+        { signal: controller.signal },
+      )
       .then((next) => {
         if (!active) return;
         setLocalCatalog(next);
@@ -142,8 +166,17 @@ export function OverviewSamplePointPanel({
       });
     return () => {
       active = false;
+      controller.abort();
     };
-  }, [controlledNetwork, productCode, refreshSequence, region.code, repository, year]);
+  }, [
+    controlledNetwork,
+    localRetrySequence,
+    productCode,
+    refreshSequence,
+    region.code,
+    repository,
+    year,
+  ]);
 
   useEffect(() => {
     let active = true;
@@ -190,9 +223,11 @@ export function OverviewSamplePointPanel({
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
     if (controlledNetwork) {
       return () => {
         active = false;
+        controller.abort();
       };
     }
     const filters = {
@@ -201,7 +236,7 @@ export function OverviewSamplePointPanel({
       year,
       ...(categoryCode ? { categoryCode } : {}),
       ...(typeCode ? { typeCode } : {}),
-      ...(effectiveQuery.trim() ? { query: effectiveQuery.trim() } : {}),
+      ...(localRequestQuery.trim() ? { query: localRequestQuery.trim() } : {}),
     };
     void Promise.resolve().then(() => {
       if (!active) return;
@@ -211,7 +246,10 @@ export function OverviewSamplePointPanel({
       setResultIssue(undefined);
       setIconIssue(undefined);
     });
-    Promise.all([repository.list(filters), repository.icons(filters)])
+    Promise.all([
+      repository.list(filters, { signal: controller.signal }),
+      repository.icons(filters, { signal: controller.signal }),
+    ])
       .then(([next, icons]) => {
         if (!active) return;
         setResult(next);
@@ -228,11 +266,13 @@ export function OverviewSamplePointPanel({
       });
     return () => {
       active = false;
+      controller.abort();
     };
   }, [
     categoryCode,
     controlledNetwork,
-    effectiveQuery,
+    localRequestQuery,
+    localRetrySequence,
     productCode,
     refreshSequence,
     region.code,
@@ -398,7 +438,9 @@ export function OverviewSamplePointPanel({
       setLocalCategoryCode(next);
       setLocalTypeCode(undefined);
       setQuery("");
+      setLocalRequestQuery("");
     }
+    setPageIndex(0);
   }
 
   function selectType(next: string) {
@@ -409,14 +451,41 @@ export function OverviewSamplePointPanel({
     } else {
       setLocalTypeCode(selectedType);
     }
+    setPageIndex(0);
   }
 
   function changeQuery(next: string) {
-    clearConcreteResults();
     if (networkModel?.setQuery) {
       networkModel.setQuery(next);
     } else {
       setQuery(next);
+      if (!next.trim()) setLocalRequestQuery("");
+    }
+    setPageIndex(0);
+  }
+
+  function startQueryComposition() {
+    if (networkModel?.setQueryComposition) {
+      networkModel.setQueryComposition(true);
+    } else {
+      setLocalQueryComposing(true);
+    }
+  }
+
+  function endQueryComposition(next: string) {
+    changeQuery(next);
+    if (networkModel?.setQueryComposition) {
+      networkModel.setQueryComposition(false);
+    } else {
+      setLocalQueryComposing(false);
+    }
+  }
+
+  function retrySampleSearch() {
+    if (networkModel?.retryFiltered) {
+      networkModel.retryFiltered();
+    } else {
+      setLocalRetrySequence((current) => current + 1);
     }
   }
 
@@ -447,7 +516,13 @@ export function OverviewSamplePointPanel({
     !missingVillageParent && effectiveResult
       ? Math.max(0, effectiveResult.items.length - effectivePublishedIcons.length)
       : 0;
-  const visibleItems = effectiveResult?.items ?? [];
+  const allVisibleItems = effectiveResult?.items ?? [];
+  const pageCount = Math.max(1, Math.ceil(allVisibleItems.length / SAMPLE_PAGE_SIZE));
+  const currentPageIndex = Math.min(pageIndex, pageCount - 1);
+  const visibleItems = allVisibleItems.slice(
+    currentPageIndex * SAMPLE_PAGE_SIZE,
+    (currentPageIndex + 1) * SAMPLE_PAGE_SIZE,
+  );
   const availableDetailPeriods = detail ? detailPeriods(detail) : [];
   const visibleAssociations = detail
     ? detail.associations.filter(
@@ -691,6 +766,10 @@ export function OverviewSamplePointPanel({
                 <span>搜索样本点</span>
                 <input
                   disabled={!catalog}
+                  onCompositionEnd={(event) =>
+                    endQueryComposition(event.currentTarget.value)
+                  }
+                  onCompositionStart={startQueryComposition}
                   onChange={(event) => changeQuery(event.target.value)}
                   placeholder="输入样本点名称、地区或联系方式"
                   type="search"
@@ -713,53 +792,94 @@ export function OverviewSamplePointPanel({
                 </div>
               ) : null}
 
-              <div aria-label="样本点列表" className="overview-sample-point-list">
+              <div
+                aria-busy={effectiveResultState === "loading"}
+                aria-label="样本点列表"
+                className="overview-sample-point-list"
+                role="list"
+              >
                 {visibleItems.map((item) => (
-                  <button
-                    aria-pressed={selectedSamplePointId === item.samplePointId}
-                    key={item.samplePointId}
-                    onClick={() => selectItem(item.samplePointId)}
-                    type="button"
-                  >
-                    <strong>{item.name}</strong>
-                    <span>
-                      {item.types.length
-                        ? item.types.map((type) => type.name).join(" / ")
-                        : `${item.categories.map((role) => role.name).join(" / ")} · 当前品种暂无审核通过对象类型`}{" "}
-                      · {item.regionName}
-                    </span>
-                    <small>
-                      当前品种 ·{" "}
-                      {item.latestBusinessDate
-                        ? `最近业务 ${formatChineseDate(item.latestBusinessDate)}`
-                        : "暂无审核通过业务数据"}
-                    </small>
-                    {item.dataQualityReason ? (
-                      <span className="overview-sample-point-list-quality">
-                        {listQualityLabel(item.dataQualityReason)}
+                  <div key={item.samplePointId} role="listitem">
+                    <button
+                      aria-pressed={selectedSamplePointId === item.samplePointId}
+                      onClick={() => selectItem(item.samplePointId)}
+                      type="button"
+                    >
+                      <strong>{item.name}</strong>
+                      <span>
+                        {item.types.length
+                          ? item.types.map((type) => type.name).join(" / ")
+                          : `${item.categories.map((role) => role.name).join(" / ")} · 当前品种暂无审核通过对象类型`}{" "}
+                        · {item.regionName}
                       </span>
-                    ) : null}
-                    <span className="overview-sample-point-list-summary">
-                      {Object.entries(item.summaryValues).map(([code, value]) => (
-                        <span key={code}>
-                          {value.label}：{value.value}
-                          {value.unitCode ? ` ${value.unitCode}` : ""}
+                      <small>
+                        当前品种 ·{" "}
+                        {item.latestBusinessDate
+                          ? `最近业务 ${formatChineseDate(item.latestBusinessDate)}`
+                          : "暂无审核通过业务数据"}
+                      </small>
+                      {item.dataQualityReason ? (
+                        <span className="overview-sample-point-list-quality">
+                          {listQualityLabel(item.dataQualityReason)}
                         </span>
-                      ))}
-                    </span>
-                  </button>
+                      ) : null}
+                      <span className="overview-sample-point-list-summary">
+                        {Object.entries(item.summaryValues).map(([code, value]) => (
+                          <span key={code}>
+                            {value.label}：{value.value}
+                            {value.unitCode ? ` ${value.unitCode}` : ""}
+                          </span>
+                        ))}
+                      </span>
+                    </button>
+                  </div>
                 ))}
-                {effectiveResult && !visibleItems.length ? (
+                {effectiveResult && !allVisibleItems.length ? (
                   <p>当前条件下暂无样本点。</p>
                 ) : null}
                 {!effectiveResult ? (
-                  <p>
+                  <p role="status">
                     {effectiveResultState === "unavailable"
                       ? "样本点列表数据不可用"
                       : "正在同步样本点列表"}
                   </p>
                 ) : null}
+                {effectiveResultState === "unavailable" ? (
+                  <button
+                    aria-label="重试样本点列表"
+                    onClick={retrySampleSearch}
+                    type="button"
+                  >
+                    重试
+                  </button>
+                ) : null}
               </div>
+              {allVisibleItems.length > SAMPLE_PAGE_SIZE ? (
+                <nav
+                  aria-label="样本点列表分页"
+                  className="overview-sample-point-pagination"
+                >
+                  <button
+                    disabled={currentPageIndex === 0}
+                    onClick={() => setPageIndex((current) => Math.max(0, current - 1))}
+                    type="button"
+                  >
+                    上一页
+                  </button>
+                  <span aria-live="polite" role="status">
+                    第 {currentPageIndex + 1} / {pageCount} 页
+                  </span>
+                  <button
+                    disabled={currentPageIndex >= pageCount - 1}
+                    onClick={() =>
+                      setPageIndex((current) => Math.min(pageCount - 1, current + 1))
+                    }
+                    type="button"
+                  >
+                    下一页
+                  </button>
+                </nav>
+              ) : null}
             </section>
 
             {selectedSamplePointId ? (

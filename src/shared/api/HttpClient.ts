@@ -1,10 +1,14 @@
 import type { ZodType } from "zod";
 
 export interface HttpClient {
-  get<T>(path: string, schema: ZodType<T>): Promise<T>;
+  get<T>(path: string, schema: ZodType<T>, options?: HttpRequestOptions): Promise<T>;
   post?<T>(path: string, body: unknown, schema: ZodType<T>): Promise<T>;
   put?<T>(path: string, body: unknown, schema: ZodType<T>): Promise<T>;
   download?(path: string): Promise<HttpDownload>;
+}
+
+export interface HttpRequestOptions {
+  signal?: AbortSignal;
 }
 
 export interface HttpDownload {
@@ -55,8 +59,12 @@ export class FetchHttpClient implements HttpClient {
       typeof document === "undefined" ? "" : document.cookie,
   ) {}
 
-  async get<T>(path: string, schema: ZodType<T>): Promise<T> {
-    return this.request("GET", path, undefined, schema);
+  async get<T>(
+    path: string,
+    schema: ZodType<T>,
+    options?: HttpRequestOptions,
+  ): Promise<T> {
+    return this.request("GET", path, undefined, schema, options);
   }
 
   async post<T>(path: string, body: unknown, schema: ZodType<T>): Promise<T> {
@@ -88,6 +96,7 @@ export class FetchHttpClient implements HttpClient {
     path: string,
     body: unknown,
     schema: ZodType<T>,
+    options?: HttpRequestOptions,
   ): Promise<T> {
     const response = await fetch(`${this.baseUrl}${path}`, {
       method,
@@ -98,6 +107,7 @@ export class FetchHttpClient implements HttpClient {
         ...csrfHeaders(method, this.cookieSource()),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      ...(options?.signal ? { signal: options.signal } : {}),
     });
     if (!response.ok) {
       throw new HttpError(response.status, `请求失败：${response.status}`);

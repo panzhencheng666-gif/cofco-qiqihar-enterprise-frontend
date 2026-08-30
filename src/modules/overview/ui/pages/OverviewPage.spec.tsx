@@ -901,7 +901,7 @@ describe("OverviewPage", () => {
 
     expect(await screen.findByRole("button", { name: "产情类 1" })).toBeVisible();
     expect(screen.queryByText("样本点数据不可用")).not.toBeInTheDocument();
-    expect(list).toHaveBeenCalledWith({
+    expect(list.mock.calls.map(([request]) => request)).toContainEqual({
       productCode: "CORN",
       regionCode: "230200",
       year: 2026,
@@ -910,7 +910,7 @@ describe("OverviewPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "产情类 1" }));
     expect(await screen.findByText("同一跨产品样本点")).toBeVisible();
     await waitFor(() =>
-      expect(icons).toHaveBeenCalledWith({
+      expect(icons.mock.calls.map(([request]) => request)).toContainEqual({
         categoryCode: "PRODUCTION",
         productCode: "CORN",
         regionCode: "230200",
@@ -919,7 +919,7 @@ describe("OverviewPage", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: "农户 1" }));
     await waitFor(() =>
-      expect(icons).toHaveBeenLastCalledWith({
+      expect(icons.mock.calls.at(-1)?.[0]).toEqual({
         categoryCode: "PRODUCTION",
         productCode: "CORN",
         regionCode: "230200",
@@ -1100,14 +1100,14 @@ describe("OverviewPage", () => {
       }),
     );
     await waitFor(() =>
-      expect(list).toHaveBeenCalledWith({
+      expect(list.mock.calls.map(([request]) => request)).toContainEqual({
         productCode: "CORN",
         regionCode: "230200",
         year: 2025,
       }),
     );
     await waitFor(() =>
-      expect(icons).toHaveBeenCalledWith({
+      expect(icons.mock.calls.map(([request]) => request)).toContainEqual({
         productCode: "CORN",
         regionCode: "230200",
         year: 2025,
@@ -1445,13 +1445,13 @@ describe("OverviewPage", () => {
       }),
     ).not.toBeInTheDocument();
     expect(list).toHaveBeenCalledTimes(listCalls + 1);
-    expect(list).toHaveBeenLastCalledWith({
+    expect(list.mock.calls.at(-1)?.[0]).toEqual({
       productCode: "SOYBEAN",
       regionCode: "230231",
       year: 2026,
     });
     expect(icons.mock.calls.length).toBeGreaterThan(iconCalls);
-    expect(icons).toHaveBeenLastCalledWith({
+    expect(icons.mock.calls.at(-1)?.[0]).toEqual({
       productCode: "SOYBEAN",
       regionCode: "230231",
       year: 2026,

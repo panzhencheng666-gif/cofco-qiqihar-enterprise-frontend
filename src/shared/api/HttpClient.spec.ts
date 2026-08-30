@@ -95,4 +95,25 @@ describe("FetchHttpClient contract diagnostics", () => {
       false,
     );
   });
+
+  it("passes an AbortSignal to fetch for cancellable reads", async () => {
+    const fetcher = vi.fn<typeof fetch>(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ ok: true }), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    const controller = new AbortController();
+
+    await new FetchHttpClient().get(
+      "/api/v1/items",
+      z.object({ ok: z.literal(true) }),
+      { signal: controller.signal },
+    );
+
+    expect(fetcher.mock.calls[0]?.[1]?.signal).toBe(controller.signal);
+  });
 });
