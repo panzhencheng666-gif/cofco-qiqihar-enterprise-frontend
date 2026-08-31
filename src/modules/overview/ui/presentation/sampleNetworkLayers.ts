@@ -1,5 +1,6 @@
 import type {
   OverviewSamplePointIcon,
+  OverviewDesignSamplePoint,
   SampleNetworkComparison,
   SampleNetworkDesignPoint,
   SampleNetworkLayerMode,
@@ -45,6 +46,7 @@ export function sampleNetworkLayerIcons(
     regionLevel: "TOWNSHIP",
     selectedRegionCode: "",
   },
+  designSamplePoints?: readonly OverviewDesignSamplePoint[],
 ): readonly OverviewSamplePointIcon[] {
   const formalAnnualComparison =
     comparison && ["PUBLISHED", "RETIRED"].includes(comparison.networkStatus)
@@ -69,8 +71,33 @@ export function sampleNetworkLayerIcons(
     comparison && context.showExactDesignLocations
       ? approvedExactDesignLocations(comparison)
       : [];
-  const design = [...coverage, ...exact];
+  const design =
+    designSamplePoints === undefined
+      ? [...coverage, ...exact]
+      : designSamplePoints.map(designSamplePointIcon);
   return mode === "design" ? design : [...actual, ...design];
+}
+
+function designSamplePointIcon(
+  point: OverviewDesignSamplePoint,
+): OverviewSamplePointIcon {
+  return {
+    samplePointId: `design-sample-point:${point.id}`,
+    name: point.name,
+    regionCode: point.regionCode,
+    iconKey: "design-reference",
+    layerType: "DESIGN_EXACT_LOCATION",
+    types: [
+      {
+        code: "DESIGN_SAMPLE_POINT",
+        name: `${point.domainLabel} · ${point.objectTypeLabel} · ${point.productLabel}`,
+        iconKey: "design-reference",
+      },
+    ],
+    longitude: point.longitude,
+    latitude: point.latitude,
+    dataQualityReason: null,
+  };
 }
 
 function regionalDesignCoverageBadges(

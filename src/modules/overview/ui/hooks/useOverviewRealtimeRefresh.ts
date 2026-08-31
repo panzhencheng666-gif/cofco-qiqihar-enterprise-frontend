@@ -7,6 +7,11 @@ import type {
 
 const FALLBACK_POLL_INTERVAL_MS = 30_000;
 const REALTIME_REFRESH_DEBOUNCE_MS = 500;
+const DESIGN_SAMPLE_POINT_ACTIONS = new Set([
+  "DESIGN_SAMPLE_POINT_CREATED",
+  "DESIGN_SAMPLE_POINT_UPDATED",
+  "DESIGN_SAMPLE_POINT_DELETED",
+]);
 
 export function useOverviewRealtimeRefresh(
   stream: OverviewRealtimeStream,
@@ -88,6 +93,18 @@ export function useOverviewRealtimeRefresh(
         return;
       }
       const currentSelection = selectionRef.current;
+      if (
+        change.aggregateType === "DESIGN_SAMPLE_POINT" &&
+        change.actionCode !== undefined &&
+        DESIGN_SAMPLE_POINT_ACTIONS.has(change.actionCode)
+      ) {
+        scheduleRefresh({
+          samplePoints:
+            change.productCode === undefined ||
+            change.productCode === currentSelection.productCode,
+        });
+        return;
+      }
       const selectedRegions = currentSelection.regionKey
         ? currentSelection.regionKey.split("|")
         : [];

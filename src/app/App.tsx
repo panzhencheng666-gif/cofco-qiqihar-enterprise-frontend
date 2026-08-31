@@ -34,6 +34,7 @@ import { HttpOverviewSamplePointRepository } from "../modules/overview/infrastru
 import { HttpOverviewRegionalDataRepository } from "../modules/overview/infrastructure/http/HttpOverviewRegionalDataRepository";
 import { BrowserOverviewRealtimeStream } from "../modules/overview/infrastructure/realtime/BrowserOverviewRealtimeStream";
 import { OverviewPage } from "../modules/overview/ui/pages/OverviewPage";
+import { HttpDesignSampleFieldDefinitionRepository } from "../modules/design-sample/infrastructure/http/HttpDesignSampleFieldDefinitionRepository";
 import type { WorkItemScope } from "../modules/work-management/domain/workItem";
 import type {
   BusinessPageKey,
@@ -58,7 +59,12 @@ const supplyAccountRepository = new HttpSupplyAccountRepository(httpClient);
 const reportingRepository = new HttpReportingRepository(httpClient);
 const workItemRepository = new HttpWorkItemRepository(httpClient);
 const overviewRepository = new HttpOverviewRepository(httpClient);
-const overviewSamplePointRepository = new HttpOverviewSamplePointRepository(httpClient);
+const designSampleFieldDefinitionRepository =
+  new HttpDesignSampleFieldDefinitionRepository(httpClient);
+const overviewSamplePointRepository = new HttpOverviewSamplePointRepository(
+  httpClient,
+  (context) => designSampleFieldDefinitionRepository.getDefinition(context),
+);
 const overviewRegionalDataRepository = new HttpOverviewRegionalDataRepository(
   httpClient,
 );

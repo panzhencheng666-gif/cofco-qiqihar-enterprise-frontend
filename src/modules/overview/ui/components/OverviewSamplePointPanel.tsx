@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
 import type {
   OverviewSamplePointCategoryCode,
+  OverviewDesignSamplePoint,
   OverviewSamplePointDetail,
   OverviewSamplePointIcon,
   OverviewSamplePointList,
@@ -16,6 +17,8 @@ type RegionLevel = "PREFECTURE" | "COUNTY" | "TOWNSHIP" | "VILLAGE";
 type LoadState = "idle" | "loading" | "ready" | "unavailable";
 const SAMPLE_PAGE_SIZE = 30;
 const SEARCH_DEBOUNCE_MS = 250;
+const DESIGN_POINT_ID_PREFIX = "design-sample-point:";
+const DESIGN_POINT_PAGE_SIZE = 30;
 
 export function OverviewSamplePointPanel({
   networkModel,
@@ -65,6 +68,8 @@ export function OverviewSamplePointPanel({
   const [resultIssue, setResultIssue] = useState<string>();
   const [iconIssue, setIconIssue] = useState<string>();
   const [detailIssue, setDetailIssue] = useState<string>();
+  const [designQuery, setDesignQuery] = useState("");
+  const [designPageIndex, setDesignPageIndex] = useState(0);
   const categoryCode = networkModel?.categoryCode ?? localCategoryCode;
   const typeCode = networkModel?.typeCode ?? localTypeCode;
   const missingVillageParent = region.level === "VILLAGE" && !region.parentCode;
@@ -108,6 +113,8 @@ export function OverviewSamplePointPanel({
       setIconIssue(undefined);
       setDetailIssue(undefined);
       setDetailUnavailable(false);
+      setDesignQuery("");
+      setDesignPageIndex(0);
     });
     onSelectedSamplePointChange(undefined);
     onIconsChange([]);
@@ -290,6 +297,15 @@ export function OverviewSamplePointPanel({
   const selectedCategory = catalog?.categories.find(
     (category) => category.code === categoryCode,
   );
+  const authoritativeDesignPoints = networkModel?.designPoints ?? [];
+  const selectedDesignPoint = authoritativeDesignPoints.find(
+    ({ id }) => selectedSamplePointId === designPointMapId(id),
+  );
+  const formalSelectedSamplePointId = selectedSamplePointId?.startsWith(
+    DESIGN_POINT_ID_PREFIX,
+  )
+    ? undefined
+    : selectedSamplePointId;
   const actualKindCodes = useMemo(
     () =>
       categoryCode
@@ -342,7 +358,7 @@ export function OverviewSamplePointPanel({
   }, [controlledNetwork, effectivePublishedIcons, onIconsChange, visibleLayerIcons]);
 
   useEffect(() => {
-    if (!selectedSamplePointId) {
+    if (!formalSelectedSamplePointId) {
       return;
     }
     let active = true;
@@ -355,7 +371,7 @@ export function OverviewSamplePointPanel({
     });
     repository
       .detail({
-        samplePointId: selectedSamplePointId,
+        samplePointId: formalSelectedSamplePointId,
         productCode,
         regionCode: region.code,
         year,
@@ -381,17 +397,19 @@ export function OverviewSamplePointPanel({
     refreshSequence,
     region.code,
     repository,
-    selectedSamplePointId,
+    formalSelectedSamplePointId,
     typeCode,
     year,
   ]);
 
   useEffect(() => {
     if (
-      !selectedSamplePointId ||
+      !formalSelectedSamplePointId ||
       effectiveResultState !== "ready" ||
       !effectiveResult ||
-      effectiveResult.items.some((item) => item.samplePointId === selectedSamplePointId)
+      effectiveResult.items.some(
+        (item) => item.samplePointId === formalSelectedSamplePointId,
+      )
     ) {
       return;
     }
@@ -411,6 +429,23 @@ export function OverviewSamplePointPanel({
     effectiveResult,
     effectiveResultState,
     onSelectedSamplePointChange,
+    formalSelectedSamplePointId,
+  ]);
+
+  useEffect(() => {
+    if (!selectedSamplePointId?.startsWith(DESIGN_POINT_ID_PREFIX)) return;
+    if (effectiveLayerMode === "actual") {
+      onSelectedSamplePointChange(undefined);
+      return;
+    }
+    if (networkModel?.designPointState === "ready" && !selectedDesignPoint) {
+      onSelectedSamplePointChange(undefined);
+    }
+  }, [
+    effectiveLayerMode,
+    networkModel?.designPointState,
+    onSelectedSamplePointChange,
+    selectedDesignPoint,
     selectedSamplePointId,
   ]);
 
@@ -545,6 +580,27 @@ export function OverviewSamplePointPanel({
   const usesRegionalSummary =
     region.level === "PREFECTURE" || region.level === "COUNTY";
   const locationCountLabel = usesRegionalSummary ? "地图汇总" : "地图图标";
+  const normalizedDesignQuery = designQuery.trim().toLocaleLowerCase("zh-CN");
+  const filteredDesignPoints = authoritativeDesignPoints.filter((point) => {
+    if (!normalizedDesignQuery) return true;
+    return [
+      point.name,
+      point.regionPath,
+      point.domainLabel,
+      point.productLabel,
+      point.objectTypeLabel,
+      ...point.businessValues.flatMap(({ label, value }) => [label, value]),
+    ].some((value) => value.toLocaleLowerCase("zh-CN").includes(normalizedDesignQuery));
+  });
+  const designPageCount = Math.max(
+    1,
+    Math.ceil(filteredDesignPoints.length / DESIGN_POINT_PAGE_SIZE),
+  );
+  const currentDesignPageIndex = Math.min(designPageIndex, designPageCount - 1);
+  const visibleDesignPoints = filteredDesignPoints.slice(
+    currentDesignPageIndex * DESIGN_POINT_PAGE_SIZE,
+    (currentDesignPageIndex + 1) * DESIGN_POINT_PAGE_SIZE,
+  );
 
   return (
     <section aria-label="样本点业务信息" className="overview-sample-point-panel">
@@ -607,7 +663,102 @@ export function OverviewSamplePointPanel({
         </section>
       ) : null}
 
-      {effectiveLayerMode === "design" ? (
+      {effectiveLayerMode === "design" &&
+      networkModel?.designPointState !== undefined &&
+      networkModel.designPointState !== "idle" ? (
+        <section
+          aria-label="设计样本点信息"
+          className="overview-detail-section overview-design-sample-points"
+        >
+          <h3>
+            <span aria-hidden="true">◆</span>
+            设计样本点
+          </h3>
+          <p>设计样本点不带年份；点位、行政区、坐标和业务字段来自权威清单。</p>
+          {networkModel?.designPointState === "loading" ? (
+            <p role="status">正在同步设计样本点…</p>
+          ) : null}
+          {networkModel?.designPointState === "unavailable" ? (
+            <p role="alert">设计样本点暂不可用，请稍后重试。</p>
+          ) : null}
+          {networkModel?.designPointState === "ready" ? (
+            <>
+              <label className="overview-design-sample-search">
+                <span>搜索设计样本点</span>
+                <input
+                  onChange={(event) => {
+                    setDesignQuery(event.target.value);
+                    setDesignPageIndex(0);
+                  }}
+                  placeholder="输入点位、地区或业务对象"
+                  type="search"
+                  value={designQuery}
+                />
+              </label>
+              <p role="status">当前地区共 {filteredDesignPoints.length} 个设计样本点</p>
+              <div
+                aria-label="设计样本点列表"
+                className="overview-design-sample-list"
+                role="list"
+              >
+                {visibleDesignPoints.map((point) => (
+                  <div key={point.id} role="listitem">
+                    <button
+                      aria-pressed={selectedDesignPoint?.id === point.id}
+                      onClick={() =>
+                        onSelectedSamplePointChange(designPointMapId(point.id))
+                      }
+                      type="button"
+                    >
+                      <strong>{point.name}</strong>
+                      <span>
+                        {point.objectTypeLabel} · {point.productLabel}
+                      </span>
+                      <small>{point.regionPath}</small>
+                    </button>
+                  </div>
+                ))}
+                {visibleDesignPoints.length === 0 ? (
+                  <p>当前条件下暂无设计样本点。</p>
+                ) : null}
+              </div>
+              {filteredDesignPoints.length > DESIGN_POINT_PAGE_SIZE ? (
+                <nav
+                  aria-label="设计样本点分页"
+                  className="overview-sample-point-pagination"
+                >
+                  <button
+                    disabled={currentDesignPageIndex === 0}
+                    onClick={() =>
+                      setDesignPageIndex((current) => Math.max(0, current - 1))
+                    }
+                    type="button"
+                  >
+                    上一页
+                  </button>
+                  <span>
+                    第 {currentDesignPageIndex + 1} / {designPageCount} 页
+                  </span>
+                  <button
+                    disabled={currentDesignPageIndex >= designPageCount - 1}
+                    onClick={() =>
+                      setDesignPageIndex((current) =>
+                        Math.min(designPageCount - 1, current + 1),
+                      )
+                    }
+                    type="button"
+                  >
+                    下一页
+                  </button>
+                </nav>
+              ) : null}
+              {selectedDesignPoint ? (
+                <DesignSamplePointDetail point={selectedDesignPoint} />
+              ) : null}
+            </>
+          ) : null}
+        </section>
+      ) : effectiveLayerMode === "design" ? (
         <section
           aria-label="设计样本网络信息"
           className="overview-detail-section overview-sample-network-design"
@@ -656,6 +807,9 @@ export function OverviewSamplePointPanel({
         </section>
       ) : (
         <>
+          {selectedDesignPoint ? (
+            <DesignSamplePointDetail point={selectedDesignPoint} />
+          ) : null}
           <section className="overview-detail-section overview-sample-point-categories">
             <h3>
               <span aria-hidden="true">◆</span>
@@ -754,7 +908,7 @@ export function OverviewSamplePointPanel({
           </section>
 
           <div
-            className={`overview-sample-point-workspace${selectedSamplePointId ? " has-selection" : ""}`}
+            className={`overview-sample-point-workspace${formalSelectedSamplePointId ? " has-selection" : ""}`}
           >
             <section className="overview-detail-section overview-sample-point-list-section">
               <h3>
@@ -801,7 +955,7 @@ export function OverviewSamplePointPanel({
                 {visibleItems.map((item) => (
                   <div key={item.samplePointId} role="listitem">
                     <button
-                      aria-pressed={selectedSamplePointId === item.samplePointId}
+                      aria-pressed={formalSelectedSamplePointId === item.samplePointId}
                       onClick={() => selectItem(item.samplePointId)}
                       type="button"
                     >
@@ -882,7 +1036,7 @@ export function OverviewSamplePointPanel({
               ) : null}
             </section>
 
-            {selectedSamplePointId ? (
+            {formalSelectedSamplePointId ? (
               <section className="overview-detail-section overview-sample-point-business">
                 <h3 aria-label="样本点业务信息">
                   <span aria-hidden="true">◆</span>
@@ -988,6 +1142,40 @@ export function OverviewSamplePointPanel({
             ) : null}
           </div>
         </>
+      )}
+    </section>
+  );
+}
+
+function designPointMapId(id: string) {
+  return `${DESIGN_POINT_ID_PREFIX}${id}`;
+}
+
+function DesignSamplePointDetail({ point }: { point: OverviewDesignSamplePoint }) {
+  return (
+    <section aria-label="设计样本点详情" className="overview-design-sample-detail">
+      <header>
+        <h4>{point.name}</h4>
+        <span>
+          {point.objectTypeLabel} · {point.productLabel}
+        </span>
+      </header>
+      <p>{point.regionPath}</p>
+      <p>坐标已通过所选行政区边界校验。</p>
+      {point.businessValues.length ? (
+        <dl>
+          {point.businessValues.map(({ code, label, unit, value }) => (
+            <div key={code}>
+              <dt>{label}</dt>
+              <dd>
+                {value}
+                {unit ? ` ${unit}` : ""}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p>当前业务对象暂无已填写的适用信息。</p>
       )}
     </section>
   );

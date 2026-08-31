@@ -2,18 +2,32 @@ import type {
   OverviewSamplePointAggregate,
   OverviewSamplePointCategoryCode,
   OverviewSamplePointDetail,
+  OverviewDesignSamplePointPage,
   OverviewSamplePointIcon,
   OverviewSamplePointList,
   SampleNetworkComparison,
   SampleNetworkDesignComparison,
 } from "../../domain/overviewSamplePoint";
 import type { HttpDownload } from "../../../../shared/api/HttpClient";
+import type {
+  DesignSampleContext,
+  DesignSampleFieldContract,
+} from "../../../design-sample/domain/designSampleFieldContract";
 
 export interface OverviewSamplePointRequestOptions {
   signal?: AbortSignal;
 }
 
 export interface OverviewSamplePointRepository {
+  designPoints?(query: {
+    page: number;
+    pageSize: number;
+    productCode?: string;
+    regionCode?: string;
+  }): Promise<OverviewDesignSamplePointPage>;
+  designPointDefinition?(
+    context: DesignSampleContext,
+  ): Promise<DesignSampleFieldContract>;
   exportInventory?(query: { year: number; regionCode?: string }): Promise<HttpDownload>;
   designComparison?(query: {
     regionCode?: string;

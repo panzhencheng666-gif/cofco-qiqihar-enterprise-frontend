@@ -5,6 +5,10 @@ import type { OverviewSamplePointRequestOptions } from "../../application/ports/
 import type { OverviewSamplePointCategoryCode } from "../../domain/overviewSamplePoint";
 import type { HttpClient } from "../../../../shared/api/HttpClient";
 import { queryString } from "../../../../shared/api/HttpClient";
+import type {
+  DesignSampleContext,
+  DesignSampleFieldContract,
+} from "../../../design-sample/domain/designSampleFieldContract";
 
 const categoryCodeSchema = z.enum(["PRODUCTION", "MARKET", "LOGISTICS"]);
 const roleRefSchema = z.object({
@@ -25,6 +29,41 @@ const businessValueSchema = z.object({
   label: z.string(),
   value: z.string(),
   unitCode: z.string().nullable(),
+});
+
+const designSamplePointSchema = z
+  .object({
+    id: uuidTextSchema,
+    contractVersion: z.literal("design-sample-fields-v1"),
+    contractDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+    context: z
+      .object({
+        domainCode: z.string().min(1),
+        productCode: z.string().min(1),
+        objectTypeCode: z.string().min(1),
+      })
+      .strict(),
+    values: z.record(z.string(), z.unknown()),
+    name: z.string().min(1),
+    regionCode: z.string().min(1),
+    regionPath: z.string().min(1),
+    longitude: z.number().min(-180).max(180),
+    latitude: z.number().min(-90).max(90),
+    version: z.number().int().nonnegative(),
+    updatedAt: z.string().min(1),
+  })
+  .strict();
+
+const designSamplePointPageSchema = z.object({
+  data: z
+    .object({
+      items: z.array(designSamplePointSchema),
+      pageNumber: z.number().int().nonnegative(),
+      pageSize: z.number().int().positive().max(100),
+      totalElements: z.number().int().nonnegative(),
+      totalPages: z.number().int().nonnegative(),
+    })
+    .strict(),
 });
 
 const aggregateSchema = z
@@ -240,7 +279,38 @@ const designComparisonSchema = z.object({
 });
 
 export class HttpOverviewSamplePointRepository implements OverviewSamplePointRepository {
-  constructor(private readonly http: HttpClient) {}
+  constructor(
+    private readonly http: HttpClient,
+    private readonly loadDesignPointDefinition?: (
+      context: DesignSampleContext,
+    ) => Promise<DesignSampleFieldContract>,
+  ) {}
+
+  async designPoints(query: {
+    page: number;
+    pageSize: number;
+    productCode?: string;
+    regionCode?: string;
+  }) {
+    return (
+      await this.http.get(
+        `/api/v1/design-sample-points${queryString({
+          page: query.page,
+          pageSize: query.pageSize,
+          productCode: query.productCode,
+          regionCode: query.regionCode,
+        })}`,
+        designSamplePointPageSchema,
+      )
+    ).data;
+  }
+
+  async designPointDefinition(context: DesignSampleContext) {
+    if (!this.loadDesignPointDefinition) {
+      throw new Error("Design sample point metadata repository is unavailable");
+    }
+    return this.loadDesignPointDefinition(context);
+  }
 
   async exportInventory(query: { year: number; regionCode?: string }) {
     if (!this.http.download)

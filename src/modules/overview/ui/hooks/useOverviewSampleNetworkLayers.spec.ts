@@ -2,7 +2,9 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
 
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
+import type { DesignSampleFieldContract } from "../../../design-sample/domain/designSampleFieldContract";
 import type { SampleNetworkComparison } from "../../domain/overviewSamplePoint";
+import { HttpError } from "../../../../shared/api/HttpClient";
 import { useOverviewSampleNetworkLayers } from "./useOverviewSampleNetworkLayers";
 
 const comparison: SampleNetworkComparison = {
@@ -509,7 +511,255 @@ describe("useOverviewSampleNetworkLayers", () => {
     expect(result.current.comparison?.activeSamplePointCount).toBe(1);
     expect(result.current.comparison?.exactCoveredDesignPointCount).toBe(1);
   });
+
+  it("maps authoritative design points with V157 labels and all four agricultural-input fields", async () => {
+    const designPoints = vi.fn(() =>
+      Promise.resolve({
+        items: [agriculturalInputStorePoint()],
+        pageNumber: 0,
+        pageSize: 100,
+        totalElements: 1,
+        totalPages: 1,
+      }),
+    );
+    const repository = {
+      ...repositoryWithSnapshot(),
+      designPoints,
+      designPointDefinition: vi.fn(() => Promise.resolve(agriculturalInputContract())),
+    } as unknown as OverviewSamplePointRepository;
+
+    const { result } = renderHook(() =>
+      useOverviewSampleNetworkLayers({
+        productCode: "CORN",
+        refreshSequence: 0,
+        region: { code: "230200", level: "PREFECTURE", name: "齐齐哈尔市" },
+        repository,
+        year: 2026,
+      }),
+    );
+
+    await waitFor(() => expect(result.current.designPointState).toBe("ready"));
+
+    expect(designPoints).toHaveBeenCalledWith({
+      page: 0,
+      pageSize: 100,
+      productCode: "CORN",
+    });
+    expect(result.current.designPoints[0]).toMatchObject({
+      name: "龙沙农资店",
+      objectTypeLabel: "农资店",
+      productLabel: "玉米",
+      regionPath: "黑龙江省 / 齐齐哈尔市 / 龙沙区",
+    });
+    expect(result.current.designPoints[0]?.businessValues).toEqual([
+      {
+        code: "AGRI_INPUT_SEED_SALES_VOLUME",
+        label: "种子销售量",
+        value: "1200",
+        unit: "公斤",
+      },
+      {
+        code: "AGRI_INPUT_SEED_RETAIL_PRICE",
+        label: "种子零售价",
+        value: "8.5",
+        unit: "元/公斤",
+      },
+      {
+        code: "AGRI_INPUT_SUPPLY_STATUS",
+        label: "供货状态",
+        value: "充足",
+        unit: null,
+      },
+      {
+        code: "AGRI_INPUT_PLANTING_INTENTION_TREND",
+        label: "种植意向趋势",
+        value: "稳定",
+        unit: null,
+      },
+    ]);
+    expect(result.current.icons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          samplePointId: "design-sample-point:94000000-0000-0000-0000-000000000009",
+          name: "龙沙农资店",
+          longitude: 123.95,
+          latitude: 47.35,
+        }),
+      ]),
+    );
+  });
+
+  it("does not fall back to legacy design coverage while the authoritative list is loading", async () => {
+    const legacyComparison: SampleNetworkComparison = {
+      ...comparison,
+      designPointCount: 1,
+      designPoints: [
+        {
+          villageRegionCode: "230202997001",
+          villageName: "旧设计村",
+          townshipRegionCode: "230202997",
+          townshipName: "测试乡",
+          countyRegionCode: "230202",
+          countyName: "龙沙区",
+          designLongitude: 123.9,
+          designLatitude: 47.3,
+          coordinateReviewStatus: "AUTHORITY_APPROVED",
+          coordinateSourceName: "历史来源",
+        },
+      ],
+    };
+    const repository = {
+      ...repositoryWithSnapshot(),
+      comparison: vi.fn(() => Promise.resolve(legacyComparison)),
+      designPoints: vi.fn(() => new Promise(() => undefined)),
+      designPointDefinition: vi.fn(() => Promise.resolve(agriculturalInputContract())),
+    } as unknown as OverviewSamplePointRepository;
+
+    const { result } = renderHook(() =>
+      useOverviewSampleNetworkLayers({
+        productCode: "CORN",
+        refreshSequence: 0,
+        region: { code: "230202997", level: "TOWNSHIP", name: "测试乡" },
+        repository,
+        year: 2026,
+      }),
+    );
+
+    await waitFor(() => expect(result.current.state).toBe("ready"));
+    expect(result.current.designPointState).toBe("loading");
+    expect(result.current.icons).toEqual([]);
+  });
+
+  it("explains a regional permission denial for authoritative design points", async () => {
+    const repository = {
+      ...repositoryWithSnapshot(),
+      designPoints: vi.fn(() =>
+        Promise.reject(new HttpError(403, "ACCESS_REGION_DENIED")),
+      ),
+      designPointDefinition: vi.fn(() => Promise.resolve(agriculturalInputContract())),
+    } as unknown as OverviewSamplePointRepository;
+
+    const { result } = renderHook(() =>
+      useOverviewSampleNetworkLayers({
+        productCode: "CORN",
+        refreshSequence: 0,
+        region: { code: "230200", level: "PREFECTURE", name: "齐齐哈尔市" },
+        repository,
+        year: 2026,
+      }),
+    );
+
+    await waitFor(() => expect(result.current.designPointState).toBe("unavailable"));
+    expect(result.current.issue).toBe(
+      "当前账号无权查看该地区的设计样本点，请返回已授权地区或联系权限管理员。",
+    );
+  });
 });
+
+function agriculturalInputStorePoint() {
+  return {
+    id: "94000000-0000-0000-0000-000000000009",
+    contractVersion: "design-sample-fields-v1" as const,
+    contractDigest:
+      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    context: {
+      domainCode: "MARKET",
+      productCode: "CORN",
+      objectTypeCode: "AGRICULTURAL_INPUT_STORE",
+    },
+    values: {
+      DSP_NAME: "龙沙农资店",
+      DSP_REGION_CODE: "230202",
+      DSP_LONGITUDE: 123.95,
+      DSP_LATITUDE: 47.35,
+      AGRI_INPUT_SEED_SALES_VOLUME: 1200,
+      AGRI_INPUT_SEED_RETAIL_PRICE: 8.5,
+      AGRI_INPUT_SUPPLY_STATUS: "SUFFICIENT",
+      AGRI_INPUT_PLANTING_INTENTION_TREND: "STABLE",
+    },
+    name: "龙沙农资店",
+    regionCode: "230202",
+    regionPath: "黑龙江省 / 齐齐哈尔市 / 龙沙区",
+    longitude: 123.95,
+    latitude: 47.35,
+    version: 0,
+    updatedAt: "2026-09-01T00:00:00Z",
+  };
+}
+
+function agriculturalInputContract(): DesignSampleFieldContract {
+  const field = (
+    code: string,
+    label: string,
+    valueType: "DECIMAL" | "ENUM",
+    sortOrder: number,
+    unit: string | null = null,
+  ) => ({
+    code,
+    sectionCode: "OBSERVATION" as const,
+    label,
+    description: label,
+    valueType,
+    precision: valueType === "DECIMAL" ? 18 : null,
+    scale: valueType === "DECIMAL" ? 4 : null,
+    maxLength: null,
+    unit,
+    enumOptions: valueType === "ENUM" ? ["SUFFICIENT", "STABLE"] : [],
+    required: false,
+    nullable: true,
+    defaultValue: null,
+    editable: true,
+    minimumValue: null,
+    maximumValue: null,
+    groupCode: "AGRICULTURAL_INPUT",
+    sortOrder,
+    analysisRole: "DISTRIBUTION_NONNULL",
+  });
+  return {
+    contractVersion: "design-sample-fields-v1",
+    contractDigest:
+      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    context: {
+      domainCode: "MARKET",
+      productCode: "CORN",
+      objectTypeCode: "AGRICULTURAL_INPUT_STORE",
+    },
+    domains: [
+      {
+        code: "MARKET",
+        label: "市场域",
+        description: "市场",
+        aliases: [],
+        sortOrder: 20,
+      },
+    ],
+    products: [{ code: "CORN", label: "玉米", aliases: [], sortOrder: 10 }],
+    objectTypes: [
+      {
+        domainCode: "MARKET",
+        code: "AGRICULTURAL_INPUT_STORE",
+        label: "农资店",
+        aliases: [],
+        sortOrder: 180,
+      },
+    ],
+    supportedContexts: [
+      {
+        domainCode: "MARKET",
+        productCode: "CORN",
+        objectTypeCode: "AGRICULTURAL_INPUT_STORE",
+        sortOrder: 260,
+      },
+    ],
+    identityFields: [],
+    observationFields: [
+      field("AGRI_INPUT_SEED_SALES_VOLUME", "种子销售量", "DECIMAL", 310, "公斤"),
+      field("AGRI_INPUT_SEED_RETAIL_PRICE", "种子零售价", "DECIMAL", 320, "元/公斤"),
+      field("AGRI_INPUT_SUPPLY_STATUS", "供货状态", "ENUM", 330),
+      field("AGRI_INPUT_PLANTING_INTENTION_TREND", "种植意向趋势", "ENUM", 340),
+    ],
+  };
+}
 
 function repositoryWithSnapshot(
   implementation: OverviewSamplePointRepository["snapshot"] = (query) =>
