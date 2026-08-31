@@ -171,6 +171,28 @@ describe("useOverviewRealtimeRefresh", () => {
     expect(screen.getByText("1:1:1")).toBeInTheDocument();
   });
 
+  it("refreshes design comparison and geography for the V158 design-coordinate dataset event", () => {
+    vi.useFakeTimers();
+    const stream = new FakeRealtimeStream();
+    render(<Harness productCode="CORN" regionCodes={["230202"]} stream={stream} />);
+
+    act(() => {
+      stream.callbacks.onBusinessChange({
+        aggregateType: "DESIGN_COORDINATE_DATASET",
+        actionCode: "LEGACY_VILLAGE_DESIGN_COORDINATES_DELETED",
+        regionCodes: ["230200"],
+      });
+      vi.advanceTimersByTime(499);
+    });
+    expect(screen.getByText("0:0:0")).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.getByText("0:1:0")).toBeInTheDocument();
+    expect(screen.getByTestId("geography-sequence")).toHaveTextContent("1");
+  });
+
   it("turns a large historical replay into one refresh instead of rebuilding the map per event", () => {
     vi.useFakeTimers();
     const stream = new FakeRealtimeStream();
@@ -198,9 +220,11 @@ describe("useOverviewRealtimeRefresh", () => {
 
 function Harness({
   productCode = "CORN",
+  regionCodes = ["230200"],
   stream,
 }: {
   productCode?: string;
+  regionCodes?: readonly string[];
   stream: OverviewRealtimeStream;
 }) {
   const sequence = (
@@ -209,19 +233,23 @@ function Harness({
       selection: unknown,
     ) => {
       businessSequence: number;
+      geographySequence: number;
       samplePointSequence: number;
       optionSequence: number;
     }
   )(stream, {
     productCode,
-    regionCodes: ["230200"],
+    regionCodes,
     year: 2026,
   });
   return (
-    <span>
-      {sequence.businessSequence}:{sequence.samplePointSequence}:
-      {sequence.optionSequence}
-    </span>
+    <>
+      <span>
+        {sequence.businessSequence}:{sequence.samplePointSequence}:
+        {sequence.optionSequence}
+      </span>
+      <span data-testid="geography-sequence">{sequence.geographySequence}</span>
+    </>
   );
 }
 

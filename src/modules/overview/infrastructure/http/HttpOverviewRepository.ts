@@ -115,13 +115,23 @@ export class HttpOverviewRepository implements OverviewRepository {
   constructor(private readonly http: HttpClient) {}
 
   invalidateBusinessData() {
+    this.invalidateGeographyData();
     for (const key of this.cache.keys()) {
       if (
         key.startsWith("/api/v1/overview/dashboard") ||
         key.startsWith("/api/v1/overview/indicators") ||
-        key.startsWith("/api/v1/overview/regions") ||
-        key.startsWith("/api/v1/overview/locations") ||
         key === "options"
+      ) {
+        this.cache.delete(key);
+      }
+    }
+  }
+
+  invalidateGeographyData() {
+    for (const key of this.cache.keys()) {
+      if (
+        key.startsWith("/api/v1/overview/regions") ||
+        key.startsWith("/api/v1/overview/locations")
       ) {
         this.cache.delete(key);
       }
