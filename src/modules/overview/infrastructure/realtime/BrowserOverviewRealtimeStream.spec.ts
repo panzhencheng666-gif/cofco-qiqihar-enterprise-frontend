@@ -79,6 +79,39 @@ describe("BrowserOverviewRealtimeStream", () => {
     expect(source.closed).toBe(true);
   });
 
+  it("delivers the V158 design-coordinate dataset contract unchanged", async () => {
+    const source = new FakeEventSource();
+    const onBusinessChange = vi.fn();
+    const unsubscribe = new BrowserOverviewRealtimeStream(
+      () => source as unknown as EventSource,
+      () => Promise.resolve(0),
+    ).subscribe({
+      onBusinessChange,
+      onConnected: vi.fn(),
+      onDisconnected: vi.fn(),
+    });
+
+    await vi.waitFor(() => expect(source.listenerCount()).toBe(1));
+    source.dispatch(
+      new MessageEvent("business-change", {
+        data: JSON.stringify({
+          aggregateType: "DESIGN_COORDINATE_DATASET",
+          actionCode: "LEGACY_VILLAGE_DESIGN_COORDINATES_DELETED",
+          productCode: null,
+          regionCodes: ["230200"],
+          surveyYear: null,
+        }),
+      }),
+    );
+
+    expect(onBusinessChange).toHaveBeenCalledWith({
+      aggregateType: "DESIGN_COORDINATE_DATASET",
+      actionCode: "LEGACY_VILLAGE_DESIGN_COORDINATES_DELETED",
+      regionCodes: ["230200"],
+    });
+    unsubscribe();
+  });
+
   it("ignores malformed events instead of refreshing an unrelated selection", async () => {
     const source = new FakeEventSource();
     const onBusinessChange = vi.fn();

@@ -16,6 +16,7 @@ export type OverviewRegionQuery = {
 
 export interface OverviewRepository {
   invalidateBusinessData?(): void;
+  invalidateGeographyData?(): void;
   options(): Promise<OverviewOptions>;
   mapScope(): Promise<OverviewMapScope>;
   regions(query: OverviewRegionQuery): Promise<readonly OverviewRegion[]>;

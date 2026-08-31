@@ -18,6 +18,7 @@ export function useOverviewRealtimeRefresh(
   fallbackPollIntervalMs = FALLBACK_POLL_INTERVAL_MS,
 ) {
   const [businessSequence, setBusinessSequence] = useState(0);
+  const [geographySequence, setGeographySequence] = useState(0);
   const [samplePointSequence, setSamplePointSequence] = useState(0);
   const [optionSequence, setOptionSequence] = useState(0);
   const regionKey = [...selection.regionCodes].sort().join("|");
@@ -39,30 +40,37 @@ export function useOverviewRealtimeRefresh(
     let fallbackTimer: number | undefined;
     let refreshTimer: number | undefined;
     let pendingBusinessRefresh = false;
+    let pendingGeographyRefresh = false;
     let pendingSamplePointRefresh = false;
     let pendingOptionRefresh = false;
     const flushRefresh = () => {
       refreshTimer = undefined;
       const refreshBusiness = pendingBusinessRefresh;
+      const refreshGeography = pendingGeographyRefresh;
       const refreshSamplePoints = pendingSamplePointRefresh;
       const refreshOptions = pendingOptionRefresh;
       pendingBusinessRefresh = false;
+      pendingGeographyRefresh = false;
       pendingSamplePointRefresh = false;
       pendingOptionRefresh = false;
       if (refreshBusiness) setBusinessSequence((current) => current + 1);
+      if (refreshGeography) setGeographySequence((current) => current + 1);
       if (refreshSamplePoints) setSamplePointSequence((current) => current + 1);
       if (refreshOptions) setOptionSequence((current) => current + 1);
     };
     const scheduleRefresh = ({
       business = false,
+      geography = false,
       samplePoints = false,
       options = false,
     }: {
       business?: boolean;
+      geography?: boolean;
       samplePoints?: boolean;
       options?: boolean;
     }) => {
       pendingBusinessRefresh ||= business;
+      pendingGeographyRefresh ||= geography;
       pendingSamplePointRefresh ||= samplePoints;
       pendingOptionRefresh ||= options;
       if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
@@ -72,6 +80,13 @@ export function useOverviewRealtimeRefresh(
       scheduleRefresh({ business: true, samplePoints: true, options: true });
     };
     const refreshChange = (change: OverviewBusinessChange) => {
+      if (
+        change.aggregateType === "DESIGN_COORDINATE_DATASET" &&
+        change.actionCode === "LEGACY_VILLAGE_DESIGN_COORDINATES_DELETED"
+      ) {
+        scheduleRefresh({ geography: true, samplePoints: true });
+        return;
+      }
       const currentSelection = selectionRef.current;
       const selectedRegions = currentSelection.regionKey
         ? currentSelection.regionKey.split("|")
@@ -121,7 +136,12 @@ export function useOverviewRealtimeRefresh(
     };
   }, [fallbackPollIntervalMs, stream]);
 
-  return { businessSequence, optionSequence, samplePointSequence };
+  return {
+    businessSequence,
+    geographySequence,
+    optionSequence,
+    samplePointSequence,
+  };
 }
 
 function affectsYearAndRegion(

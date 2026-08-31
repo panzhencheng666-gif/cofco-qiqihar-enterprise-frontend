@@ -231,12 +231,13 @@ export function OverviewPage({
     selectedRegionCode ||
     mapContextRegion?.code ||
     (scopeRootCode !== OVERALL_SCOPE ? scopeRootCode : "");
-  const { businessSequence, optionSequence, samplePointSequence } =
+  const { businessSequence, geographySequence, optionSequence, samplePointSequence } =
     useOverviewRealtimeRefresh(realtimeStream ?? NOOP_REALTIME_STREAM, {
       productCode,
       regionCodes: realtimeRegionCode ? [realtimeRegionCode] : [],
       ...(year === undefined ? {} : { year }),
     });
+  const regionSequence = businessSequence + geographySequence;
   const mapReferencePeriodCode = hasApprovedBusinessYear
     ? undefined
     : options?.periods[0]?.code;
@@ -255,7 +256,7 @@ export function OverviewPage({
         ? `period:${mapReferencePeriodCode}`
         : "";
   const desiredRootRegionQueryKey =
-    productCode && mapTimeKey ? `${productCode}:${mapTimeKey}:${businessSequence}` : "";
+    productCode && mapTimeKey ? `${productCode}:${mapTimeKey}:${regionSequence}` : "";
   const desiredChildRegionQueryKey =
     desiredRootRegionQueryKey && parentCode
       ? `${desiredRootRegionQueryKey}:${parentCode}`
@@ -288,6 +289,10 @@ export function OverviewPage({
   useEffect(() => {
     repository.invalidateBusinessData?.();
   }, [businessSequence, optionSequence, repository]);
+
+  useEffect(() => {
+    repository.invalidateGeographyData?.();
+  }, [geographySequence, repository]);
 
   useEffect(() => {
     let live = true;
@@ -394,7 +399,7 @@ export function OverviewPage({
     return () => {
       active = false;
     };
-  }, [businessSequence, mapTimeKey, productCode]);
+  }, [mapTimeKey, productCode, regionSequence]);
 
   useEffect(() => {
     if (!productCode || !mapTimeKey || !mapRegionScope) return;
@@ -407,7 +412,7 @@ export function OverviewPage({
       .then((next) => {
         if (!live) return;
         setRootRegions((current) => preserveEquivalentRegions(current, next));
-        setRootRegionQueryKey(`${productCode}:${mapTimeKey}:${businessSequence}`);
+        setRootRegionQueryKey(`${productCode}:${mapTimeKey}:${regionSequence}`);
         setRootRegionIssue(undefined);
         if (!initializedScope.current) {
           initializedScope.current = true;
@@ -432,7 +437,7 @@ export function OverviewPage({
     return () => {
       live = false;
     };
-  }, [businessSequence, mapRegionScope, mapTimeKey, productCode, repository]);
+  }, [mapRegionScope, mapTimeKey, productCode, regionSequence, repository]);
 
   useEffect(() => {
     let live = true;
@@ -480,7 +485,7 @@ export function OverviewPage({
     return () => {
       active = false;
     };
-  }, [businessSequence, mapTimeKey, parentCode, productCode]);
+  }, [mapTimeKey, parentCode, productCode, regionSequence]);
 
   useEffect(() => {
     if (!productCode || !mapTimeKey || !mapRegionScope) return;
@@ -499,7 +504,7 @@ export function OverviewPage({
         setRegions((current) => preserveEquivalentRegions(current, next));
         setRegionsParentCode(parentCode);
         setChildRegionQueryKey(
-          `${productCode}:${mapTimeKey}:${businessSequence}:${parentCode}`,
+          `${productCode}:${mapTimeKey}:${regionSequence}:${parentCode}`,
         );
         setChildRegionIssue(undefined);
       })
@@ -510,26 +515,21 @@ export function OverviewPage({
     return () => {
       live = false;
     };
-  }, [
-    businessSequence,
-    mapRegionScope,
-    mapTimeKey,
-    parentCode,
-    productCode,
-    repository,
-  ]);
+  }, [mapRegionScope, mapTimeKey, parentCode, productCode, regionSequence, repository]);
+
+  const selectedRequestRegionIsMapContextOnly = [...regions, ...rootRegions].find(
+    (region) => region.code === selectedRegionCode,
+  )?.mapContextOnly;
+  const dashboardMapContextRegionCode = mapContextRegion?.code;
 
   useEffect(() => {
     if (!sampleMode || !productCode || year === undefined || !hasApprovedBusinessYear)
       return;
-    const requestRegion = [...regions, ...rootRegions].find(
-      (region) => region.code === selectedRegionCode,
-    );
-    const businessRegionCode = requestRegion?.mapContextOnly
-      ? (mapContextRegion?.code ??
+    const businessRegionCode = selectedRequestRegionIsMapContextOnly
+      ? (dashboardMapContextRegionCode ??
         (scopeRootCode !== OVERALL_SCOPE ? scopeRootCode : ""))
       : selectedRegionCode ||
-        mapContextRegion?.code ||
+        dashboardMapContextRegionCode ||
         (scopeRootCode !== OVERALL_SCOPE ? scopeRootCode : "");
     const requestedDashboardQueryKey = `${productCode}:${year}:${businessRegionCode}`;
     let live = true;
@@ -569,12 +569,11 @@ export function OverviewPage({
     };
   }, [
     businessSequence,
+    dashboardMapContextRegionCode,
     hasApprovedBusinessYear,
     productCode,
-    mapContextRegion,
-    regions,
     repository,
-    rootRegions,
+    selectedRequestRegionIsMapContextOnly,
     scopeRootCode,
     selectedRegionCode,
     year,

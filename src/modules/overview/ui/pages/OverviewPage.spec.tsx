@@ -169,6 +169,85 @@ describe("OverviewPage", () => {
     expect(supplyBalance).toHaveBeenCalledTimes(2);
   });
 
+  it("requeries only geography and sample layers after the V158 dataset event", async () => {
+    let realtimeCallbacks: OverviewRealtimeCallbacks | undefined;
+    const regions = vi
+      .fn<OverviewRepository["regions"]>()
+      .mockResolvedValueOnce([sampleRegion])
+      .mockResolvedValue([
+        {
+          ...sampleRegion,
+          locationGeoJson: JSON.stringify({
+            type: "Point",
+            coordinates: [123.95, 47.35],
+          }),
+        },
+      ]);
+    const dashboard = vi
+      .fn<OverviewRepository["dashboard"]>()
+      .mockResolvedValue(emptyDashboard);
+    const invalidateBusinessData = vi.fn();
+    const invalidateGeographyData = vi.fn();
+    const comparison = vi
+      .fn<OverviewSamplePointRepository["comparison"]>()
+      .mockResolvedValue(emptySampleNetworkComparison);
+
+    render(
+      <OverviewPage
+        realtimeStream={{
+          subscribe: (callbacks) => {
+            realtimeCallbacks = callbacks;
+            return () => undefined;
+          },
+        }}
+        repository={{
+          invalidateBusinessData,
+          invalidateGeographyData,
+          mapScope: () => Promise.resolve(sampleMapScope),
+          options: () => Promise.resolve(options),
+          regions,
+          locations: () => Promise.resolve([]),
+          indicators: () => Promise.resolve([]),
+          dashboard,
+        }}
+        samplePointRepository={{
+          aggregates: () => Promise.resolve([]),
+          comparison,
+          list: () => Promise.resolve({ ...samplePointList, totalCount: 0, items: [] }),
+          icons: () => Promise.resolve([]),
+          detail: () => Promise.reject(new Error("not selected")),
+        }}
+      />,
+    );
+
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: "齐齐哈尔市，样本点聚合数据不可用",
+      }),
+    );
+    await waitFor(() => expect(dashboard).toHaveBeenCalled());
+    await waitFor(() => expect(comparison).toHaveBeenCalled());
+    regions.mockClear();
+    dashboard.mockClear();
+    comparison.mockClear();
+    invalidateBusinessData.mockClear();
+    invalidateGeographyData.mockClear();
+
+    act(() =>
+      realtimeCallbacks?.onBusinessChange({
+        aggregateType: "DESIGN_COORDINATE_DATASET",
+        actionCode: "LEGACY_VILLAGE_DESIGN_COORDINATES_DELETED",
+        regionCodes: ["230200"],
+      }),
+    );
+
+    await waitFor(() => expect(invalidateGeographyData).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(regions).toHaveBeenCalled());
+    await waitFor(() => expect(comparison).toHaveBeenCalled());
+    expect(invalidateBusinessData).not.toHaveBeenCalled();
+    expect(dashboard).not.toHaveBeenCalled();
+  });
+
   it("keeps the hidden sample aggregate collection referentially stable", () => {
     const aggregates = [
       {
