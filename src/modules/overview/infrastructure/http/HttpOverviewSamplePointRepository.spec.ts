@@ -464,6 +464,58 @@ describe("HttpOverviewSamplePointRepository", () => {
     expect(result.designPointCount).toBe(1);
     expect(result).not.toHaveProperty("actualPoints");
   });
+
+  it("reads the year-independent authoritative design sample point page", async () => {
+    const get = respondingWith({
+      items: [
+        {
+          id: "94000000-0000-0000-0000-000000000009",
+          contractVersion: "design-sample-fields-v1",
+          contractDigest:
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          context: {
+            domainCode: "MARKET",
+            productCode: "CORN",
+            objectTypeCode: "AGRICULTURAL_INPUT_STORE",
+          },
+          values: {
+            DSP_NAME: "龙沙农资店",
+            DSP_REGION_CODE: "230202",
+            DSP_LONGITUDE: 123.95,
+            DSP_LATITUDE: 47.35,
+            AGRI_INPUT_SEED_SALES_VOLUME: 1200,
+            AGRI_INPUT_SEED_RETAIL_PRICE: 8.5,
+            AGRI_INPUT_SUPPLY_STATUS: "SUFFICIENT",
+            AGRI_INPUT_PLANTING_INTENTION_TREND: "STABLE",
+          },
+          name: "龙沙农资店",
+          regionCode: "230202",
+          regionPath: "黑龙江省 / 齐齐哈尔市 / 龙沙区",
+          longitude: 123.95,
+          latitude: 47.35,
+          version: 2,
+          updatedAt: "2026-09-01T00:00:00Z",
+        },
+      ],
+      pageNumber: 0,
+      pageSize: 100,
+      totalElements: 1,
+      totalPages: 1,
+    });
+
+    const result = await repositoryWith(get).designPoints({
+      page: 0,
+      pageSize: 100,
+      productCode: "CORN",
+    });
+
+    expect(get).toHaveBeenCalledWith(
+      "/api/v1/design-sample-points?page=0&pageSize=100&productCode=CORN",
+      expect.anything(),
+    );
+    expect(get.mock.calls[0]?.[0]).not.toContain("surveyYear");
+    expect(result.items[0]?.values.AGRI_INPUT_SEED_SALES_VOLUME).toBe(1200);
+  });
 });
 
 function respondingWith(data: unknown) {

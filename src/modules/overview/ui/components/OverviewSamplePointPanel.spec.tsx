@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
 import type { OverviewSamplePointIcon } from "../../domain/overviewSamplePoint";
+import type { OverviewSampleNetworkLayerModel } from "../hooks/useOverviewSampleNetworkLayers";
 import { OverviewSamplePointPanel } from "./OverviewSamplePointPanel";
 
 const list = {
@@ -1004,7 +1005,140 @@ describe("OverviewSamplePointPanel", () => {
       expect(screen.queryByText(/因坐标缺失或无效暂不显示/)).not.toBeInTheDocument();
     },
   );
+
+  it("shows authoritative design point business fields without internal codes or a survey year", async () => {
+    render(
+      <PanelHarness
+        networkModel={designPointNetworkModel()}
+        onIconsChange={vi.fn()}
+        year={2026}
+        region={{ code: "230202", level: "COUNTY", name: "龙沙区" }}
+        repository={repositoryStub()}
+      />,
+    );
+
+    expect(await screen.findByRole("heading", { name: "设计样本点" })).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: /龙沙农资店/u }));
+
+    const detail = screen.getByLabelText("设计样本点详情");
+    expect(within(detail).getByText("农资店 · 玉米")).toBeVisible();
+    expect(within(detail).getByText("种子销售量")).toBeVisible();
+    expect(within(detail).getByText("1200 公斤")).toBeVisible();
+    expect(within(detail).getByText("种子零售价")).toBeVisible();
+    expect(within(detail).getByText("8.5 元/公斤")).toBeVisible();
+    expect(within(detail).getByText("供货状态")).toBeVisible();
+    expect(within(detail).getByText("充足")).toBeVisible();
+    expect(within(detail).getByText("种植意向趋势")).toBeVisible();
+    expect(within(detail).getByText("稳定")).toBeVisible();
+    expect(screen.queryByText("AGRICULTURAL_INPUT_STORE")).not.toBeInTheDocument();
+    expect(screen.queryByText("AGRI_INPUT_SUPPLY_STATUS")).not.toBeInTheDocument();
+    expect(screen.queryByText("2026年")).not.toBeInTheDocument();
+  });
+
+  it("clears a selected design point after realtime refresh removes it", async () => {
+    const repository = repositoryStub();
+    const model = designPointNetworkModel();
+    const { rerender } = render(
+      <PanelHarness
+        networkModel={model}
+        onIconsChange={vi.fn()}
+        year={2026}
+        region={{ code: "230202", level: "COUNTY", name: "龙沙区" }}
+        repository={repository}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: /龙沙农资店/u }));
+    expect(screen.getByLabelText("设计样本点详情")).toBeVisible();
+
+    rerender(
+      <PanelHarness
+        networkModel={{ ...model, designPoints: [] }}
+        onIconsChange={vi.fn()}
+        year={2026}
+        region={{ code: "230202", level: "COUNTY", name: "龙沙区" }}
+        repository={repository}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByLabelText("设计样本点详情")).not.toBeInTheDocument(),
+    );
+    expect(screen.getByText("当前条件下暂无设计样本点。")).toBeVisible();
+  });
 });
+
+function designPointNetworkModel(): OverviewSampleNetworkLayerModel {
+  return {
+    applicable: true,
+    catalog: undefined,
+    catalogState: "ready",
+    categoryCode: undefined,
+    comparison: undefined,
+    designPoints: [
+      {
+        id: "94000000-0000-0000-0000-000000000009",
+        contractVersion: "design-sample-fields-v1",
+        contractDigest:
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        context: {
+          domainCode: "MARKET",
+          productCode: "CORN",
+          objectTypeCode: "AGRICULTURAL_INPUT_STORE",
+        },
+        values: {},
+        name: "龙沙农资店",
+        regionCode: "230202",
+        regionPath: "黑龙江省 / 齐齐哈尔市 / 龙沙区",
+        longitude: 123.95,
+        latitude: 47.35,
+        version: 0,
+        updatedAt: "2026-09-01T00:00:00Z",
+        domainLabel: "市场域",
+        productLabel: "玉米",
+        objectTypeLabel: "农资店",
+        businessValues: [
+          {
+            code: "AGRI_INPUT_SEED_SALES_VOLUME",
+            label: "种子销售量",
+            value: "1200",
+            unit: "公斤",
+          },
+          {
+            code: "AGRI_INPUT_SEED_RETAIL_PRICE",
+            label: "种子零售价",
+            value: "8.5",
+            unit: "元/公斤",
+          },
+          {
+            code: "AGRI_INPUT_SUPPLY_STATUS",
+            label: "供货状态",
+            value: "充足",
+            unit: null,
+          },
+          {
+            code: "AGRI_INPUT_PLANTING_INTENTION_TREND",
+            label: "种植意向趋势",
+            value: "稳定",
+            unit: null,
+          },
+        ],
+      },
+    ],
+    designPointState: "ready",
+    icons: [],
+    issue: undefined,
+    mode: "design",
+    region: { code: "230202", level: "COUNTY", name: "龙沙区" },
+    setCategoryCode: vi.fn(),
+    setMode: vi.fn(),
+    setShowExactDesignLocations: vi.fn(),
+    showExactDesignLocations: false,
+    state: "ready",
+    setTypeCode: vi.fn(),
+    typeCode: undefined,
+  };
+}
 
 function repositoryStub() {
   return {

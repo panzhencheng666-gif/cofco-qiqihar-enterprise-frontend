@@ -116,6 +116,47 @@ export type SampleNetworkLayerType =
 export type SampleNetworkRelationType =
   "EXACT_VILLAGE" | "EXPLICIT_REPRESENTATION" | "REGIONAL_ASSOCIATION";
 
+export interface OverviewDesignSamplePointRecord {
+  id: string;
+  contractVersion: "design-sample-fields-v1";
+  contractDigest: string;
+  context: {
+    domainCode: string;
+    productCode: string;
+    objectTypeCode: string;
+  };
+  values: Readonly<Record<string, unknown>>;
+  name: string;
+  regionCode: string;
+  regionPath: string;
+  longitude: number;
+  latitude: number;
+  version: number;
+  updatedAt: string;
+}
+
+export interface OverviewDesignSamplePointPage {
+  items: readonly OverviewDesignSamplePointRecord[];
+  pageNumber: number;
+  pageSize: number;
+  totalElements: number;
+  totalPages: number;
+}
+
+export interface OverviewDesignSamplePointBusinessValue {
+  code: string;
+  label: string;
+  value: string;
+  unit: string | null;
+}
+
+export interface OverviewDesignSamplePoint extends OverviewDesignSamplePointRecord {
+  domainLabel: string;
+  productLabel: string;
+  objectTypeLabel: string;
+  businessValues: readonly OverviewDesignSamplePointBusinessValue[];
+}
+
 export interface SampleNetworkDesignPoint {
   villageRegionCode: string;
   villageName: string;

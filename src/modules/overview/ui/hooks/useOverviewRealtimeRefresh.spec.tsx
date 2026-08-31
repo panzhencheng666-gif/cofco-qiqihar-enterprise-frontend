@@ -193,6 +193,24 @@ describe("useOverviewRealtimeRefresh", () => {
     expect(screen.getByTestId("geography-sequence")).toHaveTextContent("1");
   });
 
+  it("refreshes year-independent design sample points without rebuilding annual business data", () => {
+    vi.useFakeTimers();
+    const stream = new FakeRealtimeStream();
+    render(<Harness productCode="CORN" regionCodes={["230200"]} stream={stream} />);
+
+    act(() => {
+      stream.callbacks.onBusinessChange({
+        aggregateType: "DESIGN_SAMPLE_POINT",
+        actionCode: "DESIGN_SAMPLE_POINT_DELETED",
+        productCode: "CORN",
+        regionCodes: ["230202"],
+      });
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(screen.getByText("0:1:0")).toBeInTheDocument();
+  });
+
   it("turns a large historical replay into one refresh instead of rebuilding the map per event", () => {
     vi.useFakeTimers();
     const stream = new FakeRealtimeStream();
