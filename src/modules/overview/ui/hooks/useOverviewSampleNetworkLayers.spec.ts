@@ -199,6 +199,7 @@ describe("useOverviewSampleNetworkLayers", () => {
     const pendingList = new Promise<typeof list>(() => undefined);
     const pendingIcons = new Promise<readonly (typeof icon)[]>(() => undefined);
     const repository = {
+      invalidateFormalCatalog: vi.fn(),
       comparison: vi.fn(() =>
         refreshPending ? pendingComparison : Promise.resolve(comparison),
       ),
@@ -235,6 +236,7 @@ describe("useOverviewSampleNetworkLayers", () => {
       approvedSubmissionSamplePointCount: 1,
     });
     expect(repository.snapshot).toHaveBeenCalledTimes(1);
+    expect(repository.invalidateFormalCatalog).toHaveBeenCalledTimes(1);
     expect(repository.list).not.toHaveBeenCalled();
     expect(repository.icons).not.toHaveBeenCalled();
 
@@ -245,6 +247,7 @@ describe("useOverviewSampleNetworkLayers", () => {
     });
 
     await waitFor(() => expect(result.current.filteredState).toBe("loading"));
+    expect(repository.invalidateFormalCatalog).toHaveBeenCalledTimes(2);
     expect(result.current.catalog).toEqual(list);
     expect(result.current.actualIcons).toEqual([icon]);
     expect(result.current.comparison).toMatchObject({

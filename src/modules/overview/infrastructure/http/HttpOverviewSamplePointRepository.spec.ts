@@ -80,14 +80,351 @@ describe("HttpOverviewSamplePointRepository", () => {
     });
   });
 
-  it("forwards cancellation to the atomic snapshot request", async () => {
-    const get = respondingWith({
-      items: [],
-      pageNumber: 0,
-      pageSize: 100,
-      totalElements: 0,
-      totalPages: 0,
+  it("supplements legacy null master fields without hiding complete formal masters", async () => {
+    const get = vi.fn<HttpClient["get"]>((path, schema) => {
+      if (path.startsWith("/api/v1/formal-sample-points?")) {
+        return Promise.resolve(
+          schema.parse({
+            data: {
+              items: [
+                {
+                  id: "94000000-0000-0000-0000-000000000001",
+                  kindCode: "SURVEY_SITE",
+                  canonicalName: "新格式正式样本点",
+                  regionCode: "230202",
+                  objectTypeCode: "FARMER",
+                  objectTypeName: "农户",
+                  businessDomain: "PRODUCTION",
+                  address: "龙沙区新格式地址",
+                  approvalState: "APPROVED",
+                  locationState: "VALID",
+                  longitude: 123.95,
+                  latitude: 47.35,
+                  effectiveFrom: "2026-01-01",
+                  effectiveTo: null,
+                  version: 1,
+                  annualObservationCount: 0,
+                  networkMembershipCount: 0,
+                },
+                {
+                  id: "94000000-0000-0000-0000-000000000002",
+                  kindCode: "SURVEY_SITE",
+                  canonicalName: "历史正式样本点",
+                  regionCode: "230202",
+                  objectTypeCode: null,
+                  objectTypeName: null,
+                  businessDomain: null,
+                  address: null,
+                  approvalState: "APPROVED",
+                  locationState: "VALID",
+                  longitude: 123.96,
+                  latitude: 47.32,
+                  effectiveFrom: "2026-01-01",
+                  effectiveTo: null,
+                  version: 0,
+                  annualObservationCount: 1,
+                  networkMembershipCount: 0,
+                },
+              ],
+              pageNumber: 0,
+              pageSize: 100,
+              totalElements: 2,
+              totalPages: 1,
+            },
+          }),
+        );
+      }
+      if (path.startsWith("/api/v1/overview/sample-point-snapshot?")) {
+        return Promise.resolve(
+          schema.parse({
+            data: {
+              list: {
+                regionCode: "230202",
+                totalCount: 1,
+                validCoordinateCount: 1,
+                dataQualityIssueCount: 0,
+                correctionSourceCount: 0,
+                unresolvedSourceCount: 0,
+                categories: [
+                  {
+                    code: "MARKET",
+                    name: "市场类",
+                    count: 1,
+                    types: [
+                      {
+                        code: "FEED_MILL",
+                        name: "饲料加工企业",
+                        iconKey: "feed-mill",
+                        count: 1,
+                      },
+                    ],
+                  },
+                ],
+                items: [
+                  {
+                    samplePointId: "94000000-0000-0000-0000-000000000002",
+                    name: "历史正式样本点",
+                    regionCode: "230202",
+                    regionName: "龙沙区",
+                    locationState: "VALID",
+                    dataQualityReason: null,
+                    categories: [{ code: "MARKET", name: "市场类" }],
+                    types: [
+                      {
+                        code: "FEED_MILL",
+                        name: "饲料加工企业",
+                        iconKey: "feed-mill",
+                      },
+                    ],
+                    products: [{ code: "CORN", name: "玉米" }],
+                    latestBusinessDate: "2026-08-31",
+                    summaryValues: {},
+                  },
+                ],
+                correctionSources: [],
+              },
+              icons: [
+                {
+                  samplePointId: "94000000-0000-0000-0000-000000000002",
+                  name: "历史正式样本点",
+                  regionCode: "230202",
+                  iconKey: "feed-mill",
+                  roles: [{ code: "MARKET", name: "市场类", iconKey: "market" }],
+                  types: [
+                    {
+                      code: "FEED_MILL",
+                      name: "饲料加工企业",
+                      iconKey: "feed-mill",
+                    },
+                  ],
+                  longitude: 123.96,
+                  latitude: 47.32,
+                  dataQualityReason: null,
+                },
+              ],
+            },
+          }),
+        );
+      }
+      return Promise.reject(new Error(`Unexpected path: ${path}`));
     });
+
+    const result = await repositoryWith(get).snapshot({
+      productCode: "CORN",
+      regionCode: "230202",
+      regionName: "龙沙区",
+      year: 2026,
+    });
+
+    expect(get.mock.calls.map(([path]) => path)).toEqual([
+      "/api/v1/formal-sample-points?regionCode=230202&page=0&pageSize=100",
+      "/api/v1/overview/sample-point-snapshot?productCode=CORN&regionCode=230202&year=2026",
+      "/api/v1/overview/sample-point-snapshot?productCode=CORN&regionCode=230202&year=2026&categoryCode=MARKET",
+    ]);
+    expect(result.list.items.map(({ name }) => name)).toEqual([
+      "历史正式样本点",
+      "新格式正式样本点",
+    ]);
+    expect(result.icons.map(({ name }) => name)).toEqual([
+      "历史正式样本点",
+      "新格式正式样本点",
+    ]);
+    expect(result.list.totalCount).toBe(2);
+  });
+
+  it("uses only incomplete legacy identities for filtered fallback and full facets", async () => {
+    const complete = formalMaster({
+      id: "94000000-0000-0000-0000-000000000001",
+      canonicalName: "完整主数据样本点",
+    });
+    const incomplete = formalMaster({
+      id: "94000000-0000-0000-0000-000000000002",
+      canonicalName: "历史主数据样本点",
+      objectTypeCode: null,
+      objectTypeName: null,
+      businessDomain: null,
+      address: null,
+    });
+    const completeLegacy = legacyOverviewRecord({
+      samplePointId: complete.id,
+      name: complete.canonicalName,
+    });
+    const incompleteLegacy = legacyOverviewRecord({
+      samplePointId: incomplete.id,
+      name: incomplete.canonicalName,
+    });
+    const get = vi.fn<HttpClient["get"]>((path, schema) => {
+      if (path.includes("keyword=")) {
+        return Promise.resolve(schema.parse({ data: formalPage([]) }));
+      }
+      if (path.startsWith("/api/v1/formal-sample-points?")) {
+        return Promise.resolve(
+          schema.parse({ data: formalPage([complete, incomplete]) }),
+        );
+      }
+      if (path.startsWith("/api/v1/overview/sample-point-snapshot?")) {
+        return Promise.resolve(
+          schema.parse({
+            data: legacySnapshot([completeLegacy, incompleteLegacy]),
+          }),
+        );
+      }
+      return Promise.reject(new Error(`Unexpected path: ${path}`));
+    });
+
+    const result = await repositoryWith(get).snapshot({
+      productCode: "CORN",
+      regionCode: "230202",
+      regionName: "龙沙区",
+      year: 2026,
+      query: "历史联系方式",
+    });
+
+    expect(result.list.items.map(({ samplePointId }) => samplePointId)).toEqual([
+      incomplete.id,
+    ]);
+    expect(result.icons.map(({ samplePointId }) => samplePointId)).toEqual([
+      incomplete.id,
+    ]);
+    expect(result.list.categories.find(({ code }) => code === "MARKET")).toMatchObject({
+      count: 2,
+      types: [{ code: "FEED_MILL", count: 2 }],
+    });
+    expect(get.mock.calls.map(([path]) => path)).toEqual([
+      "/api/v1/formal-sample-points?regionCode=230202&keyword=%E5%8E%86%E5%8F%B2%E8%81%94%E7%B3%BB%E6%96%B9%E5%BC%8F&page=0&pageSize=100",
+      "/api/v1/formal-sample-points?regionCode=230202&page=0&pageSize=100",
+      "/api/v1/overview/sample-point-snapshot?productCode=CORN&regionCode=230202&year=2026&query=%E5%8E%86%E5%8F%B2%E8%81%94%E7%B3%BB%E6%96%B9%E5%BC%8F",
+      "/api/v1/overview/sample-point-snapshot?productCode=CORN&regionCode=230202&year=2026",
+      "/api/v1/overview/sample-point-snapshot?productCode=CORN&regionCode=230202&year=2026&categoryCode=MARKET",
+    ]);
+  });
+
+  it("keeps legacy category types separate and quality counters distinct", async () => {
+    const incomplete = formalMaster({
+      objectTypeCode: null,
+      objectTypeName: null,
+      businessDomain: null,
+      address: null,
+    });
+    const legacy = legacyOverviewRecord({
+      categories: [
+        { code: "PRODUCTION", name: "产情类" },
+        { code: "MARKET", name: "市场类" },
+      ],
+      types: [
+        { code: "FARMER", name: "农户", iconKey: "farmer" },
+        { code: "FEED_MILL", name: "饲料加工企业", iconKey: "feed-mill" },
+      ],
+    });
+    const get = vi.fn<HttpClient["get"]>((path, schema) => {
+      if (path.startsWith("/api/v1/formal-sample-points?")) {
+        return Promise.resolve(schema.parse({ data: formalPage([incomplete]) }));
+      }
+      const type = path.includes("categoryCode=PRODUCTION")
+        ? { code: "FARMER", name: "农户", iconKey: "farmer" }
+        : path.includes("categoryCode=MARKET")
+          ? { code: "FEED_MILL", name: "饲料加工企业", iconKey: "feed-mill" }
+          : undefined;
+      const data = legacySnapshot(
+        [{ ...legacy, ...(type ? { types: [type] } : {}) }],
+        type
+          ? []
+          : [
+              {
+                categoryCode: "MARKET",
+                sourceRecordId: "legacy-source-1",
+                sourceRole: "SURVEY",
+                dataQualityReason: "SUBJECT_IDENTITY_MISSING",
+              },
+            ],
+      );
+      return Promise.resolve(schema.parse({ data }));
+    });
+
+    const result = await repositoryWith(get).snapshot({
+      productCode: "CORN",
+      regionCode: "230202",
+      regionName: "龙沙区",
+      year: 2026,
+    });
+
+    expect(
+      result.list.categories.find(({ code }) => code === "PRODUCTION")?.types,
+    ).toEqual([{ code: "FARMER", name: "农户", iconKey: "farmer", count: 1 }]);
+    expect(result.list.categories.find(({ code }) => code === "MARKET")?.types).toEqual(
+      [
+        {
+          code: "FEED_MILL",
+          name: "饲料加工企业",
+          iconKey: "feed-mill",
+          count: 1,
+        },
+      ],
+    );
+    expect(result.list).toMatchObject({
+      dataQualityIssueCount: 0,
+      correctionSourceCount: 1,
+      unresolvedSourceCount: 1,
+    });
+  });
+
+  it("invalidates the formal identity catalog before a realtime filtered requery", async () => {
+    let incomplete = false;
+    const complete = formalMaster();
+    const legacy = legacyOverviewRecord();
+    const get = vi.fn<HttpClient["get"]>((path, schema) => {
+      if (path.startsWith("/api/v1/formal-sample-points?")) {
+        const point = incomplete
+          ? {
+              ...complete,
+              objectTypeCode: null,
+              objectTypeName: null,
+              businessDomain: null,
+            }
+          : complete;
+        return Promise.resolve(
+          schema.parse({ data: formalPage(path.includes("keyword=") ? [] : [point]) }),
+        );
+      }
+      return Promise.resolve(schema.parse({ data: legacySnapshot([legacy]) }));
+    });
+    const repository = repositoryWith(get);
+    await repository.snapshot({
+      productCode: "CORN",
+      regionCode: "230202",
+      year: 2026,
+    });
+
+    incomplete = true;
+    repository.invalidateFormalCatalog?.();
+    const result = await repository.snapshot({
+      productCode: "CORN",
+      regionCode: "230202",
+      year: 2026,
+      query: "历史联系方式",
+    });
+
+    expect(result.list.items.map(({ samplePointId }) => samplePointId)).toEqual([
+      complete.id,
+    ]);
+  });
+
+  it("forwards cancellation to formal and legacy snapshot requests", async () => {
+    const incomplete = formalMaster({
+      objectTypeCode: null,
+      objectTypeName: null,
+      businessDomain: null,
+      address: null,
+    });
+    const get = vi.fn<HttpClient["get"]>((path, schema) =>
+      Promise.resolve(
+        schema.parse({
+          data: path.startsWith("/api/v1/formal-sample-points?")
+            ? formalPage([incomplete])
+            : legacySnapshot([]),
+        }),
+      ),
+    );
     const controller = new AbortController();
 
     await repositoryWith(get).snapshot(
@@ -95,11 +432,14 @@ describe("HttpOverviewSamplePointRepository", () => {
       { signal: controller.signal },
     );
 
-    expect(get).toHaveBeenCalledWith(
-      expect.stringContaining("/api/v1/formal-sample-points"),
-      expect.anything(),
-      { signal: controller.signal },
-    );
+    expect(get.mock.calls).toHaveLength(2);
+    expect(get.mock.calls.map(([path]) => path)).toEqual([
+      "/api/v1/formal-sample-points?regionCode=230202&page=0&pageSize=100",
+      "/api/v1/overview/sample-point-snapshot?productCode=CORN&regionCode=230202&year=2026",
+    ]);
+    expect(
+      get.mock.calls.every(([, , options]) => options?.signal === controller.signal),
+    ).toBe(true);
   });
 
   it("keeps stable role icons separate from product-scoped object types", async () => {
@@ -331,6 +671,86 @@ describe("HttpOverviewSamplePointRepository", () => {
     );
     expect(result[0]?.longitude).toBe(123.9);
     expect(result[0]?.dataQualityReason).toBe("DUPLICATE_COORDINATE_UNVERIFIED");
+  });
+
+  it("reads legacy detail when the formal master has no categorization fields", async () => {
+    const get = vi.fn<HttpClient["get"]>((path, schema) => {
+      if (
+        path === "/api/v1/formal-sample-points/94000000-0000-0000-0000-000000000002"
+      ) {
+        return Promise.resolve(
+          schema.parse({
+            data: {
+              id: "94000000-0000-0000-0000-000000000002",
+              kindCode: "SURVEY_SITE",
+              canonicalName: "历史正式样本点",
+              regionCode: "230202",
+              objectTypeCode: null,
+              objectTypeName: null,
+              businessDomain: null,
+              address: null,
+              approvalState: "APPROVED",
+              locationState: "VALID",
+              longitude: "123.9600000",
+              latitude: "47.3200000",
+              effectiveFrom: "2026-01-01",
+              effectiveTo: null,
+              version: 0,
+              annualObservationCount: 1,
+              networkMembershipCount: 0,
+            },
+          }),
+        );
+      }
+      if (path.startsWith("/api/v1/overview/sample-points/94000000-")) {
+        return Promise.resolve(
+          schema.parse({
+            data: {
+              samplePointId: "94000000-0000-0000-0000-000000000002",
+              name: "历史正式样本点",
+              regionCode: "230202",
+              regionName: "龙沙区",
+              locationState: "VALID",
+              dataQualityReason: null,
+              roles: [{ code: "MARKET", name: "市场类", iconKey: "market" }],
+              associations: [
+                {
+                  categoryCode: "MARKET",
+                  categoryName: "市场类",
+                  sourceRole: "SURVEY",
+                  typeCode: "FEED_MILL",
+                  typeName: "饲料加工企业",
+                  productCode: "CORN",
+                  productName: "玉米",
+                  occurrenceDate: "2026-08-31",
+                  sourceVersion: 1,
+                  businessValues: {},
+                },
+              ],
+            },
+          }),
+        );
+      }
+      return Promise.reject(new Error(`Unexpected path: ${path}`));
+    });
+
+    const result = await repositoryWith(get).detail({
+      samplePointId: "94000000-0000-0000-0000-000000000002",
+      regionCode: "230202",
+      regionName: "龙沙区",
+      productCode: "CORN",
+      year: 2026,
+    });
+
+    expect(get.mock.calls.map(([path]) => path)).toEqual([
+      "/api/v1/formal-sample-points/94000000-0000-0000-0000-000000000002",
+      "/api/v1/overview/sample-points/94000000-0000-0000-0000-000000000002?year=2026&productCode=CORN&regionCode=230202",
+    ]);
+    expect(result).toMatchObject({
+      name: "历史正式样本点",
+      roles: [{ code: "MARKET" }],
+      associations: [{ typeCode: "FEED_MILL", productCode: "CORN" }],
+    });
   });
 
   it("joins authoritative master detail with agricultural-input observation history", async () => {
@@ -668,5 +1088,110 @@ function marketField(
     scale: options.length ? null : 4,
     sortOrder: 10,
     options,
+  };
+}
+
+function formalMaster(overrides: Readonly<Record<string, unknown>> = {}) {
+  return {
+    id: "94000000-0000-0000-0000-000000000001",
+    kindCode: "SURVEY_SITE",
+    canonicalName: "完整主数据样本点",
+    regionCode: "230202",
+    objectTypeCode: "FEED_MILL",
+    objectTypeName: "饲料加工企业",
+    businessDomain: "MARKET",
+    address: "龙沙区正式地址",
+    approvalState: "APPROVED",
+    locationState: "VALID",
+    longitude: 123.95,
+    latitude: 47.35,
+    effectiveFrom: "2026-01-01",
+    effectiveTo: null,
+    version: 1,
+    annualObservationCount: 1,
+    networkMembershipCount: 0,
+    ...overrides,
+  };
+}
+
+function formalPage(items: readonly Readonly<Record<string, unknown>>[]) {
+  return {
+    items,
+    pageNumber: 0,
+    pageSize: 100,
+    totalElements: items.length,
+    totalPages: items.length === 0 ? 0 : 1,
+  };
+}
+
+function legacyOverviewRecord(overrides: Readonly<Record<string, unknown>> = {}) {
+  return {
+    samplePointId: "94000000-0000-0000-0000-000000000001",
+    name: "历史投影样本点",
+    regionCode: "230202",
+    regionName: "龙沙区",
+    locationState: "VALID",
+    dataQualityReason: null,
+    categories: [{ code: "MARKET", name: "市场类" }],
+    types: [
+      {
+        code: "FEED_MILL",
+        name: "饲料加工企业",
+        iconKey: "feed-mill",
+      },
+    ],
+    products: [{ code: "CORN", name: "玉米" }],
+    latestBusinessDate: "2026-08-31",
+    summaryValues: {},
+    ...overrides,
+  };
+}
+
+function legacySnapshot(
+  items: readonly ReturnType<typeof legacyOverviewRecord>[],
+  correctionSources: readonly {
+    categoryCode: "PRODUCTION" | "MARKET" | "LOGISTICS";
+    sourceRecordId: string;
+    sourceRole: "SURVEY" | "ORIGIN" | "DESTINATION";
+    dataQualityReason: string;
+  }[] = [],
+) {
+  return {
+    list: {
+      regionCode: "230202",
+      totalCount: items.length,
+      validCoordinateCount: items.length,
+      dataQualityIssueCount: 0,
+      correctionSourceCount: 0,
+      unresolvedSourceCount: 0,
+      categories: [
+        {
+          code: "MARKET",
+          name: "市场类",
+          count: items.length,
+          types: [
+            {
+              code: "FEED_MILL",
+              name: "饲料加工企业",
+              iconKey: "feed-mill",
+              count: items.length,
+            },
+          ],
+        },
+      ],
+      items,
+      correctionSources: [...correctionSources],
+    },
+    icons: items.map((item, index) => ({
+      samplePointId: item.samplePointId,
+      name: item.name,
+      regionCode: item.regionCode,
+      iconKey: "feed-mill",
+      roles: [{ code: "MARKET", name: "市场类", iconKey: "market" }],
+      types: item.types,
+      longitude: 123.95 + index / 100,
+      latitude: 47.35 + index / 100,
+      dataQualityReason: null,
+    })),
   };
 }

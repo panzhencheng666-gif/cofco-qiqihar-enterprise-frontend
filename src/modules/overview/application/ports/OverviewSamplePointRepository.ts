@@ -19,6 +19,7 @@ export interface OverviewSamplePointRequestOptions {
 }
 
 export interface OverviewSamplePointRepository {
+  invalidateFormalCatalog?(): void;
   designPoints?(query: {
     page: number;
     pageSize: number;
