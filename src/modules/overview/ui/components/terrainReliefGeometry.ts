@@ -320,12 +320,10 @@ export function projectReliefScene({
   // is a MultiPolygon. A single canonical label selects the complete boundary;
   // detached components must never become independently raised overlays.
   const aggregateByRegion = new Map(
-    samplePointAggregates
-      .filter(({ regionLevel }) => regionLevel !== "VILLAGE")
-      .map((aggregate) => [
-        aggregate.anchorRegionCode ?? aggregate.regionCode,
-        aggregate,
-      ]),
+    samplePointAggregates.map((aggregate) => [
+      aggregate.anchorRegionCode ?? aggregate.regionCode,
+      aggregate,
+    ]),
   );
   const labels: ReliefLabel[] = projectedFeatures.flatMap((surface) =>
     surface.raiseablePolygonIndices.length
@@ -359,7 +357,7 @@ export function projectReliefScene({
   const projectedAggregateRegions = new Set<string>();
   projectedSurfaces.forEach((surface) => {
     const aggregate = aggregateByRegion.get(surface.region.code);
-    if (!aggregate || surface.region.level === "VILLAGE") return;
+    if (!aggregate) return;
     const primaryPolygon = surface.polygons[surface.primaryPolygonIndex];
     if (!primaryPolygon) return;
     projectedAggregateRegions.add(surface.region.code);
@@ -370,11 +368,7 @@ export function projectReliefScene({
   });
   projectedPoints.forEach(({ point, region }) => {
     const aggregate = aggregateByRegion.get(region.code);
-    if (
-      !aggregate ||
-      region.level === "VILLAGE" ||
-      projectedAggregateRegions.has(region.code)
-    ) {
+    if (!aggregate || projectedAggregateRegions.has(region.code)) {
       return;
     }
     projectedAggregateRegions.add(region.code);
@@ -432,19 +426,17 @@ export function projectReliefOverlays(
     surfaces,
   );
   const aggregateByRegion = new Map(
-    samplePointAggregates
-      .filter(({ regionLevel }) => regionLevel !== "VILLAGE")
-      .map((aggregate) => [
-        aggregate.anchorRegionCode ?? aggregate.regionCode,
-        aggregate,
-      ]),
+    samplePointAggregates.map((aggregate) => [
+      aggregate.anchorRegionCode ?? aggregate.regionCode,
+      aggregate,
+    ]),
   );
   const projectedAggregates: ReliefSamplePointAggregate[] = [];
   const projectedRegions = new Set<string>();
   surfaces.forEach((surface) => {
     const aggregate = aggregateByRegion.get(surface.region.code);
     const polygon = surface.polygons[surface.primaryPolygonIndex];
-    if (!aggregate || surface.region.level === "VILLAGE" || !polygon) return;
+    if (!aggregate || !polygon) return;
     projectedRegions.add(surface.region.code);
     projectedAggregates.push({
       aggregate,
@@ -453,7 +445,7 @@ export function projectReliefOverlays(
   });
   scene.points.forEach(({ point, region }) => {
     const aggregate = aggregateByRegion.get(region.code);
-    if (!aggregate || region.level === "VILLAGE" || projectedRegions.has(region.code)) {
+    if (!aggregate || projectedRegions.has(region.code)) {
       return;
     }
     projectedRegions.add(region.code);
@@ -946,7 +938,10 @@ export function reliefCircleInsidePolygon(
   );
 }
 
-export function reliefLabelFootprint(label: ReliefLabel): ReliefOverlayFootprint {
+export function reliefLabelFootprint(
+  label: ReliefLabel,
+  hasAggregateCount = false,
+): ReliefOverlayFootprint {
   const fontSize =
     label.kind === "point"
       ? 12
@@ -962,8 +957,7 @@ export function reliefLabelFootprint(label: ReliefLabel): ReliefOverlayFootprint
   const glyphCount = Array.from(compactAdministrativeName(label.region.name)).length;
   const baseHeight = fontSize + 6;
   const baseWidth = Math.ceil(glyphCount * fontSize * (1 + letterSpacing) + 14);
-  const canDisplayAggregateCount =
-    label.kind === "region" && label.region.level !== "VILLAGE";
+  const canDisplayAggregateCount = label.kind === "region" || hasAggregateCount;
   return {
     height: canDisplayAggregateCount ? baseHeight + 12 : baseHeight,
     width: canDisplayAggregateCount ? Math.max(baseWidth, 72) : baseWidth,
@@ -1064,7 +1058,10 @@ export function createReliefOverlayLayout(
     };
   });
   const labels = scene.labels.map((label) => {
-    const footprint = reliefLabelFootprint(label);
+    const footprint = reliefLabelFootprint(
+      label,
+      aggregateByRegion.has(label.region.code),
+    );
     const surface = surfaceByRegion.get(label.region.code);
     const polygon = surface?.polygons[surface.primaryPolygonIndex ?? 0];
     if (!polygon) {
