@@ -272,6 +272,33 @@ describe("OverviewPage", () => {
     expect(selectVisibleSamplePointAggregates(true, aggregates)).toBe(aggregates);
   });
 
+  it("projects map aggregate counts to the selected sample role", () => {
+    const aggregates = [
+      {
+        regionCode: "230200",
+        regionName: "齐齐哈尔市",
+        regionLevel: "PREFECTURE" as const,
+        samplePointCount: 329,
+        productionCount: 240,
+        marketCount: 86,
+        logisticsCount: 3,
+        validCoordinateCount: 329,
+        dataQualityIssueCount: 0,
+        correctionSourceCount: 0,
+        unresolvedSourceCount: 0,
+      },
+    ];
+
+    expect(selectVisibleSamplePointAggregates(true, aggregates, "MARKET")).toEqual([
+      expect.objectContaining({
+        samplePointCount: 86,
+        productionCount: 0,
+        marketCount: 86,
+        logisticsCount: 0,
+      }),
+    ]);
+  });
+
   it("leaves perpetual loading and allows retry when the options request stalls", async () => {
     vi.useFakeTimers();
     const optionsRequest = vi
@@ -936,10 +963,10 @@ describe("OverviewPage", () => {
                 regionCode: sampleRegion.code,
                 regionName: sampleRegion.name,
                 regionLevel: "PREFECTURE",
-                samplePointCount: 1,
+                samplePointCount: 2,
                 productionCount: 1,
-                marketCount: 0,
-                validCoordinateCount: 1,
+                marketCount: 1,
+                validCoordinateCount: 2,
                 dataQualityIssueCount: 0,
                 correctionSourceCount: 0,
                 unresolvedSourceCount: 0,
@@ -973,9 +1000,9 @@ describe("OverviewPage", () => {
     );
 
     const aggregatedRegion = await screen.findByRole("button", {
-      name: "齐齐哈尔市，已核定 1 个样本点，其中产情类 1 个、市场类 0 个、物流类 0 个；多角色样本只计一个身份",
+      name: "齐齐哈尔市，已核定 2 个样本点，其中产情类 1 个、市场类 1 个、物流类 0 个；多角色样本只计一个身份",
     });
-    expect(within(aggregatedRegion).getByText("1个")).toBeInTheDocument();
+    expect(within(aggregatedRegion).getByText("2个")).toBeInTheDocument();
     await userEvent.setup().click(aggregatedRegion);
 
     expect(await screen.findByRole("button", { name: "产情类 1" })).toBeVisible();
@@ -987,6 +1014,11 @@ describe("OverviewPage", () => {
     });
 
     await userEvent.click(screen.getByRole("button", { name: "产情类 1" }));
+    expect(
+      await screen.findByRole("button", {
+        name: "齐齐哈尔市，已核定 1 个样本点，其中产情类 1 个、市场类 0 个、物流类 0 个；多角色样本只计一个身份",
+      }),
+    ).toBeVisible();
     expect(await screen.findByText("同一跨产品样本点")).toBeVisible();
     await waitFor(() =>
       expect(icons.mock.calls.map(([request]) => request)).toContainEqual({

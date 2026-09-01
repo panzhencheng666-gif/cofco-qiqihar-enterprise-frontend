@@ -497,15 +497,30 @@ async function installOverviewFixture(
           }
         : pathname.endsWith("/regions")
           ? regionsFor(parentCode)
-          : pathname.endsWith("/sample-point-aggregates")
-            ? []
-            : pathname.endsWith("/locations")
+          : pathname.endsWith("/sample-point-snapshot")
+            ? {
+                icons: [],
+                list: {
+                  categories: [],
+                  correctionSourceCount: 0,
+                  correctionSources: [],
+                  dataQualityIssueCount: 0,
+                  items: [],
+                  regionCode: regionCode ?? city.code,
+                  totalCount: 0,
+                  unresolvedSourceCount: 0,
+                  validCoordinateCount: 0,
+                },
+              }
+            : pathname.endsWith("/sample-point-aggregates")
               ? []
-              : pathname.endsWith("/indicators")
+              : pathname.endsWith("/locations")
                 ? []
-                : pathname.endsWith("/dashboard")
-                  ? dashboardFor(regionCode)
-                  : undefined;
+                : pathname.endsWith("/indicators")
+                  ? []
+                  : pathname.endsWith("/dashboard")
+                    ? dashboardFor(regionCode)
+                    : undefined;
 
     if (data === undefined) {
       await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
