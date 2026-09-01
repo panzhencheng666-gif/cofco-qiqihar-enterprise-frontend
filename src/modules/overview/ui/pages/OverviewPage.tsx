@@ -13,7 +13,10 @@ import type {
   OverviewOptions,
   OverviewRegion,
 } from "../../domain/overview";
-import type { OverviewSamplePointAggregate } from "../../domain/overviewSamplePoint";
+import type {
+  OverviewSamplePointAggregate,
+  OverviewSamplePointCategoryCode,
+} from "../../domain/overviewSamplePoint";
 import type {
   OverviewDataMode,
   RegionalCropSummary,
@@ -126,8 +129,25 @@ const EMPTY_SAMPLE_POINT_AGGREGATES: readonly OverviewSamplePointAggregate[] = [
 export function selectVisibleSamplePointAggregates(
   showAggregateLayer: boolean,
   aggregates: readonly OverviewSamplePointAggregate[],
+  categoryCode?: OverviewSamplePointCategoryCode,
 ): readonly OverviewSamplePointAggregate[] {
-  return showAggregateLayer ? aggregates : EMPTY_SAMPLE_POINT_AGGREGATES;
+  if (!showAggregateLayer) return EMPTY_SAMPLE_POINT_AGGREGATES;
+  if (!categoryCode) return aggregates;
+  const countKey = {
+    PRODUCTION: "productionCount",
+    MARKET: "marketCount",
+    LOGISTICS: "logisticsCount",
+  } as const;
+  return aggregates.map((aggregate) => {
+    const samplePointCount = aggregate[countKey[categoryCode]] ?? 0;
+    return {
+      ...aggregate,
+      samplePointCount,
+      productionCount: categoryCode === "PRODUCTION" ? samplePointCount : 0,
+      marketCount: categoryCode === "MARKET" ? samplePointCount : 0,
+      logisticsCount: categoryCode === "LOGISTICS" ? samplePointCount : 0,
+    };
+  });
 }
 
 function overviewDataIssue(error: unknown, fallback: string): string {
@@ -612,6 +632,7 @@ export function OverviewPage({
   const visibleSamplePointAggregates = selectVisibleSamplePointAggregates(
     showAggregateLayer,
     samplePointAggregates,
+    sampleNetworkModel.categoryCode,
   );
   const visibleSamplePointAggregateStatus = showAggregateLayer
     ? samplePointAggregateStatus

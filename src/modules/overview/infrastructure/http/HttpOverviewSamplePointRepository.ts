@@ -303,10 +303,7 @@ const designComparisonSchema = z.object({
 });
 
 export class HttpOverviewSamplePointRepository implements OverviewSamplePointRepository {
-  private readonly formalCatalogByRegion = new Map<
-    string,
-    readonly FormalSamplePoint[]
-  >();
+  private formalCatalog: readonly FormalSamplePoint[] | undefined;
 
   constructor(
     private readonly http: HttpClient,
@@ -316,7 +313,7 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
   ) {}
 
   invalidateFormalCatalog() {
-    this.formalCatalogByRegion.clear();
+    this.formalCatalog = undefined;
   }
 
   async designPoints(query: {
@@ -440,7 +437,7 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
     },
     options?: OverviewSamplePointRequestOptions,
   ) {
-    let allPoints = this.formalCatalogByRegion.get(query.regionCode);
+    let allPoints: readonly FormalSamplePoint[];
     let visiblePoints: readonly FormalSamplePoint[];
     if (query.query) {
       visiblePoints = await this.loadFormalSamplePoints(
@@ -448,21 +445,15 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
         query.query,
         options,
       );
-      if (!allPoints) {
-        allPoints = await this.loadFormalSamplePoints(
-          query.regionCode,
-          undefined,
-          options,
-        );
-        this.formalCatalogByRegion.set(query.regionCode, allPoints);
-      }
+      allPoints = this.formalCatalog
+        ? formalPointsInRegion(this.formalCatalog, query.regionCode)
+        : await this.loadFormalSamplePoints(query.regionCode, undefined, options);
     } else {
       allPoints = await this.loadFormalSamplePoints(
         query.regionCode,
         undefined,
         options,
       );
-      this.formalCatalogByRegion.set(query.regionCode, allPoints);
       visiblePoints = allPoints;
     }
     const allCategorizedPoints = allPoints.filter(isCategorizedFormalSamplePoint);
@@ -488,8 +479,6 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
         .filter((point) => !isCategorizedFormalSamplePoint(point))
         .map(({ id }) => id),
     );
-    if (incompleteIds.size === 0) return formalSnapshot;
-
     const legacySnapshot = await this.loadLegacySnapshot(query, options);
     const hasFilters = Boolean(query.categoryCode || query.typeCode || query.query);
     const legacyCatalog = hasFilters
@@ -502,10 +491,18 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
           options,
         )
       : legacySnapshot;
+    const formalIds = new Set(allPoints.map(({ id }) => id));
+    const fallbackIds = new Set([
+      ...incompleteIds,
+      ...legacyCatalog.list.items
+        .filter(({ samplePointId }) => !formalIds.has(samplePointId))
+        .map(({ samplePointId }) => samplePointId),
+    ]);
+    if (fallbackIds.size === 0) return formalSnapshot;
     const legacyCategoryCodes = [
       ...new Set(
         legacyCatalog.list.items
-          .filter(({ samplePointId }) => incompleteIds.has(samplePointId))
+          .filter(({ samplePointId }) => fallbackIds.has(samplePointId))
           .flatMap((item) => item.categories.map(({ code }) => code)),
       ),
     ];
@@ -524,7 +521,7 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
           return [
             categoryCode,
             categorySnapshot.list.items.filter(({ samplePointId }) =>
-              incompleteIds.has(samplePointId),
+              fallbackIds.has(samplePointId),
             ),
           ] as const;
         }),
@@ -533,7 +530,7 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
     return mergeFormalAndLegacySnapshots(
       legacySnapshot,
       formalSnapshot,
-      incompleteIds,
+      fallbackIds,
       catalogSnapshot.list.categories,
       legacyCategoryItems,
     );
@@ -623,7 +620,6 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
     const readPage = (page: number) =>
       this.http.get(
         `/api/v1/formal-sample-points${queryString({
-          regionCode,
           keyword,
           page,
           pageSize: 100,
@@ -636,7 +632,8 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
     for (let page = 1; page < first.totalPages; page += 1) {
       items.push(...(await readPage(page)).data.items);
     }
-    return items;
+    if (!keyword) this.formalCatalog = items;
+    return formalPointsInRegion(items, regionCode);
   }
 
   private async loadLegacySnapshot(
@@ -729,7 +726,7 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
 function mergeFormalAndLegacySnapshots(
   legacy: { list: OverviewSamplePointList; icons: readonly OverviewSamplePointIcon[] },
   formal: { list: OverviewSamplePointList; icons: readonly OverviewSamplePointIcon[] },
-  incompleteIds: ReadonlySet<string>,
+  fallbackIds: ReadonlySet<string>,
   formalCategories: OverviewSamplePointList["categories"],
   legacyCategoryItems: ReadonlyMap<
     OverviewSamplePointCategoryCode,
@@ -737,10 +734,10 @@ function mergeFormalAndLegacySnapshots(
   >,
 ) {
   const legacyItems = legacy.list.items.filter(({ samplePointId }) =>
-    incompleteIds.has(samplePointId),
+    fallbackIds.has(samplePointId),
   );
   const legacyIcons = legacy.icons.filter(({ samplePointId }) =>
-    incompleteIds.has(samplePointId),
+    fallbackIds.has(samplePointId),
   );
   const items = [...legacyItems, ...formal.list.items];
   const icons = [...legacyIcons, ...formal.icons];
@@ -761,6 +758,19 @@ function mergeFormalAndLegacySnapshots(
     },
     icons,
   };
+}
+
+function formalPointsInRegion(
+  points: readonly FormalSamplePoint[],
+  regionCode: string,
+) {
+  return points.filter(
+    (point) =>
+      point.regionCode === regionCode ||
+      (/^\d{6}$/u.test(regionCode) && regionCode.endsWith("00")
+        ? point.regionCode.startsWith(regionCode.slice(0, 4))
+        : point.regionCode.startsWith(regionCode)),
+  );
 }
 
 function categoryCounts(

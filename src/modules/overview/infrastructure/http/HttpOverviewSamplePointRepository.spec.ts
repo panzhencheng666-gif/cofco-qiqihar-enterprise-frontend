@@ -22,7 +22,7 @@ describe("HttpOverviewSamplePointRepository", () => {
   });
 
   it("builds the map and list only from the authoritative formal sample master page", async () => {
-    const get = respondingWith({
+    const formalData = {
       items: [
         {
           id: "94000000-0000-0000-0000-000000000001",
@@ -48,7 +48,21 @@ describe("HttpOverviewSamplePointRepository", () => {
       pageSize: 100,
       totalElements: 1,
       totalPages: 1,
-    });
+    };
+    const get = vi.fn<HttpClient["get"]>((path, schema) =>
+      Promise.resolve(
+        schema.parse({
+          data: path.startsWith("/api/v1/formal-sample-points?")
+            ? formalData
+            : legacySnapshot([
+                legacyOverviewRecord({
+                  samplePointId: "94000000-0000-0000-0000-000000000001",
+                  name: "龙沙兴农农资店",
+                }),
+              ]),
+        }),
+      ),
+    );
 
     const result = await repositoryWith(get).snapshot({
       productCode: "CORN",
@@ -58,7 +72,7 @@ describe("HttpOverviewSamplePointRepository", () => {
     });
 
     expect(get).toHaveBeenCalledWith(
-      "/api/v1/formal-sample-points?regionCode=230202&page=0&pageSize=100",
+      "/api/v1/formal-sample-points?page=0&pageSize=100",
       expect.anything(),
       undefined,
     );
@@ -78,6 +92,84 @@ describe("HttpOverviewSamplePointRepository", () => {
       roles: [{ code: "MARKET", name: "市场类" }],
       types: [{ code: "AGRICULTURAL_INPUT_STORE", name: "农资店" }],
     });
+  });
+
+  it("includes descendant formal samples when the selected region is a prefecture", async () => {
+    const formalPoint = (id: string, canonicalName: string, regionCode: string) => ({
+      id,
+      kindCode: "SURVEY_SITE",
+      canonicalName,
+      regionCode,
+      objectTypeCode: "FARMER",
+      objectTypeName: "农户",
+      businessDomain: "PRODUCTION",
+      address: `${canonicalName}地址`,
+      approvalState: "APPROVED",
+      locationState: "VALID",
+      longitude: 123.95,
+      latitude: 47.35,
+      effectiveFrom: "2026-01-01",
+      effectiveTo: null,
+      version: 1,
+      annualObservationCount: 1,
+      networkMembershipCount: 0,
+    });
+    const get = vi.fn<HttpClient["get"]>((path, schema) =>
+      Promise.resolve(
+        schema.parse({
+          data: path.startsWith("/api/v1/overview/sample-point-snapshot?")
+            ? legacySnapshot([])
+            : {
+                items: path.includes("regionCode=230200")
+                  ? [
+                      formalPoint(
+                        "94000000-0000-0000-0000-000000000001",
+                        "市本级正式样本",
+                        "230200",
+                      ),
+                    ]
+                  : [
+                      formalPoint(
+                        "94000000-0000-0000-0000-000000000001",
+                        "市本级正式样本",
+                        "230200",
+                      ),
+                      formalPoint(
+                        "94000000-0000-0000-0000-000000000002",
+                        "下级区县正式样本",
+                        "230231",
+                      ),
+                      formalPoint(
+                        "94000000-0000-0000-0000-000000000003",
+                        "范围外正式样本",
+                        "231100",
+                      ),
+                    ],
+                pageNumber: 0,
+                pageSize: 100,
+                totalElements: path.includes("regionCode=230200") ? 1 : 3,
+                totalPages: 1,
+              },
+        }),
+      ),
+    );
+
+    const result = await repositoryWith(get).snapshot({
+      productCode: "CORN",
+      regionCode: "230200",
+      regionName: "齐齐哈尔市",
+      year: 2026,
+    });
+
+    expect(result.list.items.map(({ name }) => name)).toEqual([
+      "市本级正式样本",
+      "下级区县正式样本",
+    ]);
+    expect(get).toHaveBeenCalledWith(
+      "/api/v1/formal-sample-points?page=0&pageSize=100",
+      expect.anything(),
+      undefined,
+    );
   });
 
   it("supplements legacy null master fields without hiding complete formal masters", async () => {
@@ -217,7 +309,7 @@ describe("HttpOverviewSamplePointRepository", () => {
     });
 
     expect(get.mock.calls.map(([path]) => path)).toEqual([
-      "/api/v1/formal-sample-points?regionCode=230202&page=0&pageSize=100",
+      "/api/v1/formal-sample-points?page=0&pageSize=100",
       "/api/v1/overview/sample-point-snapshot?productCode=CORN&regionCode=230202&year=2026",
       "/api/v1/overview/sample-point-snapshot?productCode=CORN&regionCode=230202&year=2026&categoryCode=MARKET",
     ]);
@@ -230,6 +322,45 @@ describe("HttpOverviewSamplePointRepository", () => {
       "新格式正式样本点",
     ]);
     expect(result.list.totalCount).toBe(2);
+  });
+
+  it("keeps current legacy identities that are absent from the formal master projection", async () => {
+    const complete = formalMaster();
+    const completeLegacy = legacyOverviewRecord({
+      samplePointId: complete.id,
+      name: complete.canonicalName,
+    });
+    const missingLegacy = legacyOverviewRecord({
+      samplePointId: "94000000-0000-0000-0000-000000000099",
+      name: "尚未进入正式主数据投影的当前样本",
+    });
+    const get = vi.fn<HttpClient["get"]>((path, schema) => {
+      if (path.startsWith("/api/v1/formal-sample-points?")) {
+        return Promise.resolve(schema.parse({ data: formalPage([complete]) }));
+      }
+      if (path.startsWith("/api/v1/overview/sample-point-snapshot?")) {
+        return Promise.resolve(
+          schema.parse({
+            data: legacySnapshot([completeLegacy, missingLegacy]),
+          }),
+        );
+      }
+      return Promise.reject(new Error(`Unexpected path: ${path}`));
+    });
+
+    const result = await repositoryWith(get).snapshot({
+      productCode: "CORN",
+      regionCode: "230202",
+      regionName: "龙沙区",
+      year: 2026,
+    });
+
+    expect(result.list.items.map(({ samplePointId }) => samplePointId)).toEqual([
+      missingLegacy.samplePointId,
+      complete.id,
+    ]);
+    expect(result.list.totalCount).toBe(2);
+    expect(result.list.categories.find(({ code }) => code === "MARKET")?.count).toBe(2);
   });
 
   it("uses only incomplete legacy identities for filtered fallback and full facets", async () => {
@@ -291,8 +422,8 @@ describe("HttpOverviewSamplePointRepository", () => {
       types: [{ code: "FEED_MILL", count: 2 }],
     });
     expect(get.mock.calls.map(([path]) => path)).toEqual([
-      "/api/v1/formal-sample-points?regionCode=230202&keyword=%E5%8E%86%E5%8F%B2%E8%81%94%E7%B3%BB%E6%96%B9%E5%BC%8F&page=0&pageSize=100",
-      "/api/v1/formal-sample-points?regionCode=230202&page=0&pageSize=100",
+      "/api/v1/formal-sample-points?keyword=%E5%8E%86%E5%8F%B2%E8%81%94%E7%B3%BB%E6%96%B9%E5%BC%8F&page=0&pageSize=100",
+      "/api/v1/formal-sample-points?page=0&pageSize=100",
       "/api/v1/overview/sample-point-snapshot?productCode=CORN&regionCode=230202&year=2026&query=%E5%8E%86%E5%8F%B2%E8%81%94%E7%B3%BB%E6%96%B9%E5%BC%8F",
       "/api/v1/overview/sample-point-snapshot?productCode=CORN&regionCode=230202&year=2026",
       "/api/v1/overview/sample-point-snapshot?productCode=CORN&regionCode=230202&year=2026&categoryCode=MARKET",
@@ -434,7 +565,7 @@ describe("HttpOverviewSamplePointRepository", () => {
 
     expect(get.mock.calls).toHaveLength(2);
     expect(get.mock.calls.map(([path]) => path)).toEqual([
-      "/api/v1/formal-sample-points?regionCode=230202&page=0&pageSize=100",
+      "/api/v1/formal-sample-points?page=0&pageSize=100",
       "/api/v1/overview/sample-point-snapshot?productCode=CORN&regionCode=230202&year=2026",
     ]);
     expect(
