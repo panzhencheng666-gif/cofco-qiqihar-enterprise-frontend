@@ -150,6 +150,18 @@ export function selectVisibleSamplePointAggregates(
   });
 }
 
+export function useVisibleSamplePointAggregates(
+  showAggregateLayer: boolean,
+  aggregates: readonly OverviewSamplePointAggregate[],
+  categoryCode?: OverviewSamplePointCategoryCode,
+): readonly OverviewSamplePointAggregate[] {
+  return useMemo(
+    () =>
+      selectVisibleSamplePointAggregates(showAggregateLayer, aggregates, categoryCode),
+    [aggregates, categoryCode, showAggregateLayer],
+  );
+}
+
 function overviewDataIssue(error: unknown, fallback: string): string {
   if (error instanceof HttpContractError) {
     const trace = error.traceId ? `追踪号：${error.traceId}。` : "追踪号：响应未提供。";
@@ -629,7 +641,7 @@ export function OverviewPage({
     (!sampleNetworkRegion ||
       sampleNetworkRegion.level === "PREFECTURE" ||
       sampleNetworkRegion.level === "COUNTY");
-  const visibleSamplePointAggregates = selectVisibleSamplePointAggregates(
+  const visibleSamplePointAggregates = useVisibleSamplePointAggregates(
     showAggregateLayer,
     samplePointAggregates,
     sampleNetworkModel.categoryCode,
