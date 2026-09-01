@@ -2,6 +2,7 @@ import {
   act,
   fireEvent,
   render,
+  renderHook,
   screen,
   waitFor,
   within,
@@ -17,7 +18,11 @@ import type {
 } from "../../application/ports/OverviewRealtimeStream";
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
 import type { OverviewDashboardSummary, OverviewRegion } from "../../domain/overview";
-import { OverviewPage, selectVisibleSamplePointAggregates } from "./OverviewPage";
+import {
+  OverviewPage,
+  selectVisibleSamplePointAggregates,
+  useVisibleSamplePointAggregates,
+} from "./OverviewPage";
 import { HttpContractError, HttpError } from "../../../../shared/api/HttpClient";
 
 describe("OverviewPage", () => {
@@ -297,6 +302,32 @@ describe("OverviewPage", () => {
         logisticsCount: 0,
       }),
     ]);
+  });
+
+  it("keeps the selected-role map aggregate projection stable across rerenders", () => {
+    const aggregates = [
+      {
+        regionCode: "230200",
+        regionName: "齐齐哈尔市",
+        regionLevel: "PREFECTURE" as const,
+        samplePointCount: 329,
+        productionCount: 240,
+        marketCount: 86,
+        logisticsCount: 3,
+        validCoordinateCount: 329,
+        dataQualityIssueCount: 0,
+        correctionSourceCount: 0,
+        unresolvedSourceCount: 0,
+      },
+    ];
+    const { result, rerender } = renderHook(() =>
+      useVisibleSamplePointAggregates(true, aggregates, "MARKET"),
+    );
+    const firstProjection = result.current;
+
+    rerender();
+
+    expect(result.current).toBe(firstProjection);
   });
 
   it("leaves perpetual loading and allows retry when the options request stalls", async () => {
