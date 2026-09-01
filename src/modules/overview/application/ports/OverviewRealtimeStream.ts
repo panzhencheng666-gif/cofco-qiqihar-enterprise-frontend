@@ -1,4 +1,5 @@
 export interface OverviewBusinessChange {
+  aggregateId?: string;
   aggregateType?: string;
   actionCode?: string;
   productCode?: string;

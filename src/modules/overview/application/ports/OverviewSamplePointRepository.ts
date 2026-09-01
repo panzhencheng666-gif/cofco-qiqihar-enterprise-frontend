@@ -46,6 +46,7 @@ export interface OverviewSamplePointRepository {
   list(
     query: {
       regionCode: string;
+      regionName?: string;
       productCode: string;
       year: number;
       categoryCode?: OverviewSamplePointCategoryCode;
@@ -57,6 +58,7 @@ export interface OverviewSamplePointRepository {
   icons(
     query: {
       regionCode: string;
+      regionName?: string;
       productCode: string;
       year: number;
       categoryCode?: OverviewSamplePointCategoryCode;
@@ -68,6 +70,7 @@ export interface OverviewSamplePointRepository {
   snapshot?(
     query: {
       regionCode: string;
+      regionName?: string;
       productCode: string;
       year: number;
       categoryCode?: OverviewSamplePointCategoryCode;
@@ -82,6 +85,7 @@ export interface OverviewSamplePointRepository {
   detail(query: {
     samplePointId: string;
     regionCode: string;
+    regionName?: string;
     productCode: string;
     year: number;
     categoryCode?: OverviewSamplePointCategoryCode;

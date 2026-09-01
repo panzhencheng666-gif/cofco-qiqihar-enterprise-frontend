@@ -1087,6 +1087,7 @@ describe("OverviewPage", () => {
       expect(detail).toHaveBeenCalledWith({
         productCode: "CORN",
         regionCode: "230200",
+        regionName: "齐齐哈尔市",
         samplePointId: samplePointIcons[0]!.samplePointId,
         year: 2026,
       }),
@@ -1397,6 +1398,7 @@ describe("OverviewPage", () => {
         categoryCode: "PRODUCTION",
         productCode: "CORN",
         regionCode: "230231",
+        regionName: "拜泉县",
         samplePointId: "94000000-0000-0000-0000-000000000001",
         year: 2026,
       }),

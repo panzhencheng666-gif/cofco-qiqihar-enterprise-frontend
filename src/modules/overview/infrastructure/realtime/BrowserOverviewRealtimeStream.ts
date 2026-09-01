@@ -65,6 +65,7 @@ function parseBusinessChange(event: Event): OverviewBusinessChange | undefined {
   try {
     const value = JSON.parse(event.data) as Record<string, unknown>;
     const regionCodes = value.regionCodes;
+    const aggregateId = value.aggregateId;
     const aggregateType = value.aggregateType;
     const actionCode = value.actionCode;
     const productCode = value.productCode;
@@ -72,6 +73,9 @@ function parseBusinessChange(event: Event): OverviewBusinessChange | undefined {
     if (
       !Array.isArray(regionCodes) ||
       !regionCodes.every((code) => typeof code === "string") ||
+      (aggregateId !== null &&
+        aggregateId !== undefined &&
+        typeof aggregateId !== "string") ||
       (aggregateType !== null &&
         aggregateType !== undefined &&
         typeof aggregateType !== "string") ||
@@ -87,6 +91,7 @@ function parseBusinessChange(event: Event): OverviewBusinessChange | undefined {
     }
     return {
       regionCodes,
+      ...(typeof aggregateId === "string" ? { aggregateId } : {}),
       ...(typeof aggregateType === "string" ? { aggregateType } : {}),
       ...(typeof actionCode === "string" ? { actionCode } : {}),
       ...(typeof productCode === "string" ? { productCode } : {}),
