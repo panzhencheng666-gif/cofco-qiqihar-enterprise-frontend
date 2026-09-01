@@ -2,7 +2,11 @@ import { z } from "zod";
 
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
 import type { OverviewSamplePointRequestOptions } from "../../application/ports/OverviewSamplePointRepository";
-import type { OverviewSamplePointCategoryCode } from "../../domain/overviewSamplePoint";
+import type {
+  OverviewSamplePointCategoryCode,
+  OverviewSamplePointIcon,
+  OverviewSamplePointList,
+} from "../../domain/overviewSamplePoint";
 import type { HttpClient } from "../../../../shared/api/HttpClient";
 import { queryString } from "../../../../shared/api/HttpClient";
 import type {
@@ -15,6 +19,7 @@ import {
   formalRole,
   formalSamplePointDetailSchema,
   formalSamplePointPageSchema,
+  isCategorizedFormalSamplePoint,
   logisticsObservationDefinitionSchema,
   lockedObservationCodes,
   marketObservationDefinitionSchema,
@@ -173,6 +178,39 @@ const iconsSchema = z.object({
   ),
 });
 
+const snapshotSchema = z.object({
+  data: z.object({
+    list: listSchema.shape.data,
+    icons: iconsSchema.shape.data,
+  }),
+});
+
+const detailSchema = z.object({
+  data: z.object({
+    samplePointId: uuidTextSchema,
+    name: z.string(),
+    regionCode: z.string(),
+    regionName: z.string(),
+    locationState: z.string(),
+    dataQualityReason: z.string().nullable(),
+    roles: z.array(roleRefSchema).min(1),
+    associations: z.array(
+      z.object({
+        categoryCode: categoryCodeSchema,
+        categoryName: z.string(),
+        sourceRole: z.enum(["SURVEY", "ORIGIN", "DESTINATION"]),
+        typeCode: z.string(),
+        typeName: z.string(),
+        productCode: z.string(),
+        productName: z.string(),
+        occurrenceDate: z.string(),
+        sourceVersion: z.number(),
+        businessValues: z.record(z.string(), businessValueSchema),
+      }),
+    ),
+  }),
+});
+
 const comparisonDesignPointSchema = z
   .object({
     villageRegionCode: z.string(),
@@ -265,12 +303,21 @@ const designComparisonSchema = z.object({
 });
 
 export class HttpOverviewSamplePointRepository implements OverviewSamplePointRepository {
+  private readonly formalCatalogByRegion = new Map<
+    string,
+    readonly FormalSamplePoint[]
+  >();
+
   constructor(
     private readonly http: HttpClient,
     private readonly loadDesignPointDefinition?: (
       context: DesignSampleContext,
     ) => Promise<DesignSampleFieldContract>,
   ) {}
+
+  invalidateFormalCatalog() {
+    this.formalCatalogByRegion.clear();
+  }
 
   async designPoints(query: {
     page: number;
@@ -393,17 +440,103 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
     },
     options?: OverviewSamplePointRequestOptions,
   ) {
-    const points = await this.loadFormalSamplePoints(
-      query.regionCode,
-      query.query,
-      options,
+    let allPoints = this.formalCatalogByRegion.get(query.regionCode);
+    let visiblePoints: readonly FormalSamplePoint[];
+    if (query.query) {
+      visiblePoints = await this.loadFormalSamplePoints(
+        query.regionCode,
+        query.query,
+        options,
+      );
+      if (!allPoints) {
+        allPoints = await this.loadFormalSamplePoints(
+          query.regionCode,
+          undefined,
+          options,
+        );
+        this.formalCatalogByRegion.set(query.regionCode, allPoints);
+      }
+    } else {
+      allPoints = await this.loadFormalSamplePoints(
+        query.regionCode,
+        undefined,
+        options,
+      );
+      this.formalCatalogByRegion.set(query.regionCode, allPoints);
+      visiblePoints = allPoints;
+    }
+    const allCategorizedPoints = allPoints.filter(isCategorizedFormalSamplePoint);
+    const visibleCategorizedPoints = visiblePoints.filter(
+      isCategorizedFormalSamplePoint,
     );
-    return presentFormalSnapshot(points, {
+    const catalogSnapshot = presentFormalSnapshot(allCategorizedPoints, {
+      regionCode: query.regionCode,
+      regionName: query.regionName ?? "",
+    });
+    const visibleSnapshot = presentFormalSnapshot(visibleCategorizedPoints, {
       regionCode: query.regionCode,
       regionName: query.regionName ?? "",
       ...(query.categoryCode ? { categoryCode: query.categoryCode } : {}),
       ...(query.typeCode ? { typeCode: query.typeCode } : {}),
     });
+    const formalSnapshot = {
+      ...visibleSnapshot,
+      list: { ...visibleSnapshot.list, categories: catalogSnapshot.list.categories },
+    };
+    const incompleteIds = new Set(
+      allPoints
+        .filter((point) => !isCategorizedFormalSamplePoint(point))
+        .map(({ id }) => id),
+    );
+    if (incompleteIds.size === 0) return formalSnapshot;
+
+    const legacySnapshot = await this.loadLegacySnapshot(query, options);
+    const hasFilters = Boolean(query.categoryCode || query.typeCode || query.query);
+    const legacyCatalog = hasFilters
+      ? await this.loadLegacySnapshot(
+          {
+            productCode: query.productCode,
+            regionCode: query.regionCode,
+            year: query.year,
+          },
+          options,
+        )
+      : legacySnapshot;
+    const legacyCategoryCodes = [
+      ...new Set(
+        legacyCatalog.list.items
+          .filter(({ samplePointId }) => incompleteIds.has(samplePointId))
+          .flatMap((item) => item.categories.map(({ code }) => code)),
+      ),
+    ];
+    const legacyCategoryItems = new Map(
+      await Promise.all(
+        legacyCategoryCodes.map(async (categoryCode) => {
+          const categorySnapshot = await this.loadLegacySnapshot(
+            {
+              productCode: query.productCode,
+              regionCode: query.regionCode,
+              year: query.year,
+              categoryCode,
+            },
+            options,
+          );
+          return [
+            categoryCode,
+            categorySnapshot.list.items.filter(({ samplePointId }) =>
+              incompleteIds.has(samplePointId),
+            ),
+          ] as const;
+        }),
+      ),
+    );
+    return mergeFormalAndLegacySnapshots(
+      legacySnapshot,
+      formalSnapshot,
+      incompleteIds,
+      catalogSnapshot.list.categories,
+      legacyCategoryItems,
+    );
   }
 
   async detail(query: {
@@ -421,6 +554,21 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
         formalSamplePointDetailSchema,
       )
     ).data;
+    if (!isCategorizedFormalSamplePoint(point)) {
+      const parameters = {
+        year: query.year,
+        productCode: query.productCode,
+        regionCode: query.regionCode,
+        ...(query.categoryCode ? { categoryCode: query.categoryCode } : {}),
+        ...(query.typeCode ? { typeCode: query.typeCode } : {}),
+      };
+      return (
+        await this.http.get(
+          `/api/v1/overview/sample-points/${encodeURIComponent(query.samplePointId)}${queryString(parameters)}`,
+          detailSchema,
+        )
+      ).data;
+    }
     const [history, fields] = await Promise.all([
       this.http.get(
         `/api/v1/formal-sample-observations/observations${queryString({
@@ -445,7 +593,7 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
       name: point.canonicalName,
       regionCode: point.regionCode,
       regionName: query.regionName ?? "",
-      address: point.address,
+      ...(point.address === null ? {} : { address: point.address }),
       ...(point.longitude === null ? {} : { longitude: point.longitude }),
       ...(point.latitude === null ? {} : { latitude: point.latitude }),
       objectTypeName: point.objectTypeName,
@@ -489,6 +637,32 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
       items.push(...(await readPage(page)).data.items);
     }
     return items;
+  }
+
+  private async loadLegacySnapshot(
+    query: {
+      regionCode: string;
+      productCode: string;
+      year: number;
+      categoryCode?: OverviewSamplePointCategoryCode;
+      typeCode?: string;
+      query?: string;
+    },
+    options: OverviewSamplePointRequestOptions | undefined,
+  ) {
+    const path = `/api/v1/overview/sample-point-snapshot${queryString({
+      productCode: query.productCode,
+      regionCode: query.regionCode,
+      year: query.year,
+      categoryCode: query.categoryCode,
+      typeCode: query.typeCode,
+      query: query.query,
+    })}`;
+    return (
+      await (options
+        ? this.http.get(path, snapshotSchema, options)
+        : this.http.get(path, snapshotSchema))
+    ).data;
   }
 
   private async loadObservationFields(
@@ -550,4 +724,66 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
       )
       .map((field) => ({ ...field, sectionOrder: 0, options: field.options }));
   }
+}
+
+function mergeFormalAndLegacySnapshots(
+  legacy: { list: OverviewSamplePointList; icons: readonly OverviewSamplePointIcon[] },
+  formal: { list: OverviewSamplePointList; icons: readonly OverviewSamplePointIcon[] },
+  incompleteIds: ReadonlySet<string>,
+  formalCategories: OverviewSamplePointList["categories"],
+  legacyCategoryItems: ReadonlyMap<
+    OverviewSamplePointCategoryCode,
+    OverviewSamplePointList["items"]
+  >,
+) {
+  const legacyItems = legacy.list.items.filter(({ samplePointId }) =>
+    incompleteIds.has(samplePointId),
+  );
+  const legacyIcons = legacy.icons.filter(({ samplePointId }) =>
+    incompleteIds.has(samplePointId),
+  );
+  const items = [...legacyItems, ...formal.list.items];
+  const icons = [...legacyIcons, ...formal.icons];
+  const issueCount = items.filter(
+    ({ dataQualityReason }) => dataQualityReason !== null,
+  ).length;
+
+  return {
+    list: {
+      ...legacy.list,
+      totalCount: items.length,
+      validCoordinateCount: icons.length,
+      dataQualityIssueCount: issueCount,
+      correctionSourceCount: legacy.list.correctionSources.length,
+      unresolvedSourceCount: issueCount + legacy.list.correctionSources.length,
+      categories: categoryCounts(formalCategories, legacyCategoryItems),
+      items,
+    },
+    icons,
+  };
+}
+
+function categoryCounts(
+  formalCategories: OverviewSamplePointList["categories"],
+  legacyCategoryItems: ReadonlyMap<
+    OverviewSamplePointCategoryCode,
+    OverviewSamplePointList["items"]
+  >,
+) {
+  return formalCategories.map((formalCategory) => {
+    const legacyItems = legacyCategoryItems.get(formalCategory.code) ?? [];
+    const types = new Map(formalCategory.types.map((type) => [type.code, type]));
+    legacyItems
+      .flatMap((item) => item.types)
+      .forEach((type) => {
+        const current = types.get(type.code);
+        types.set(type.code, { ...type, count: (current?.count ?? 0) + 1 });
+      });
+    return {
+      code: formalCategory.code,
+      name: formalCategory.name,
+      count: formalCategory.count + legacyItems.length,
+      types: [...types.values()],
+    };
+  });
 }

@@ -16,10 +16,10 @@ const formalSamplePointSchema = z.object({
   kindCode: z.string(),
   canonicalName: z.string().min(1),
   regionCode: z.string().min(1),
-  objectTypeCode: z.string().min(1),
-  objectTypeName: z.string().min(1),
-  businessDomain: categoryCodeSchema,
-  address: z.string().min(1),
+  objectTypeCode: z.string().min(1).nullable(),
+  objectTypeName: z.string().min(1).nullable(),
+  businessDomain: categoryCodeSchema.nullable(),
+  address: z.string().min(1).nullable(),
   approvalState: z.string(),
   locationState: z.string(),
   longitude: formalCoordinateSchema,
@@ -146,6 +146,22 @@ export const logisticsObservationDefinitionSchema = z.object({
 
 export type FormalSamplePoint = z.infer<typeof formalSamplePointSchema>;
 
+export type CategorizedFormalSamplePoint = FormalSamplePoint & {
+  objectTypeCode: string;
+  objectTypeName: string;
+  businessDomain: OverviewSamplePointCategoryCode;
+};
+
+export function isCategorizedFormalSamplePoint(
+  point: FormalSamplePoint,
+): point is CategorizedFormalSamplePoint {
+  return (
+    point.objectTypeCode !== null &&
+    point.objectTypeName !== null &&
+    point.businessDomain !== null
+  );
+}
+
 export interface ObservationFieldDefinition {
   code: string;
   label: string;
@@ -218,7 +234,7 @@ export const lockedObservationCodes: Readonly<
 };
 
 export function presentFormalSnapshot(
-  points: readonly FormalSamplePoint[],
+  points: readonly CategorizedFormalSamplePoint[],
   query: {
     regionCode: string;
     regionName: string;

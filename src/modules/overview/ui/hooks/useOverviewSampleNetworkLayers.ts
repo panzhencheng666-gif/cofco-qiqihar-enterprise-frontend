@@ -278,6 +278,10 @@ export function useOverviewSampleNetworkLayers({
   );
 
   useEffect(() => {
+    repository?.invalidateFormalCatalog?.();
+  }, [refreshSequence, repository]);
+
+  useEffect(() => {
     let active = true;
     const sameScope = filteredSnapshotScopeRef.current === filteredScopeKey;
     const sameCatalogScope = catalogSnapshotScopeRef.current === filterScopeKey;
