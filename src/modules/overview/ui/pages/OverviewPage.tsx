@@ -258,15 +258,34 @@ export function OverviewPage({
   const showSamplePointAggregates =
     !parentCode ||
     aggregateParentLevel === "PREFECTURE" ||
-    aggregateParentLevel === "COUNTY";
-  const realtimeRegionCode =
-    selectedRegionCode ||
-    mapContextRegion?.code ||
-    (scopeRootCode !== OVERALL_SCOPE ? scopeRootCode : "");
+    aggregateParentLevel === "COUNTY" ||
+    aggregateParentLevel === "TOWNSHIP";
+  const visibleRegions = useMemo(
+    () =>
+      parentCode ? (regionsParentCode === parentCode ? regions : []) : rootRegions,
+    [parentCode, regions, regionsParentCode, rootRegions],
+  );
+  const realtimeRegionCodes = useMemo(
+    () =>
+      [
+        selectedRegionCode,
+        parentCode,
+        mapContextRegion?.code,
+        scopeRootCode !== OVERALL_SCOPE ? scopeRootCode : undefined,
+        ...visibleRegions.map((region) => region.code),
+      ].filter((code): code is string => Boolean(code)),
+    [
+      mapContextRegion?.code,
+      parentCode,
+      scopeRootCode,
+      selectedRegionCode,
+      visibleRegions,
+    ],
+  );
   const { businessSequence, geographySequence, optionSequence, samplePointSequence } =
     useOverviewRealtimeRefresh(realtimeStream ?? NOOP_REALTIME_STREAM, {
       productCode,
-      regionCodes: realtimeRegionCode ? [realtimeRegionCode] : [],
+      regionCodes: realtimeRegionCodes,
       ...(year === undefined ? {} : { year }),
     });
   const regionSequence = businessSequence + geographySequence;
@@ -612,11 +631,6 @@ export function OverviewPage({
     sampleMode,
   ]);
 
-  const visibleRegions = useMemo(
-    () =>
-      parentCode ? (regionsParentCode === parentCode ? regions : []) : rootRegions,
-    [parentCode, regions, regionsParentCode, rootRegions],
-  );
   const selectedRegion =
     visibleRegions.find((region) => region.code === selectedRegionCode) ??
     (selectedRegionSnapshot?.code === selectedRegionCode
@@ -638,9 +652,7 @@ export function OverviewPage({
   const showAggregateLayer =
     sampleNetworkModel.applicable &&
     sampleNetworkModel.mode !== "design" &&
-    (!sampleNetworkRegion ||
-      sampleNetworkRegion.level === "PREFECTURE" ||
-      sampleNetworkRegion.level === "COUNTY");
+    showSamplePointAggregates;
   const visibleSamplePointAggregates = useVisibleSamplePointAggregates(
     showAggregateLayer,
     samplePointAggregates,

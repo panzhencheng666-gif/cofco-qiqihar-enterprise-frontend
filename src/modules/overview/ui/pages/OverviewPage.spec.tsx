@@ -1259,7 +1259,7 @@ describe("OverviewPage", () => {
     expect(screen.getByRole("button", { name: "产情类 1" })).toBeVisible();
   });
 
-  it("shows aggregates only for prefectures and counties across all five map levels", async () => {
+  it("keeps authoritative aggregates on village labels and after village selection", async () => {
     const county = {
       ...sampleRegion,
       code: "230231",
@@ -1281,11 +1281,25 @@ describe("OverviewPage", () => {
       level: "VILLAGE" as const,
       parentCode: "230231100",
     };
+    const siblingVillage = {
+      ...village,
+      code: "230231100202",
+      name: "利民村",
+    };
+    let realtimeCallbacks: OverviewRealtimeCallbacks | undefined;
+    const realtimeStream: OverviewRealtimeStream = {
+      subscribe: (callbacks) => {
+        realtimeCallbacks = callbacks;
+        return () => undefined;
+      },
+    };
     const regions = vi.fn<OverviewRepository["regions"]>((query) => {
       if (!query.parentCode) return Promise.resolve([sampleRegion]);
       if (query.parentCode === "230200") return Promise.resolve([county]);
       if (query.parentCode === "230231") return Promise.resolve([township]);
-      if (query.parentCode === "230231100") return Promise.resolve([village]);
+      if (query.parentCode === "230231100") {
+        return Promise.resolve([village, siblingVillage]);
+      }
       return Promise.resolve([]);
     });
     const aggregates = vi.fn<OverviewSamplePointRepository["aggregates"]>((query) => {
@@ -1305,12 +1319,26 @@ describe("OverviewPage", () => {
           },
         ]);
       }
+      if (query.parentCode === "230231100") {
+        return Promise.resolve(
+          [village, siblingVillage].map((region) => ({
+            regionCode: region.code,
+            regionName: region.name,
+            regionLevel: region.level,
+            samplePointCount: 1,
+            productionCount: 1,
+            marketCount: 0,
+            validCoordinateCount: 1,
+            dataQualityIssueCount: 0,
+            correctionSourceCount: 0,
+            unresolvedSourceCount: 0,
+          })),
+        );
+      }
       const child =
         query.parentCode === "230200"
           ? { region: county, count: 3 }
-          : query.parentCode === "230231"
-            ? { region: township, count: 2 }
-            : { region: village, count: 1 };
+          : { region: township, count: 2 };
       return Promise.resolve([
         {
           regionCode: child.region.code,
@@ -1326,9 +1354,16 @@ describe("OverviewPage", () => {
         },
       ]);
     });
+    const list = vi.fn<OverviewSamplePointRepository["list"]>((query) =>
+      Promise.resolve({ ...samplePointList, regionCode: query.regionCode }),
+    );
+    const icons = vi.fn<OverviewSamplePointRepository["icons"]>(() =>
+      Promise.resolve([]),
+    );
 
     render(
       <OverviewPage
+        realtimeStream={realtimeStream}
         repository={{
           mapScope: () => Promise.resolve(sampleMapScope),
           options: () => Promise.resolve(options),
@@ -1340,8 +1375,8 @@ describe("OverviewPage", () => {
         samplePointRepository={{
           aggregates,
           comparison: () => Promise.resolve(emptySampleNetworkComparison),
-          list: () => Promise.resolve(samplePointList),
-          icons: () => Promise.resolve([]),
+          list,
+          icons,
           detail: () => Promise.reject(new Error("not selected")),
         }}
       />,
@@ -1361,10 +1396,17 @@ describe("OverviewPage", () => {
     fireEvent.doubleClick(
       await within(mapRegion).findByRole("button", { name: /^兴农镇，/ }),
     );
+    const villageButton = await within(mapRegion).findByRole("button", {
+      name: "众兴村，已核定 1 个样本点，其中产情类 1 个、市场类 0 个、物流类 0 个；多角色样本只计一个身份",
+    });
+    expect(villageButton).toBeVisible();
+    await userEvent.setup().click(villageButton);
     expect(
-      await within(mapRegion).findByRole("button", { name: "众兴村" }),
+      await within(mapRegion).findByRole("button", {
+        name: "众兴村，已核定 1 个样本点，其中产情类 1 个、市场类 0 个、物流类 0 个；多角色样本只计一个身份",
+      }),
     ).toBeVisible();
-    expect(aggregates).toHaveBeenCalledTimes(3);
+    expect(aggregates).toHaveBeenCalledTimes(4);
     expect(aggregates).toHaveBeenNthCalledWith(1, {
       productCode: "CORN",
       year: 2026,
@@ -1379,9 +1421,42 @@ describe("OverviewPage", () => {
       productCode: "CORN",
       year: 2026,
     });
-    expect(
-      screen.queryByText("1", { selector: ".overview-sample-point-aggregate-marker" }),
-    ).not.toBeInTheDocument();
+    expect(aggregates).toHaveBeenNthCalledWith(4, {
+      parentCode: "230231100",
+      productCode: "CORN",
+      year: 2026,
+    });
+    await waitFor(() =>
+      expect(list.mock.calls.map(([request]) => request)).toContainEqual({
+        productCode: "CORN",
+        regionCode: village.code,
+        year: 2026,
+      }),
+    );
+    await waitFor(() =>
+      expect(icons.mock.calls.map(([request]) => request)).toContainEqual({
+        productCode: "CORN",
+        regionCode: village.code,
+        year: 2026,
+      }),
+    );
+    act(() =>
+      realtimeCallbacks?.onBusinessChange({
+        actionCode: "FORMAL_SAMPLE_POINT_UPDATED",
+        aggregateType: "FORMAL_SAMPLE_POINT",
+        regionCodes: [siblingVillage.code],
+        surveyYear: 2026,
+      }),
+    );
+    await waitFor(
+      () =>
+        expect(aggregates).toHaveBeenNthCalledWith(5, {
+          parentCode: township.code,
+          productCode: "CORN",
+          year: 2026,
+        }),
+      { timeout: 1_000 },
+    );
   });
 
   it("keeps county maps aggregated and reveals only the selected exact sample", async () => {
@@ -1708,9 +1783,30 @@ describe("OverviewPage", () => {
     const dashboard = vi.fn<OverviewRepository["dashboard"]>(() =>
       Promise.resolve(emptyDashboard),
     );
-    const aggregates = vi.fn<OverviewSamplePointRepository["aggregates"]>(() =>
-      Promise.resolve([]),
-    );
+    const aggregates = vi.fn<OverviewSamplePointRepository["aggregates"]>((query) => {
+      const region = !query.parentCode
+        ? prefecture
+        : query.parentCode === prefecture.code
+          ? county
+          : query.parentCode === county.code
+            ? township
+            : village;
+      return Promise.resolve([
+        {
+          regionCode: region.code,
+          regionName: region.name,
+          regionLevel: region.level,
+          samplePointCount: 0,
+          productionCount: 0,
+          marketCount: 0,
+          logisticsCount: 0,
+          validCoordinateCount: 0,
+          dataQualityIssueCount: 0,
+          correctionSourceCount: 0,
+          unresolvedSourceCount: 0,
+        },
+      ]);
+    });
     render(
       <OverviewPage
         repository={{
@@ -1751,7 +1847,11 @@ describe("OverviewPage", () => {
     fireEvent.doubleClick(
       await within(map).findByRole("button", { name: /^雅尔塞镇/ }),
     );
-    expect(await within(map).findByRole("button", { name: "音钦村" })).toBeVisible();
+    expect(
+      await within(map).findByRole("button", {
+        name: "音钦村，暂无产情、市场或物流样本点",
+      }),
+    ).toBeVisible();
     expect(regions).toHaveBeenCalledWith({
       periodCode: "2026-Q3",
       productCode: "CORN",
@@ -2366,7 +2466,9 @@ describe("OverviewPage", () => {
     ).toBeVisible();
 
     await userEvent.click(screen.getByRole("button", { name: "设计样本" }));
-    await userEvent.click(within(map).getByRole("button", { name: "众兴村" }));
+    await userEvent.click(
+      await within(map).findByRole("button", { name: /^众兴村(?:，|$)/ }),
+    );
 
     expect(screen.getByRole("button", { name: "设计样本" })).toHaveAttribute(
       "aria-pressed",

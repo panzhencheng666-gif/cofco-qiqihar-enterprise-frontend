@@ -163,7 +163,7 @@ describe("projectReliefScene", () => {
     expect(attempts).toBe(2);
   });
 
-  it("projects only non-village aggregates from an independently computed interior anchor", () => {
+  it("projects county and village aggregates from independent interior anchors", () => {
     const county = polygonFeature(
       "230225",
       [
@@ -218,7 +218,7 @@ describe("projectReliefScene", () => {
       ],
     });
 
-    expect(projection.samplePointAggregates).toHaveLength(1);
+    expect(projection.samplePointAggregates).toHaveLength(2);
     expect(projection.samplePointAggregates[0]?.aggregate.samplePointCount).toBe(17);
     expect(typeof projection.samplePointAggregates[0]?.point.x).toBe("number");
     expect(typeof projection.samplePointAggregates[0]?.point.y).toBe("number");
@@ -227,6 +227,13 @@ describe("projectReliefScene", () => {
     );
     expect(projection.samplePointAggregates[0]?.point).not.toBe(
       projection.features[0]?.anchor,
+    );
+    expect(projection.samplePointAggregates[1]?.aggregate.samplePointCount).toBe(3);
+    expect(projection.samplePointAggregates[1]?.point).toEqual(
+      projection.features[1]?.anchor,
+    );
+    expect(projection.samplePointAggregates[1]?.point).not.toBe(
+      projection.features[1]?.anchor,
     );
   });
 
@@ -772,6 +779,34 @@ describe("projectReliefScene", () => {
         expect(point.y).toBeLessThanOrEqual(safeFrame.y + safeFrame.height);
       });
     });
+  });
+
+  it("reserves aggregate count space for a point-only village label", () => {
+    const village = region("230225204201", "点位村", "VILLAGE");
+    const scene = projectReliefScene({
+      features: [],
+      frame,
+      points: [{ position: [123.5, 47.5], region: village }],
+      samplePointAggregates: [
+        {
+          regionCode: village.code,
+          regionName: village.name,
+          regionLevel: village.level,
+          samplePointCount: 3,
+          productionCount: 2,
+          marketCount: 1,
+          validCoordinateCount: 3,
+          dataQualityIssueCount: 0,
+          correctionSourceCount: 0,
+          unresolvedSourceCount: 0,
+        },
+      ],
+    });
+
+    const label = createReliefOverlayLayout(scene).labels[0];
+    expect(label?.kind).toBe("point");
+    expect(label?.footprint.width).toBeGreaterThanOrEqual(72);
+    expect(label?.footprint.height).toBe(30);
   });
 
   it("preserves every polygon and ring from MultiPolygon geometry", () => {
@@ -2013,23 +2048,20 @@ describe("polygon-contained relief overlay layout", () => {
         ],
         level,
       );
-      const aggregates =
-        level === "VILLAGE"
-          ? []
-          : [
-              {
-                regionCode: target.region.code,
-                regionName: target.region.name,
-                regionLevel: level,
-                samplePointCount: 1234,
-                productionCount: 4,
-                marketCount: 3,
-                validCoordinateCount: 7,
-                dataQualityIssueCount: 0,
-                correctionSourceCount: 0,
-                unresolvedSourceCount: 0,
-              },
-            ];
+      const aggregates = [
+        {
+          regionCode: target.region.code,
+          regionName: target.region.name,
+          regionLevel: level,
+          samplePointCount: 1234,
+          productionCount: 4,
+          marketCount: 3,
+          validCoordinateCount: 7,
+          dataQualityIssueCount: 0,
+          correctionSourceCount: 0,
+          unresolvedSourceCount: 0,
+        },
+      ];
       const full = projectReliefScene({
         backdrop,
         features: [target, neighbor],
@@ -2057,16 +2089,14 @@ describe("polygon-contained relief overlay layout", () => {
         expect(label, `${name} label`).toBeDefined();
         expect(label?.visible, `${name} label visibility`).toBe(true);
         if (polygon && label?.visible) {
-          if (level !== "VILLAGE") {
-            expect(
-              label.footprint.width,
-              `${name} count gutter width`,
-            ).toBeGreaterThanOrEqual(72);
-            expect(
-              label.footprint.height,
-              `${name} count gutter height`,
-            ).toBeGreaterThanOrEqual(34);
-          }
+          expect(
+            label.footprint.width,
+            `${name} count gutter width`,
+          ).toBeGreaterThanOrEqual(72);
+          expect(
+            label.footprint.height,
+            `${name} count gutter height`,
+          ).toBeGreaterThanOrEqual(34);
           expect(
             reliefRectInsidePolygon(
               label.point,
@@ -2083,20 +2113,16 @@ describe("polygon-contained relief overlay layout", () => {
         const aggregate = layouts[stateIndex]?.samplePointAggregates.find(
           ({ aggregate: item }) => item.regionCode === target.region.code,
         );
-        if (level === "VILLAGE") {
-          expect(aggregate).toBeUndefined();
-        } else {
-          expect(aggregate?.visible, `${name} aggregate visibility`).toBe(true);
-          if (polygon && aggregate?.visible) {
-            expect(
-              reliefCircleInsidePolygon(
-                aggregate.point,
-                aggregate.radius * aggregate.scale,
-                polygon,
-              ),
-              `${name} aggregate ring`,
-            ).toBe(true);
-          }
+        expect(aggregate?.visible, `${name} aggregate visibility`).toBe(true);
+        if (polygon && aggregate?.visible) {
+          expect(
+            reliefCircleInsidePolygon(
+              aggregate.point,
+              aggregate.radius * aggregate.scale,
+              polygon,
+            ),
+            `${name} aggregate ring`,
+          ).toBe(true);
         }
       });
 

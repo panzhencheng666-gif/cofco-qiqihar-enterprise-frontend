@@ -1094,7 +1094,7 @@ export default function TerrainReliefBoundaryMap({
                     region,
                     status: samplePointAggregateStatus,
                   })}
-                  className={`overview-relief-label is-${kind} is-${region.level.toLowerCase()}${kind === "region" && region.level !== "VILLAGE" ? " can-have-count" : ""}${aggregateRegionCodes.has(region.code) ? " has-sample-point-aggregate" : ""}${region.code === selectedCode ? " is-selected" : ""}`}
+                  className={`overview-relief-label is-${kind} is-${region.level.toLowerCase()}${kind === "region" || aggregateRegionCodes.has(region.code) ? " can-have-count" : ""}${aggregateRegionCodes.has(region.code) ? " has-sample-point-aggregate" : ""}${region.code === selectedCode ? " is-selected" : ""}`}
                   onClick={() =>
                     identity
                       ? scheduleComponentSelection(region, identity.componentId)
