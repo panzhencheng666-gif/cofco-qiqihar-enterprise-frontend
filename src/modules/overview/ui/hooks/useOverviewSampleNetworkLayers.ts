@@ -311,7 +311,10 @@ export function useOverviewSampleNetworkLayers({
       };
     }
     const snapshotRequest = repository.snapshot
-      ? repository.snapshot(filters, { signal: controller.signal })
+      ? repository.snapshot(
+          { ...filters, ...(region?.name ? { regionName: region.name } : {}) },
+          { signal: controller.signal },
+        )
       : Promise.all([
           repository.list(filters, { signal: controller.signal }),
           repository.icons(filters, { signal: controller.signal }),
@@ -357,6 +360,7 @@ export function useOverviewSampleNetworkLayers({
     requestQuery,
     refreshSequence,
     regionCode,
+    region?.name,
     repository,
     typeCode,
     year,

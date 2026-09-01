@@ -9,6 +9,25 @@ import type {
   DesignSampleContext,
   DesignSampleFieldContract,
 } from "../../../design-sample/domain/designSampleFieldContract";
+import {
+  formalLocationIssue,
+  formalObservationHistorySchema,
+  formalRole,
+  formalSamplePointDetailSchema,
+  formalSamplePointPageSchema,
+  logisticsObservationDefinitionSchema,
+  lockedObservationCodes,
+  marketObservationDefinitionSchema,
+  presentFormalSnapshot,
+  presentObservationValues,
+  productionObservationDefinitionSchema,
+  shanghaiDate,
+  uniqueObservationFields,
+} from "./formalSamplePointProjection";
+import type {
+  FormalSamplePoint,
+  ObservationFieldDefinition,
+} from "./formalSamplePointProjection";
 
 const categoryCodeSchema = z.enum(["PRODUCTION", "MARKET", "LOGISTICS"]);
 const roleRefSchema = z.object({
@@ -152,39 +171,6 @@ const iconsSchema = z.object({
       dataQualityReason: z.string().nullable().default(null),
     }),
   ),
-});
-
-const snapshotSchema = z.object({
-  data: z.object({
-    list: listSchema.shape.data,
-    icons: iconsSchema.shape.data,
-  }),
-});
-
-const detailSchema = z.object({
-  data: z.object({
-    samplePointId: uuidTextSchema,
-    name: z.string(),
-    regionCode: z.string(),
-    regionName: z.string(),
-    locationState: z.string(),
-    dataQualityReason: z.string().nullable(),
-    roles: z.array(roleRefSchema).min(1),
-    associations: z.array(
-      z.object({
-        categoryCode: categoryCodeSchema,
-        categoryName: z.string(),
-        sourceRole: z.enum(["SURVEY", "ORIGIN", "DESTINATION"]),
-        typeCode: z.string(),
-        typeName: z.string(),
-        productCode: z.string(),
-        productName: z.string(),
-        occurrenceDate: z.string(),
-        sourceVersion: z.number(),
-        businessValues: z.record(z.string(), businessValueSchema),
-      }),
-    ),
-  }),
 });
 
 const comparisonDesignPointSchema = z
@@ -398,6 +384,7 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
   async snapshot(
     query: {
       regionCode: string;
+      regionName?: string;
       productCode: string;
       year: number;
       categoryCode?: OverviewSamplePointCategoryCode;
@@ -406,34 +393,161 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
     },
     options?: OverviewSamplePointRequestOptions,
   ) {
-    const path = `/api/v1/overview/sample-point-snapshot${queryString(query)}`;
-    return (
-      await (options
-        ? this.http.get(path, snapshotSchema, options)
-        : this.http.get(path, snapshotSchema))
-    ).data;
+    const points = await this.loadFormalSamplePoints(
+      query.regionCode,
+      query.query,
+      options,
+    );
+    return presentFormalSnapshot(points, {
+      regionCode: query.regionCode,
+      regionName: query.regionName ?? "",
+      ...(query.categoryCode ? { categoryCode: query.categoryCode } : {}),
+      ...(query.typeCode ? { typeCode: query.typeCode } : {}),
+    });
   }
 
   async detail(query: {
     samplePointId: string;
     regionCode: string;
+    regionName?: string;
     productCode: string;
     year: number;
     categoryCode?: OverviewSamplePointCategoryCode;
     typeCode?: string;
   }) {
-    const parameters = {
-      year: query.year,
-      productCode: query.productCode,
-      regionCode: query.regionCode,
-      ...(query.categoryCode ? { categoryCode: query.categoryCode } : {}),
-      ...(query.typeCode ? { typeCode: query.typeCode } : {}),
-    };
-    return (
+    const point = (
       await this.http.get(
-        `/api/v1/overview/sample-points/${encodeURIComponent(query.samplePointId)}${queryString(parameters)}`,
-        detailSchema,
+        `/api/v1/formal-sample-points/${encodeURIComponent(query.samplePointId)}`,
+        formalSamplePointDetailSchema,
       )
     ).data;
+    const [history, fields] = await Promise.all([
+      this.http.get(
+        `/api/v1/formal-sample-observations/observations${queryString({
+          domain: point.businessDomain,
+          samplePointId: point.id,
+          productCode: query.productCode,
+          year: query.year,
+          pageNumber: 0,
+          pageSize: 100,
+        })}`,
+        formalObservationHistorySchema,
+      ),
+      this.loadObservationFields(
+        point.businessDomain,
+        query.productCode,
+        point.objectTypeCode,
+      ),
+    ]);
+    const role = formalRole(point.businessDomain);
+    return {
+      samplePointId: point.id,
+      name: point.canonicalName,
+      regionCode: point.regionCode,
+      regionName: query.regionName ?? "",
+      address: point.address,
+      ...(point.longitude === null ? {} : { longitude: point.longitude }),
+      ...(point.latitude === null ? {} : { latitude: point.latitude }),
+      objectTypeName: point.objectTypeName,
+      version: point.version,
+      locationState: point.locationState,
+      dataQualityReason: formalLocationIssue(point),
+      roles: [role],
+      associations: history.data.items.map((observation) => ({
+        categoryCode: point.businessDomain,
+        categoryName: role.name,
+        sourceRole: "SURVEY" as const,
+        typeCode: point.objectTypeCode,
+        typeName: point.objectTypeName,
+        productCode: query.productCode,
+        productName: "",
+        occurrenceDate: shanghaiDate(observation.observedAt),
+        businessValues: presentObservationValues(observation.values, fields),
+      })),
+    };
+  }
+
+  private async loadFormalSamplePoints(
+    regionCode: string,
+    keyword: string | undefined,
+    options: OverviewSamplePointRequestOptions | undefined,
+  ): Promise<readonly FormalSamplePoint[]> {
+    const readPage = (page: number) =>
+      this.http.get(
+        `/api/v1/formal-sample-points${queryString({
+          regionCode,
+          keyword,
+          page,
+          pageSize: 100,
+        })}`,
+        formalSamplePointPageSchema,
+        options,
+      );
+    const first = (await readPage(0)).data;
+    const items = [...first.items];
+    for (let page = 1; page < first.totalPages; page += 1) {
+      items.push(...(await readPage(page)).data.items);
+    }
+    return items;
+  }
+
+  private async loadObservationFields(
+    domain: OverviewSamplePointCategoryCode,
+    productCode: string,
+    objectTypeCode: string,
+  ): Promise<readonly ObservationFieldDefinition[]> {
+    if (domain === "MARKET") {
+      const definition = (
+        await this.http.get(
+          `/api/v1/market-record-definitions${queryString({ productCode, objectTypeCode })}`,
+          marketObservationDefinitionSchema,
+        )
+      ).data;
+      return uniqueObservationFields([
+        ...definition.coreFields
+          .filter(
+            ({ code, controlType }) =>
+              !lockedObservationCodes.MARKET.has(code) &&
+              !controlType.toUpperCase().startsWith("READONLY"),
+          )
+          .map((field) => ({ ...field, sectionOrder: 0, options: field.options })),
+        ...definition.groups.flatMap(({ fields, sortOrder: sectionOrder }) =>
+          fields.map((field) => ({ ...field, sectionOrder, options: [] })),
+        ),
+      ]);
+    }
+    if (domain === "PRODUCTION") {
+      const definition = (
+        await this.http.get(
+          `/api/v1/production-record-definitions${queryString({ productCode, objectTypeCode })}`,
+          productionObservationDefinitionSchema,
+        )
+      ).data;
+      const fields = definition.fields
+        .filter(
+          (field) =>
+            field.displayed &&
+            !field.readOnly &&
+            !field.calculated &&
+            !lockedObservationCodes.PRODUCTION.has(field.code),
+        )
+        .map((field) => ({
+          ...field,
+          sectionOrder: field.groupOrder,
+          options: field.options.map((value) => ({ value, label: value })),
+        }));
+      return uniqueObservationFields(fields);
+    }
+    const definition = (
+      await this.http.get(
+        `/api/v1/logistics-record-definitions${queryString({ productCode })}`,
+        logisticsObservationDefinitionSchema,
+      )
+    ).data;
+    return definition.fields
+      .filter(
+        (field) => !field.readOnly && !lockedObservationCodes.LOGISTICS.has(field.code),
+      )
+      .map((field) => ({ ...field, sectionOrder: 0, options: field.options }));
   }
 }

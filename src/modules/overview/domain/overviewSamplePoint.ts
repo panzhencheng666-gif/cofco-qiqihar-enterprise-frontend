@@ -247,7 +247,7 @@ export interface OverviewSamplePointAssociation {
   productCode: string;
   productName: string;
   occurrenceDate: string;
-  sourceVersion: number;
+  sourceVersion?: number;
   businessValues: Readonly<Record<string, OverviewSamplePointBusinessValue>>;
 }
 
@@ -258,6 +258,11 @@ export interface OverviewSamplePointDetail {
   regionName: string;
   locationState: string;
   dataQualityReason: string | null;
+  address?: string;
+  longitude?: number;
+  latitude?: number;
+  objectTypeName?: string;
+  version?: number;
   /** Required by the live HTTP contract; optional only for legacy in-memory fixtures. */
   roles?: readonly OverviewSamplePointRoleRef[];
   associations: readonly OverviewSamplePointAssociation[];

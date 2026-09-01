@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
 import type { OverviewSamplePointIcon } from "../../domain/overviewSamplePoint";
 import type { OverviewSampleNetworkLayerModel } from "../hooks/useOverviewSampleNetworkLayers";
+import { HttpError } from "../../../../shared/api/HttpClient";
 import { OverviewSamplePointPanel } from "./OverviewSamplePointPanel";
 
 const list = {
@@ -471,8 +472,41 @@ describe("OverviewSamplePointPanel", () => {
     ]);
   });
 
-  it("loads stable-id business detail without map geometry", async () => {
+  it("shows authoritative stable master fields separately from period observations", async () => {
     const repository = repositoryStub();
+    repository.detail.mockResolvedValue({
+      samplePointId: "94000000-0000-0000-0000-000000000001",
+      name: "同一跨产品样本点",
+      regionCode: "230202997001",
+      regionName: "契约测试村",
+      address: "契约测试村一组 1 号",
+      longitude: 123.9,
+      latitude: 47.3,
+      objectTypeName: "农户",
+      version: 4,
+      locationState: "VALID",
+      dataQualityReason: null,
+      roles: [{ code: "PRODUCTION", name: "产情类", iconKey: "production" }],
+      associations: [
+        {
+          categoryCode: "PRODUCTION",
+          categoryName: "产情类",
+          sourceRole: "SURVEY",
+          typeCode: "FARMER",
+          typeName: "农户",
+          productCode: "CORN",
+          productName: "",
+          occurrenceDate: "2026-08-05",
+          businessValues: {
+            CULTIVATED_AREA_MU: {
+              label: "种植面积",
+              value: "10",
+              unitCode: "亩",
+            },
+          },
+        },
+      ],
+    });
     render(
       <PanelHarness
         onIconsChange={vi.fn()}
@@ -485,15 +519,46 @@ describe("OverviewSamplePointPanel", () => {
     await userEvent.click(await screen.findByRole("button", { name: "产情类 1" }));
     await userEvent.click(await screen.findByText("同一跨产品样本点"));
 
-    expect(await screen.findByText("13900000000")).toBeInTheDocument();
+    const detail = await screen.findByLabelText("所选样本点详情");
+    expect(within(detail).getByText("契约测试村一组 1 号")).toBeVisible();
+    expect(within(detail).getByText("123.9，47.3")).toBeVisible();
+    expect(within(detail).getByText("农户")).toBeVisible();
+    expect(within(detail).getByText("第4版")).toBeVisible();
+    expect(within(detail).getByText("10 亩")).toBeVisible();
     expect(repository.detail).toHaveBeenCalledWith({
       samplePointId: "94000000-0000-0000-0000-000000000001",
       regionCode: "230202",
+      regionName: "龙沙区",
       categoryCode: "PRODUCTION",
       productCode: "CORN",
       year: 2026,
     });
-    expect(screen.queryByText("123.9")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("94000000-0000-0000-0000-000000000001"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("clears the selected formal sample when detail permission is revoked", async () => {
+    const repository = repositoryStub();
+    repository.detail.mockRejectedValue(new HttpError(403, "forbidden"));
+    render(
+      <PanelHarness
+        onIconsChange={vi.fn()}
+        year={2026}
+        region={{ code: "230202", level: "COUNTY", name: "龙沙区" }}
+        repository={repository}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "产情类 1" }));
+    await userEvent.click(await screen.findByText("同一跨产品样本点"));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("heading", { name: "样本点业务信息" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByText("样本点业务信息不可用")).not.toBeInTheDocument();
   });
 
   it("defaults to the latest approved month and keeps earlier months selectable", async () => {
@@ -627,6 +692,7 @@ describe("OverviewSamplePointPanel", () => {
       expect(repository.detail).toHaveBeenCalledWith({
         samplePointId: "94000000-0000-0000-0000-000000000001",
         regionCode: "230202997",
+        regionName: "契约测试乡",
         categoryCode: "PRODUCTION",
         productCode: "CORN",
         year: 2026,
@@ -710,6 +776,7 @@ describe("OverviewSamplePointPanel", () => {
       categoryCode: "PRODUCTION",
       productCode: "CORN",
       regionCode: "230202997001",
+      regionName: "契约测试村",
       samplePointId: "94000000-0000-0000-0000-000000000001",
       year: 2026,
     });

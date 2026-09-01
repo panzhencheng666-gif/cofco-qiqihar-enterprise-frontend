@@ -12,6 +12,7 @@ import type {
 } from "../../domain/overviewSamplePoint";
 import { sampleNetworkLayerIcons } from "../presentation/sampleNetworkLayers";
 import type { OverviewSampleNetworkLayerModel } from "../hooks/useOverviewSampleNetworkLayers";
+import { HttpError } from "../../../../shared/api/HttpClient";
 
 type RegionLevel = "PREFECTURE" | "COUNTY" | "TOWNSHIP" | "VILLAGE";
 type LoadState = "idle" | "loading" | "ready" | "unavailable";
@@ -374,6 +375,7 @@ export function OverviewSamplePointPanel({
         samplePointId: formalSelectedSamplePointId,
         productCode,
         regionCode: region.code,
+        regionName: region.name,
         year,
         ...(categoryCode ? { categoryCode } : {}),
         ...(typeCode ? { typeCode } : {}),
@@ -383,8 +385,19 @@ export function OverviewSamplePointPanel({
         setDetail(next);
         setDetailPeriod(detailPeriods(next)[0]);
       })
-      .catch(() => {
+      .catch((failure: unknown) => {
         if (!active) return;
+        if (
+          failure instanceof HttpError &&
+          (failure.status === 403 || failure.status === 404)
+        ) {
+          setDetail(undefined);
+          setDetailPeriod(undefined);
+          setDetailUnavailable(false);
+          setDetailIssue(undefined);
+          onSelectedSamplePointChange(undefined);
+          return;
+        }
         setDetailUnavailable(true);
         setDetailIssue("样本点业务信息加载失败，请稍后重试。");
       });
@@ -396,8 +409,10 @@ export function OverviewSamplePointPanel({
     productCode,
     refreshSequence,
     region.code,
+    region.name,
     repository,
     formalSelectedSamplePointId,
+    onSelectedSamplePointChange,
     typeCode,
     year,
   ]);
@@ -967,10 +982,9 @@ export function OverviewSamplePointPanel({
                         · {item.regionName}
                       </span>
                       <small>
-                        当前品种 ·{" "}
                         {item.latestBusinessDate
-                          ? `最近业务 ${formatChineseDate(item.latestBusinessDate)}`
-                          : "暂无审核通过业务数据"}
+                          ? `最近期间观测 ${formatChineseDate(item.latestBusinessDate)}`
+                          : "稳定主数据 · 点击查看期间观测"}
                       </small>
                       {item.dataQualityReason ? (
                         <span className="overview-sample-point-list-quality">
@@ -1069,6 +1083,41 @@ export function OverviewSamplePointPanel({
                         {detail.roles.map((role) => role.name).join(" / ")}
                       </p>
                     ) : null}
+                    {detail.address !== undefined ||
+                    detail.longitude !== undefined ||
+                    detail.latitude !== undefined ||
+                    detail.objectTypeName !== undefined ||
+                    detail.version !== undefined ? (
+                      <dl aria-label="正式样本稳定主数据">
+                        {detail.objectTypeName !== undefined ? (
+                          <div>
+                            <dt>当前对象分类</dt>
+                            <dd>{detail.objectTypeName}</dd>
+                          </div>
+                        ) : null}
+                        {detail.address !== undefined ? (
+                          <div>
+                            <dt>地址</dt>
+                            <dd>{detail.address}</dd>
+                          </div>
+                        ) : null}
+                        {detail.longitude !== undefined &&
+                        detail.latitude !== undefined ? (
+                          <div>
+                            <dt>经纬度</dt>
+                            <dd>
+                              {detail.longitude}，{detail.latitude}
+                            </dd>
+                          </div>
+                        ) : null}
+                        {detail.version !== undefined ? (
+                          <div>
+                            <dt>当前版本</dt>
+                            <dd>第{detail.version}版</dd>
+                          </div>
+                        ) : null}
+                      </dl>
+                    ) : null}
                     {availableDetailPeriods.length ? (
                       <>
                         <div
@@ -1105,14 +1154,18 @@ export function OverviewSamplePointPanel({
                           {association.categoryName} · {association.typeName}
                         </h5>
                         <p>
-                          {association.productName} · 业务日期
-                          {formatChineseDate(association.occurrenceDate)}
+                          {association.productName
+                            ? `${association.productName} · `
+                            : ""}
+                          实际观测 {formatChineseDate(association.occurrenceDate)}
                         </p>
-                        <p>
-                          审核来源历史：{sourceRoleLabel(association.sourceRole)} ·
-                          业务日期 {formatChineseDate(association.occurrenceDate)} · 第
-                          {association.sourceVersion}版
-                        </p>
+                        {association.sourceVersion !== undefined ? (
+                          <p>
+                            审核来源历史：{sourceRoleLabel(association.sourceRole)} ·
+                            业务日期 {formatChineseDate(association.occurrenceDate)} ·
+                            第{association.sourceVersion}版
+                          </p>
+                        ) : null}
                         <dl>
                           {Object.entries(association.businessValues).map(
                             ([code, value]) => (

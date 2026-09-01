@@ -211,6 +211,30 @@ describe("useOverviewRealtimeRefresh", () => {
     expect(screen.getByText("0:1:0")).toBeInTheDocument();
   });
 
+  it("refreshes only the formal master projection for create, update, and delete events", () => {
+    vi.useFakeTimers();
+    const stream = new FakeRealtimeStream();
+    render(<Harness productCode="CORN" regionCodes={["230202"]} stream={stream} />);
+
+    for (const actionCode of [
+      "FORMAL_SAMPLE_POINT_CREATED",
+      "FORMAL_SAMPLE_POINT_UPDATED",
+      "FORMAL_SAMPLE_POINT_DELETED",
+    ]) {
+      act(() => {
+        stream.callbacks.onBusinessChange({
+          aggregateType: "FORMAL_SAMPLE_POINT",
+          aggregateId: "94000000-0000-0000-0000-000000000001",
+          actionCode,
+          regionCodes: ["230202"],
+        });
+        vi.advanceTimersByTime(500);
+      });
+    }
+
+    expect(screen.getByText("0:3:0")).toBeInTheDocument();
+  });
+
   it("turns a large historical replay into one refresh instead of rebuilding the map per event", () => {
     vi.useFakeTimers();
     const stream = new FakeRealtimeStream();

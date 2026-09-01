@@ -12,6 +12,11 @@ const DESIGN_SAMPLE_POINT_ACTIONS = new Set([
   "DESIGN_SAMPLE_POINT_UPDATED",
   "DESIGN_SAMPLE_POINT_DELETED",
 ]);
+const FORMAL_SAMPLE_POINT_ACTIONS = new Set([
+  "FORMAL_SAMPLE_POINT_CREATED",
+  "FORMAL_SAMPLE_POINT_UPDATED",
+  "FORMAL_SAMPLE_POINT_DELETED",
+]);
 
 export function useOverviewRealtimeRefresh(
   stream: OverviewRealtimeStream,
@@ -116,6 +121,14 @@ export function useOverviewRealtimeRefresh(
       const affectsProduct =
         change.productCode === undefined ||
         change.productCode === currentSelection.productCode;
+      if (
+        change.aggregateType === "FORMAL_SAMPLE_POINT" &&
+        change.actionCode !== undefined &&
+        FORMAL_SAMPLE_POINT_ACTIONS.has(change.actionCode)
+      ) {
+        scheduleRefresh({ samplePoints: affectsSelection });
+        return;
+      }
       if (change.aggregateType === "SAMPLE_NETWORK_YEAR") {
         scheduleRefresh({
           options: true,

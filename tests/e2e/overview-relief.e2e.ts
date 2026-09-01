@@ -112,9 +112,9 @@ test.describe("overview owned-relief interaction", () => {
     page,
   }) => {
     await page.setViewportSize({ height: 844, width: 390 });
-    const snapshotQueries: string[] = [];
+    const formalSampleQueries: string[] = [];
     await installOverviewFixture(page, {
-      onSnapshotQuery: (query) => snapshotQueries.push(query),
+      onFormalSampleQuery: (query) => formalSampleQueries.push(query),
       sampleCount: 1000,
     });
     await page.goto("/#/overview");
@@ -139,25 +139,25 @@ test.describe("overview owned-relief interaction", () => {
     );
     expect(inputLatencyMs).toBeLessThan(100);
     await search.fill("");
-    await expect.poll(() => snapshotQueries.at(-1)).toBe("");
+    await expect.poll(() => formalSampleQueries.at(-1)).toBe("");
 
-    const rapidStart = snapshotQueries.length;
+    const rapidStart = formalSampleQueries.length;
     await search.pressSequentially("嫩江", { delay: 20 });
     // This timeout is the behavior under test: 250ms debounce plus scheduling margin.
     await page.waitForTimeout(320);
-    expect(snapshotQueries.slice(rapidStart)).toEqual(["嫩江"]);
+    expect(formalSampleQueries.slice(rapidStart)).toEqual(["嫩江"]);
 
     await search.fill("");
-    await expect.poll(() => snapshotQueries.at(-1)).toBe("");
-    const compositionStart = snapshotQueries.length;
+    await expect.poll(() => formalSampleQueries.at(-1)).toBe("");
+    const compositionStart = formalSampleQueries.length;
     await search.dispatchEvent("compositionstart", { data: "nen" });
     await search.fill("nen");
     await page.waitForTimeout(320);
-    expect(snapshotQueries).toHaveLength(compositionStart);
+    expect(formalSampleQueries).toHaveLength(compositionStart);
     await search.fill("嫩江");
     await search.dispatchEvent("compositionend", { data: "嫩江" });
     await page.waitForTimeout(320);
-    expect(snapshotQueries.slice(compositionStart)).toEqual(["嫩江"]);
+    expect(formalSampleQueries.slice(compositionStart)).toEqual(["嫩江"]);
   });
 
   test("keeps the overview canvas and key controls reachable at 390px", async ({
@@ -415,7 +415,7 @@ async function enterSelectedRegion(page: Page) {
 async function installOverviewFixture(
   page: Page,
   options: {
-    onSnapshotQuery?: (query: string) => void;
+    onFormalSampleQuery?: (query: string) => void;
     sampleCount?: number;
   } = {},
 ) {
@@ -447,6 +447,25 @@ async function installOverviewFixture(
       },
     }),
   );
+  await page.route("**/api/v1/formal-sample-points**", async (route) => {
+    const requestUrl = new URL(route.request().url());
+    if (requestUrl.pathname !== "/api/v1/formal-sample-points") {
+      await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
+      return;
+    }
+    await route.fulfill({
+      json: {
+        data: formalSamplePointPage(
+          requestUrl.searchParams.get("regionCode"),
+          options.sampleCount ?? 0,
+          requestUrl.searchParams.get("keyword") ?? "",
+          Number(requestUrl.searchParams.get("page") ?? 0),
+          Number(requestUrl.searchParams.get("pageSize") ?? 100),
+          options.onFormalSampleQuery,
+        ),
+      },
+    });
+  });
   await page.route("**/api/v1/overview/**", async (route) => {
     const requestUrl = new URL(route.request().url());
     const parentCode = requestUrl.searchParams.get("parentCode");
@@ -480,26 +499,13 @@ async function installOverviewFixture(
           ? regionsFor(parentCode)
           : pathname.endsWith("/sample-point-aggregates")
             ? []
-            : pathname.endsWith("/sample-point-snapshot")
-              ? samplePointSnapshot(
-                  regionCode,
-                  options.sampleCount ?? 0,
-                  requestUrl.searchParams.get("query") ?? "",
-                  options.onSnapshotQuery,
-                )
-              : pathname.endsWith("/sample-points")
-                ? samplePointList(
-                    regionCode,
-                    options.sampleCount ?? 0,
-                    requestUrl.searchParams.get("query") ?? "",
-                  )
-                : pathname.endsWith("/locations")
-                  ? []
-                  : pathname.endsWith("/indicators")
-                    ? []
-                    : pathname.endsWith("/dashboard")
-                      ? dashboardFor(regionCode)
-                      : undefined;
+            : pathname.endsWith("/locations")
+              ? []
+              : pathname.endsWith("/indicators")
+                ? []
+                : pathname.endsWith("/dashboard")
+                  ? dashboardFor(regionCode)
+                  : undefined;
 
     if (data === undefined) {
       await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
@@ -514,71 +520,51 @@ async function installOverviewFixture(
   });
 }
 
-function samplePointSnapshot(
+function formalSamplePointPage(
   regionCode: string | null,
   count: number,
-  query: string,
+  keyword: string,
+  page: number,
+  pageSize: number,
   onQuery?: (query: string) => void,
 ) {
-  onQuery?.(query);
-  return { icons: [], list: samplePointList(regionCode, count, query) };
-}
-
-function samplePointList(regionCode: string | null, count: number, query: string) {
-  const items = Array.from({ length: count }, (_, index) => {
+  if (page === 0) onQuery?.(keyword);
+  const matching = Array.from({ length: count }, (_, index) => {
     const order = index + 1;
     return {
-      categories: [{ code: "PRODUCTION", name: "产情类" }],
-      dataQualityReason: null,
-      latestBusinessDate: "2026-08-05",
+      address: `${city.name}高量地址 ${order} 号`,
+      annualObservationCount: 1,
+      approvalState: "APPROVED",
+      businessDomain: "PRODUCTION",
+      canonicalName: `高量样本 ${String(order).padStart(4, "0")}`,
+      effectiveFrom: "2026-01-01",
+      effectiveTo: null,
+      id: `94000000-0000-0000-0000-${String(order).padStart(12, "0")}`,
+      kindCode: "FARMER",
+      latitude: 47.3,
       locationState: "VALID",
-      name: `高量样本 ${String(order).padStart(4, "0")}`,
-      products: [{ code: "CORN", name: "玉米" }],
+      longitude: 123.9,
+      networkMembershipCount: 1,
+      objectTypeCode: "FARMER",
+      objectTypeName: "农户",
       regionCode: regionCode ?? city.code,
-      regionName: city.name,
-      samplePointId: `94000000-0000-0000-0000-${String(order).padStart(12, "0")}`,
-      summaryValues: {
-        SAMPLE_CONTACT: {
-          label: "样本点联系方式",
-          unitCode: null,
-          value: `138${String(order).padStart(8, "0")}`,
-        },
-      },
-      types: [{ code: "FARMER", iconKey: "farmer", name: "农户" }],
+      version: 1,
     };
   }).filter((item) => {
-    const keyword = query.trim().toLowerCase();
+    const normalizedKeyword = keyword.trim().toLowerCase();
     return (
-      !keyword ||
-      item.name.toLowerCase().includes(keyword) ||
-      item.regionName.toLowerCase().includes(keyword) ||
-      item.summaryValues.SAMPLE_CONTACT.value.includes(keyword)
+      !normalizedKeyword ||
+      item.canonicalName.toLowerCase().includes(normalizedKeyword) ||
+      item.address.toLowerCase().includes(normalizedKeyword)
     );
   });
+  const start = page * pageSize;
   return {
-    categories: [
-      {
-        code: "PRODUCTION",
-        count: items.length,
-        name: "产情类",
-        types: [
-          {
-            code: "FARMER",
-            count: items.length,
-            iconKey: "farmer",
-            name: "农户",
-          },
-        ],
-      },
-    ],
-    correctionSourceCount: 0,
-    correctionSources: [],
-    dataQualityIssueCount: 0,
-    items,
-    regionCode: regionCode ?? "",
-    totalCount: items.length,
-    unresolvedSourceCount: 0,
-    validCoordinateCount: 0,
+    items: matching.slice(start, start + pageSize),
+    pageNumber: page,
+    pageSize,
+    totalElements: matching.length,
+    totalPages: Math.ceil(matching.length / pageSize),
   };
 }
 
