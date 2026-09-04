@@ -2,6 +2,7 @@ import type {
   OverviewSamplePointAggregate,
   OverviewSamplePointCategoryCode,
   OverviewSamplePointDetail,
+  OverviewHistoricalSamplePointDetail,
   OverviewDesignSamplePointPage,
   OverviewSamplePointIcon,
   OverviewSamplePointList,
@@ -68,6 +69,17 @@ export interface OverviewSamplePointRepository {
     },
     options?: OverviewSamplePointRequestOptions,
   ): Promise<readonly OverviewSamplePointIcon[]>;
+  historicalIcons?(
+    query: {
+      regionCode: string;
+      productCode: string;
+      year: number;
+      categoryCode?: OverviewSamplePointCategoryCode;
+      typeCode?: string;
+      query?: string;
+    },
+    options?: OverviewSamplePointRequestOptions,
+  ): Promise<readonly OverviewSamplePointIcon[]>;
   snapshot?(
     query: {
       regionCode: string;
@@ -92,4 +104,12 @@ export interface OverviewSamplePointRepository {
     categoryCode?: OverviewSamplePointCategoryCode;
     typeCode?: string;
   }): Promise<OverviewSamplePointDetail>;
+  historicalDetail?(query: {
+    samplePointId: string;
+    regionCode: string;
+    productCode: string;
+    year: number;
+    categoryCode?: OverviewSamplePointCategoryCode;
+    typeCode?: string;
+  }): Promise<OverviewHistoricalSamplePointDetail>;
 }

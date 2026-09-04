@@ -211,6 +211,20 @@ const detailSchema = z.object({
   }),
 });
 
+const historicalDetailSchema = z.object({
+  data: z.object({
+    samplePointId: uuidTextSchema,
+    name: z.string(),
+    regionCode: z.string(),
+    retiredAt: z.string(),
+    retirementYear: z.number().int(),
+    retirementReason: z.string(),
+    retiredBy: z.string(),
+    roles: z.array(roleRefSchema).min(1),
+    lastBusinessData: detailSchema.shape.data.shape.associations,
+  }),
+});
+
 const comparisonDesignPointSchema = z
   .object({
     villageRegionCode: z.string(),
@@ -425,6 +439,25 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
     ).data;
   }
 
+  async historicalIcons(
+    query: {
+      regionCode: string;
+      productCode: string;
+      year: number;
+      categoryCode?: OverviewSamplePointCategoryCode;
+      typeCode?: string;
+      query?: string;
+    },
+    options?: OverviewSamplePointRequestOptions,
+  ) {
+    const path = `/api/v1/overview/historical-sample-point-icons${queryString(query)}`;
+    return (
+      await (options
+        ? this.http.get(path, iconsSchema, options)
+        : this.http.get(path, iconsSchema))
+    ).data;
+  }
+
   async snapshot(
     query: {
       regionCode: string;
@@ -610,6 +643,29 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
         businessValues: presentObservationValues(observation.values, fields),
       })),
     };
+  }
+
+  async historicalDetail(query: {
+    samplePointId: string;
+    regionCode: string;
+    productCode: string;
+    year: number;
+    categoryCode?: OverviewSamplePointCategoryCode;
+    typeCode?: string;
+  }) {
+    const parameters = {
+      year: query.year,
+      productCode: query.productCode,
+      regionCode: query.regionCode,
+      ...(query.categoryCode ? { categoryCode: query.categoryCode } : {}),
+      ...(query.typeCode ? { typeCode: query.typeCode } : {}),
+    };
+    return (
+      await this.http.get(
+        `/api/v1/overview/historical-sample-points/${encodeURIComponent(query.samplePointId)}${queryString(parameters)}`,
+        historicalDetailSchema,
+      )
+    ).data;
   }
 
   private async loadFormalSamplePoints(

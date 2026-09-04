@@ -33,6 +33,8 @@ export interface OverviewSampleNetworkLayerModel {
   comparison: SampleNetworkComparison | undefined;
   designPoints: readonly OverviewDesignSamplePoint[];
   designPointState: SampleNetworkLoadState;
+  historicalIcons?: readonly OverviewSamplePointIcon[];
+  historicalState?: SampleNetworkLoadState;
   actualIcons?: readonly OverviewSamplePointIcon[];
   filteredList?: OverviewSamplePointList;
   filteredState?: SampleNetworkLoadState;
@@ -51,6 +53,7 @@ export interface OverviewSampleNetworkLayerModel {
   state: SampleNetworkLoadState;
   setTypeCode: (typeCode: string | undefined) => void;
   typeCode: string | undefined;
+  year?: number;
 }
 
 const SEARCH_DEBOUNCE_MS = 250;
@@ -85,6 +88,12 @@ export function useOverviewSampleNetworkLayers({
   const [actualIcons, setActualIcons] = useState<readonly OverviewSamplePointIcon[]>(
     [],
   );
+  const [historicalIcons, setHistoricalIcons] = useState<
+    readonly OverviewSamplePointIcon[]
+  >([]);
+  const [historicalState, setHistoricalState] =
+    useState<SampleNetworkLoadState>("idle");
+  const [historicalIssue, setHistoricalIssue] = useState<string>();
   const [filteredList, setFilteredList] = useState<OverviewSamplePointList>();
   const [filteredState, setFilteredState] = useState<SampleNetworkLoadState>("idle");
   const [storedQuery, setQueryState] = useState("");
@@ -116,6 +125,9 @@ export function useOverviewSampleNetworkLayers({
   const filteredSnapshotScopeRef = useRef("");
   const canLoadComparison = Boolean(applicable && repository && productCode);
   const canLoadCatalog = Boolean(applicable && repository && productCode && regionCode);
+  const canLoadHistorical = Boolean(
+    canLoadCatalog && repository?.historicalIcons && mode === "historical",
+  );
   const canLoadDesignPoints = Boolean(
     repository?.designPoints && repository.designPointDefinition && productCode,
   );
@@ -283,6 +295,67 @@ export function useOverviewSampleNetworkLayers({
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
+    void Promise.resolve().then(() => {
+      if (!active) return;
+      setHistoricalState(canLoadHistorical ? "loading" : "idle");
+      setHistoricalIssue(undefined);
+      if (!canLoadHistorical) setHistoricalIcons([]);
+    });
+    if (
+      !canLoadHistorical ||
+      !repository?.historicalIcons ||
+      year === undefined ||
+      !regionCode
+    ) {
+      return () => {
+        active = false;
+        controller.abort();
+      };
+    }
+    repository
+      .historicalIcons(
+        {
+          productCode,
+          regionCode,
+          year,
+          ...(categoryCode ? { categoryCode } : {}),
+          ...(typeCode ? { typeCode } : {}),
+          ...(requestQuery.trim() ? { query: requestQuery.trim() } : {}),
+        },
+        { signal: controller.signal },
+      )
+      .then((next) => {
+        if (!active) return;
+        setHistoricalIcons(
+          next.map((icon) => ({ ...icon, layerType: "HISTORICAL_ACTUAL" })),
+        );
+        setHistoricalState("ready");
+      })
+      .catch(() => {
+        if (!active) return;
+        setHistoricalIcons([]);
+        setHistoricalState("unavailable");
+        setHistoricalIssue("历史样本点加载失败，请稍后重试。");
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [
+    canLoadHistorical,
+    categoryCode,
+    productCode,
+    refreshSequence,
+    regionCode,
+    repository,
+    requestQuery,
+    typeCode,
+    year,
+  ]);
+
+  useEffect(() => {
+    let active = true;
     const sameScope = filteredSnapshotScopeRef.current === filteredScopeKey;
     const sameCatalogScope = catalogSnapshotScopeRef.current === filterScopeKey;
     const unfiltered = !categoryCode && !typeCode && !requestQuery.trim();
@@ -394,6 +467,7 @@ export function useOverviewSampleNetworkLayers({
 
   const icons = useMemo(() => {
     if (!regionCode || !regionLevel) return [];
+    if (mode === "historical") return historicalIcons;
     const missingVillageParent = regionLevel === "VILLAGE" && !regionParentCode;
     if (missingVillageParent) {
       if (mode === "design") return [];
@@ -425,6 +499,7 @@ export function useOverviewSampleNetworkLayers({
     comparison,
     comparisonRegionCode,
     mode,
+    historicalIcons,
     regionCode,
     regionLevel,
     regionParentCode,
@@ -441,10 +516,15 @@ export function useOverviewSampleNetworkLayers({
     comparison,
     designPoints: visibleDesignPoints,
     designPointState,
+    historicalIcons,
+    historicalState,
     ...(filteredList ? { filteredList } : {}),
     filteredState,
     icons,
-    issue: designPointIssue ?? catalogIssue ?? issue,
+    issue:
+      mode === "historical"
+        ? historicalIssue
+        : (designPointIssue ?? catalogIssue ?? issue),
     mode,
     query,
     retryFiltered,
@@ -458,6 +538,7 @@ export function useOverviewSampleNetworkLayers({
     state,
     setTypeCode,
     typeCode,
+    ...(year === undefined ? {} : { year }),
   };
 }
 

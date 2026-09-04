@@ -652,6 +652,7 @@ export function OverviewPage({
   const showAggregateLayer =
     sampleNetworkModel.applicable &&
     sampleNetworkModel.mode !== "design" &&
+    sampleNetworkModel.mode !== "historical" &&
     showSamplePointAggregates;
   const visibleSamplePointAggregates = useVisibleSamplePointAggregates(
     showAggregateLayer,
@@ -1067,9 +1068,13 @@ export function OverviewPage({
               </select>
             </label>
             <label>
-              <span>年度</span>
+              <span>
+                {sampleNetworkModel.mode === "historical" ? "淘汰年份" : "年度"}
+              </span>
               <select
-                aria-label="年度"
+                aria-label={
+                  sampleNetworkModel.mode === "historical" ? "淘汰年份" : "年度"
+                }
                 value={year ?? ""}
                 onChange={(event) => {
                   setYear(Number(event.target.value));

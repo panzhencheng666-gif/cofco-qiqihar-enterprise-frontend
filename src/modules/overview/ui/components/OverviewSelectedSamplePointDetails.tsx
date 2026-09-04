@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
 import type {
+  OverviewHistoricalSamplePointDetail,
   OverviewSamplePointCategoryCode,
   OverviewSamplePointDetail,
   OverviewSamplePointIcon,
@@ -16,22 +17,28 @@ const roleAssetUrl = {
 
 export function OverviewSelectedSamplePointDetails({
   categoryCode,
+  historical = false,
   icon,
   productCode,
   refreshSequence = 0,
   regionCode,
   repository,
+  typeCode,
   year,
 }: {
   categoryCode?: OverviewSamplePointCategoryCode;
+  historical?: boolean;
   icon: OverviewSamplePointIcon;
   productCode: string;
   refreshSequence?: number;
   regionCode: string;
   repository: OverviewSamplePointRepository;
+  typeCode?: string;
   year: number;
 }) {
-  const [detail, setDetail] = useState<OverviewSamplePointDetail>();
+  const [detail, setDetail] = useState<
+    OverviewSamplePointDetail | OverviewHistoricalSamplePointDetail
+  >();
   const [issue, setIssue] = useState<string>();
   const [loading, setLoading] = useState(true);
 
@@ -43,14 +50,33 @@ export function OverviewSelectedSamplePointDetails({
       setIssue(undefined);
       setLoading(true);
     });
-    repository
-      .detail({
-        productCode,
-        regionCode,
-        samplePointId: icon.samplePointId,
-        year,
-        ...(categoryCode ? { categoryCode } : {}),
-      })
+    const request = historical
+      ? repository.historicalDetail?.({
+          productCode,
+          regionCode,
+          samplePointId: icon.samplePointId,
+          year,
+          ...(categoryCode ? { categoryCode } : {}),
+          ...(typeCode ? { typeCode } : {}),
+        })
+      : repository.detail({
+          productCode,
+          regionCode,
+          samplePointId: icon.samplePointId,
+          year,
+          ...(categoryCode ? { categoryCode } : {}),
+        });
+    if (!request) {
+      void Promise.resolve().then(() => {
+        if (!active) return;
+        setIssue("历史样本业务信息暂不可用，请稍后重试。");
+        setLoading(false);
+      });
+      return () => {
+        active = false;
+      };
+    }
+    request
       .then((next) => {
         if (!active) return;
         setDetail(next);
@@ -66,31 +92,36 @@ export function OverviewSelectedSamplePointDetails({
     };
   }, [
     categoryCode,
+    historical,
     icon.samplePointId,
     productCode,
     refreshSequence,
     regionCode,
     repository,
+    typeCode,
     year,
   ]);
 
+  const historicalDetail = detail && "lastBusinessData" in detail ? detail : undefined;
+  const currentDetail = detail && "associations" in detail ? detail : undefined;
   const latestPeriod = useMemo(
     () =>
-      detail?.associations
+      currentDetail?.associations
         .map(({ occurrenceDate }) => occurrenceDate.slice(0, 7))
         .sort((left, right) => right.localeCompare(left))[0],
-    [detail],
+    [currentDetail],
   );
-  const associations =
-    detail?.associations.filter(
-      ({ occurrenceDate }) => occurrenceDate.slice(0, 7) === latestPeriod,
-    ) ?? [];
+  const associations = historicalDetail
+    ? historicalDetail.lastBusinessData
+    : (currentDetail?.associations.filter(
+        ({ occurrenceDate }) => occurrenceDate.slice(0, 7) === latestPeriod,
+      ) ?? []);
   const roleName = (icon.roles ?? []).map(({ name }) => name).join(" / ") || "现有样本";
   const typeName = icon.types.map(({ name }) => name).join(" / ");
 
   return (
     <section
-      aria-label="所选现有样本业务信息"
+      aria-label={historical ? "所选历史样本业务信息" : "所选现有样本业务信息"}
       className="overview-selected-sample-point-details"
     >
       <header>
@@ -104,7 +135,7 @@ export function OverviewSelectedSamplePointDetails({
           <p>
             {roleName}
             {typeName ? ` · ${typeName}` : ""}
-            {detail?.regionName ? ` · ${detail.regionName}` : ""}
+            {currentDetail?.regionName ? ` · ${currentDetail.regionName}` : ""}
           </p>
         </div>
       </header>
@@ -115,7 +146,15 @@ export function OverviewSelectedSamplePointDetails({
       ) : null}
       {loading ? <p>正在同步已核定业务信息。</p> : null}
       {issue ? <p role="alert">{issue}</p> : null}
-      {latestPeriod ? <h4>{formatMonth(latestPeriod)}已核定业务</h4> : null}
+      {historicalDetail ? (
+        <>
+          <p>淘汰时间：{formatShanghaiDate(historicalDetail.retiredAt)}</p>
+          <p>淘汰原因：{historicalDetail.retirementReason}</p>
+          <h4>最后一次维护快照</h4>
+        </>
+      ) : latestPeriod ? (
+        <h4>{formatMonth(latestPeriod)}已核定业务</h4>
+      ) : null}
       {associations.map((association, index) => (
         <article
           key={`${association.categoryCode}-${association.typeCode}-${association.occurrenceDate}-${index}`}
@@ -144,6 +183,18 @@ export function OverviewSelectedSamplePointDetails({
       ))}
     </section>
   );
+}
+
+function formatShanghaiDate(value: string) {
+  const parts = new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).formatToParts(new Date(value));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}年${part("month")}月${part("day")}日`;
 }
 
 function formatMonth(value: string) {
