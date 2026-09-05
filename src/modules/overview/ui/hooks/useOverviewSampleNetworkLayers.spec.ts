@@ -97,6 +97,51 @@ describe("useOverviewSampleNetworkLayers", () => {
     await waitFor(() => expect(historicalIcons).toHaveBeenCalledTimes(2));
   });
 
+  it.each(["search", "category"])(
+    "refreshes the regional catalog while %s stays active",
+    async (filter) => {
+      let count = 329;
+      const repository = repositoryWithSnapshot((query) => {
+        const filtered = Boolean(query.query || query.categoryCode);
+        const snapshot = emptySnapshot(query.regionCode);
+        return Promise.resolve({
+          ...snapshot,
+          list: {
+            ...snapshot.list,
+            totalCount: filtered ? 1 : count,
+            categories: [
+              { code: "LOGISTICS", name: "物流类", count: count - 326, types: [] },
+            ],
+          },
+        });
+      });
+      const { result, rerender } = renderHook(
+        ({ refreshSequence }) =>
+          useOverviewSampleNetworkLayers({
+            productCode: "CORN",
+            refreshSequence,
+            region: { code: "230200", level: "PREFECTURE", name: "齐齐哈尔市" },
+            repository,
+            year: 2026,
+          }),
+        { initialProps: { refreshSequence: 0 } },
+      );
+      await waitFor(() => expect(result.current.catalog?.totalCount).toBe(329));
+      act(() => {
+        if (filter === "search") result.current.setQuery?.("专用样本");
+        else result.current.setCategoryCode("LOGISTICS");
+      });
+      await waitFor(() => expect(result.current.filteredList?.totalCount).toBe(1));
+      count = 330;
+      rerender({ refreshSequence: 1 });
+      await waitFor(() => expect(result.current.catalog?.totalCount).toBe(330));
+      expect(result.current.catalog?.categories[0]?.count).toBe(4);
+      expect(result.current.filteredList?.totalCount).toBe(1);
+      if (filter === "search") expect(result.current.query).toBe("专用样本");
+      else expect(result.current.categoryCode).toBe("LOGISTICS");
+    },
+  );
+
   it("debounces search, suppresses IME composition, and clears immediately", async () => {
     vi.useFakeTimers();
     const repository = repositoryWithSnapshot();

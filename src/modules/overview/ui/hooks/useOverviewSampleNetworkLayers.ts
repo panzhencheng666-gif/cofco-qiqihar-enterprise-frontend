@@ -122,6 +122,7 @@ export function useOverviewSampleNetworkLayers({
   const filteredScopeKey = `${filterScopeKey}:${categoryCode ?? ""}:${typeCode ?? ""}:${requestQuery.trim()}`;
   const comparisonSnapshotScopeRef = useRef("");
   const catalogSnapshotScopeRef = useRef("");
+  const catalogRefreshSequenceRef = useRef<number | undefined>(undefined);
   const filteredSnapshotScopeRef = useRef("");
   const canLoadComparison = Boolean(applicable && repository && productCode);
   const canLoadCatalog = Boolean(applicable && repository && productCode && regionCode);
@@ -396,16 +397,33 @@ export function useOverviewSampleNetworkLayers({
           repository.list(filters, { signal: controller.signal }),
           repository.icons(filters, { signal: controller.signal }),
         ]).then(([list, icons]) => ({ icons, list }));
-    snapshotRequest
-      .then(({ icons: nextIcons, list: nextList }) => {
+    const refreshCatalog =
+      !unfiltered &&
+      (!sameCatalogScope || catalogRefreshSequenceRef.current !== refreshSequence);
+    const catalogFilters = {
+      productCode,
+      regionCode,
+      year,
+      ...(region?.name ? { regionName: region.name } : {}),
+    };
+    const catalogRequest = refreshCatalog
+      ? repository.snapshot
+        ? repository
+            .snapshot(catalogFilters, { signal: controller.signal })
+            .then(({ list }) => list)
+        : repository.list(catalogFilters, { signal: controller.signal })
+      : Promise.resolve(undefined);
+    Promise.all([snapshotRequest, catalogRequest])
+      .then(([{ icons: nextIcons, list: nextList }, nextCatalog]) => {
         if (!active) return;
         filteredSnapshotScopeRef.current = filteredScopeKey;
         setFilteredList(nextList);
         setActualIcons(nextIcons);
         setFilteredState("ready");
-        if (unfiltered) {
+        if (unfiltered || nextCatalog) {
           catalogSnapshotScopeRef.current = filterScopeKey;
-          setCatalog(nextList);
+          catalogRefreshSequenceRef.current = refreshSequence;
+          setCatalog(nextCatalog ?? nextList);
           setCatalogState("ready");
           setCatalogIssue(undefined);
         }
@@ -417,7 +435,7 @@ export function useOverviewSampleNetworkLayers({
           setActualIcons([]);
         }
         setFilteredState("unavailable");
-        if (unfiltered) {
+        if (unfiltered || refreshCatalog) {
           if (!sameCatalogScope) setCatalog(undefined);
           setCatalogState("unavailable");
           setCatalogIssue("样本点分类加载失败，请稍后重试。");
