@@ -60,7 +60,7 @@ export function sampleNetworkLayerIcons(
   // its governed business roles remain stable across products.  Never let that
   // separate publication state hide an already approved, precisely located icon.
   const actual = actualIcons;
-  if (mode === "actual") return actual;
+  if (mode === "actual" || mode === "historical") return actual;
 
   const coverage = comparison
     ? context.regionLevel === "PREFECTURE" || context.regionLevel === "COUNTY"

@@ -804,6 +804,87 @@ describe("HttpOverviewSamplePointRepository", () => {
     expect(result[0]?.dataQualityReason).toBe("DUPLICATE_COORDINATE_UNVERIFIED");
   });
 
+  it("reads retired icons and their last maintained business snapshot by retirement year", async () => {
+    const samplePointId = "94000000-0000-0000-0000-000000000001";
+    const get = vi.fn<HttpClient["get"]>((path, schema) =>
+      Promise.resolve(
+        schema.parse({
+          data: path.includes("historical-sample-point-icons")
+            ? [
+                {
+                  samplePointId,
+                  name: "已淘汰农户样本",
+                  regionCode: "230202997001",
+                  iconKey: "farmer",
+                  roles: [
+                    { code: "PRODUCTION", name: "产情类", iconKey: "production" },
+                  ],
+                  types: [{ code: "FARMER", name: "农户", iconKey: "farmer" }],
+                  longitude: 123.9,
+                  latitude: 47.3,
+                  dataQualityReason: null,
+                },
+              ]
+            : {
+                samplePointId,
+                name: "已淘汰农户样本",
+                regionCode: "230202997001",
+                retiredAt: "2026-09-04T01:30:00Z",
+                retirementYear: 2026,
+                retirementReason: "年度样本调整",
+                retiredBy: "production-tester",
+                roles: [{ code: "PRODUCTION", name: "产情类", iconKey: "production" }],
+                lastBusinessData: [
+                  {
+                    categoryCode: "PRODUCTION",
+                    categoryName: "产情类",
+                    sourceRole: "SURVEY",
+                    typeCode: "FARMER",
+                    typeName: "农户",
+                    productCode: "CORN",
+                    productName: "玉米",
+                    occurrenceDate: "2026-08-05",
+                    sourceVersion: 2,
+                    businessValues: {
+                      CULTIVATED_AREA_MU: {
+                        label: "种植面积",
+                        value: "120",
+                        unitCode: "亩",
+                      },
+                    },
+                  },
+                ],
+              },
+        }),
+      ),
+    );
+    const repository = repositoryWith(get);
+
+    const icons = await repository.historicalIcons({
+      year: 2026,
+      productCode: "CORN",
+      regionCode: "230202",
+      categoryCode: "PRODUCTION",
+    });
+    const detail = await repository.historicalDetail({
+      samplePointId,
+      year: 2026,
+      productCode: "CORN",
+      regionCode: "230202",
+      categoryCode: "PRODUCTION",
+    });
+
+    expect(get.mock.calls.map(([path]) => path)).toEqual([
+      "/api/v1/overview/historical-sample-point-icons?year=2026&productCode=CORN&regionCode=230202&categoryCode=PRODUCTION",
+      `/api/v1/overview/historical-sample-points/${samplePointId}?year=2026&productCode=CORN&regionCode=230202&categoryCode=PRODUCTION`,
+    ]);
+    expect(icons).toHaveLength(1);
+    expect(detail.retirementYear).toBe(2026);
+    expect(detail.lastBusinessData[0]?.businessValues.CULTIVATED_AREA_MU?.value).toBe(
+      "120",
+    );
+  });
+
   it("reads legacy detail when the formal master has no categorization fields", async () => {
     const get = vi.fn<HttpClient["get"]>((path, schema) => {
       if (

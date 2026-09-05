@@ -13,6 +13,7 @@ import type {
 import { sampleNetworkLayerIcons } from "../presentation/sampleNetworkLayers";
 import type { OverviewSampleNetworkLayerModel } from "../hooks/useOverviewSampleNetworkLayers";
 import { HttpError } from "../../../../shared/api/HttpClient";
+import { OverviewSelectedSamplePointDetails } from "./OverviewSelectedSamplePointDetails";
 
 type RegionLevel = "PREFECTURE" | "COUNTY" | "TOWNSHIP" | "VILLAGE";
 type LoadState = "idle" | "loading" | "ready" | "unavailable";
@@ -81,6 +82,7 @@ export function OverviewSamplePointPanel({
   const effectiveResult = networkModel?.filteredList ?? result;
   const effectiveResultState = networkModel?.filteredState ?? resultState;
   const effectivePublishedIcons = networkModel?.actualIcons ?? publishedIcons;
+  const effectiveHistoricalIcons = networkModel?.historicalIcons ?? [];
   const comparisonRegionCode = missingVillageParent
     ? undefined
     : region.level === "VILLAGE"
@@ -307,6 +309,9 @@ export function OverviewSamplePointPanel({
   )
     ? undefined
     : selectedSamplePointId;
+  const selectedHistoricalIcon = effectiveHistoricalIcons.find(
+    ({ samplePointId }) => samplePointId === selectedSamplePointId,
+  );
   const actualKindCodes = useMemo(
     () =>
       categoryCode
@@ -359,7 +364,7 @@ export function OverviewSamplePointPanel({
   }, [controlledNetwork, effectivePublishedIcons, onIconsChange, visibleLayerIcons]);
 
   useEffect(() => {
-    if (!formalSelectedSamplePointId) {
+    if (!formalSelectedSamplePointId || effectiveLayerMode === "historical") {
       return;
     }
     let active = true;
@@ -406,6 +411,7 @@ export function OverviewSamplePointPanel({
     };
   }, [
     categoryCode,
+    effectiveLayerMode,
     productCode,
     refreshSequence,
     region.code,
@@ -419,6 +425,7 @@ export function OverviewSamplePointPanel({
 
   useEffect(() => {
     if (
+      effectiveLayerMode === "historical" ||
       !formalSelectedSamplePointId ||
       effectiveResultState !== "ready" ||
       !effectiveResult ||
@@ -443,6 +450,7 @@ export function OverviewSamplePointPanel({
   }, [
     effectiveResult,
     effectiveResultState,
+    effectiveLayerMode,
     onSelectedSamplePointChange,
     formalSelectedSamplePointId,
   ]);
@@ -461,6 +469,24 @@ export function OverviewSamplePointPanel({
     networkModel?.designPointState,
     onSelectedSamplePointChange,
     selectedDesignPoint,
+    selectedSamplePointId,
+  ]);
+
+  useEffect(() => {
+    if (
+      effectiveLayerMode !== "historical" ||
+      networkModel?.historicalState !== "ready" ||
+      !selectedSamplePointId ||
+      selectedHistoricalIcon
+    ) {
+      return;
+    }
+    onSelectedSamplePointChange(undefined);
+  }, [
+    effectiveLayerMode,
+    networkModel?.historicalState,
+    onSelectedSamplePointChange,
+    selectedHistoricalIcon,
     selectedSamplePointId,
   ]);
 
@@ -616,6 +642,43 @@ export function OverviewSamplePointPanel({
     currentDesignPageIndex * DESIGN_POINT_PAGE_SIZE,
     (currentDesignPageIndex + 1) * DESIGN_POINT_PAGE_SIZE,
   );
+
+  if (effectiveLayerMode === "historical") {
+    return (
+      <section aria-label="历史样本点业务信息" className="overview-sample-point-panel">
+        {issue ? <p role="alert">{issue}</p> : null}
+        <section className="overview-detail-section">
+          <h3>历史样本点</h3>
+          <p>淘汰年份：{year}年。地图只显示该年度已淘汰样本点。</p>
+          {networkModel?.historicalState === "loading" ? (
+            <p role="status">正在同步历史样本点。</p>
+          ) : null}
+          {networkModel?.historicalState === "ready" &&
+          effectiveHistoricalIcons.length === 0 ? (
+            <p>当前淘汰年份暂无历史样本点。</p>
+          ) : null}
+          {networkModel?.historicalState === "ready" &&
+          effectiveHistoricalIcons.length > 0 &&
+          !selectedHistoricalIcon ? (
+            <p>请选择地图上的历史样本点查看最后一次维护快照。</p>
+          ) : null}
+          {selectedHistoricalIcon ? (
+            <OverviewSelectedSamplePointDetails
+              historical
+              icon={selectedHistoricalIcon}
+              productCode={productCode}
+              refreshSequence={refreshSequence}
+              regionCode={region.code}
+              repository={repository}
+              year={year}
+              {...(categoryCode ? { categoryCode } : {})}
+              {...(typeCode ? { typeCode } : {})}
+            />
+          ) : null}
+        </section>
+      </section>
+    );
+  }
 
   return (
     <section aria-label="样本点业务信息" className="overview-sample-point-panel">

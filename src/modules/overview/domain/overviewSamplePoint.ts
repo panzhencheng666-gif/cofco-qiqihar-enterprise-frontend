@@ -105,10 +105,11 @@ export interface OverviewSamplePointIcon {
   dataQualityReason: string | null;
 }
 
-export type SampleNetworkLayerMode = "actual" | "design" | "comparison";
+export type SampleNetworkLayerMode = "actual" | "design" | "comparison" | "historical";
 
 export type SampleNetworkLayerType =
   | "ANNUAL_ACTUAL"
+  | "HISTORICAL_ACTUAL"
   | "DESIGN_COVERAGE_BADGE"
   | "DESIGN_EXACT_LOCATION"
   | "REGIONAL_ACTUAL_BADGE";
@@ -266,4 +267,16 @@ export interface OverviewSamplePointDetail {
   /** Required by the live HTTP contract; optional only for legacy in-memory fixtures. */
   roles?: readonly OverviewSamplePointRoleRef[];
   associations: readonly OverviewSamplePointAssociation[];
+}
+
+export interface OverviewHistoricalSamplePointDetail {
+  samplePointId: string;
+  name: string;
+  regionCode: string;
+  retiredAt: string;
+  retirementYear: number;
+  retirementReason: string;
+  retiredBy: string;
+  roles: readonly OverviewSamplePointRoleRef[];
+  lastBusinessData: readonly OverviewSamplePointAssociation[];
 }

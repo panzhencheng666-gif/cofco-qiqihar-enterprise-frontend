@@ -53,14 +53,21 @@ export function OverviewSampleNetworkToolbar({
     ["comparison", "对照显示"],
     ["actual", "现有样本"],
     ["design", "设计样本"],
+    ["historical", "历史样本点"],
   ] as const satisfies readonly (readonly [SampleNetworkLayerMode, string])[];
   const mapLevelGuidance = !model.applicable
     ? "请选择年度查看样本网络与已审核业务样本。"
-    : model.state === "unavailable"
-      ? "样本网络暂不可用"
-      : model.state === "loading" || model.catalogState === "loading"
-        ? "正在同步样本网络"
-        : undefined;
+    : model.mode === "historical"
+      ? model.historicalState === "unavailable"
+        ? "历史样本点暂不可用"
+        : model.historicalState === "loading"
+          ? "正在同步历史样本点"
+          : undefined
+      : model.state === "unavailable"
+        ? "样本网络暂不可用"
+        : model.state === "loading" || model.catalogState === "loading"
+          ? "正在同步样本网络"
+          : undefined;
 
   return (
     <section className="overview-sample-network-toolbar" aria-label="样本网络图层">
@@ -88,6 +95,9 @@ export function OverviewSampleNetworkToolbar({
         </button>
       )}
       {mapLevelGuidance ? <span aria-live="polite">{mapLevelGuidance}</span> : null}
+      {model.mode === "historical" && model.year !== undefined ? (
+        <span>淘汰年份：{model.year}年</span>
+      ) : null}
       {model.applicable &&
       model.mode !== "actual" &&
       approvedDesignCoordinateCount > 0 ? (

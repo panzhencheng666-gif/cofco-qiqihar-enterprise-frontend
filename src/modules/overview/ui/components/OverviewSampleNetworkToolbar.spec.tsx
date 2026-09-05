@@ -81,6 +81,45 @@ describe("OverviewSampleNetworkToolbar", () => {
     expect(screen.getByText("正在同步样本网络")).toBeVisible();
   });
 
+  it("switches to retired samples and identifies the selected year as the retirement year", async () => {
+    const setMode = vi.fn();
+    render(
+      <OverviewSampleNetworkToolbar
+        model={{
+          applicable: true,
+          catalog: undefined,
+          catalogState: "idle",
+          categoryCode: undefined,
+          comparison: undefined,
+          designPoints: [],
+          designPointState: "idle",
+          historicalIcons: [],
+          historicalState: "ready",
+          icons: [],
+          issue: undefined,
+          mode: "historical",
+          region: { code: "230202", level: "COUNTY", name: "龙沙区" },
+          setCategoryCode: vi.fn(),
+          setMode,
+          setShowExactDesignLocations: vi.fn(),
+          setTypeCode: vi.fn(),
+          showExactDesignLocations: false,
+          state: "ready",
+          typeCode: undefined,
+          year: 2026,
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "历史样本点" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByText("淘汰年份：2026年")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "现有样本" }));
+    await waitFor(() => expect(setMode).toHaveBeenCalledWith("actual"));
+  });
+
   it("keeps every selected year on the same sample and annual-layer contract", () => {
     render(
       <OverviewSampleNetworkToolbar

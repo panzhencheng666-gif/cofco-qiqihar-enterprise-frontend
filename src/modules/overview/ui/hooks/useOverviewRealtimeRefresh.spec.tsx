@@ -211,7 +211,7 @@ describe("useOverviewRealtimeRefresh", () => {
     expect(screen.getByText("0:1:0")).toBeInTheDocument();
   });
 
-  it("refreshes only the formal master projection for create, update, and delete events", () => {
+  it("refreshes only the formal master projection for create, update, delete, and retirement events", () => {
     vi.useFakeTimers();
     const stream = new FakeRealtimeStream();
     render(<Harness productCode="CORN" regionCodes={["230202"]} stream={stream} />);
@@ -220,6 +220,7 @@ describe("useOverviewRealtimeRefresh", () => {
       "FORMAL_SAMPLE_POINT_CREATED",
       "FORMAL_SAMPLE_POINT_UPDATED",
       "FORMAL_SAMPLE_POINT_DELETED",
+      "FORMAL_SAMPLE_POINT_RETIRED",
     ]) {
       act(() => {
         stream.callbacks.onBusinessChange({
@@ -232,7 +233,7 @@ describe("useOverviewRealtimeRefresh", () => {
       });
     }
 
-    expect(screen.getByText("0:3:0")).toBeInTheDocument();
+    expect(screen.getByText("0:4:0")).toBeInTheDocument();
   });
 
   it("turns a large historical replay into one refresh instead of rebuilding the map per event", () => {
