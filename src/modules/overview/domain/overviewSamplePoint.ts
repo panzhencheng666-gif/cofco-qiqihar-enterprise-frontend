@@ -3,6 +3,7 @@ import type { DesignSampleContractVersion } from "../../design-sample/domain/des
 export type OverviewSamplePointCategoryCode = "PRODUCTION" | "MARKET" | "LOGISTICS";
 
 export interface OverviewSamplePointAggregate {
+  sampleKind?: "DESIGN";
   regionCode: string;
   regionName: string;
   regionLevel: "PREFECTURE" | "COUNTY" | "TOWNSHIP" | "VILLAGE";

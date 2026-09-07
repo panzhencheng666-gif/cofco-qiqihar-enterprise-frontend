@@ -5617,3 +5617,7 @@ select:focus-visible {
     flex: 0 0 auto;
   }
 }
+
+.overview-command-center.without-business-kpis {
+  --command-kpi-height: 0px;
+}

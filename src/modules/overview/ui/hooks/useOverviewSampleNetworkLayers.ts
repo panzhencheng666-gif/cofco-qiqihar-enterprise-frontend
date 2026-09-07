@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
 import type {
   OverviewSamplePointCategoryCode,
+  OverviewSamplePointAggregate,
   OverviewDesignSamplePoint,
   OverviewDesignSamplePointRecord,
   OverviewSamplePointIcon,
@@ -11,6 +12,10 @@ import type {
   SampleNetworkDesignComparison,
   SampleNetworkLayerMode,
 } from "../../domain/overviewSamplePoint";
+import {
+  designPointsInRegion,
+  designPointRegionAggregates,
+} from "../presentation/designSampleRegionScope";
 import { sampleNetworkLayerIcons } from "../presentation/sampleNetworkLayers";
 import { HttpError } from "../../../../shared/api/HttpClient";
 
@@ -23,6 +28,7 @@ export interface OverviewSampleNetworkRegion {
   level: RegionLevel;
   name: string;
   parentCode?: string;
+  boundaryGeoJson?: string;
 }
 
 export interface OverviewSampleNetworkLayerModel {
@@ -33,6 +39,7 @@ export interface OverviewSampleNetworkLayerModel {
   comparison: SampleNetworkComparison | undefined;
   designPoints: readonly OverviewDesignSamplePoint[];
   designPointState: SampleNetworkLoadState;
+  designPointAggregates?: readonly OverviewSamplePointAggregate[];
   historicalIcons?: readonly OverviewSamplePointIcon[];
   historicalState?: SampleNetworkLoadState;
   actualIcons?: readonly OverviewSamplePointIcon[];
@@ -61,12 +68,14 @@ const DESIGN_SAMPLE_PAGE_SIZE = 100;
 
 export function useOverviewSampleNetworkLayers({
   productCode,
+  mapRegions,
   refreshSequence,
   region,
   repository,
   year,
 }: {
   productCode: string;
+  mapRegions?: readonly OverviewSampleNetworkRegion[];
   refreshSequence: number;
   region: OverviewSampleNetworkRegion | undefined;
   repository: OverviewSamplePointRepository | undefined;
@@ -474,13 +483,12 @@ export function useOverviewSampleNetworkLayers({
     [actualIcons, catalog, comparisonSource],
   );
   const visibleDesignPoints = useMemo(
-    () =>
-      regionCode
-        ? designPoints.filter(({ regionCode: pointRegionCode }) =>
-            regionContains(regionCode, pointRegionCode),
-          )
-        : designPoints,
-    [designPoints, regionCode],
+    () => designPointsInRegion(designPoints, region),
+    [designPoints, region],
+  );
+  const designPointAggregates = useMemo(
+    () => designPointRegionAggregates(designPoints, mapRegions ?? []),
+    [designPoints, mapRegions],
   );
 
   const icons = useMemo(() => {
@@ -533,6 +541,7 @@ export function useOverviewSampleNetworkLayers({
     categoryCode,
     comparison,
     designPoints: visibleDesignPoints,
+    designPointAggregates,
     designPointState,
     historicalIcons,
     historicalState,
@@ -666,14 +675,6 @@ function designSampleValueLabel(value: unknown) {
   if (typeof value === "string") return labels[value] ?? value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   throw new Error("Unsupported design sample point display value");
-}
-
-function regionContains(selectedRegionCode: string, pointRegionCode: string) {
-  if (selectedRegionCode === pointRegionCode) return true;
-  if (/^\d{6}$/u.test(selectedRegionCode) && selectedRegionCode.endsWith("00")) {
-    return pointRegionCode.startsWith(selectedRegionCode.slice(0, 4));
-  }
-  return pointRegionCode.startsWith(selectedRegionCode);
 }
 
 function synchronizeDesignComparison(

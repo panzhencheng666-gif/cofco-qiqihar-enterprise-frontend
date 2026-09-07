@@ -646,6 +646,7 @@ export function OverviewPage({
     productCode,
     refreshSequence: samplePointSequence,
     region: sampleNetworkRegion,
+    mapRegions: visibleRegions,
     repository: activeSamplePointRepository,
     year,
   });
@@ -654,14 +655,25 @@ export function OverviewPage({
     sampleNetworkModel.mode !== "design" &&
     sampleNetworkModel.mode !== "historical" &&
     showSamplePointAggregates;
-  const visibleSamplePointAggregates = useVisibleSamplePointAggregates(
+  const actualSamplePointAggregates = useVisibleSamplePointAggregates(
     showAggregateLayer,
     samplePointAggregates,
     sampleNetworkModel.categoryCode,
   );
-  const visibleSamplePointAggregateStatus = showAggregateLayer
-    ? samplePointAggregateStatus
-    : "hidden";
+  const visibleSamplePointAggregates =
+    sampleNetworkModel.mode === "design"
+      ? (sampleNetworkModel.designPointAggregates ?? [])
+      : actualSamplePointAggregates;
+  const visibleSamplePointAggregateStatus =
+    sampleNetworkModel.mode === "design"
+      ? sampleNetworkModel.designPointState === "ready"
+        ? "ready"
+        : sampleNetworkModel.designPointState === "unavailable"
+          ? "unavailable"
+          : "loading"
+      : showAggregateLayer
+        ? samplePointAggregateStatus
+        : "hidden";
   const visibleSampleNetworkIcons = useMemo(
     () =>
       sampleMode
@@ -975,6 +987,9 @@ export function OverviewPage({
   return (
     <>
       <OverviewCommandCenter
+        sampleNetworkMode={
+          activeSamplePointRepository ? sampleNetworkModel.mode : "actual"
+        }
         {...(overallMapScope
           ? {
               boundarySource: {

@@ -1,3 +1,4 @@
+import type { SampleNetworkLayerMode } from "../../domain/overviewSamplePoint";
 import type { ReactNode } from "react";
 
 import type {
@@ -28,6 +29,7 @@ export function OverviewCommandCenter({
   productLabel,
   sampleNetworkControls,
   sampleMode = true,
+  sampleNetworkMode = "actual",
   scopeLabel,
   samplePoints,
   selectedSamplePoint,
@@ -56,6 +58,7 @@ export function OverviewCommandCenter({
   productLabel: string;
   sampleNetworkControls?: ReactNode;
   sampleMode?: boolean;
+  sampleNetworkMode?: SampleNetworkLayerMode;
   scopeLabel?: string;
   samplePoints?: ReactNode;
   selectedSamplePoint?: { details: ReactNode; name: string };
@@ -63,6 +66,7 @@ export function OverviewCommandCenter({
   selectedRegion?: OverviewRegion;
   selectionPoint?: OverviewMapSelectionPoint;
 }) {
+  const showBusinessMetrics = !sampleMode || sampleNetworkMode === "actual";
   const metricByCode = new Map(dashboard?.metrics.map((item) => [item.code, item]));
   const overtureBoundary = boundarySource?.name.includes("Overture") ?? false;
   const selectedPath = selectedRegion?.name;
@@ -103,7 +107,7 @@ export function OverviewCommandCenter({
 
   return (
     <main
-      className={`overview-command-center${selectedRegion || selectedSamplePoint ? " has-details" : ""}${sideDataPanel ? " has-side-data-panel" : ""}`}
+      className={`overview-command-center${selectedRegion || selectedSamplePoint ? " has-details" : ""}${sideDataPanel ? " has-side-data-panel" : ""}${!showBusinessMetrics ? " without-business-kpis" : ""}`}
     >
       <h2 className="overview-sr-only">粮食商情总览</h2>
 
@@ -138,24 +142,25 @@ export function OverviewCommandCenter({
         </div>
       </header>
 
-      {dataModePanel ?? (
-        <section aria-label="总揽关键指标" className="overview-command-kpis">
-          {metrics.map((item) => (
-            <article
-              aria-label={item.label}
-              className={`is-${item.tone}`}
-              key={item.label}
-            >
-              <p>{item.label}</p>
-              <div>
-                <strong>{item.value}</strong>
-                <small>{item.unit}</small>
-              </div>
-              <span>{item.sourceLabel}</span>
-            </article>
-          ))}
-        </section>
-      )}
+      {dataModePanel ??
+        (showBusinessMetrics && (
+          <section aria-label="总揽关键指标" className="overview-command-kpis">
+            {metrics.map((item) => (
+              <article
+                aria-label={item.label}
+                className={`is-${item.tone}`}
+                key={item.label}
+              >
+                <p>{item.label}</p>
+                <div>
+                  <strong>{item.value}</strong>
+                  <small>{item.unit}</small>
+                </div>
+                <span>{item.sourceLabel}</span>
+              </article>
+            ))}
+          </section>
+        ))}
 
       <aside className="overview-command-legend">
         <h3>图例</h3>

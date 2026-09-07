@@ -4,6 +4,39 @@ import { describe, expect, it, vi } from "vitest";
 import { OverviewCommandCenter } from "./OverviewCommandCenter";
 
 describe("OverviewCommandCenter data mode slot", () => {
+  it.each(["design", "historical", "comparison"] as const)(
+    "hides business KPIs in %s mode",
+    (mode) => {
+      render(
+        <OverviewCommandCenter
+          sampleNetworkMode={mode}
+          filters={<div />}
+          map={<div />}
+          navigation={<div />}
+          onCloseDetails={vi.fn()}
+          onEnterSelectedRegion={vi.fn()}
+          productLabel="玉米"
+        />,
+      );
+      expect(screen.queryByLabelText("总揽关键指标")).not.toBeInTheDocument();
+    },
+  );
+
+  it("keeps the four business KPIs for existing samples", () => {
+    render(
+      <OverviewCommandCenter
+        sampleNetworkMode="actual"
+        filters={<div />}
+        map={<div />}
+        navigation={<div />}
+        onCloseDetails={vi.fn()}
+        onEnterSelectedRegion={vi.fn()}
+        productLabel="玉米"
+      />,
+    );
+    expect(screen.getByLabelText("总揽关键指标")).toBeInTheDocument();
+  });
+
   it("replaces sample-derived KPI cards with the selected independent data mode", () => {
     render(
       <OverviewCommandCenter
