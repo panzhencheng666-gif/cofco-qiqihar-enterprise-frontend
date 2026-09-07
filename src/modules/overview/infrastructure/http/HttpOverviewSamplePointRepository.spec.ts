@@ -1217,12 +1217,16 @@ describe("HttpOverviewSamplePointRepository", () => {
     expect(result).not.toHaveProperty("actualPoints");
   });
 
-  it("reads the year-independent authoritative design sample point page", async () => {
+  it.each([
+    "design-sample-fields-v1",
+    "design-sample-fields-v2",
+    "design-sample-fields-v3",
+  ])("reads design sample coordinates for %s", async (contractVersion) => {
     const get = respondingWith({
       items: [
         {
           id: "94000000-0000-0000-0000-000000000009",
-          contractVersion: "design-sample-fields-v1",
+          contractVersion,
           contractDigest:
             "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           context: {
@@ -1267,6 +1271,12 @@ describe("HttpOverviewSamplePointRepository", () => {
     );
     expect(get.mock.calls[0]?.[0]).not.toContain("surveyYear");
     expect(result.items[0]?.values.AGRI_INPUT_SEED_SALES_VOLUME).toBe(1200);
+    expect(result.items[0]).toMatchObject({
+      contractVersion,
+      longitude: 123.95,
+      latitude: 47.35,
+      regionCode: "230202",
+    });
   });
 });
 

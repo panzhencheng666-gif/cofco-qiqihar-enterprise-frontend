@@ -17,11 +17,23 @@ describe.runIf(acceptanceBaseUrl !== undefined)(
         objectTypeCode: "TRADER",
       });
 
-      expect(definition.contractVersion).toBe("design-sample-fields-v1");
-      expect(definition.supportedContexts).toHaveLength(27);
-      expect(definition.observationFields.map(({ code }) => code)).toEqual(
-        expect.arrayContaining(["MKT_PURCHASE_BASE_PRICE", "MKT_SALE_BASE_PRICE"]),
+      expect(definition.contractVersion).toBe("design-sample-fields-v3");
+      expect(definition.supportedContexts).toContainEqual(
+        expect.objectContaining({
+          domainCode: "MARKET",
+          productCode: "CORN",
+          objectTypeCode: "TRADER",
+        }),
       );
+      expect(definition.identityFields.map(({ code }) => code)).toEqual(
+        expect.arrayContaining([
+          "DSP_NAME",
+          "DSP_REGION_CODE",
+          "DSP_LONGITUDE",
+          "DSP_LATITUDE",
+        ]),
+      );
+      expect(definition.observationFields).toEqual([]);
     });
   },
 );

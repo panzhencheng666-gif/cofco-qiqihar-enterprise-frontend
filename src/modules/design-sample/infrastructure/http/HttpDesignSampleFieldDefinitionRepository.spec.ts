@@ -9,13 +9,19 @@ const context = {
 } as const;
 
 describe("HttpDesignSampleFieldDefinitionRepository", () => {
-  it("loads and strictly parses the echoed backend context", async () => {
+  it.each([
+    "design-sample-fields-v1",
+    "design-sample-fields-v2",
+    "design-sample-fields-v3",
+  ])("loads the echoed backend context for %s", async (contractVersion) => {
+    const payload = { ...validContract(), contractVersion };
+    if (contractVersion === "design-sample-fields-v3") payload.observationFields = [];
     const http: HttpClient = {
       get: (path, schema) => {
         expect(path).toBe(
           "/api/v1/design-sample-field-definitions?domainCode=MARKET&productCode=CORN&objectTypeCode=TRADER",
         );
-        return Promise.resolve(schema.parse(validContract()));
+        return Promise.resolve(schema.parse(payload));
       },
     };
 
@@ -23,14 +29,54 @@ describe("HttpDesignSampleFieldDefinitionRepository", () => {
       http,
     ).getDefinition(context);
 
-    expect(result.contractVersion).toBe("design-sample-fields-v1");
+    expect(result.contractVersion).toBe(contractVersion);
     expect(result.domains).toHaveLength(2);
     expect(result.products).toHaveLength(3);
     expect(result.objectTypes).toHaveLength(11);
     expect(result.supportedContexts).toHaveLength(27);
   });
 
+  it("accepts the backend reference catalog added to the current contract", async () => {
+    const payload = validContract();
+    payload.contractVersion = "design-sample-fields-v3";
+    payload.observationFields = [];
+    payload.domains.push({
+      code: "REFERENCE",
+      label: "参考点",
+      description: "设计参考点",
+      aliases: [],
+      sortOrder: 30,
+    });
+    payload.products.push({
+      code: "GENERAL",
+      label: "通用",
+      aliases: [],
+      sortOrder: 40,
+    });
+    payload.objectTypes.push(objectType("REFERENCE", "REFERENCE_POINT", 190));
+    payload.supportedContexts.push({
+      domainCode: "REFERENCE",
+      productCode: "GENERAL",
+      objectTypeCode: "REFERENCE_POINT",
+      sortOrder: 280,
+    });
+    const http: HttpClient = {
+      get: (_path, schema) => Promise.resolve(schema.parse(payload)),
+    };
+    const result = await new HttpDesignSampleFieldDefinitionRepository(
+      http,
+    ).getDefinition(context);
+    expect(result.supportedContexts).toContainEqual(payload.supportedContexts.at(-1));
+    expect(result.observationFields).toEqual([]);
+  });
+
   it.each([
+    [
+      "unsupported contract version",
+      (value: Record<string, unknown>) => {
+        value.contractVersion = "design-sample-fields-v99";
+      },
+    ],
     ["missing digest", (value: Record<string, unknown>) => delete value.contractDigest],
     [
       "unknown value type",
