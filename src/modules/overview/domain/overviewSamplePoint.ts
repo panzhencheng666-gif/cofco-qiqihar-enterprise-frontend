@@ -1,3 +1,5 @@
+import type { DesignSampleContractVersion } from "../../design-sample/domain/designSampleFieldContract";
+
 export type OverviewSamplePointCategoryCode = "PRODUCTION" | "MARKET" | "LOGISTICS";
 
 export interface OverviewSamplePointAggregate {
@@ -119,7 +121,7 @@ export type SampleNetworkRelationType =
 
 export interface OverviewDesignSamplePointRecord {
   id: string;
-  contractVersion: "design-sample-fields-v1";
+  contractVersion: DesignSampleContractVersion;
   contractDigest: string;
   context: {
     domainCode: string;

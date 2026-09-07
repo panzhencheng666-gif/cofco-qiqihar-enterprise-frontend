@@ -1,3 +1,11 @@
+export const designSampleContractVersions = [
+  "design-sample-fields-v1",
+  "design-sample-fields-v2",
+  "design-sample-fields-v3",
+] as const;
+
+export type DesignSampleContractVersion = (typeof designSampleContractVersions)[number];
+
 export interface DesignSampleContext {
   readonly domainCode: string;
   readonly productCode: string;
@@ -57,7 +65,7 @@ export interface DesignSampleFieldDefinition {
 }
 
 export interface DesignSampleFieldContract {
-  readonly contractVersion: "design-sample-fields-v1";
+  readonly contractVersion: DesignSampleContractVersion;
   readonly contractDigest: string;
   readonly context: DesignSampleContext;
   readonly domains: readonly DesignSampleDomainDefinition[];

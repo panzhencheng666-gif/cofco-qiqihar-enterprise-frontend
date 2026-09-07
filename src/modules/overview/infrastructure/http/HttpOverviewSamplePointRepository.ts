@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { designSampleContractVersions } from "../../../design-sample/domain/designSampleFieldContract";
 
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
 import type { OverviewSamplePointRequestOptions } from "../../application/ports/OverviewSamplePointRepository";
@@ -58,7 +59,7 @@ const businessValueSchema = z.object({
 const designSamplePointSchema = z
   .object({
     id: uuidTextSchema,
-    contractVersion: z.literal("design-sample-fields-v1"),
+    contractVersion: z.enum(designSampleContractVersions),
     contractDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
     context: z
       .object({

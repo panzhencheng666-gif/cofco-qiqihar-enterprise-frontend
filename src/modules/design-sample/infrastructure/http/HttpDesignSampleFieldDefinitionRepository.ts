@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { designSampleContractVersions } from "../../domain/designSampleFieldContract";
 
 import type { HttpClient } from "../../../../shared/api/HttpClient";
 import type { DesignSampleFieldDefinitionRepository } from "../../application/ports/DesignSampleFieldDefinitionRepository";
@@ -84,7 +85,7 @@ export class HttpDesignSampleFieldDefinitionRepository implements DesignSampleFi
   async getDefinition(
     context: DesignSampleContext,
   ): Promise<DesignSampleFieldContract> {
-    const schema = contractSchema(context).describe("design-sample-fields-v1");
+    const schema = contractSchema(context).describe("design-sample-fields");
     const query = new URLSearchParams({
       domainCode: context.domainCode,
       productCode: context.productCode,
@@ -107,13 +108,13 @@ export function parseDesignSampleFieldContract(
 function contractSchema(expectedContext: DesignSampleContext) {
   return z
     .object({
-      contractVersion: z.literal("design-sample-fields-v1"),
+      contractVersion: z.enum(designSampleContractVersions),
       contractDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
       context: contextSchema,
-      domains: z.array(domainSchema).length(2),
-      products: z.array(productSchema).length(3),
-      objectTypes: z.array(objectTypeSchema).length(11),
-      supportedContexts: z.array(supportedContextSchema).length(27),
+      domains: z.array(domainSchema).min(1),
+      products: z.array(productSchema).min(1),
+      objectTypes: z.array(objectTypeSchema).min(1),
+      supportedContexts: z.array(supportedContextSchema).min(1),
       identityFields: z.array(fieldSchema),
       observationFields: z.array(fieldSchema),
     })
