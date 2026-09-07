@@ -5,6 +5,34 @@ import type { HttpClient } from "../../../../shared/api/HttpClient";
 import { HttpOverviewRepository } from "./HttpOverviewRepository";
 
 describe("HttpOverviewRepository request cache", () => {
+  it("invalidates the map footprint together with administrative boundaries", async () => {
+    const get = vi.fn<HttpClient["get"]>((_path, schema) =>
+      Promise.resolve(
+        schema.parse({
+          data: {
+            scopeCode: "FORMAL_BUSINESS",
+            name: "业务范围",
+            boundaryGeoJson: "{}",
+            sourceName: "fixture",
+            sourceRevision: "v1",
+            sourceLicense: "fixture",
+            componentGeometryFingerprint: "fixture",
+            refreshedAt: "2026-09-07T00:00:00Z",
+          },
+        }),
+      ),
+    );
+    const repository = new HttpOverviewRepository({
+      get: get as unknown as HttpClient["get"],
+    });
+    await repository.mapScope();
+    await repository.mapScope();
+    expect(get).toHaveBeenCalledTimes(1);
+    repository.invalidateGeographyData();
+    await repository.mapScope();
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
   it("rejects an otherwise complete legacy indicator response without a contract version", async () => {
     const get = vi.fn<HttpClient["get"]>((_path, schema) =>
       Promise.resolve(

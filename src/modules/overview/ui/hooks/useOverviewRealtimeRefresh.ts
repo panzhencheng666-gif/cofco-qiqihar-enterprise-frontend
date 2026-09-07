@@ -104,10 +104,12 @@ export function useOverviewRealtimeRefresh(
         change.actionCode !== undefined &&
         DESIGN_SAMPLE_POINT_ACTIONS.has(change.actionCode)
       ) {
+        const affectsProduct =
+          change.productCode === undefined ||
+          change.productCode === currentSelection.productCode;
         scheduleRefresh({
-          samplePoints:
-            change.productCode === undefined ||
-            change.productCode === currentSelection.productCode,
+          geography: affectsProduct,
+          samplePoints: affectsProduct,
         });
         return;
       }
