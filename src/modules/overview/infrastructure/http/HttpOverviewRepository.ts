@@ -130,6 +130,7 @@ export class HttpOverviewRepository implements OverviewRepository {
   invalidateGeographyData() {
     for (const key of this.cache.keys()) {
       if (
+        key === "map-scope" ||
         key.startsWith("/api/v1/overview/regions") ||
         key.startsWith("/api/v1/overview/locations")
       ) {

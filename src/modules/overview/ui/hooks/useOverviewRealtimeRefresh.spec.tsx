@@ -209,6 +209,7 @@ describe("useOverviewRealtimeRefresh", () => {
     });
 
     expect(screen.getByText("0:1:0")).toBeInTheDocument();
+    expect(screen.getByTestId("geography-sequence")).toHaveTextContent("1");
   });
 
   it("refreshes only the formal master projection for create, update, delete, and retirement events", () => {

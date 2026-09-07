@@ -524,7 +524,7 @@ export function OverviewPage({
       live = false;
       if (retryTimer !== undefined) window.clearTimeout(retryTimer);
     };
-  }, [repository]);
+  }, [geographySequence, repository]);
 
   useEffect(() => {
     let active = true;
