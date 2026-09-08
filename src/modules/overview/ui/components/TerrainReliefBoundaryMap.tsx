@@ -1232,7 +1232,11 @@ export default function TerrainReliefBoundaryMap({
                     </span>
                   ) : (
                     <button
-                      aria-label={`${icon.name}，${(icon.roles ?? []).map((role) => role.name).join("、")}${icon.types.length ? `，当前品种对象类型：${icon.types.map((type) => type.name).join("、")}` : "，当前品种暂无审核通过业务数据"}${coordinateGroup && coordinateGroup.count > 1 ? `，该真实坐标共有 ${coordinateGroup.count} 个正式样本身份` : ""}${expanded ? "，图标为区域内标注，引线起点是真实经纬度" : "，图标锚点是真实经纬度"}，点击查看样本点详情`}
+                      aria-label={
+                        icon.locationMode === "REGION_SCHEMATIC"
+                          ? sampleNetworkMarkerAccessibilityLabel(icon)
+                          : `${icon.name}，${(icon.roles ?? []).map((role) => role.name).join("、")}${icon.types.length ? `，当前品种对象类型：${icon.types.map((type) => type.name).join("、")}` : "，当前品种暂无审核通过业务数据"}${coordinateGroup && coordinateGroup.count > 1 ? `，该真实坐标共有 ${coordinateGroup.count} 个正式样本身份` : ""}${expanded ? "，图标为区域内标注，引线起点是真实经纬度" : "，图标锚点是真实经纬度"}，点击查看样本点详情`
+                      }
                       aria-pressed={selectedSamplePointId === icon.samplePointId}
                       className={`overview-sample-point-map-icon is-${icon.iconKey ?? "unknown"} is-layer-${(icon.layerType ?? "ANNUAL_ACTUAL").toLowerCase()}${domainClass}${icon.dataQualityReason === "DUPLICATE_COORDINATE_UNVERIFIED" ? " has-coordinate-warning" : ""}${selectedSamplePointId === icon.samplePointId ? " is-selected" : ""}`}
                       data-anchor-latitude={icon.latitude ?? undefined}
@@ -1262,7 +1266,7 @@ export default function TerrainReliefBoundaryMap({
                         expanded
                           ? "区域内样本标注；引线起点为真实经纬度；点击查看样本点详情"
                           : coordinateGroup && coordinateGroup.count > 1
-                            ? `真实坐标同址 ${coordinateGroup.count} 个正式样本；点击查看当前样本详情`
+                            ? `同一展示位置有 ${coordinateGroup.count} 个正式样本；点击查看当前样本详情`
                             : "真实经纬度位置；点击查看样本点详情"
                       }
                       type="button"
@@ -1287,7 +1291,7 @@ export default function TerrainReliefBoundaryMap({
           !activeProjection.features.length &&
           activeProjection.points.length > 0 && (
             <span className="overview-relief-governance-note">
-              当前层级仅展示已治理真实坐标点
+              当前层级展示样本位置，区域内示意位置已单独标明
             </span>
           )}
       </div>
