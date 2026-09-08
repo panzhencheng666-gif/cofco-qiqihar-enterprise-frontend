@@ -1,3 +1,4 @@
+import { clusterDesignMapMarkers } from "../presentation/clusterDesignMapMarkers";
 import type { OverviewRegion } from "../../domain/overview";
 import type {
   OverviewSamplePointAggregate,
@@ -1076,7 +1077,11 @@ export function createReliefOverlayLayout(
       ...placeReliefRectInsidePolygon(polygon, label.point, footprint, []),
     };
   });
-  return { labels, samplePointAggregates, samplePointIcons };
+  return {
+    labels,
+    samplePointAggregates,
+    samplePointIcons: clusterDesignMapMarkers(samplePointIcons),
+  };
 }
 
 function samplePointIconRegionCode(icon: OverviewSamplePointIcon) {

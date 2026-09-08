@@ -3,6 +3,7 @@ import type { DesignSampleContractVersion } from "../../design-sample/domain/des
 export type OverviewSamplePointCategoryCode = "PRODUCTION" | "MARKET" | "LOGISTICS";
 
 export interface OverviewSamplePointAggregate {
+  sampleKind?: "DESIGN";
   regionCode: string;
   regionName: string;
   regionLevel: "PREFECTURE" | "COUNTY" | "TOWNSHIP" | "VILLAGE";
@@ -134,6 +135,10 @@ export interface OverviewDesignSamplePointRecord {
   regionPath: string;
   longitude: number;
   latitude: number;
+  displayLongitude?: number | undefined;
+  displayLatitude?: number | undefined;
+  displayRegionCode?: string | undefined;
+  locationMode?: "REPORTED_COORDINATE" | "REGION_SCHEMATIC" | undefined;
   version: number;
   updatedAt: string;
 }

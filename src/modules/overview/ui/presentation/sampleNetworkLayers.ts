@@ -83,7 +83,10 @@ function designSamplePointIcon(
 ): OverviewSamplePointIcon {
   return {
     samplePointId: `design-sample-point:${point.id}`,
-    name: point.name,
+    name:
+      point.locationMode === "REGION_SCHEMATIC"
+        ? `${point.name}（示意位置）`
+        : point.name,
     regionCode: point.regionCode,
     iconKey: "design-reference",
     layerType: "DESIGN_EXACT_LOCATION",
@@ -94,8 +97,8 @@ function designSamplePointIcon(
         iconKey: "design-reference",
       },
     ],
-    longitude: point.longitude,
-    latitude: point.latitude,
+    longitude: point.displayLongitude ?? point.longitude,
+    latitude: point.displayLatitude ?? point.latitude,
     dataQualityReason: null,
   };
 }

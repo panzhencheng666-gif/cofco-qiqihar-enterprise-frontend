@@ -620,6 +620,72 @@ describe("useOverviewSampleNetworkLayers", () => {
     expect(result.current.comparison?.exactCoveredDesignPointCount).toBe(1);
   });
 
+  it("uses the displayed township and village boundary for county-registered points and map totals", async () => {
+    const point = agriculturalInputStorePoint();
+    const region = {
+      code: "230202001",
+      name: "测试乡",
+      level: "TOWNSHIP" as "TOWNSHIP" | "VILLAGE",
+      parentCode: "230202",
+      boundaryGeoJson: JSON.stringify({
+        type: "Polygon",
+        coordinates: [
+          [
+            [123.9, 47.3],
+            [124, 47.3],
+            [124, 47.4],
+            [123.9, 47.4],
+            [123.9, 47.3],
+          ],
+        ],
+      }),
+      approvedRecordCount: null,
+    };
+    const repository = {
+      ...repositoryWithSnapshot(),
+      designPoints: vi.fn(() =>
+        Promise.resolve({
+          items: [point, { ...point, id: "outside", longitude: 124.1 }],
+          pageNumber: 0,
+          pageSize: 100,
+          totalElements: 2,
+          totalPages: 1,
+        }),
+      ),
+      designPointDefinition: vi.fn(() => Promise.resolve(agriculturalInputContract())),
+    } as unknown as OverviewSamplePointRepository;
+    const { result, rerender } = renderHook(
+      ({ selected }) =>
+        useOverviewSampleNetworkLayers({
+          productCode: "CORN",
+          refreshSequence: 0,
+          region: selected,
+          mapRegions: [region],
+          repository,
+          year: 2026,
+        }),
+      { initialProps: { selected: region } },
+    );
+    await waitFor(() => expect(result.current.designPointState).toBe("ready"));
+    act(() => result.current.setMode("design"));
+    expect(result.current.designPoints.map(({ id }) => id)).toEqual([point.id]);
+    expect(result.current.icons).toHaveLength(1);
+    expect(result.current.designPointAggregates?.[0]?.samplePointCount).toBe(1);
+    rerender({
+      selected: {
+        ...region,
+        code: "230202001001",
+        level: "VILLAGE",
+        parentCode: region.code,
+      },
+    });
+    expect(result.current.designPoints.map(({ id }) => id)).toEqual([point.id]);
+    expect(result.current.icons[0]).toMatchObject({
+      longitude: point.longitude,
+      latitude: point.latitude,
+    });
+  });
+
   it("maps authoritative design points with V157 labels and all four agricultural-input fields", async () => {
     const designPoints = vi.fn(() =>
       Promise.resolve({

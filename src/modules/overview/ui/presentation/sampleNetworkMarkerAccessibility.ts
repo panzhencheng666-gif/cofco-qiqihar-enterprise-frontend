@@ -9,7 +9,7 @@ export function sampleNetworkMarkerAccessibilityLabel(
     return `${icon.name}${count}，行政村展示分区覆盖徽标，不代表精确经纬度`;
   }
   if (icon.layerType === "DESIGN_EXACT_LOCATION") {
-    return `${icon.name}，已审核设计样本点精确位置`;
+    return `${icon.name}，设计样本位置`;
   }
   if (icon.layerType === "REGIONAL_ACTUAL_BADGE") {
     return `${icon.name}，仅确认到${regionalActualLevelLabel(icon.representedRegionLevel)}，不显示伪造图钉`;

@@ -263,6 +263,8 @@ test.describe("overview owned-relief interaction", () => {
     await installOverviewFixture(page);
     await page.goto("/#/overview");
 
+    await page.getByRole("button", { name: "现有样本", exact: true }).click();
+
     const kpis = page.locator(".overview-command-kpis");
     const navigation = page.locator(
       ".overview-command-tools > .overview-cockpit-navigation",
