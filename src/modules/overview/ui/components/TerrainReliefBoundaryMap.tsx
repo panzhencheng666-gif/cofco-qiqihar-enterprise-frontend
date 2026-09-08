@@ -1304,7 +1304,7 @@ function sampleNetworkMarkerTitle(icon: OverviewSamplePointIcon): string {
     return "行政村设计覆盖；展示分区不是权威边界";
   }
   if (icon.layerType === "DESIGN_EXACT_LOCATION") {
-    return "原始设计样本点；已审核精确位置";
+    return `${icon.name}；设计样本位置，详情中可查看是否为区域内示意位置`;
   }
   return `区域级现有样本；仅确认到${regionalActualLevelLabel(icon.representedRegionLevel)}，不绘制图钉`;
 }

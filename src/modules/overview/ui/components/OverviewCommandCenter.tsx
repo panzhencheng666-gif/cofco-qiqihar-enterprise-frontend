@@ -212,7 +212,7 @@ export function OverviewCommandCenter({
             </span>
             <span>
               <i className="is-design-exact" />
-              已核验设计位置
+              设计样本位置
             </span>
           </>
         )}

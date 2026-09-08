@@ -246,7 +246,7 @@ describe("BoundaryMap", () => {
     ).toBeVisible();
     expect(
       screen.getByRole("img", {
-        name: /契约测试村设计样本点精确位置，已审核设计样本点精确位置/,
+        name: /契约测试村设计样本点精确位置，设计样本位置/,
       }),
     ).toBeVisible();
     expect(

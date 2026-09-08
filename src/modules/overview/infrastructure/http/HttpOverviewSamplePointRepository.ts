@@ -74,10 +74,22 @@ const designSamplePointSchema = z
     regionPath: z.string().min(1),
     longitude: z.number().min(-180).max(180),
     latitude: z.number().min(-90).max(90),
+    displayLongitude: z.number().min(-180).max(180).optional(),
+    displayLatitude: z.number().min(-90).max(90).optional(),
+    displayRegionCode: z.string().min(1).optional(),
+    locationMode: z.enum(["REPORTED_COORDINATE", "REGION_SCHEMATIC"]).optional(),
     version: z.number().int().nonnegative(),
     updatedAt: z.string().min(1),
   })
-  .strict();
+  .strict()
+  .refine(
+    (point) =>
+      point.locationMode !== "REGION_SCHEMATIC" ||
+      (point.displayLongitude !== undefined &&
+        point.displayLatitude !== undefined &&
+        point.displayRegionCode === point.regionCode),
+    "示意位置必须属于所选行政区",
+  );
 
 const designSamplePointPageSchema = z.object({
   data: z

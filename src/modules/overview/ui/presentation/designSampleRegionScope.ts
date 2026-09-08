@@ -30,7 +30,10 @@ export function designPointsInRegion(
   );
   return points.filter((point) =>
     polygons.some((rings) => {
-      const position: Position = [point.longitude, point.latitude];
+      const position: Position = [
+        point.displayLongitude ?? point.longitude,
+        point.displayLatitude ?? point.latitude,
+      ];
       const outer = rings[0];
       return (
         outer &&

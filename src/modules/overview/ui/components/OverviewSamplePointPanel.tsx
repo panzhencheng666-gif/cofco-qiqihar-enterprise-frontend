@@ -1277,7 +1277,11 @@ function DesignSamplePointDetail({ point }: { point: OverviewDesignSamplePoint }
         </span>
       </header>
       <p>{point.regionPath}</p>
-      <p>坐标已通过所选行政区边界校验。</p>
+      <p>
+        {point.locationMode === "REGION_SCHEMATIC"
+          ? "地图为所属行政区内的示意位置，原始填报经纬度已保留。"
+          : "地图按填报经纬度展示。"}
+      </p>
       {point.businessValues.length ? (
         <dl>
           {point.businessValues.map(({ code, label, unit, value }) => (

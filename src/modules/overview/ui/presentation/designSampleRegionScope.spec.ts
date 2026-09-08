@@ -76,3 +76,16 @@ describe("design map counts", () => {
     expect(samplePointAggregateLabel(aggregate)).not.toContain("已核定");
   });
 });
+
+it("uses the schematic coordinate for map membership without modifying reported coordinates", () => {
+  const sample = {
+    ...point("schematic", 130, 50),
+    displayLongitude: 1,
+    displayLatitude: 1,
+    displayRegionCode: region.code,
+    locationMode: "REGION_SCHEMATIC" as const,
+  };
+  expect(designPointsInRegion([sample], region)).toEqual([sample]);
+  expect(designPointRegionAggregates([sample], [region])[0]?.samplePointCount).toBe(1);
+  expect(sample.longitude).toBe(130);
+});
