@@ -1135,6 +1135,11 @@ export function OverviewSamplePointPanel({
                       <h4>{detail.name}</h4>
                       <span>{detail.regionName}</span>
                     </header>
+                    {detail.locationMode === "REGION_SCHEMATIC" ? (
+                      <p className="overview-sample-point-period-note">
+                        地图为所属行政区内的示意位置，原始填报经纬度已保留。
+                      </p>
+                    ) : null}
                     {detail.dataQualityReason ? (
                       <p className="overview-sample-point-detail-quality">
                         {detailQualityLabel(detail.dataQualityReason)}

@@ -187,6 +187,11 @@ const iconsSchema = z.object({
       longitude: z.number(),
       latitude: z.number(),
       dataQualityReason: z.string().nullable().default(null),
+      locationMode: z
+        .enum(["REPORTED_COORDINATE", "REGION_SCHEMATIC"])
+        .nullable()
+        .optional()
+        .transform((value) => value ?? undefined),
     }),
   ),
 });
@@ -206,6 +211,11 @@ const detailSchema = z.object({
     regionName: z.string(),
     locationState: z.string(),
     dataQualityReason: z.string().nullable(),
+    locationMode: z
+      .enum(["REPORTED_COORDINATE", "REGION_SCHEMATIC"])
+      .nullable()
+      .optional()
+      .transform((value) => value ?? undefined),
     roles: z.array(roleRefSchema).min(1),
     associations: z.array(
       z.object({
@@ -643,6 +653,7 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
       version: point.version,
       locationState: point.locationState,
       dataQualityReason: formalLocationIssue(point),
+      locationMode: point.locationMode ?? undefined,
       roles: [role],
       associations: history.data.items.map((observation) => ({
         categoryCode: point.businessDomain,

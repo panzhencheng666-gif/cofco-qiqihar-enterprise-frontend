@@ -3,6 +3,9 @@ import type { OverviewSamplePointIcon } from "../../domain/overviewSamplePoint";
 export function sampleNetworkMarkerAccessibilityLabel(
   icon: OverviewSamplePointIcon,
 ): string {
+  if (icon.locationMode === "REGION_SCHEMATIC") {
+    return `${icon.name}，所属行政区内示意位置，原始填报经纬度已保留，点击查看样本点详情`;
+  }
   if (icon.layerType === "DESIGN_COVERAGE_BADGE") {
     const count =
       icon.aggregateCount === undefined ? "" : `，${icon.aggregateCount} 个设计样本`;

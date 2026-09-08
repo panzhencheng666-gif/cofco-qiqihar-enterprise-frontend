@@ -87,6 +87,7 @@ export interface OverviewSamplePointCorrectionSource {
 }
 
 export interface OverviewSamplePointIcon {
+  locationMode?: "REPORTED_COORDINATE" | "REGION_SCHEMATIC" | undefined;
   samplePointId: string;
   name: string;
   /** Formal administrative ownership of this exact governed coordinate. */
@@ -260,6 +261,7 @@ export interface OverviewSamplePointAssociation {
 }
 
 export interface OverviewSamplePointDetail {
+  locationMode?: "REPORTED_COORDINATE" | "REGION_SCHEMATIC" | undefined;
   samplePointId: string;
   name: string;
   regionCode: string;

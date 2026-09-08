@@ -24,6 +24,12 @@ const formalSamplePointSchema = z.object({
   locationState: z.string(),
   longitude: formalCoordinateSchema,
   latitude: formalCoordinateSchema,
+  displayLongitude: formalCoordinateSchema.optional(),
+  displayLatitude: formalCoordinateSchema.optional(),
+  locationMode: z
+    .enum(["REPORTED_COORDINATE", "REGION_SCHEMATIC"])
+    .nullable()
+    .optional(),
   effectiveFrom: z.string(),
   effectiveTo: z.string().nullable(),
   version: z.number().int().nonnegative(),
@@ -317,8 +323,9 @@ export function presentFormalSnapshot(
         iconKey: objectTypeIconKey(point.objectTypeCode),
       },
     ],
-    longitude: point.longitude,
-    latitude: point.latitude,
+    longitude: point.displayLongitude ?? point.longitude,
+    latitude: point.displayLatitude ?? point.latitude,
+    locationMode: point.locationMode ?? undefined,
     dataQualityReason: null,
   }));
   return { list, icons };
