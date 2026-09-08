@@ -1263,11 +1263,13 @@ export default function TerrainReliefBoundaryMap({
                         ["--overview-icon-scale" as string]: scale,
                       }}
                       title={
-                        expanded
-                          ? "区域内样本标注；引线起点为真实经纬度；点击查看样本点详情"
-                          : coordinateGroup && coordinateGroup.count > 1
-                            ? `同一展示位置有 ${coordinateGroup.count} 个正式样本；点击查看当前样本详情`
-                            : "真实经纬度位置；点击查看样本点详情"
+                        icon.locationMode === "REGION_SCHEMATIC"
+                          ? "所属行政区内示意位置，原始填报经纬度已保留；点击查看样本点详情"
+                          : expanded
+                            ? "区域内样本标注；引线起点为真实经纬度；点击查看样本点详情"
+                            : coordinateGroup && coordinateGroup.count > 1
+                              ? `同一展示位置有 ${coordinateGroup.count} 个正式样本；点击查看当前样本详情`
+                              : "真实经纬度位置；点击查看样本点详情"
                       }
                       type="button"
                     >
