@@ -925,6 +925,32 @@ describe("OverviewPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("uses historical counts and a selectable list on the city map without current sample totals", async () => {
+    render(<OverviewPage repository={{
+      mapScope: () => Promise.resolve(sampleMapScope), options: () => Promise.resolve(options),
+      regions: () => Promise.resolve([sampleRegion]), locations: () => Promise.resolve([]),
+      indicators: () => Promise.resolve([]), dashboard: () => Promise.resolve(emptyDashboard),
+    }} samplePointRepository={{
+      aggregates: () => Promise.resolve([]), comparison: () => Promise.resolve(emptySampleNetworkComparison),
+      list: () => Promise.resolve(samplePointList), icons: () => Promise.resolve(samplePointIcons),
+      detail: () => Promise.resolve(samplePointDetail),
+      historicalIcons: () => Promise.resolve(samplePointIcons),
+      historicalAggregates: () => Promise.resolve([{
+        regionCode: sampleRegion.code, regionName: sampleRegion.name, regionLevel: "PREFECTURE",
+        samplePointCount: 1, productionCount: 1, marketCount: 0, logisticsCount: 0,
+        validCoordinateCount: 1, dataQualityIssueCount: 0, correctionSourceCount: 0, unresolvedSourceCount: 0,
+      }]),
+    }} />);
+    await userEvent.click(await screen.findByRole("button", { name: "历史样本点" }));
+    const cityAggregate = await screen.findByRole("button", {
+      name: "齐齐哈尔市，历史样本点 1 个，其中产情类 1 个、市场类 0 个、物流类 0 个；多角色样本只计一个身份",
+    });
+    expect(cityAggregate).toBeVisible();
+    await userEvent.click(cityAggregate);
+    expect(await screen.findByRole("list", { name: "历史样本点列表" })).toBeVisible();
+    expect(screen.getByText("当前地区共 1 个历史样本点")).toBeVisible();
+  });
+
   it("shows unavailable sample-point state without inventing a zero aggregate", async () => {
     const samplePointRepository: OverviewSamplePointRepository = {
       aggregates: () => Promise.reject(new Error("formal aggregate unavailable")),
@@ -970,7 +996,7 @@ describe("OverviewPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("keeps prefecture current-sample and farmer filters connected to map icons", async () => {
+  it("keeps prefecture list filters without showing map icons", async () => {
     const list = vi.fn<OverviewSamplePointRepository["list"]>(() =>
       Promise.resolve(samplePointList),
     );
@@ -1071,13 +1097,13 @@ describe("OverviewPage", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: /同一跨产品样本点/ }));
     expect(
-      await within(screen.getByLabelText("粮食商情总览地图")).findByRole("button", {
+      within(screen.getByLabelText("粮食商情总览地图")).queryByRole("button", {
         name: "同一跨产品样本点，农户，点击查看样本点详情",
       }),
-    ).toBeVisible();
+    ).not.toBeInTheDocument();
   });
 
-  it("keeps the region summary and list visible when a map marker selects its governed detail", async () => {
+  it("keeps prefecture summary and list detail without creating a map marker", async () => {
     const detail = vi.fn<OverviewSamplePointRepository["detail"]>(() =>
       Promise.resolve(samplePointDetail),
     );
@@ -1128,11 +1154,9 @@ describe("OverviewPage", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: /同一跨产品样本点/ }),
     );
-    await userEvent.click(
-      await within(screen.getByLabelText("粮食商情总览地图")).findByRole("button", {
-        name: "同一跨产品样本点，农户，点击查看样本点详情",
-      }),
-    );
+    expect(within(screen.getByLabelText("粮食商情总览地图")).queryByRole("button", {
+      name: "同一跨产品样本点，农户，点击查看样本点详情",
+    })).not.toBeInTheDocument();
 
     const regionPanel = await screen.findByRole("complementary", {
       name: "所选地区样本点详情",
@@ -1459,7 +1483,7 @@ describe("OverviewPage", () => {
     );
   });
 
-  it("keeps county maps aggregated and reveals only the selected exact sample", async () => {
+  it("keeps county map icons hidden even after selecting a sample", async () => {
     const county = {
       ...sampleRegion,
       code: "230231",
@@ -1550,7 +1574,7 @@ describe("OverviewPage", () => {
       screen.queryByRole("button", {
         name: "同一跨产品样本点，农户，点击查看样本点详情",
       }),
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
 
     expect(
       screen.getByRole("complementary", { name: "所选地区样本点详情" }),

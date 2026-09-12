@@ -98,6 +98,12 @@ export class FetchHttpClient implements HttpClient {
     schema: ZodType<T>,
     options?: HttpRequestOptions,
   ): Promise<T> {
+    const controller = new AbortController();
+    const cancel = () => controller.abort();
+    if (options?.signal?.aborted) cancel();
+    else options?.signal?.addEventListener("abort", cancel, { once: true });
+    const deadline = setTimeout(cancel, 15_000);
+    try {
     const response = await fetch(`${this.baseUrl}${path}`, {
       method,
       credentials: "same-origin",
@@ -107,7 +113,8 @@ export class FetchHttpClient implements HttpClient {
         ...csrfHeaders(method, this.cookieSource()),
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      ...(options?.signal ? { signal: options.signal } : {}),
+      signal: controller.signal,
+      ...(method === "GET" ? { cache: "no-store" as const } : {}),
     });
     if (!response.ok) {
       throw new HttpError(response.status, `请求失败：${response.status}`);
@@ -124,6 +131,10 @@ export class FetchHttpClient implements HttpClient {
       });
     }
     return parsed.data;
+    } finally {
+      clearTimeout(deadline);
+      options?.signal?.removeEventListener("abort", cancel);
+    }
   }
 }
 

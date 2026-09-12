@@ -100,6 +100,7 @@ export function OverviewSampleNetworkToolbar({
       ) : null}
       {model.applicable &&
       model.mode !== "actual" &&
+      model.mode !== "historical" &&
       approvedDesignCoordinateCount > 0 ? (
         <label>
           <input

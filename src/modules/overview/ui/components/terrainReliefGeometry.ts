@@ -219,7 +219,7 @@ export function overviewReliefFrame(
         1300,
         overviewDetailsPanelLeft(stageWidth) - OVERVIEW_DETAILS_MAP_SAFE_GAP,
       )
-    : 1820;
+    : Math.min(1820, Math.max(1280, stageWidth) - 100);
   return {
     x,
     y: 290,

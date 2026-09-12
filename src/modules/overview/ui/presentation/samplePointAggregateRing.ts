@@ -40,6 +40,10 @@ export function samplePointAggregateLabel(
 ): string {
   if (aggregate.sampleKind === "DESIGN")
     return `设计样本点 ${aggregate.samplePointCount} 个，其中产情类 ${aggregate.productionCount} 个、市场类 ${aggregate.marketCount} 个、物流类 ${aggregate.logisticsCount ?? 0} 个`;
+  if (aggregate.sampleKind === "HISTORICAL") {
+    const identity = aggregate.scopeKind === "PARENT_DIRECT" ? "本级直属历史样本点" : "历史样本点";
+    return `${identity} ${aggregate.samplePointCount} 个，其中产情类 ${aggregate.productionCount} 个、市场类 ${aggregate.marketCount} 个、物流类 ${aggregate.logisticsCount ?? 0} 个；多角色样本只计一个身份`;
+  }
   if (aggregate.samplePointCount === 0) return "暂无产情、市场或物流样本点";
   const identity =
     aggregate.scopeKind === "PARENT_DIRECT" ? "本级直属样本点" : "样本点";

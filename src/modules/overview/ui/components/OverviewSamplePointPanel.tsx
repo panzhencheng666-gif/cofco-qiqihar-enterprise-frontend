@@ -1,3 +1,4 @@
+import { presentDesignSamplePoint } from "../hooks/useOverviewSampleNetworkLayers";
 import { useEffect, useMemo, useState } from "react";
 
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
@@ -620,7 +621,7 @@ export function OverviewSamplePointPanel({
       : "正在同步年度样本网络";
   const usesRegionalSummary =
     region.level === "PREFECTURE" || region.level === "COUNTY";
-  const locationCountLabel = usesRegionalSummary ? "地图汇总" : "地图图标";
+  const locationCountLabel = "坐标样本";
   const normalizedDesignQuery = designQuery.trim().toLocaleLowerCase("zh-CN");
   const filteredDesignPoints = authoritativeDesignPoints.filter((point) => {
     if (!normalizedDesignQuery) return true;
@@ -643,24 +644,71 @@ export function OverviewSamplePointPanel({
     (currentDesignPageIndex + 1) * DESIGN_POINT_PAGE_SIZE,
   );
 
+
   if (effectiveLayerMode === "historical") {
+    const historyPageCount = Math.max(1, Math.ceil(effectiveHistoricalIcons.length / SAMPLE_PAGE_SIZE));
+    const historyPageIndex = Math.min(pageIndex, historyPageCount - 1);
+    const visibleHistory = effectiveHistoricalIcons.slice(
+      historyPageIndex * SAMPLE_PAGE_SIZE, (historyPageIndex + 1) * SAMPLE_PAGE_SIZE,
+    );
     return (
       <section aria-label="历史样本点业务信息" className="overview-sample-point-panel">
         {issue ? <p role="alert">{issue}</p> : null}
         <section className="overview-detail-section">
           <h3>历史样本点</h3>
-          <p>淘汰年份：{year}年。地图只显示该年度已淘汰样本点。</p>
+          <p>淘汰年份：{year}年。</p>
+          <label className="overview-design-sample-search">
+            <span>搜索历史样本点</span>
+            <input type="search" value={effectiveQuery} placeholder="输入样本名称"
+              onChange={(event) => {
+                networkModel?.setQuery?.(event.target.value);
+                setPageIndex(0);
+              }}
+              onCompositionStart={() => networkModel?.setQueryComposition?.(true)}
+              onCompositionEnd={() => networkModel?.setQueryComposition?.(false)} />
+          </label>
+          <div aria-label="历史样本业务类别" role="group">
+            {([
+              [undefined, "全部"], ["PRODUCTION", "产情类"],
+              ["MARKET", "市场类"], ["LOGISTICS", "物流类"],
+            ] as const).map(([code, name]) => (
+              <button key={name} type="button" aria-pressed={categoryCode === code}
+                onClick={() => selectCategory(code)}>{name}</button>
+            ))}
+          </div>
           {networkModel?.historicalState === "loading" ? (
             <p role="status">正在同步历史样本点。</p>
           ) : null}
-          {networkModel?.historicalState === "ready" &&
-          effectiveHistoricalIcons.length === 0 ? (
-            <p>当前淘汰年份暂无历史样本点。</p>
-          ) : null}
-          {networkModel?.historicalState === "ready" &&
-          effectiveHistoricalIcons.length > 0 &&
-          !selectedHistoricalIcon ? (
-            <p>请选择地图上的历史样本点查看最后一次维护快照。</p>
+          {networkModel?.historicalState === "ready" ? (
+            <>
+              <p role="status">当前地区共 {effectiveHistoricalIcons.length} 个历史样本点</p>
+              <p>{region.level === "PREFECTURE" || region.level === "COUNTY"
+                ? "地图显示地区汇总，进入乡镇、行政村可查看点位；也可从列表查看最后一次维护信息。"
+                : "选择地图或列表中的历史样本点，查看最后一次维护信息。"}</p>
+              <div aria-label="历史样本点列表" className="overview-sample-point-list" role="list">
+                {visibleHistory.map((point) => (
+                  <div key={point.samplePointId} role="listitem">
+                    <button type="button" aria-pressed={selectedSamplePointId === point.samplePointId}
+                      onClick={() => onSelectedSamplePointChange(point.samplePointId)}>
+                      <strong>{point.name}</strong>
+                      <span>{point.types.map(({ name }) => name).join(" · ")}</span>
+                      {point.longitude === null || point.latitude === null
+                        ? <small>暂无可展示坐标，可查看历史业务信息</small> : null}
+                    </button>
+                  </div>
+                ))}
+                {visibleHistory.length === 0 ? <p>当前条件下暂无历史样本点。</p> : null}
+              </div>
+              {historyPageCount > 1 ? (
+                <nav aria-label="历史样本点分页" className="overview-sample-point-pagination">
+                  <button type="button" disabled={historyPageIndex === 0}
+                    onClick={() => setPageIndex(historyPageIndex - 1)}>上一页</button>
+                  <span>第 {historyPageIndex + 1} / {historyPageCount} 页</span>
+                  <button type="button" disabled={historyPageIndex >= historyPageCount - 1}
+                    onClick={() => setPageIndex(historyPageIndex + 1)}>下一页</button>
+                </nav>
+              ) : null}
+            </>
           ) : null}
           {selectedHistoricalIcon ? (
             <OverviewSelectedSamplePointDetails
@@ -715,10 +763,10 @@ export function OverviewSamplePointPanel({
             <p>{comparisonStatusText}</p>
           )}
           {region.level === "PREFECTURE" && effectiveLayerMode !== "actual" ? (
-            <small>市级仅显示区县汇总，避免在全市范围堆叠 2,332 个标识。</small>
+            <small>显示全市及下辖地区样本，点击样本查看详情。</small>
           ) : null}
           {region.level === "COUNTY" && effectiveLayerMode !== "actual" ? (
-            <small>区县级仅显示乡镇汇总；进入乡镇后展示全部下属村覆盖徽标。</small>
+            <small>显示全县及下辖乡镇、行政村样本，进入下级地区可缩小范围。</small>
           ) : null}
           {(region.level === "TOWNSHIP" || region.level === "VILLAGE") &&
           effectiveLayerMode !== "actual" ? (
@@ -831,7 +879,7 @@ export function OverviewSamplePointPanel({
                 </nav>
               ) : null}
               {selectedDesignPoint ? (
-                <DesignSamplePointDetail point={selectedDesignPoint} />
+                <DesignSamplePointDetail key={`${selectedDesignPoint.id}:${selectedDesignPoint.version}`} point={selectedDesignPoint} repository={repository} />
               ) : null}
             </>
           ) : null}
@@ -886,7 +934,7 @@ export function OverviewSamplePointPanel({
       ) : (
         <>
           {selectedDesignPoint ? (
-            <DesignSamplePointDetail point={selectedDesignPoint} />
+            <DesignSamplePointDetail key={`${selectedDesignPoint.id}:${selectedDesignPoint.version}`} point={selectedDesignPoint} repository={repository} />
           ) : null}
           <section className="overview-detail-section overview-sample-point-categories">
             <h3>
@@ -913,16 +961,14 @@ export function OverviewSamplePointPanel({
                     <dt>{locationCountLabel}</dt>
                     <dd>{catalog.validCoordinateCount}</dd>
                     <small>
-                      {usesRegionalSummary
-                        ? `${region.level === "PREFECTURE" ? "市级按区县" : "区县按乡镇"}唯一分桶，列表选择后定位`
-                        : "正式坐标生成，可点击"}
+                      乡镇、行政村地图展示图标
                     </small>
                   </div>
                 </dl>
                 {catalog.dataQualityIssueCount ? (
                   <p className="overview-sample-point-location-blocked" role="status">
                     系统契约异常：{catalog.dataQualityIssueCount}{" "}
-                    条审核通过样本未生成地图图标；请回填报导入环节治理，系统不会推测坐标。
+                    条审核通过样本未生成坐标样本；请回填报导入环节治理，系统不会推测坐标。
                   </p>
                 ) : null}
                 <p className="overview-sample-point-filter-label">
@@ -1003,7 +1049,7 @@ export function OverviewSamplePointPanel({
                   }
                   onCompositionStart={startQueryComposition}
                   onChange={(event) => changeQuery(event.target.value)}
-                  placeholder="输入样本点名称、地区或联系方式"
+                  placeholder="输入样本点名称"
                   type="search"
                   value={effectiveQuery}
                 />
@@ -1018,7 +1064,7 @@ export function OverviewSamplePointPanel({
                   {blockedLocationCount ? (
                     <span>
                       系统契约异常：另有 {blockedLocationCount}{" "}
-                      条审核通过样本未生成地图图标
+                      条审核通过样本未生成坐标样本
                     </span>
                   ) : null}
                 </div>
@@ -1272,7 +1318,22 @@ function designPointMapId(id: string) {
   return `${DESIGN_POINT_ID_PREFIX}${id}`;
 }
 
-function DesignSamplePointDetail({ point }: { point: OverviewDesignSamplePoint }) {
+function DesignSamplePointDetail({ point: selected, repository }: { point: OverviewDesignSamplePoint; repository: OverviewSamplePointRepository }) {
+  const [detail, setDetail] = useState<OverviewDesignSamplePoint>();
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let active = true;
+    if (!repository.designPoint || !repository.designPointDefinition) return;
+    void repository.designPoint(selected.id).then(async record => {
+      const definition = await repository.designPointDefinition!(record.context);
+      if (definition.contractDigest !== record.contractDigest) throw new Error("Metadata changed");
+      if (active) setDetail(presentDesignSamplePoint(record, definition));
+    }).catch(() => { if (active) setFailed(true); });
+    return () => { active = false; };
+  }, [selected.id, selected.version, repository]);
+  const point = detail?.id === selected.id ? detail : selected;
+  if (repository.designPoint && !detail && !failed) return <p role="status">正在加载样本详情…</p>;
+  if (failed) return <p role="alert">样本详情加载失败，请重新选择样本重试。</p>;
   return (
     <section aria-label="设计样本点详情" className="overview-design-sample-detail">
       <header>

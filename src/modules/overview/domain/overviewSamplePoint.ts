@@ -3,7 +3,7 @@ import type { DesignSampleContractVersion } from "../../design-sample/domain/des
 export type OverviewSamplePointCategoryCode = "PRODUCTION" | "MARKET" | "LOGISTICS";
 
 export interface OverviewSamplePointAggregate {
-  sampleKind?: "DESIGN";
+  sampleKind?: "DESIGN" | "HISTORICAL";
   regionCode: string;
   regionName: string;
   regionLevel: "PREFECTURE" | "COUNTY" | "TOWNSHIP" | "VILLAGE";
@@ -287,5 +287,7 @@ export interface OverviewHistoricalSamplePointDetail {
   retirementReason: string;
   retiredBy: string;
   roles: readonly OverviewSamplePointRoleRef[];
-  lastBusinessData: readonly OverviewSamplePointAssociation[];
+  lastBusinessData: readonly (Omit<OverviewSamplePointAssociation, "sourceRole"> & {
+    sourceRole: OverviewSamplePointAssociation["sourceRole"] | OverviewSamplePointCategoryCode;
+  })[];
 }

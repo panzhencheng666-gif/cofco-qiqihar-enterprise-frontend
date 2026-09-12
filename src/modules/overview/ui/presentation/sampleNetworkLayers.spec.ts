@@ -396,44 +396,11 @@ describe("sampleNetworkLayerIcons", () => {
     );
   });
 
-  it("uses regional summaries through county level and reveals only the list-selected exact sample", () => {
-    const anotherIcon = {
-      ...actualIcon,
-      samplePointId: "94000000-0000-0000-0000-000000000099",
-      name: "另一个正式样本",
-    };
-    const designBadge = {
-      ...actualIcon,
-      samplePointId: "design-coverage-summary:230202",
-      layerType: "DESIGN_COVERAGE_BADGE" as const,
-    };
-
-    expect(
-      visibleSampleNetworkMapIcons("PREFECTURE", undefined, [
-        actualIcon,
-        anotherIcon,
-        designBadge,
-      ]),
-    ).toEqual([designBadge]);
-    expect(
-      visibleSampleNetworkMapIcons("PREFECTURE", actualIcon.samplePointId, [
-        actualIcon,
-        anotherIcon,
-        designBadge,
-      ]),
-    ).toEqual([actualIcon, designBadge]);
-    expect(
-      visibleSampleNetworkMapIcons("COUNTY", undefined, [actualIcon, anotherIcon]),
-    ).toEqual([]);
-    expect(
-      visibleSampleNetworkMapIcons("COUNTY", actualIcon.samplePointId, [
-        actualIcon,
-        anotherIcon,
-      ]),
-    ).toEqual([actualIcon]);
-    expect(
-      visibleSampleNetworkMapIcons("TOWNSHIP", undefined, [actualIcon, anotherIcon]),
-    ).toEqual([actualIcon, anotherIcon]);
+  it.each(["PREFECTURE", "COUNTY", "TOWNSHIP", "VILLAGE"] as const)("gates icons by displayed map level %s even when a sample is selected", (level) => {
+    const points = [actualIcon, { ...actualIcon, samplePointId: "94000000-0000-0000-0000-000000000099" }];
+    const expected = level === "TOWNSHIP" || level === "VILLAGE" ? points : [];
+    expect(visibleSampleNetworkMapIcons(level, undefined, points)).toEqual(expected);
+    expect(visibleSampleNetworkMapIcons(level, actualIcon.samplePointId, points)).toEqual(expected);
   });
 
   it("does not reconstruct a filtered business icon from annual object kinds", () => {

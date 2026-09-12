@@ -160,7 +160,6 @@ describe("OverviewSamplePointPanel", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "地区样本总览" })).toBeVisible();
-    expect(screen.getByText("正式坐标生成，可点击")).toBeVisible();
     expect(screen.getByRole("heading", { name: "样本点列表" })).toBeVisible();
     expect(
       screen.queryByRole("heading", { name: "样本点业务信息" }),
@@ -200,8 +199,7 @@ describe("OverviewSamplePointPanel", () => {
     );
 
     expect(await screen.findByRole("button", { name: "产情类 1" })).toBeVisible();
-    expect(screen.getByText("地图汇总")).toBeVisible();
-    expect(screen.getByText("区县按乡镇唯一分桶，列表选择后定位")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "地区样本总览" })).toBeVisible();
     expect(await screen.findByText("同一跨产品样本点")).toBeVisible();
     expect(repository.icons.mock.calls.map(([request]) => request)).toContainEqual({
       productCode: "CORN",
@@ -305,9 +303,9 @@ describe("OverviewSamplePointPanel", () => {
     expect(screen.getByRole("button", { name: "产情类 0" })).toBeDisabled();
 
     await userEvent.click(screen.getByRole("button", { name: "市场类 3" }));
-    expect(await screen.findByText("当前条件：正式样本 3 · 地图图标 0")).toBeVisible();
+    expect(await screen.findByText("当前条件：正式样本 3 · 坐标样本 0")).toBeVisible();
     expect(
-      screen.getByText("系统契约异常：另有 3 条审核通过样本未生成地图图标"),
+      screen.getByText("系统契约异常：另有 3 条审核通过样本未生成坐标样本"),
     ).toBeVisible();
     expect(await screen.findByText("贸易商甲")).toBeVisible();
     expect(screen.getByText("贸易商乙")).toBeVisible();
@@ -973,7 +971,7 @@ describe("OverviewSamplePointPanel", () => {
     );
 
     await userEvent.click(await screen.findByRole("button", { name: "产情类 1" }));
-    expect(await screen.findByText("当前条件：正式样本 1 · 地图图标 1")).toBeVisible();
+    expect(await screen.findByText("当前条件：正式样本 1 · 坐标样本 1")).toBeVisible();
     await waitFor(() => {
       const layers = onIconsChange.mock.calls.at(-1)?.[0] ?? [];
       expect(
@@ -1019,6 +1017,37 @@ describe("OverviewSamplePointPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: "只看设计" }));
     expect(await screen.findByText("已登记 1 / 总数 2")).toBeVisible();
   });
+
+  it.each(["PREFECTURE", "COUNTY", "TOWNSHIP", "VILLAGE"] as const)(
+    "offers the historical population and list selection at %s level", async (level) => {
+      const historicalDetail = vi.fn().mockResolvedValue({
+        samplePointId: "retired-1", name: "历史农户", regionCode: "230202997001",
+        retiredAt: "2026-09-01T00:00:00Z", retirementYear: 2026,
+        retirementReason: "年度调整", roles: [], lastBusinessData: [],
+      });
+      const historicalIcons: OverviewSamplePointIcon[] = Array.from({ length: 31 }, (_, index) => ({
+        samplePointId: `retired-${index + 1}`, name: `历史农户 ${index + 1}`,
+        regionCode: "230202997001", iconKey: "farmer",
+        types: [{ code: "FARMER", name: "农户", iconKey: "farmer" }],
+        longitude: null, latitude: null, dataQualityReason: null,
+      }));
+      render(<PanelHarness onIconsChange={vi.fn()} year={2026}
+        region={{ code: "230202", name: "龙沙区", level, parentCode: "230200" }}
+        repository={{ ...repositoryStub(), historicalDetail }}
+        networkModel={{ ...designPointNetworkModel(), mode: "historical",
+          historicalState: "ready", historicalIcons }} />);
+      expect(screen.getByText("当前地区共 31 个历史样本点")).toBeVisible();
+      const list = screen.getByRole("list", { name: "历史样本点列表" });
+      expect(within(list).getAllByRole("listitem")).toHaveLength(30);
+      await userEvent.click(within(list).getAllByRole("button")[0]!);
+      await waitFor(() => expect(historicalDetail).toHaveBeenCalledWith({
+        samplePointId: "retired-1", regionCode: "230202", productCode: "CORN", year: 2026,
+      }));
+      await userEvent.click(screen.getByRole("button", { name: "下一页" }));
+      expect(within(list).getAllByRole("listitem")).toHaveLength(1);
+      expect(within(list).getByText("历史农户 31")).toBeVisible();
+    },
+  );
 
   it("keeps historical REVIEWED coordinates pending and disables the exact-location toggle", async () => {
     const repository = repositoryStub();

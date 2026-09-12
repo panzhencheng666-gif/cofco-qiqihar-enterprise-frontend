@@ -192,6 +192,12 @@ export class HttpOverviewRepository implements OverviewRepository {
   }
 
   private cached<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
+    const split = key.indexOf("?");
+    if (split >= 0) {
+      const params = new URLSearchParams(key.slice(split + 1));
+      params.sort();
+      key = `${key.slice(0, split)}?${params}`;
+    }
     const cached = this.cache.get(key) as CacheEntry<T> | undefined;
     if (cached && cached.expiresAt > Date.now()) return cached.promise;
 
@@ -200,6 +206,7 @@ export class HttpOverviewRepository implements OverviewRepository {
       if (current?.promise === promise) this.cache.delete(key);
       throw error;
     });
+    if (this.cache.size >= 128) this.cache.delete(this.cache.keys().next().value!);
     this.cache.set(key, { expiresAt: Date.now() + ttlMs, promise });
     return promise;
   }

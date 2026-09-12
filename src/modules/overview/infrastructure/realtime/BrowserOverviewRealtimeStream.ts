@@ -1,3 +1,4 @@
+import { BrowserOverviewMapRevisionMonitor } from "./BrowserOverviewMapRevisionMonitor";
 import type {
   OverviewBusinessChange,
   OverviewRealtimeCallbacks,
@@ -14,6 +15,9 @@ export class BrowserOverviewRealtimeStream implements OverviewRealtimeStream {
   subscribe(callbacks: OverviewRealtimeCallbacks) {
     let source: EventSource | undefined;
     let closed = false;
+    const stopMapRevision = new BrowserOverviewMapRevisionMonitor().subscribe(() =>
+      callbacks.onBusinessChange({ aggregateType: "OVERVIEW_MAP", regionCodes: [] }),
+    );
     const onBusinessChange = (event: Event) => {
       const change = parseBusinessChange(event);
       if (change) callbacks.onBusinessChange(change);
@@ -32,6 +36,7 @@ export class BrowserOverviewRealtimeStream implements OverviewRealtimeStream {
 
     return () => {
       closed = true;
+      stopMapRevision();
       source?.removeEventListener("business-change", onBusinessChange);
       source?.close();
     };
