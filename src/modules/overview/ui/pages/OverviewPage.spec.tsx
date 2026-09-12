@@ -1099,7 +1099,7 @@ describe("OverviewPage", () => {
     ).toBeVisible();
     expect(await screen.findByText("同一跨产品样本点")).toBeVisible();
     await waitFor(() =>
-      expect(icons.mock.calls.map(([request]) => request)).toContainEqual({
+      expect(list.mock.calls.map(([request]) => request)).toContainEqual({
         categoryCode: "PRODUCTION",
         productCode: "CORN",
         regionCode: "230200",
@@ -1108,7 +1108,7 @@ describe("OverviewPage", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: "农户 1" }));
     await waitFor(() =>
-      expect(icons.mock.calls.at(-1)?.[0]).toEqual({
+      expect(list.mock.calls.at(-1)?.[0]).toEqual({
         categoryCode: "PRODUCTION",
         productCode: "CORN",
         regionCode: "230200",
@@ -1296,13 +1296,7 @@ describe("OverviewPage", () => {
         year: 2025,
       }),
     );
-    await waitFor(() =>
-      expect(icons.mock.calls.map(([request]) => request)).toContainEqual({
-        productCode: "CORN",
-        regionCode: "230200",
-        year: 2025,
-      }),
-    );
+    expect(icons).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "产情类 1" })).toBeVisible();
   });
 
@@ -1716,12 +1710,7 @@ describe("OverviewPage", () => {
       regionCode: "230231",
       year: 2026,
     });
-    expect(icons.mock.calls.length).toBeGreaterThan(iconCalls);
-    expect(icons.mock.calls.at(-1)?.[0]).toEqual({
-      productCode: "SOYBEAN",
-      regionCode: "230231",
-      year: 2026,
-    });
+    expect(icons).toHaveBeenCalledTimes(iconCalls);
   });
 
   it("does not load or render the retired region hierarchy inside the drawer", async () => {

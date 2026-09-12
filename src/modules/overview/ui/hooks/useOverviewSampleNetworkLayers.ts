@@ -141,9 +141,7 @@ export function useOverviewSampleNetworkLayers({
   const filteredSnapshotScopeRef = useRef("");
   const canLoadComparison = Boolean(applicable && repository && productCode);
   const pointLevel = regionLevel === "TOWNSHIP" || regionLevel === "VILLAGE";
-  const canLoadCatalog = Boolean(
-    applicable && repository && productCode && regionCode && pointLevel,
-  );
+  const canLoadCatalog = Boolean(applicable && repository && productCode && regionCode);
   const canLoadHistorical = Boolean(
     applicable &&
     repository &&
@@ -433,17 +431,23 @@ export function useOverviewSampleNetworkLayers({
         controller.abort();
       };
     }
-    const readCatalog =
-      repository.mapCatalog?.bind(repository) ?? repository.snapshot?.bind(repository);
+    const readCatalog = pointLevel
+      ? (repository.mapCatalog?.bind(repository) ??
+        repository.snapshot?.bind(repository))
+      : undefined;
     const snapshotRequest = readCatalog
       ? readCatalog(
           { ...filters, ...(region?.name ? { regionName: region.name } : {}) },
           { signal: controller.signal },
         )
-      : Promise.all([
-          repository.list(filters, { signal: controller.signal }),
-          repository.icons(filters, { signal: controller.signal }),
-        ]).then(([list, icons]) => ({ icons, list }));
+      : pointLevel
+        ? Promise.all([
+            repository.list(filters, { signal: controller.signal }),
+            repository.icons(filters, { signal: controller.signal }),
+          ]).then(([list, icons]) => ({ icons, list }))
+        : repository
+            .list(filters, { signal: controller.signal })
+            .then((list) => ({ icons: [], list }));
     const refreshCatalog =
       !unfiltered &&
       (!sameCatalogScope || catalogRefreshSequenceRef.current !== refreshSequence);
@@ -499,6 +503,7 @@ export function useOverviewSampleNetworkLayers({
     filteredScopeKey,
     filteredRetrySequence,
     productCode,
+    pointLevel,
     requestQuery,
     refreshSequence,
     regionCode,
