@@ -140,7 +140,7 @@ export function useOverviewSampleNetworkLayers({
   const catalogRefreshSequenceRef = useRef<number | undefined>(undefined);
   const filteredSnapshotScopeRef = useRef("");
   const canLoadComparison = Boolean(applicable && repository && productCode);
-  const pointLevel = Boolean(regionLevel);
+  const pointLevel = regionLevel === "TOWNSHIP" || regionLevel === "VILLAGE";
   const canLoadCatalog = Boolean(
     applicable && repository && productCode && regionCode && pointLevel,
   );
