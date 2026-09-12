@@ -3010,13 +3010,13 @@ select:focus-visible {
   --command-map-tools-gap: 14px;
   --command-details-width: 540px;
   --command-details-offset: calc(var(--command-details-width) + 22px);
-  --command-stage-scale: min(1, calc(100vh / 1080px));
+  --command-stage-scale: 1;
   position: fixed;
   top: 0;
   left: 0;
-  width: calc(100vw / var(--command-stage-scale));
+  width: 100vw;
   min-width: 1280px;
-  height: calc(100vh / var(--command-stage-scale));
+  height: 100vh;
   min-height: 720px;
   overflow: hidden;
   color: #f3fbff;
@@ -3262,7 +3262,10 @@ select:focus-visible {
   transform: translate(-50%, -100%) scale(var(--overview-icon-scale, 1));
   transform-origin: 50% 100%;
 }
-.overview-sample-point-map-icon.is-layer-annual_actual::before {
+.overview-sample-point-map-icon:is(
+    .is-layer-annual_actual,
+    .is-layer-historical_actual
+  )::before {
   position: absolute;
   bottom: 0;
   left: 50%;
@@ -3278,17 +3281,26 @@ select:focus-visible {
   pointer-events: none;
   transform: translateX(-50%);
 }
-.overview-sample-point-map-icon.is-layer-annual_actual[data-glyph-placement="center"] {
+.overview-sample-point-map-icon:is(
+    .is-layer-annual_actual,
+    .is-layer-historical_actual
+  )[data-glyph-placement="center"] {
   align-items: center;
   transform: translate(-50%, -50%) scale(var(--overview-icon-scale, 1));
   transform-origin: 50% 50%;
 }
-.overview-sample-point-map-icon.is-layer-annual_actual[data-glyph-placement="center"]::before {
+.overview-sample-point-map-icon:is(
+    .is-layer-annual_actual,
+    .is-layer-historical_actual
+  )[data-glyph-placement="center"]::before {
   top: 50%;
   bottom: auto;
   transform: translate(-50%, -50%);
 }
-.overview-sample-point-map-icon.is-layer-annual_actual[data-glyph-positioning="inset-callout"]::before {
+.overview-sample-point-map-icon:is(
+    .is-layer-annual_actual,
+    .is-layer-historical_actual
+  )[data-glyph-positioning="inset-callout"]::before {
   content: none;
 }
 .overview-sample-point-map-exact-anchor {
@@ -3305,75 +3317,117 @@ select:focus-visible {
   pointer-events: none;
   transform: translate(-50%, -50%);
 }
-.overview-sample-point-map-icon.is-layer-annual_actual[data-glyph-placement="below"] {
+.overview-sample-point-map-icon:is(
+    .is-layer-annual_actual,
+    .is-layer-historical_actual
+  )[data-glyph-placement="below"] {
   align-items: flex-start;
   transform: translate(-50%, 0) scale(var(--overview-icon-scale, 1));
   transform-origin: 50% 0;
 }
-.overview-sample-point-map-icon.is-layer-annual_actual[data-glyph-placement="below"]::before {
+.overview-sample-point-map-icon:is(
+    .is-layer-annual_actual,
+    .is-layer-historical_actual
+  )[data-glyph-placement="below"]::before {
   top: 0;
   bottom: auto;
 }
-.overview-sample-point-map-icon.is-layer-annual_actual[data-glyph-placement="left"] {
+.overview-sample-point-map-icon:is(
+    .is-layer-annual_actual,
+    .is-layer-historical_actual
+  )[data-glyph-placement="left"] {
   align-items: center;
   transform: translate(-100%, -50%) scale(var(--overview-icon-scale, 1));
   transform-origin: 100% 50%;
 }
-.overview-sample-point-map-icon.is-layer-annual_actual[data-glyph-placement="left"]::before {
+.overview-sample-point-map-icon:is(
+    .is-layer-annual_actual,
+    .is-layer-historical_actual
+  )[data-glyph-placement="left"]::before {
   top: 50%;
   right: 0;
   bottom: auto;
   left: auto;
   transform: translateY(-50%);
 }
-.overview-sample-point-map-icon.is-layer-annual_actual[data-glyph-placement="right"] {
+.overview-sample-point-map-icon:is(
+    .is-layer-annual_actual,
+    .is-layer-historical_actual
+  )[data-glyph-placement="right"] {
   align-items: center;
   transform: translate(0, -50%) scale(var(--overview-icon-scale, 1));
   transform-origin: 0 50%;
 }
-.overview-sample-point-map-icon.is-layer-annual_actual[data-glyph-placement="right"]::before {
+.overview-sample-point-map-icon:is(
+    .is-layer-annual_actual,
+    .is-layer-historical_actual
+  )[data-glyph-placement="right"]::before {
   top: 50%;
   bottom: auto;
   left: 0;
   transform: translateY(-50%);
 }
-.overview-sample-point-map-icon.is-layer-annual_actual[data-glyph-placement="above-left"] {
+.overview-sample-point-map-icon:is(
+    .is-layer-annual_actual,
+    .is-layer-historical_actual
+  )[data-glyph-placement="above-left"] {
   transform: translate(-100%, -100%) scale(var(--overview-icon-scale, 1));
   transform-origin: 100% 100%;
 }
-.overview-sample-point-map-icon.is-layer-annual_actual[data-glyph-placement="above-left"]::before {
+.overview-sample-point-map-icon:is(
+    .is-layer-annual_actual,
+    .is-layer-historical_actual
+  )[data-glyph-placement="above-left"]::before {
   right: 0;
   bottom: 0;
   left: auto;
   transform: none;
 }
-.overview-sample-point-map-icon.is-layer-annual_actual[data-glyph-placement="above-right"] {
+.overview-sample-point-map-icon:is(
+    .is-layer-annual_actual,
+    .is-layer-historical_actual
+  )[data-glyph-placement="above-right"] {
   transform: translate(0, -100%) scale(var(--overview-icon-scale, 1));
   transform-origin: 0 100%;
 }
-.overview-sample-point-map-icon.is-layer-annual_actual[data-glyph-placement="above-right"]::before {
+.overview-sample-point-map-icon:is(
+    .is-layer-annual_actual,
+    .is-layer-historical_actual
+  )[data-glyph-placement="above-right"]::before {
   bottom: 0;
   left: 0;
   transform: none;
 }
-.overview-sample-point-map-icon.is-layer-annual_actual[data-glyph-placement="below-left"] {
+.overview-sample-point-map-icon:is(
+    .is-layer-annual_actual,
+    .is-layer-historical_actual
+  )[data-glyph-placement="below-left"] {
   align-items: flex-start;
   transform: translate(-100%, 0) scale(var(--overview-icon-scale, 1));
   transform-origin: 100% 0;
 }
-.overview-sample-point-map-icon.is-layer-annual_actual[data-glyph-placement="below-left"]::before {
+.overview-sample-point-map-icon:is(
+    .is-layer-annual_actual,
+    .is-layer-historical_actual
+  )[data-glyph-placement="below-left"]::before {
   top: 0;
   right: 0;
   bottom: auto;
   left: auto;
   transform: none;
 }
-.overview-sample-point-map-icon.is-layer-annual_actual[data-glyph-placement="below-right"] {
+.overview-sample-point-map-icon:is(
+    .is-layer-annual_actual,
+    .is-layer-historical_actual
+  )[data-glyph-placement="below-right"] {
   align-items: flex-start;
   transform: translate(0, 0) scale(var(--overview-icon-scale, 1));
   transform-origin: 0 0;
 }
-.overview-sample-point-map-icon.is-layer-annual_actual[data-glyph-placement="below-right"]::before {
+.overview-sample-point-map-icon:is(
+    .is-layer-annual_actual,
+    .is-layer-historical_actual
+  )[data-glyph-placement="below-right"]::before {
   top: 0;
   bottom: auto;
   left: 0;
@@ -3399,7 +3453,10 @@ select:focus-visible {
   height: 34px;
 }
 .overview-command-center.has-details
-  .overview-sample-point-map-icon.is-layer-annual_actual {
+  .overview-sample-point-map-icon:is(
+    .is-layer-annual_actual,
+    .is-layer-historical_actual
+  ) {
   min-width: 30px;
   height: 34px;
 }
@@ -3483,11 +3540,26 @@ select:focus-visible {
     rgb(13 88 139 / 98%) 50%
   );
 }
-.overview-sample-point-map-icon.is-layer-annual_actual,
-.overview-sample-point-map-icon.is-layer-annual_actual.is-domain-production,
-.overview-sample-point-map-icon.is-layer-annual_actual.is-domain-market,
-.overview-sample-point-map-icon.is-layer-annual_actual.is-domain-logistics,
-.overview-sample-point-map-icon.is-layer-annual_actual.is-domain-cross {
+.overview-sample-point-map-icon:is(
+  .is-layer-annual_actual,
+  .is-layer-historical_actual
+),
+.overview-sample-point-map-icon:is(
+    .is-layer-annual_actual,
+    .is-layer-historical_actual
+  ).is-domain-production,
+.overview-sample-point-map-icon:is(
+    .is-layer-annual_actual,
+    .is-layer-historical_actual
+  ).is-domain-market,
+.overview-sample-point-map-icon:is(
+    .is-layer-annual_actual,
+    .is-layer-historical_actual
+  ).is-domain-logistics,
+.overview-sample-point-map-icon:is(
+    .is-layer-annual_actual,
+    .is-layer-historical_actual
+  ).is-domain-cross {
   border: 0;
   border-radius: 0;
   color: inherit;

@@ -41,6 +41,7 @@ export interface OverviewSampleNetworkLayerModel {
   designPointState: SampleNetworkLoadState;
   designPointAggregates?: readonly OverviewSamplePointAggregate[];
   historicalIcons?: readonly OverviewSamplePointIcon[];
+  historicalAggregates?: readonly OverviewSamplePointAggregate[];
   historicalState?: SampleNetworkLoadState;
   actualIcons?: readonly OverviewSamplePointIcon[];
   filteredList?: OverviewSamplePointList;
@@ -69,6 +70,7 @@ const DESIGN_SAMPLE_PAGE_SIZE = 100;
 export function useOverviewSampleNetworkLayers({
   productCode,
   mapRegions,
+  mapParentCode,
   refreshSequence,
   region,
   repository,
@@ -76,6 +78,7 @@ export function useOverviewSampleNetworkLayers({
 }: {
   productCode: string;
   mapRegions?: readonly OverviewSampleNetworkRegion[];
+  mapParentCode?: string | undefined;
   refreshSequence: number;
   region: OverviewSampleNetworkRegion | undefined;
   repository: OverviewSamplePointRepository | undefined;
@@ -99,6 +102,9 @@ export function useOverviewSampleNetworkLayers({
   );
   const [historicalIcons, setHistoricalIcons] = useState<
     readonly OverviewSamplePointIcon[]
+  >([]);
+  const [historicalAggregates, setHistoricalAggregates] = useState<
+    readonly OverviewSamplePointAggregate[]
   >([]);
   const [historicalState, setHistoricalState] =
     useState<SampleNetworkLoadState>("idle");
@@ -134,13 +140,31 @@ export function useOverviewSampleNetworkLayers({
   const catalogRefreshSequenceRef = useRef<number | undefined>(undefined);
   const filteredSnapshotScopeRef = useRef("");
   const canLoadComparison = Boolean(applicable && repository && productCode);
+  const pointLevel = regionLevel === "TOWNSHIP" || regionLevel === "VILLAGE";
   const canLoadCatalog = Boolean(applicable && repository && productCode && regionCode);
   const canLoadHistorical = Boolean(
-    canLoadCatalog && repository?.historicalIcons && mode === "historical",
+    applicable &&
+    repository &&
+    productCode &&
+    mode === "historical" &&
+    (regionCode
+      ? typeof repository.historicalIcons === "function"
+      : typeof repository.historicalAggregates === "function"),
   );
   const canLoadDesignPoints = Boolean(
-    repository?.designPoints && repository.designPointDefinition && productCode,
+    repository?.designPoints &&
+    repository.designPointDefinition &&
+    productCode &&
+    regionCode &&
+    pointLevel,
   );
+
+  const previousRefresh = useRef(refreshSequence);
+  useEffect(() => {
+    if (previousRefresh.current !== refreshSequence)
+      repository?.invalidateFormalCatalog?.();
+    previousRefresh.current = refreshSequence;
+  }, [refreshSequence, repository]);
 
   useEffect(() => {
     let active = true;
@@ -159,7 +183,7 @@ export function useOverviewSampleNetworkLayers({
         active = false;
       };
     }
-    loadDesignSamplePoints(repository, productCode)
+    loadDesignSamplePoints(repository, productCode, regionCode?.slice(0, 6))
       .then((next) => {
         if (!active) return;
         setDesignPoints(next);
@@ -174,7 +198,7 @@ export function useOverviewSampleNetworkLayers({
     return () => {
       active = false;
     };
-  }, [canLoadDesignPoints, productCode, refreshSequence, repository]);
+  }, [canLoadDesignPoints, productCode, regionCode, refreshSequence, repository]);
 
   const setCategoryCode = useCallback(
     (next: OverviewSamplePointCategoryCode | undefined) => {
@@ -300,43 +324,52 @@ export function useOverviewSampleNetworkLayers({
   );
 
   useEffect(() => {
-    repository?.invalidateFormalCatalog?.();
-  }, [refreshSequence, repository]);
-
-  useEffect(() => {
     let active = true;
     const controller = new AbortController();
     void Promise.resolve().then(() => {
       if (!active) return;
       setHistoricalState(canLoadHistorical ? "loading" : "idle");
       setHistoricalIssue(undefined);
-      if (!canLoadHistorical) setHistoricalIcons([]);
+      setHistoricalIcons([]);
+      setHistoricalAggregates([]);
     });
-    if (
-      !canLoadHistorical ||
-      !repository?.historicalIcons ||
-      year === undefined ||
-      !regionCode
-    ) {
+    if (!canLoadHistorical || !repository || year === undefined) {
       return () => {
         active = false;
         controller.abort();
       };
     }
-    repository
-      .historicalIcons(
+    Promise.all([
+      regionCode && repository.historicalIcons
+        ? repository.historicalIcons(
+            {
+              productCode,
+              regionCode,
+              year,
+              ...(categoryCode ? { categoryCode } : {}),
+              ...(typeCode ? { typeCode } : {}),
+              ...(requestQuery.trim() ? { query: requestQuery.trim() } : {}),
+            },
+            { signal: controller.signal },
+          )
+        : Promise.resolve([]),
+      repository.historicalAggregates?.(
         {
           productCode,
-          regionCode,
           year,
+          ...(mapParentCode ? { parentCode: mapParentCode } : {}),
           ...(categoryCode ? { categoryCode } : {}),
           ...(typeCode ? { typeCode } : {}),
           ...(requestQuery.trim() ? { query: requestQuery.trim() } : {}),
         },
         { signal: controller.signal },
-      )
-      .then((next) => {
+      ) ?? Promise.resolve([]),
+    ])
+      .then(([next, aggregates]) => {
         if (!active) return;
+        setHistoricalAggregates(
+          aggregates.map((aggregate) => ({ ...aggregate, sampleKind: "HISTORICAL" })),
+        );
         setHistoricalIcons(
           next.map((icon) => ({ ...icon, layerType: "HISTORICAL_ACTUAL" })),
         );
@@ -354,6 +387,7 @@ export function useOverviewSampleNetworkLayers({
     };
   }, [
     canLoadHistorical,
+    mapParentCode,
     categoryCode,
     productCode,
     refreshSequence,
@@ -397,15 +431,23 @@ export function useOverviewSampleNetworkLayers({
         controller.abort();
       };
     }
-    const snapshotRequest = repository.snapshot
-      ? repository.snapshot(
+    const readCatalog = pointLevel
+      ? (repository.mapCatalog?.bind(repository) ??
+        repository.snapshot?.bind(repository))
+      : undefined;
+    const snapshotRequest = readCatalog
+      ? readCatalog(
           { ...filters, ...(region?.name ? { regionName: region.name } : {}) },
           { signal: controller.signal },
         )
-      : Promise.all([
-          repository.list(filters, { signal: controller.signal }),
-          repository.icons(filters, { signal: controller.signal }),
-        ]).then(([list, icons]) => ({ icons, list }));
+      : pointLevel
+        ? Promise.all([
+            repository.list(filters, { signal: controller.signal }),
+            repository.icons(filters, { signal: controller.signal }),
+          ]).then(([list, icons]) => ({ icons, list }))
+        : repository
+            .list(filters, { signal: controller.signal })
+            .then((list) => ({ icons: [], list }));
     const refreshCatalog =
       !unfiltered &&
       (!sameCatalogScope || catalogRefreshSequenceRef.current !== refreshSequence);
@@ -416,10 +458,10 @@ export function useOverviewSampleNetworkLayers({
       ...(region?.name ? { regionName: region.name } : {}),
     };
     const catalogRequest = refreshCatalog
-      ? repository.snapshot
-        ? repository
-            .snapshot(catalogFilters, { signal: controller.signal })
-            .then(({ list }) => list)
+      ? readCatalog
+        ? readCatalog(catalogFilters, { signal: controller.signal }).then(
+            ({ list }) => list,
+          )
         : repository.list(catalogFilters, { signal: controller.signal })
       : Promise.resolve(undefined);
     Promise.all([snapshotRequest, catalogRequest])
@@ -461,6 +503,7 @@ export function useOverviewSampleNetworkLayers({
     filteredScopeKey,
     filteredRetrySequence,
     productCode,
+    pointLevel,
     requestQuery,
     refreshSequence,
     regionCode,
@@ -487,8 +530,9 @@ export function useOverviewSampleNetworkLayers({
     [designPoints, region],
   );
   const designPointAggregates = useMemo(
-    () => designPointRegionAggregates(designPoints, mapRegions ?? []),
-    [designPoints, mapRegions],
+    () =>
+      pointLevel ? designPointRegionAggregates(designPoints, mapRegions ?? []) : [],
+    [designPoints, mapRegions, pointLevel],
   );
 
   const icons = useMemo(() => {
@@ -544,6 +588,7 @@ export function useOverviewSampleNetworkLayers({
     designPointAggregates,
     designPointState,
     historicalIcons,
+    historicalAggregates,
     historicalState,
     ...(filteredList ? { filteredList } : {}),
     filteredState,
@@ -579,12 +624,33 @@ function designPointLoadIssue(failure: unknown): string {
 async function loadDesignSamplePoints(
   repository: OverviewSamplePointRepository,
   productCode: string,
+  regionCode?: string,
 ): Promise<readonly OverviewDesignSamplePoint[]> {
   if (!repository.designPoints || !repository.designPointDefinition) return [];
+  if (repository.designMapCatalog) {
+    const records = await repository.designMapCatalog({
+      productCode,
+      ...(regionCode ? { regionCode } : {}),
+    });
+    return records.map((record) => ({
+      ...record,
+      domainLabel:
+        (
+          { PRODUCTION: "产情", MARKET: "市场", LOGISTICS: "物流" } as Record<
+            string,
+            string
+          >
+        )[record.context.domainCode] ?? "样本",
+      productLabel: record.context.productCode,
+      objectTypeLabel: "设计样本",
+      businessValues: [],
+    }));
+  }
   const first = await repository.designPoints({
     page: 0,
     pageSize: DESIGN_SAMPLE_PAGE_SIZE,
     productCode,
+    ...(regionCode ? { regionCode } : {}),
   });
   const records = [...first.items];
   for (let page = 1; page < first.totalPages; page += 1) {
@@ -592,33 +658,32 @@ async function loadDesignSamplePoints(
       page,
       pageSize: DESIGN_SAMPLE_PAGE_SIZE,
       productCode,
+      ...(regionCode ? { regionCode } : {}),
     });
     records.push(...next.items);
   }
   const uniqueRecords = [
     ...new Map(records.map((record) => [record.id, record] as const)).values(),
   ];
-  const contexts = new Map(
-    uniqueRecords.map((record) => [contextKey(record), record.context] as const),
-  );
-  const definitions = new Map(
-    await Promise.all(
-      [...contexts].map(
-        async ([key, context]) =>
-          [key, await repository.designPointDefinition!(context)] as const,
-      ),
-    ),
-  );
-  return uniqueRecords.map((record) => {
-    const definition = definitions.get(contextKey(record));
-    if (!definition || definition.contractDigest !== record.contractDigest) {
-      throw new Error("Design sample point metadata mismatch");
-    }
-    return presentDesignSamplePoint(record, definition);
-  });
+  return uniqueRecords.map((record) => ({
+    ...record,
+    domainLabel:
+      (
+        { PRODUCTION: "产情", MARKET: "市场", LOGISTICS: "物流" } as Record<
+          string,
+          string
+        >
+      )[record.context.domainCode] ?? "样本",
+    productLabel:
+      ({ CORN: "玉米", SOYBEAN: "大豆", RICE: "稻谷" } as Record<string, string>)[
+        record.context.productCode
+      ] ?? "",
+    objectTypeLabel: "设计样本",
+    businessValues: [],
+  }));
 }
 
-function presentDesignSamplePoint(
+export function presentDesignSamplePoint(
   record: OverviewDesignSamplePointRecord,
   definition: Awaited<
     ReturnType<NonNullable<OverviewSamplePointRepository["designPointDefinition"]>>
@@ -654,10 +719,6 @@ function presentDesignSamplePoint(
       ];
     }),
   };
-}
-
-function contextKey({ context }: Pick<OverviewDesignSamplePointRecord, "context">) {
-  return `${context.domainCode}:${context.productCode}:${context.objectTypeCode}`;
 }
 
 function designSampleValueLabel(value: unknown) {

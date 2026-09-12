@@ -98,32 +98,43 @@ export class FetchHttpClient implements HttpClient {
     schema: ZodType<T>,
     options?: HttpRequestOptions,
   ): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      method,
-      credentials: "same-origin",
-      headers: {
-        Accept: "application/json",
-        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-        ...csrfHeaders(method, this.cookieSource()),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      ...(options?.signal ? { signal: options.signal } : {}),
-    });
-    if (!response.ok) {
-      throw new HttpError(response.status, `请求失败：${response.status}`);
-    }
-    const payload = (await response.json()) as unknown;
-    const parsed = schema.safeParse(payload);
-    if (!parsed.success) {
-      throw new HttpContractError({
-        endpoint: path,
-        expectedContractVersion: schema.description ?? "declared-response-contract",
-        receivedContractVersion: contractVersionFrom(payload),
-        traceId: response.headers.get("X-Trace-Id"),
-        cause: parsed.error,
+    const controller = new AbortController();
+    const cancel = () => controller.abort();
+    if (options?.signal?.aborted) cancel();
+    else options?.signal?.addEventListener("abort", cancel, { once: true });
+    const deadline = setTimeout(cancel, 15_000);
+    try {
+      const response = await fetch(`${this.baseUrl}${path}`, {
+        method,
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+          ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+          ...csrfHeaders(method, this.cookieSource()),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        signal: controller.signal,
+        ...(method === "GET" ? { cache: "no-store" as const } : {}),
       });
+      if (!response.ok) {
+        throw new HttpError(response.status, `请求失败：${response.status}`);
+      }
+      const payload = (await response.json()) as unknown;
+      const parsed = schema.safeParse(payload);
+      if (!parsed.success) {
+        throw new HttpContractError({
+          endpoint: path,
+          expectedContractVersion: schema.description ?? "declared-response-contract",
+          receivedContractVersion: contractVersionFrom(payload),
+          traceId: response.headers.get("X-Trace-Id"),
+          cause: parsed.error,
+        });
+      }
+      return parsed.data;
+    } finally {
+      clearTimeout(deadline);
+      options?.signal?.removeEventListener("abort", cancel);
     }
-    return parsed.data;
   }
 }
 

@@ -647,6 +647,7 @@ export function OverviewPage({
     refreshSequence: samplePointSequence,
     region: sampleNetworkRegion,
     mapRegions: visibleRegions,
+    mapParentCode: parentCode,
     repository: activeSamplePointRepository,
     year,
   });
@@ -663,32 +664,37 @@ export function OverviewPage({
   const visibleSamplePointAggregates =
     sampleNetworkModel.mode === "design"
       ? (sampleNetworkModel.designPointAggregates ?? [])
-      : actualSamplePointAggregates;
+      : sampleNetworkModel.mode === "historical"
+        ? (sampleNetworkModel.historicalAggregates ?? [])
+        : actualSamplePointAggregates;
   const visibleSamplePointAggregateStatus =
     sampleNetworkModel.mode === "design"
-      ? sampleNetworkModel.designPointState === "ready"
-        ? "ready"
-        : sampleNetworkModel.designPointState === "unavailable"
-          ? "unavailable"
-          : "loading"
-      : showAggregateLayer
-        ? samplePointAggregateStatus
-        : "hidden";
+      ? sampleNetworkModel.designPointState === "idle"
+        ? "hidden"
+        : sampleNetworkModel.designPointState === "ready"
+          ? "ready"
+          : sampleNetworkModel.designPointState === "unavailable"
+            ? "unavailable"
+            : "loading"
+      : sampleNetworkModel.mode === "historical"
+        ? sampleNetworkModel.historicalState === "ready"
+          ? "ready"
+          : sampleNetworkModel.historicalState === "unavailable"
+            ? "unavailable"
+            : "loading"
+        : showAggregateLayer
+          ? samplePointAggregateStatus
+          : "hidden";
   const visibleSampleNetworkIcons = useMemo(
     () =>
       sampleMode
         ? visibleSampleNetworkMapIcons(
-            sampleNetworkRegion?.level,
+            visibleRegions[0]?.level,
             selectedSamplePointId,
             sampleNetworkModel.icons,
           )
         : [],
-    [
-      sampleMode,
-      sampleNetworkModel.icons,
-      sampleNetworkRegion?.level,
-      selectedSamplePointId,
-    ],
+    [sampleMode, sampleNetworkModel.icons, visibleRegions, selectedSamplePointId],
   );
 
   const regionalDataRegionCode =

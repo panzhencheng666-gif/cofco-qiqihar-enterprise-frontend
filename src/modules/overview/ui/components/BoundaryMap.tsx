@@ -59,10 +59,11 @@ export function BoundaryMap({
 }) {
   const [webGlEnabled, setWebGlEnabled] = useState(canRenderWebGlMap);
   const [fallbackReason, setFallbackReason] = useState("");
-  const sceneRevision = useMemo(
-    () => ({ backdrop, features, points }),
+  const sceneRevisionKey = useMemo(
+    () => JSON.stringify({ backdrop, features, points }),
     [backdrop, features, points],
   );
+  const sceneRevision = useMemo(() => ({ key: sceneRevisionKey }), [sceneRevisionKey]);
   const [readySceneRevision, setReadySceneRevision] = useState<object>();
   const sceneReady = readySceneRevision === sceneRevision;
   const activateFallback = useCallback((reason: string) => {

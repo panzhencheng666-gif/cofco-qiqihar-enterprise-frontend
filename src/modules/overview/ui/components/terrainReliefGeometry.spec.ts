@@ -68,6 +68,11 @@ function polygonFeature(
 }
 
 describe("projectReliefScene", () => {
+  it("fits the full map inside a narrow stage", () => {
+    const frame = overviewReliefFrame(false, 1280);
+    expect(frame.x + frame.width).toBeLessThanOrEqual(1180);
+    expect(frame.width).toBeGreaterThan(0);
+  });
   it("keeps a parent-direct sample bucket attached to a stable backdrop label", () => {
     const backdrop = polygonFeature(
       "230200",

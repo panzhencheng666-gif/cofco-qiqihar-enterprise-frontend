@@ -27,15 +27,11 @@ export interface SampleNetworkLayerContext {
 
 export function visibleSampleNetworkMapIcons(
   regionLevel: RegionLevel | undefined,
-  selectedSamplePointId: string | undefined,
+  _selectedSamplePointId: string | undefined,
   icons: readonly OverviewSamplePointIcon[],
 ): readonly OverviewSamplePointIcon[] {
   if (regionLevel === "TOWNSHIP" || regionLevel === "VILLAGE") return icons;
-  return icons.filter(
-    (icon) =>
-      (icon.layerType ?? "ANNUAL_ACTUAL") !== "ANNUAL_ACTUAL" ||
-      icon.samplePointId === selectedSamplePointId,
-  );
+  return [];
 }
 
 export function sampleNetworkLayerIcons(

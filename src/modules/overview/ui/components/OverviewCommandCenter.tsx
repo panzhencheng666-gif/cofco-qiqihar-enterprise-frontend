@@ -1,5 +1,5 @@
 import type { SampleNetworkLayerMode } from "../../domain/overviewSamplePoint";
-import type { ReactNode } from "react";
+import { useLayoutEffect, useState, type ReactNode, type CSSProperties } from "react";
 
 import type {
   OverviewDashboardMetric,
@@ -66,6 +66,26 @@ export function OverviewCommandCenter({
   selectedRegion?: OverviewRegion;
   selectionPoint?: OverviewMapSelectionPoint;
 }) {
+  const [viewport, setViewport] = useState(() => ({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  }));
+  useLayoutEffect(() => {
+    const resize = () =>
+      setViewport({ width: window.innerWidth, height: window.innerHeight });
+    window.addEventListener("resize", resize);
+    resize();
+    return () => window.removeEventListener("resize", resize);
+  }, []);
+  const compactViewport = viewport.width <= 800;
+  const stageScale = compactViewport
+    ? 1
+    : Math.min(1, viewport.height / 1080, viewport.width / 1280);
+  const stageStyle = {
+    "--command-stage-scale": stageScale,
+    width: compactViewport ? viewport.width : viewport.width / stageScale,
+    height: compactViewport ? viewport.height : viewport.height / stageScale,
+  } as CSSProperties;
   const showBusinessMetrics = !sampleMode || sampleNetworkMode === "actual";
   const metricByCode = new Map(dashboard?.metrics.map((item) => [item.code, item]));
   const overtureBoundary = boundarySource?.name.includes("Overture") ?? false;
@@ -107,6 +127,7 @@ export function OverviewCommandCenter({
 
   return (
     <main
+      style={stageStyle}
       className={`overview-command-center${selectedRegion || selectedSamplePoint ? " has-details" : ""}${sideDataPanel ? " has-side-data-panel" : ""}${!showBusinessMetrics ? " without-business-kpis" : ""}`}
     >
       <h2 className="overview-sr-only">粮食商情总览</h2>

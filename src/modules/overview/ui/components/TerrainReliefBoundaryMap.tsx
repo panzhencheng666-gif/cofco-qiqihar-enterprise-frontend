@@ -102,7 +102,11 @@ export const samplePointIconPathData: Readonly<Record<string, string>> = {
 };
 
 function commandStageWidth() {
-  const scale = Math.min(1, window.innerHeight / STAGE_HEIGHT);
+  const scale = Math.min(
+    1,
+    window.innerHeight / STAGE_HEIGHT,
+    window.innerWidth / 1280,
+  );
   return Math.max(1280, window.innerWidth / Math.max(scale, 0.001));
 }
 
@@ -228,7 +232,21 @@ export default function TerrainReliefBoundaryMap({
   const [stageWidth, setStageWidth] = useState(commandStageWidth);
   const renderedStageWidth = Math.max(STAGE_WIDTH, Math.ceil(stageWidth));
   const wideStageOffset = overviewWideStageOffset(renderedStageWidth);
-  const fullMapFrame = useMemo(() => overviewReliefFrame(false), []);
+  const terrainSourceKey = useMemo(
+    () => JSON.stringify({ backdrop, features, points }),
+    [backdrop, features, points],
+  );
+  const terrainSource = useMemo(
+    () => ({ backdrop, features, points }),
+    // The serialized key represents the complete scene input and prevents a
+    // renderer rebuild when React supplies equivalent arrays on selection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [terrainSourceKey],
+  );
+  const fullMapFrame = useMemo(
+    () => overviewReliefFrame(false, stageWidth),
+    [stageWidth],
+  );
   const detailMapFrame = useMemo(
     () => overviewReliefFrame(true, stageWidth),
     [stageWidth],
@@ -236,16 +254,16 @@ export default function TerrainReliefBoundaryMap({
   const terrainProjectionResult = useMemo(() => {
     const startedAt = window.performance.now();
     const projection = projectReliefScene({
-      ...(backdrop ? { backdrop } : {}),
-      features,
+      ...(terrainSource.backdrop ? { backdrop: terrainSource.backdrop } : {}),
+      features: terrainSource.features,
       frame: fullMapFrame,
-      points,
+      points: terrainSource.points,
     });
     return {
       duration: window.performance.now() - startedAt,
       projection,
     };
-  }, [backdrop, features, fullMapFrame, points]);
+  }, [fullMapFrame, terrainSource]);
   const terrainProjection = terrainProjectionResult.projection;
   const sceneProjectionResult = useMemo(() => {
     if (!samplePointAggregates.length && !samplePointIcons.length) {
@@ -1353,7 +1371,7 @@ function reliefRegionLabel({
   return `${region.name}，已核定 ${region.approvedRecordCount} 个样本点，${action}`;
 }
 
-function SamplePointMapSymbol({
+export function SamplePointMapSymbol({
   aggregateCount,
   iconKey,
   layerType,
@@ -1364,7 +1382,12 @@ function SamplePointMapSymbol({
   layerType?: OverviewSamplePointIcon["layerType"];
   roles?: OverviewSamplePointIcon["roles"];
 }) {
-  if ((!layerType || layerType === "ANNUAL_ACTUAL") && roles?.length) {
+  if (
+    (!layerType ||
+      layerType === "ANNUAL_ACTUAL" ||
+      layerType === "HISTORICAL_ACTUAL") &&
+    roles?.length
+  ) {
     return (
       <>
         <span className="overview-sample-point-role-icons">

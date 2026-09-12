@@ -48,6 +48,9 @@ export function useOverviewRealtimeRefresh(
   }, [regionKey, selection.productCode, selection.year]);
 
   useEffect(() => {
+    let disconnected = false;
+    const available = () =>
+      navigator.onLine !== false && document.visibilityState !== "hidden";
     let fallbackTimer: number | undefined;
     let refreshTimer: number | undefined;
     let pendingBusinessRefresh = false;
@@ -56,6 +59,7 @@ export function useOverviewRealtimeRefresh(
     let pendingOptionRefresh = false;
     const flushRefresh = () => {
       refreshTimer = undefined;
+      if (!available()) return;
       const refreshBusiness = pendingBusinessRefresh;
       const refreshGeography = pendingGeographyRefresh;
       const refreshSamplePoints = pendingSamplePointRefresh;
@@ -84,13 +88,30 @@ export function useOverviewRealtimeRefresh(
       pendingGeographyRefresh ||= geography;
       pendingSamplePointRefresh ||= samplePoints;
       pendingOptionRefresh ||= options;
-      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+      // A bounded coalescing window: continuous traffic must not postpone refresh forever.
+      if (!available() || refreshTimer !== undefined) return;
+      if (!(
+        pendingBusinessRefresh ||
+        pendingGeographyRefresh ||
+        pendingSamplePointRefresh ||
+        pendingOptionRefresh
+      ))
+        return;
       refreshTimer = window.setTimeout(flushRefresh, REALTIME_REFRESH_DEBOUNCE_MS);
     };
     const refreshAll = () => {
-      scheduleRefresh({ business: true, samplePoints: true, options: true });
+      scheduleRefresh({
+        business: true,
+        geography: true,
+        samplePoints: true,
+        options: true,
+      });
     };
     const refreshChange = (change: OverviewBusinessChange) => {
+      if (change.aggregateType === "OVERVIEW_MAP") {
+        scheduleRefresh({ geography: true, samplePoints: true });
+        return;
+      }
       if (
         change.aggregateType === "DESIGN_COORDINATE_DATASET" &&
         change.actionCode === "LEGACY_VILLAGE_DESIGN_COORDINATES_DELETED"
@@ -151,18 +172,40 @@ export function useOverviewRealtimeRefresh(
       fallbackTimer = undefined;
     };
     const startFallback = () => {
-      if (fallbackTimer !== undefined) return;
+      if (!available() || fallbackTimer !== undefined) return;
       fallbackTimer = window.setInterval(refreshAll, fallbackPollIntervalMs);
     };
+    const availabilityChanged = () => {
+      if (!available()) {
+        stopFallback();
+        if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+        refreshTimer = undefined;
+        return;
+      }
+      if (disconnected) {
+        refreshAll();
+        startFallback();
+      } else scheduleRefresh({}); // Flush retained events once, including a hidden reconnect.
+    };
+    document.addEventListener("visibilitychange", availabilityChanged);
+    window.addEventListener("online", availabilityChanged);
+    window.addEventListener("offline", availabilityChanged);
     const unsubscribe = stream.subscribe({
       onBusinessChange: refreshChange,
       onConnected: () => {
         stopFallback();
-        refreshAll();
+        if (disconnected) refreshAll();
+        disconnected = false;
       },
-      onDisconnected: startFallback,
+      onDisconnected: () => {
+        disconnected = true;
+        startFallback();
+      },
     });
     return () => {
+      document.removeEventListener("visibilitychange", availabilityChanged);
+      window.removeEventListener("online", availabilityChanged);
+      window.removeEventListener("offline", availabilityChanged);
       stopFallback();
       if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
       unsubscribe();

@@ -4,6 +4,7 @@ import type {
   OverviewSamplePointDetail,
   OverviewHistoricalSamplePointDetail,
   OverviewDesignSamplePointPage,
+  OverviewDesignSamplePointRecord,
   OverviewSamplePointIcon,
   OverviewSamplePointList,
   SampleNetworkComparison,
@@ -21,6 +22,7 @@ export interface OverviewSamplePointRequestOptions {
 
 export interface OverviewSamplePointRepository {
   invalidateFormalCatalog?(): void;
+  designPoint?(id: string): Promise<OverviewDesignSamplePointRecord>;
   designPoints?(query: {
     page: number;
     pageSize: number;
@@ -69,6 +71,17 @@ export interface OverviewSamplePointRepository {
     },
     options?: OverviewSamplePointRequestOptions,
   ): Promise<readonly OverviewSamplePointIcon[]>;
+  historicalAggregates?(
+    query: {
+      parentCode?: string;
+      productCode: string;
+      year: number;
+      categoryCode?: OverviewSamplePointCategoryCode;
+      typeCode?: string;
+      query?: string;
+    },
+    options?: OverviewSamplePointRequestOptions,
+  ): Promise<readonly OverviewSamplePointAggregate[]>;
   historicalIcons?(
     query: {
       regionCode: string;
@@ -80,6 +93,11 @@ export interface OverviewSamplePointRepository {
     },
     options?: OverviewSamplePointRequestOptions,
   ): Promise<readonly OverviewSamplePointIcon[]>;
+  mapCatalog?: NonNullable<OverviewSamplePointRepository["snapshot"]>;
+  designMapCatalog?(query: {
+    regionCode?: string;
+    productCode: string;
+  }): Promise<readonly OverviewDesignSamplePointRecord[]>;
   snapshot?(
     query: {
       regionCode: string;

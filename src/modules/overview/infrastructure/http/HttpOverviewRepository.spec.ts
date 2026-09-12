@@ -276,7 +276,7 @@ describe("HttpOverviewRepository request cache", () => {
       repository.regions(query),
       repository.regions(query),
     ]);
-    const third = await repository.regions(query);
+    const third = await repository.regions({ year: 2026, productCode: "CORN" });
 
     expect(get).toHaveBeenCalledTimes(1);
     expect(second).toBe(first);

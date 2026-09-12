@@ -5,7 +5,10 @@ import type { OverviewSamplePointRepository } from "../../application/ports/Over
 import type { DesignSampleFieldContract } from "../../../design-sample/domain/designSampleFieldContract";
 import type { SampleNetworkComparison } from "../../domain/overviewSamplePoint";
 import { HttpError } from "../../../../shared/api/HttpClient";
-import { useOverviewSampleNetworkLayers } from "./useOverviewSampleNetworkLayers";
+import {
+  useOverviewSampleNetworkLayers,
+  presentDesignSamplePoint,
+} from "./useOverviewSampleNetworkLayers";
 
 const comparison: SampleNetworkComparison = {
   networkYear: 2026,
@@ -61,16 +64,32 @@ describe("useOverviewSampleNetworkLayers", () => {
         },
       ]),
     );
+    const historicalAggregates = vi.fn().mockResolvedValue([
+      {
+        regionCode: "230281",
+        regionName: "讷河市",
+        regionLevel: "COUNTY",
+        samplePointCount: 1,
+        productionCount: 1,
+        marketCount: 0,
+        logisticsCount: 0,
+        validCoordinateCount: 1,
+        dataQualityIssueCount: 0,
+        correctionSourceCount: 0,
+        unresolvedSourceCount: 0,
+      },
+    ]);
     const repository = {
       ...repositoryWithSnapshot(),
       historicalIcons,
+      historicalAggregates,
     } as unknown as OverviewSamplePointRepository;
     let refreshSequence = 0;
     const { result, rerender } = renderHook(() =>
       useOverviewSampleNetworkLayers({
         productCode: "CORN",
         refreshSequence,
-        region: { code: "230281", level: "COUNTY", name: "讷河市" },
+        region: { code: "230281", level: "TOWNSHIP", name: "讷河市" },
         repository,
         year: 2026,
       }),
@@ -86,6 +105,11 @@ describe("useOverviewSampleNetworkLayers", () => {
     });
     expect(historicalIcons.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
     expect(result.current.icons.map(({ name }) => name)).toEqual(["已淘汰样本"]);
+    expect(historicalAggregates.mock.calls[0]?.[0]).toEqual({
+      productCode: "CORN",
+      year: 2026,
+    });
+    expect(result.current.historicalAggregates?.[0]?.samplePointCount).toBe(1);
     expect(result.current.actualIcons?.map(({ name }) => name)).not.toContain(
       "已淘汰样本",
     );
@@ -120,7 +144,7 @@ describe("useOverviewSampleNetworkLayers", () => {
           useOverviewSampleNetworkLayers({
             productCode: "CORN",
             refreshSequence,
-            region: { code: "230200", level: "PREFECTURE", name: "齐齐哈尔市" },
+            region: { code: "230200", level: "TOWNSHIP", name: "齐齐哈尔市" },
             repository,
             year: 2026,
           }),
@@ -149,7 +173,7 @@ describe("useOverviewSampleNetworkLayers", () => {
       useOverviewSampleNetworkLayers({
         productCode: "CORN",
         refreshSequence: 0,
-        region: { code: "230281", level: "COUNTY", name: "讷河市" },
+        region: { code: "230281", level: "TOWNSHIP", name: "讷河市" },
         repository,
         year: 2026,
       }),
@@ -207,7 +231,7 @@ describe("useOverviewSampleNetworkLayers", () => {
       useOverviewSampleNetworkLayers({
         productCode: "CORN",
         refreshSequence: 0,
-        region: { code: "230281", level: "COUNTY", name: "讷河市" },
+        region: { code: "230281", level: "TOWNSHIP", name: "讷河市" },
         repository,
         year: 2026,
       }),
@@ -253,7 +277,7 @@ describe("useOverviewSampleNetworkLayers", () => {
         useOverviewSampleNetworkLayers({
           productCode: scope.productCode,
           refreshSequence: 0,
-          region: { code: scope.regionCode, level: "COUNTY", name: "测试地区" },
+          region: { code: scope.regionCode, level: "TOWNSHIP", name: "测试地区" },
           repository,
           year: scope.year,
         }),
@@ -326,7 +350,7 @@ describe("useOverviewSampleNetworkLayers", () => {
       useOverviewSampleNetworkLayers({
         productCode: "CORN",
         refreshSequence,
-        region: { code: "230281", level: "COUNTY", name: "讷河市" },
+        region: { code: "230281", level: "TOWNSHIP", name: "讷河市" },
         repository,
         year: 2026,
       }),
@@ -341,7 +365,7 @@ describe("useOverviewSampleNetworkLayers", () => {
       approvedSubmissionSamplePointCount: 1,
     });
     expect(repository.snapshot).toHaveBeenCalledTimes(1);
-    expect(repository.invalidateFormalCatalog).toHaveBeenCalledTimes(1);
+    expect(repository.invalidateFormalCatalog).not.toHaveBeenCalled();
     expect(repository.list).not.toHaveBeenCalled();
     expect(repository.icons).not.toHaveBeenCalled();
 
@@ -352,7 +376,7 @@ describe("useOverviewSampleNetworkLayers", () => {
     });
 
     await waitFor(() => expect(result.current.filteredState).toBe("loading"));
-    expect(repository.invalidateFormalCatalog).toHaveBeenCalledTimes(2);
+    expect(repository.invalidateFormalCatalog).toHaveBeenCalledTimes(1);
     expect(result.current.catalog).toEqual(list);
     expect(result.current.actualIcons).toEqual([icon]);
     expect(result.current.comparison).toMatchObject({
@@ -390,7 +414,7 @@ describe("useOverviewSampleNetworkLayers", () => {
       useOverviewSampleNetworkLayers({
         productCode: "CORN",
         refreshSequence: 0,
-        region: { code: "230281", level: "COUNTY", name: "讷河市" },
+        region: { code: "230281", level: "TOWNSHIP", name: "讷河市" },
         repository,
         year: 2026,
       }),
@@ -441,7 +465,7 @@ describe("useOverviewSampleNetworkLayers", () => {
       useOverviewSampleNetworkLayers({
         productCode: "RICE",
         refreshSequence: 0,
-        region: { code: "230200", level: "PREFECTURE", name: "齐齐哈尔市" },
+        region: { code: "230200", level: "TOWNSHIP", name: "齐齐哈尔市" },
         repository,
         year: 2025,
       }),
@@ -493,7 +517,7 @@ describe("useOverviewSampleNetworkLayers", () => {
       useOverviewSampleNetworkLayers({
         productCode: "RICE",
         refreshSequence: 0,
-        region: { code: "230200", level: "PREFECTURE", name: "齐齐哈尔市" },
+        region: { code: "230200", level: "TOWNSHIP", name: "齐齐哈尔市" },
         repository,
         year: 2026,
       }),
@@ -606,7 +630,7 @@ describe("useOverviewSampleNetworkLayers", () => {
       useOverviewSampleNetworkLayers({
         productCode: "CORN",
         refreshSequence: 0,
-        region: { code: "230281", level: "COUNTY", name: "讷河市" },
+        region: { code: "230281", level: "TOWNSHIP", name: "讷河市" },
         repository,
         year: 2026,
       }),
@@ -696,17 +720,20 @@ describe("useOverviewSampleNetworkLayers", () => {
         totalPages: 1,
       }),
     );
+    const designPointDefinition = vi.fn(() =>
+      Promise.resolve(agriculturalInputContract()),
+    );
     const repository = {
       ...repositoryWithSnapshot(),
       designPoints,
-      designPointDefinition: vi.fn(() => Promise.resolve(agriculturalInputContract())),
+      designPointDefinition,
     } as unknown as OverviewSamplePointRepository;
 
     const { result } = renderHook(() =>
       useOverviewSampleNetworkLayers({
         productCode: "CORN",
         refreshSequence: 0,
-        region: { code: "230200", level: "PREFECTURE", name: "齐齐哈尔市" },
+        region: { code: "230202", level: "TOWNSHIP", name: "齐齐哈尔市" },
         repository,
         year: 2026,
       }),
@@ -718,14 +745,21 @@ describe("useOverviewSampleNetworkLayers", () => {
       page: 0,
       pageSize: 100,
       productCode: "CORN",
+      regionCode: "230202",
     });
-    expect(result.current.designPoints[0]).toMatchObject({
+    expect(designPointDefinition).not.toHaveBeenCalled();
+    expect(result.current.designPoints[0]?.businessValues).toEqual([]);
+    const detail = presentDesignSamplePoint(
+      result.current.designPoints[0]!,
+      agriculturalInputContract(),
+    );
+    expect(detail).toMatchObject({
       name: "龙沙农资店",
       objectTypeLabel: "农资店",
       productLabel: "玉米",
       regionPath: "黑龙江省 / 齐齐哈尔市 / 龙沙区",
     });
-    expect(result.current.designPoints[0]?.businessValues).toEqual([
+    expect(detail.businessValues).toEqual([
       {
         code: "AGRI_INPUT_SEED_SALES_VOLUME",
         label: "种子销售量",
@@ -817,7 +851,7 @@ describe("useOverviewSampleNetworkLayers", () => {
       useOverviewSampleNetworkLayers({
         productCode: "CORN",
         refreshSequence: 0,
-        region: { code: "230200", level: "PREFECTURE", name: "齐齐哈尔市" },
+        region: { code: "230200", level: "TOWNSHIP", name: "齐齐哈尔市" },
         repository,
         year: 2026,
       }),
