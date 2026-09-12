@@ -77,11 +77,14 @@ export function OverviewCommandCenter({
     resize();
     return () => window.removeEventListener("resize", resize);
   }, []);
-  const stageScale = Math.min(1, viewport.height / 1080, viewport.width / 1280);
+  const compactViewport = viewport.width <= 800;
+  const stageScale = compactViewport
+    ? 1
+    : Math.min(1, viewport.height / 1080, viewport.width / 1280);
   const stageStyle = {
     "--command-stage-scale": stageScale,
-    width: viewport.width / stageScale,
-    height: viewport.height / stageScale,
+    width: compactViewport ? viewport.width : viewport.width / stageScale,
+    height: compactViewport ? viewport.height : viewport.height / stageScale,
   } as CSSProperties;
   const showBusinessMetrics = !sampleMode || sampleNetworkMode === "actual";
   const metricByCode = new Map(dashboard?.metrics.map((item) => [item.code, item]));

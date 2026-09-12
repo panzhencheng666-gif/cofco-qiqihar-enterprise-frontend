@@ -232,6 +232,17 @@ export default function TerrainReliefBoundaryMap({
   const [stageWidth, setStageWidth] = useState(commandStageWidth);
   const renderedStageWidth = Math.max(STAGE_WIDTH, Math.ceil(stageWidth));
   const wideStageOffset = overviewWideStageOffset(renderedStageWidth);
+  const terrainSourceKey = useMemo(
+    () => JSON.stringify({ backdrop, features, points }),
+    [backdrop, features, points],
+  );
+  const terrainSource = useMemo(
+    () => ({ backdrop, features, points }),
+    // The serialized key represents the complete scene input and prevents a
+    // renderer rebuild when React supplies equivalent arrays on selection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [terrainSourceKey],
+  );
   const fullMapFrame = useMemo(
     () => overviewReliefFrame(false, stageWidth),
     [stageWidth],
@@ -243,16 +254,16 @@ export default function TerrainReliefBoundaryMap({
   const terrainProjectionResult = useMemo(() => {
     const startedAt = window.performance.now();
     const projection = projectReliefScene({
-      ...(backdrop ? { backdrop } : {}),
-      features,
+      ...(terrainSource.backdrop ? { backdrop: terrainSource.backdrop } : {}),
+      features: terrainSource.features,
       frame: fullMapFrame,
-      points,
+      points: terrainSource.points,
     });
     return {
       duration: window.performance.now() - startedAt,
       projection,
     };
-  }, [backdrop, features, fullMapFrame, points]);
+  }, [fullMapFrame, terrainSource]);
   const terrainProjection = terrainProjectionResult.projection;
   const sceneProjectionResult = useMemo(() => {
     if (!samplePointAggregates.length && !samplePointIcons.length) {

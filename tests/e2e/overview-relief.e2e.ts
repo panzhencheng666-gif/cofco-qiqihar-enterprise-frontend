@@ -350,16 +350,15 @@ test.describe("overview owned-relief interaction", () => {
     await expect(contract.locator("canvas")).toBeVisible();
     expect((await terrainResponse).status()).toBe(200);
     expect(await canvasUniqueColors(contract)).toBeGreaterThanOrEqual(16);
+    const cityButton = page.getByRole("button", {
+      name: /^齐齐哈尔市，.*点击选中，双击进入下一级$/,
+    });
     await contract.locator("canvas").evaluate((canvas) => {
       canvas.dataset.e2eRendererIdentity = "stable";
     });
     const initialRenderCount = Number(
       await contract.getAttribute("data-renderer-frame-count"),
     );
-    const cityButton = page.getByRole("button", {
-      name: /^齐齐哈尔市，.*点击选中，双击进入下一级$/,
-    });
-
     const selectionCloseCycles = 10;
     for (let attempt = 0; attempt < selectionCloseCycles; attempt += 1) {
       await cityButton.click();
@@ -499,30 +498,37 @@ async function installOverviewFixture(
           }
         : pathname.endsWith("/regions")
           ? regionsFor(parentCode)
-          : pathname.endsWith("/sample-point-snapshot")
-            ? {
-                icons: [],
-                list: {
-                  categories: [],
-                  correctionSourceCount: 0,
-                  correctionSources: [],
-                  dataQualityIssueCount: 0,
-                  items: [],
-                  regionCode: regionCode ?? city.code,
-                  totalCount: 0,
-                  unresolvedSourceCount: 0,
-                  validCoordinateCount: 0,
-                },
-              }
-            : pathname.endsWith("/sample-point-aggregates")
-              ? []
-              : pathname.endsWith("/locations")
+          : pathname.endsWith("/sample-points")
+            ? overviewSamplePointList(
+                regionCode,
+                options.sampleCount ?? 0,
+                requestUrl.searchParams.get("query") ?? "",
+                options.onFormalSampleQuery,
+              )
+            : pathname.endsWith("/sample-point-snapshot")
+              ? {
+                  icons: [],
+                  list: {
+                    categories: [],
+                    correctionSourceCount: 0,
+                    correctionSources: [],
+                    dataQualityIssueCount: 0,
+                    items: [],
+                    regionCode: regionCode ?? city.code,
+                    totalCount: 0,
+                    unresolvedSourceCount: 0,
+                    validCoordinateCount: 0,
+                  },
+                }
+              : pathname.endsWith("/sample-point-aggregates")
                 ? []
-                : pathname.endsWith("/indicators")
+                : pathname.endsWith("/locations")
                   ? []
-                  : pathname.endsWith("/dashboard")
-                    ? dashboardFor(regionCode)
-                    : undefined;
+                  : pathname.endsWith("/indicators")
+                    ? []
+                    : pathname.endsWith("/dashboard")
+                      ? dashboardFor(regionCode)
+                      : undefined;
 
     if (data === undefined) {
       await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
@@ -535,6 +541,57 @@ async function installOverviewFixture(
           : { data },
     });
   });
+}
+
+function overviewSamplePointList(
+  regionCode: string | null,
+  count: number,
+  query: string,
+  onQuery?: (query: string) => void,
+) {
+  onQuery?.(query);
+  const normalizedQuery = query.trim().toLowerCase();
+  const items = Array.from({ length: count }, (_, index) => {
+    const order = index + 1;
+    return {
+      categories: [{ code: "PRODUCTION", name: "产情" }],
+      dataQualityReason: null,
+      latestBusinessDate: "2026-08-01",
+      locationState: "VALID",
+      name: `高量样本 ${String(order).padStart(4, "0")}`,
+      products: [{ code: "CORN", name: "玉米" }],
+      regionCode: regionCode ?? city.code,
+      regionName: city.name,
+      samplePointId: `94000000-0000-0000-0000-${String(order).padStart(12, "0")}`,
+      summaryValues: {},
+      types: [{ code: "FARMER", iconKey: "farmer", name: "农户" }],
+    };
+  }).filter(
+    (item) =>
+      !normalizedQuery ||
+      item.name.toLowerCase().includes(normalizedQuery) ||
+      item.regionName.toLowerCase().includes(normalizedQuery),
+  );
+  return {
+    categories: [
+      {
+        code: "PRODUCTION",
+        count: items.length,
+        name: "产情",
+        types: [
+          { code: "FARMER", count: items.length, iconKey: "farmer", name: "农户" },
+        ],
+      },
+    ],
+    correctionSourceCount: 0,
+    correctionSources: [],
+    dataQualityIssueCount: 0,
+    items,
+    regionCode: regionCode ?? city.code,
+    totalCount: items.length,
+    unresolvedSourceCount: 0,
+    validCoordinateCount: items.length,
+  };
 }
 
 function formalSamplePointPage(
