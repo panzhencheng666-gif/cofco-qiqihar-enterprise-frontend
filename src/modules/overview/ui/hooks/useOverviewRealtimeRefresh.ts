@@ -49,7 +49,8 @@ export function useOverviewRealtimeRefresh(
 
   useEffect(() => {
     let disconnected = false;
-    const available = () => navigator.onLine !== false && document.visibilityState !== "hidden";
+    const available = () =>
+      navigator.onLine !== false && document.visibilityState !== "hidden";
     let fallbackTimer: number | undefined;
     let refreshTimer: number | undefined;
     let pendingBusinessRefresh = false;
@@ -89,7 +90,13 @@ export function useOverviewRealtimeRefresh(
       pendingOptionRefresh ||= options;
       // A bounded coalescing window: continuous traffic must not postpone refresh forever.
       if (!available() || refreshTimer !== undefined) return;
-      if (!(pendingBusinessRefresh || pendingGeographyRefresh || pendingSamplePointRefresh || pendingOptionRefresh)) return;
+      if (!(
+        pendingBusinessRefresh ||
+        pendingGeographyRefresh ||
+        pendingSamplePointRefresh ||
+        pendingOptionRefresh
+      ))
+        return;
       refreshTimer = window.setTimeout(flushRefresh, REALTIME_REFRESH_DEBOUNCE_MS);
     };
     const refreshAll = () => {
@@ -175,8 +182,10 @@ export function useOverviewRealtimeRefresh(
         refreshTimer = undefined;
         return;
       }
-      if (disconnected) { refreshAll(); startFallback(); }
-      else scheduleRefresh({}); // Flush retained events once, including a hidden reconnect.
+      if (disconnected) {
+        refreshAll();
+        startFallback();
+      } else scheduleRefresh({}); // Flush retained events once, including a hidden reconnect.
     };
     document.addEventListener("visibilitychange", availabilityChanged);
     window.addEventListener("online", availabilityChanged);
@@ -188,7 +197,10 @@ export function useOverviewRealtimeRefresh(
         if (disconnected) refreshAll();
         disconnected = false;
       },
-      onDisconnected: () => { disconnected = true; startFallback(); },
+      onDisconnected: () => {
+        disconnected = true;
+        startFallback();
+      },
     });
     return () => {
       document.removeEventListener("visibilitychange", availabilityChanged);

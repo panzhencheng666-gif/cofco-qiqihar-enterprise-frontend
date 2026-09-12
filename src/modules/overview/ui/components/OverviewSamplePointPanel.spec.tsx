@@ -1019,30 +1019,57 @@ describe("OverviewSamplePointPanel", () => {
   });
 
   it.each(["PREFECTURE", "COUNTY", "TOWNSHIP", "VILLAGE"] as const)(
-    "offers the historical population and list selection at %s level", async (level) => {
+    "offers the historical population and list selection at %s level",
+    async (level) => {
       const historicalDetail = vi.fn().mockResolvedValue({
-        samplePointId: "retired-1", name: "历史农户", regionCode: "230202997001",
-        retiredAt: "2026-09-01T00:00:00Z", retirementYear: 2026,
-        retirementReason: "年度调整", roles: [], lastBusinessData: [],
+        samplePointId: "retired-1",
+        name: "历史农户",
+        regionCode: "230202997001",
+        retiredAt: "2026-09-01T00:00:00Z",
+        retirementYear: 2026,
+        retirementReason: "年度调整",
+        roles: [],
+        lastBusinessData: [],
       });
-      const historicalIcons: OverviewSamplePointIcon[] = Array.from({ length: 31 }, (_, index) => ({
-        samplePointId: `retired-${index + 1}`, name: `历史农户 ${index + 1}`,
-        regionCode: "230202997001", iconKey: "farmer",
-        types: [{ code: "FARMER", name: "农户", iconKey: "farmer" }],
-        longitude: null, latitude: null, dataQualityReason: null,
-      }));
-      render(<PanelHarness onIconsChange={vi.fn()} year={2026}
-        region={{ code: "230202", name: "龙沙区", level, parentCode: "230200" }}
-        repository={{ ...repositoryStub(), historicalDetail }}
-        networkModel={{ ...designPointNetworkModel(), mode: "historical",
-          historicalState: "ready", historicalIcons }} />);
+      const historicalIcons: OverviewSamplePointIcon[] = Array.from(
+        { length: 31 },
+        (_, index) => ({
+          samplePointId: `retired-${index + 1}`,
+          name: `历史农户 ${index + 1}`,
+          regionCode: "230202997001",
+          iconKey: "farmer",
+          types: [{ code: "FARMER", name: "农户", iconKey: "farmer" }],
+          longitude: null,
+          latitude: null,
+          dataQualityReason: null,
+        }),
+      );
+      render(
+        <PanelHarness
+          onIconsChange={vi.fn()}
+          year={2026}
+          region={{ code: "230202", name: "龙沙区", level, parentCode: "230200" }}
+          repository={{ ...repositoryStub(), historicalDetail }}
+          networkModel={{
+            ...designPointNetworkModel(),
+            mode: "historical",
+            historicalState: "ready",
+            historicalIcons,
+          }}
+        />,
+      );
       expect(screen.getByText("当前地区共 31 个历史样本点")).toBeVisible();
       const list = screen.getByRole("list", { name: "历史样本点列表" });
       expect(within(list).getAllByRole("listitem")).toHaveLength(30);
       await userEvent.click(within(list).getAllByRole("button")[0]!);
-      await waitFor(() => expect(historicalDetail).toHaveBeenCalledWith({
-        samplePointId: "retired-1", regionCode: "230202", productCode: "CORN", year: 2026,
-      }));
+      await waitFor(() =>
+        expect(historicalDetail).toHaveBeenCalledWith({
+          samplePointId: "retired-1",
+          regionCode: "230202",
+          productCode: "CORN",
+          year: 2026,
+        }),
+      );
       await userEvent.click(screen.getByRole("button", { name: "下一页" }));
       expect(within(list).getAllByRole("listitem")).toHaveLength(1);
       expect(within(list).getByText("历史农户 31")).toBeVisible();

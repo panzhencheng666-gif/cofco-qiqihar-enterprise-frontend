@@ -396,12 +396,20 @@ describe("sampleNetworkLayerIcons", () => {
     );
   });
 
-  it.each(["PREFECTURE", "COUNTY", "TOWNSHIP", "VILLAGE"] as const)("gates icons by displayed map level %s even when a sample is selected", (level) => {
-    const points = [actualIcon, { ...actualIcon, samplePointId: "94000000-0000-0000-0000-000000000099" }];
-    const expected = level === "TOWNSHIP" || level === "VILLAGE" ? points : [];
-    expect(visibleSampleNetworkMapIcons(level, undefined, points)).toEqual(expected);
-    expect(visibleSampleNetworkMapIcons(level, actualIcon.samplePointId, points)).toEqual(expected);
-  });
+  it.each(["PREFECTURE", "COUNTY", "TOWNSHIP", "VILLAGE"] as const)(
+    "gates icons by displayed map level %s even when a sample is selected",
+    (level) => {
+      const points = [
+        actualIcon,
+        { ...actualIcon, samplePointId: "94000000-0000-0000-0000-000000000099" },
+      ];
+      const expected = level === "TOWNSHIP" || level === "VILLAGE" ? points : [];
+      expect(visibleSampleNetworkMapIcons(level, undefined, points)).toEqual(expected);
+      expect(
+        visibleSampleNetworkMapIcons(level, actualIcon.samplePointId, points),
+      ).toEqual(expected);
+    },
+  );
 
   it("does not reconstruct a filtered business icon from annual object kinds", () => {
     const result = sampleNetworkLayerIcons("actual", [], comparison, {

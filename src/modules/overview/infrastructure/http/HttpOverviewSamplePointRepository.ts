@@ -198,9 +198,12 @@ const iconsSchema = z.object({
 
 // History retains identities without a usable display coordinate in its list and counts.
 const historicalIconsSchema = z.object({
-  data: z.array(iconsSchema.shape.data.element.extend({
-    longitude: z.number().nullable(), latitude: z.number().nullable(),
-  })),
+  data: z.array(
+    iconsSchema.shape.data.element.extend({
+      longitude: z.number().nullable(),
+      latitude: z.number().nullable(),
+    }),
+  ),
 });
 
 const snapshotSchema = z.object({
@@ -251,9 +254,18 @@ const historicalDetailSchema = z.object({
     retirementReason: z.string(),
     retiredBy: z.string(),
     roles: z.array(roleRefSchema).min(1),
-    lastBusinessData: z.array(detailSchema.shape.data.shape.associations.element.extend({
-      sourceRole: z.enum(["SURVEY", "ORIGIN", "DESTINATION", "PRODUCTION", "MARKET", "LOGISTICS"]),
-    })),
+    lastBusinessData: z.array(
+      detailSchema.shape.data.shape.associations.element.extend({
+        sourceRole: z.enum([
+          "SURVEY",
+          "ORIGIN",
+          "DESTINATION",
+          "PRODUCTION",
+          "MARKET",
+          "LOGISTICS",
+        ]),
+      }),
+    ),
   }),
 });
 
@@ -349,7 +361,10 @@ const designComparisonSchema = z.object({
 });
 
 export class HttpOverviewSamplePointRepository implements OverviewSamplePointRepository {
-  private readonly requests = new Map<string, { expires: number; promise: Promise<unknown> }>();
+  private readonly requests = new Map<
+    string,
+    { expires: number; promise: Promise<unknown> }
+  >();
 
   constructor(
     private readonly http: HttpClient,
@@ -369,7 +384,8 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
       if (this.requests.get(key)?.promise === promise) this.requests.delete(key);
       throw error;
     });
-    if (this.requests.size >= 128) this.requests.delete(this.requests.keys().next().value!);
+    if (this.requests.size >= 128)
+      this.requests.delete(this.requests.keys().next().value!);
     this.requests.set(key, { expires: Date.now() + 60_000, promise });
     return promise;
   }
@@ -380,11 +396,28 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
 
   async designMapCatalog(query: { productCode: string; regionCode?: string }) {
     const path = `/api/v1/overview/design-map-samples${queryString(query)}`;
-    return (await this.cachedGet(path, z.object({ data: z.array(z.preprocess((value) => ({ ...(value as Record<string, unknown>), values: {} }), designSamplePointSchema)) }))).data;
+    return (
+      await this.cachedGet(
+        path,
+        z.object({
+          data: z.array(
+            z.preprocess(
+              (value) => ({ ...(value as Record<string, unknown>), values: {} }),
+              designSamplePointSchema,
+            ),
+          ),
+        }),
+      )
+    ).data;
   }
 
   async designPoint(id: string) {
-    return (await this.http.get(`/api/v1/design-sample-points/${encodeURIComponent(id)}`, z.object({data: designSamplePointSchema}))).data;
+    return (
+      await this.http.get(
+        `/api/v1/design-sample-points/${encodeURIComponent(id)}`,
+        z.object({ data: designSamplePointSchema }),
+      )
+    ).data;
   }
 
   async designPoints(query: {
@@ -410,7 +443,9 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
     if (!this.loadDesignPointDefinition) {
       throw new Error("Design sample point metadata repository is unavailable");
     }
-    return this.cached("definition:" + JSON.stringify(context), () => this.loadDesignPointDefinition!(context));
+    return this.cached("definition:" + JSON.stringify(context), () =>
+      this.loadDesignPointDefinition!(context),
+    );
   }
 
   async exportInventory(query: { year: number; regionCode?: string }) {
@@ -497,7 +532,9 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
   }
 
   async historicalAggregates(
-    query: Parameters<NonNullable<OverviewSamplePointRepository["historicalAggregates"]>>[0],
+    query: Parameters<
+      NonNullable<OverviewSamplePointRepository["historicalAggregates"]>
+    >[0],
     options?: OverviewSamplePointRequestOptions,
   ) {
     const path = `/api/v1/overview/historical-sample-point-aggregates${queryString(query)}`;
@@ -540,36 +577,81 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
     options?: OverviewSamplePointRequestOptions,
   ) {
     const key = `map-catalog:${query.regionCode}:${query.productCode}:${query.year}`;
-    const allIcons = await this.cached(key, async () =>
-      (await this.http.get(`/api/v1/overview/map-samples${queryString({
-        regionCode: query.regionCode, productCode: query.productCode, year: query.year,
-      })}`, iconsSchema)).data,
+    const allIcons = await this.cached(
+      key,
+      async () =>
+        (
+          await this.http.get(
+            `/api/v1/overview/map-samples${queryString({
+              regionCode: query.regionCode,
+              productCode: query.productCode,
+              year: query.year,
+            })}`,
+            iconsSchema,
+          )
+        ).data,
     );
-    if (options?.signal?.aborted) throw new DOMException("Request cancelled", "AbortError");
-    const icons = allIcons.filter((point) =>
-      (!query.categoryCode || point.roles.some(({ code }) => code === query.categoryCode)) &&
-      (!query.typeCode || point.types.some(({ code }) => code === query.typeCode)) &&
-      (!query.query || point.name.toLocaleLowerCase().includes(query.query.trim().toLocaleLowerCase())),
+    if (options?.signal?.aborted)
+      throw new DOMException("Request cancelled", "AbortError");
+    const icons = allIcons.filter(
+      (point) =>
+        (!query.categoryCode ||
+          point.roles.some(({ code }) => code === query.categoryCode)) &&
+        (!query.typeCode || point.types.some(({ code }) => code === query.typeCode)) &&
+        (!query.query ||
+          point.name
+            .toLocaleLowerCase()
+            .includes(query.query.trim().toLocaleLowerCase())),
     );
     const categories = (["PRODUCTION", "MARKET", "LOGISTICS"] as const).map((code) => {
-      const matching = allIcons.filter((point) => point.roles.some((role) => role.code === code));
-      const types = new Map<string, { code: string; name: string; iconKey: string; count: number }>();
-      matching.forEach((point) => point.types.forEach((type) => {
-        types.set(type.code, { ...type, count: (types.get(type.code)?.count ?? 0) + 1 });
-      }));
-      return { code, name: { PRODUCTION: "产情类", MARKET: "市场类", LOGISTICS: "物流类" }[code], count: matching.length, types: [...types.values()] };
+      const matching = allIcons.filter((point) =>
+        point.roles.some((role) => role.code === code),
+      );
+      const types = new Map<
+        string,
+        { code: string; name: string; iconKey: string; count: number }
+      >();
+      matching.forEach((point) =>
+        point.types.forEach((type) => {
+          types.set(type.code, {
+            ...type,
+            count: (types.get(type.code)?.count ?? 0) + 1,
+          });
+        }),
+      );
+      return {
+        code,
+        name: { PRODUCTION: "产情类", MARKET: "市场类", LOGISTICS: "物流类" }[code],
+        count: matching.length,
+        types: [...types.values()],
+      };
     });
-    return { icons, list: {
-      regionCode: query.regionCode, totalCount: icons.length, validCoordinateCount: icons.length,
-      dataQualityIssueCount: 0, correctionSourceCount: 0, unresolvedSourceCount: 0,
-      categories, correctionSources: [],
-      items: icons.map((point) => ({ samplePointId: point.samplePointId, name: point.name,
-        regionCode: point.regionCode, regionName: query.regionName ?? "", locationState: "VALID",
-        dataQualityReason: null, categories: point.roles.map(({ code, name }) => ({ code, name })),
-        types: point.types, products: [{ code: query.productCode, name: query.productCode }],
-        latestBusinessDate: null, summaryValues: {},
-      })),
-    } };
+    return {
+      icons,
+      list: {
+        regionCode: query.regionCode,
+        totalCount: icons.length,
+        validCoordinateCount: icons.length,
+        dataQualityIssueCount: 0,
+        correctionSourceCount: 0,
+        unresolvedSourceCount: 0,
+        categories,
+        correctionSources: [],
+        items: icons.map((point) => ({
+          samplePointId: point.samplePointId,
+          name: point.name,
+          regionCode: point.regionCode,
+          regionName: query.regionName ?? "",
+          locationState: "VALID",
+          dataQualityReason: null,
+          categories: point.roles.map(({ code, name }) => ({ code, name })),
+          types: point.types,
+          products: [{ code: query.productCode, name: query.productCode }],
+          latestBusinessDate: null,
+          summaryValues: {},
+        })),
+      },
+    };
   }
 
   async snapshot(
@@ -592,7 +674,11 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
         query.query,
         options,
       );
-      allPoints = await this.loadFormalSamplePoints(query.regionCode, undefined, options);
+      allPoints = await this.loadFormalSamplePoints(
+        query.regionCode,
+        undefined,
+        options,
+      );
     } else {
       allPoints = await this.loadFormalSamplePoints(
         query.regionCode,
@@ -788,16 +874,19 @@ export class HttpOverviewSamplePointRepository implements OverviewSamplePointRep
   ): Promise<readonly FormalSamplePoint[]> {
     const key = `formal:${regionCode}:${keyword ?? ""}`;
     const points = await this.cached(key, async () => {
-      const readPage = (page: number) => this.http.get(
-        `/api/v1/formal-sample-points${queryString({ regionCode, keyword, page, pageSize: 100 })}`,
-        formalSamplePointPageSchema,
-      );
+      const readPage = (page: number) =>
+        this.http.get(
+          `/api/v1/formal-sample-points${queryString({ regionCode, keyword, page, pageSize: 100 })}`,
+          formalSamplePointPageSchema,
+        );
       const first = (await readPage(0)).data;
       const items = [...first.items];
-      for (let page = 1; page < first.totalPages; page += 1) items.push(...(await readPage(page)).data.items);
+      for (let page = 1; page < first.totalPages; page += 1)
+        items.push(...(await readPage(page)).data.items);
       return formalPointsInRegion(items, regionCode);
     });
-    if (options?.signal?.aborted) throw new DOMException("Request cancelled", "AbortError");
+    if (options?.signal?.aborted)
+      throw new DOMException("Request cancelled", "AbortError");
     return points;
   }
 

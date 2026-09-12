@@ -10,7 +10,13 @@ export class BrowserOverviewMapRevisionMonitor {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let active: AbortController | undefined;
     const poll = async () => {
-      if (closed || active || document.visibilityState === "hidden" || !navigator.onLine) return;
+      if (
+        closed ||
+        active ||
+        document.visibilityState === "hidden" ||
+        !navigator.onLine
+      )
+        return;
       clearTimeout(timer);
       const controller = new AbortController();
       active = controller;
@@ -30,7 +36,9 @@ export class BrowserOverviewMapRevisionMonitor {
         if (!closed) timer = setTimeout(() => void poll(), 60_000);
       }
     };
-    const resume = () => { void poll(); };
+    const resume = () => {
+      void poll();
+    };
     const visibility = () => {
       if (document.visibilityState === "hidden") clearTimeout(timer);
       else resume();

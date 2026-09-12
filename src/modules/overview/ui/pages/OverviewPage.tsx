@@ -672,19 +672,19 @@ export function OverviewPage({
       ? sampleNetworkModel.designPointState === "idle"
         ? "hidden"
         : sampleNetworkModel.designPointState === "ready"
-        ? "ready"
-        : sampleNetworkModel.designPointState === "unavailable"
-          ? "unavailable"
-          : "loading"
+          ? "ready"
+          : sampleNetworkModel.designPointState === "unavailable"
+            ? "unavailable"
+            : "loading"
       : sampleNetworkModel.mode === "historical"
         ? sampleNetworkModel.historicalState === "ready"
           ? "ready"
           : sampleNetworkModel.historicalState === "unavailable"
             ? "unavailable"
             : "loading"
-      : showAggregateLayer
-        ? samplePointAggregateStatus
-        : "hidden";
+        : showAggregateLayer
+          ? samplePointAggregateStatus
+          : "hidden";
   const visibleSampleNetworkIcons = useMemo(
     () =>
       sampleMode
@@ -694,12 +694,7 @@ export function OverviewPage({
             sampleNetworkModel.icons,
           )
         : [],
-    [
-      sampleMode,
-      sampleNetworkModel.icons,
-      visibleRegions,
-      selectedSamplePointId,
-    ],
+    [sampleMode, sampleNetworkModel.icons, visibleRegions, selectedSamplePointId],
   );
 
   const regionalDataRegionCode =

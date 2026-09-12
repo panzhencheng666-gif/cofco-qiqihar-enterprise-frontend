@@ -926,21 +926,42 @@ describe("OverviewPage", () => {
   });
 
   it("uses historical counts and a selectable list on the city map without current sample totals", async () => {
-    render(<OverviewPage repository={{
-      mapScope: () => Promise.resolve(sampleMapScope), options: () => Promise.resolve(options),
-      regions: () => Promise.resolve([sampleRegion]), locations: () => Promise.resolve([]),
-      indicators: () => Promise.resolve([]), dashboard: () => Promise.resolve(emptyDashboard),
-    }} samplePointRepository={{
-      aggregates: () => Promise.resolve([]), comparison: () => Promise.resolve(emptySampleNetworkComparison),
-      list: () => Promise.resolve(samplePointList), icons: () => Promise.resolve(samplePointIcons),
-      detail: () => Promise.resolve(samplePointDetail),
-      historicalIcons: () => Promise.resolve(samplePointIcons),
-      historicalAggregates: () => Promise.resolve([{
-        regionCode: sampleRegion.code, regionName: sampleRegion.name, regionLevel: "PREFECTURE",
-        samplePointCount: 1, productionCount: 1, marketCount: 0, logisticsCount: 0,
-        validCoordinateCount: 1, dataQualityIssueCount: 0, correctionSourceCount: 0, unresolvedSourceCount: 0,
-      }]),
-    }} />);
+    render(
+      <OverviewPage
+        repository={{
+          mapScope: () => Promise.resolve(sampleMapScope),
+          options: () => Promise.resolve(options),
+          regions: () => Promise.resolve([sampleRegion]),
+          locations: () => Promise.resolve([]),
+          indicators: () => Promise.resolve([]),
+          dashboard: () => Promise.resolve(emptyDashboard),
+        }}
+        samplePointRepository={{
+          aggregates: () => Promise.resolve([]),
+          comparison: () => Promise.resolve(emptySampleNetworkComparison),
+          list: () => Promise.resolve(samplePointList),
+          icons: () => Promise.resolve(samplePointIcons),
+          detail: () => Promise.resolve(samplePointDetail),
+          historicalIcons: () => Promise.resolve(samplePointIcons),
+          historicalAggregates: () =>
+            Promise.resolve([
+              {
+                regionCode: sampleRegion.code,
+                regionName: sampleRegion.name,
+                regionLevel: "PREFECTURE",
+                samplePointCount: 1,
+                productionCount: 1,
+                marketCount: 0,
+                logisticsCount: 0,
+                validCoordinateCount: 1,
+                dataQualityIssueCount: 0,
+                correctionSourceCount: 0,
+                unresolvedSourceCount: 0,
+              },
+            ]),
+        }}
+      />,
+    );
     await userEvent.click(await screen.findByRole("button", { name: "历史样本点" }));
     const cityAggregate = await screen.findByRole("button", {
       name: "齐齐哈尔市，历史样本点 1 个，其中产情类 1 个、市场类 0 个、物流类 0 个；多角色样本只计一个身份",
@@ -1154,9 +1175,11 @@ describe("OverviewPage", () => {
     await userEvent.click(
       await screen.findByRole("button", { name: /同一跨产品样本点/ }),
     );
-    expect(within(screen.getByLabelText("粮食商情总览地图")).queryByRole("button", {
-      name: "同一跨产品样本点，农户，点击查看样本点详情",
-    })).not.toBeInTheDocument();
+    expect(
+      within(screen.getByLabelText("粮食商情总览地图")).queryByRole("button", {
+        name: "同一跨产品样本点，农户，点击查看样本点详情",
+      }),
+    ).not.toBeInTheDocument();
 
     const regionPanel = await screen.findByRole("complementary", {
       name: "所选地区样本点详情",

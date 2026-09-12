@@ -4,15 +4,28 @@ import { z } from "zod";
 import { FetchHttpClient, HttpContractError } from "./HttpClient";
 
 describe("FetchHttpClient contract diagnostics", () => {
-  afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
 
   it("propagates caller cancellation and cleans its timeout", async () => {
     vi.useFakeTimers();
-    vi.stubGlobal("fetch", vi.fn((_url, options: RequestInit) => new Promise((_resolve, reject) => {
-      options.signal?.addEventListener("abort", () => reject(new DOMException("cancelled", "AbortError")));
-    })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url, options: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            options.signal?.addEventListener("abort", () =>
+              reject(new DOMException("cancelled", "AbortError")),
+            );
+          }),
+      ),
+    );
     const controller = new AbortController();
-    const result = new FetchHttpClient().get("/api/v1/cancel", z.unknown(), {signal:controller.signal}).catch(error => error);
+    const result = new FetchHttpClient()
+      .get("/api/v1/cancel", z.unknown(), { signal: controller.signal })
+      .catch((error) => error);
     controller.abort();
     expect(await result).toBeInstanceOf(DOMException);
     expect(vi.getTimerCount()).toBe(0);
@@ -21,11 +34,20 @@ describe("FetchHttpClient contract diagnostics", () => {
   it("aborts stalled reads and releases the deadline timer", async () => {
     vi.useFakeTimers();
     let signal: AbortSignal | undefined;
-    vi.stubGlobal("fetch", vi.fn((_url, options: RequestInit) => {
-      signal = options.signal as AbortSignal;
-      return new Promise((_resolve, reject) => signal?.addEventListener("abort", () => reject(new DOMException("timeout", "AbortError"))));
-    }));
-    const result = new FetchHttpClient().get("/api/v1/stalled", z.unknown()).catch(error => error);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url, options: RequestInit) => {
+        signal = options.signal as AbortSignal;
+        return new Promise((_resolve, reject) =>
+          signal?.addEventListener("abort", () =>
+            reject(new DOMException("timeout", "AbortError")),
+          ),
+        );
+      }),
+    );
+    const result = new FetchHttpClient()
+      .get("/api/v1/stalled", z.unknown())
+      .catch((error) => error);
     await vi.advanceTimersByTimeAsync(15_001);
     expect(signal?.aborted).toBe(true);
     expect(await result).toBeInstanceOf(DOMException);

@@ -66,9 +66,13 @@ export function OverviewCommandCenter({
   selectedRegion?: OverviewRegion;
   selectionPoint?: OverviewMapSelectionPoint;
 }) {
-  const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  const [viewport, setViewport] = useState(() => ({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  }));
   useLayoutEffect(() => {
-    const resize = () => setViewport({ width: window.innerWidth, height: window.innerHeight });
+    const resize = () =>
+      setViewport({ width: window.innerWidth, height: window.innerHeight });
     window.addEventListener("resize", resize);
     resize();
     return () => window.removeEventListener("resize", resize);

@@ -5,7 +5,10 @@ import type { OverviewSamplePointRepository } from "../../application/ports/Over
 import type { DesignSampleFieldContract } from "../../../design-sample/domain/designSampleFieldContract";
 import type { SampleNetworkComparison } from "../../domain/overviewSamplePoint";
 import { HttpError } from "../../../../shared/api/HttpClient";
-import { useOverviewSampleNetworkLayers, presentDesignSamplePoint } from "./useOverviewSampleNetworkLayers";
+import {
+  useOverviewSampleNetworkLayers,
+  presentDesignSamplePoint,
+} from "./useOverviewSampleNetworkLayers";
 
 const comparison: SampleNetworkComparison = {
   networkYear: 2026,
@@ -61,12 +64,21 @@ describe("useOverviewSampleNetworkLayers", () => {
         },
       ]),
     );
-    const historicalAggregates = vi.fn().mockResolvedValue([{
-      regionCode: "230281", regionName: "讷河市", regionLevel: "COUNTY",
-      samplePointCount: 1, productionCount: 1, marketCount: 0, logisticsCount: 0,
-      validCoordinateCount: 1, dataQualityIssueCount: 0, correctionSourceCount: 0,
-      unresolvedSourceCount: 0,
-    }]);
+    const historicalAggregates = vi.fn().mockResolvedValue([
+      {
+        regionCode: "230281",
+        regionName: "讷河市",
+        regionLevel: "COUNTY",
+        samplePointCount: 1,
+        productionCount: 1,
+        marketCount: 0,
+        logisticsCount: 0,
+        validCoordinateCount: 1,
+        dataQualityIssueCount: 0,
+        correctionSourceCount: 0,
+        unresolvedSourceCount: 0,
+      },
+    ]);
     const repository = {
       ...repositoryWithSnapshot(),
       historicalIcons,
@@ -93,7 +105,10 @@ describe("useOverviewSampleNetworkLayers", () => {
     });
     expect(historicalIcons.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
     expect(result.current.icons.map(({ name }) => name)).toEqual(["已淘汰样本"]);
-    expect(historicalAggregates.mock.calls[0]?.[0]).toEqual({ productCode: "CORN", year: 2026 });
+    expect(historicalAggregates.mock.calls[0]?.[0]).toEqual({
+      productCode: "CORN",
+      year: 2026,
+    });
     expect(result.current.historicalAggregates?.[0]?.samplePointCount).toBe(1);
     expect(result.current.actualIcons?.map(({ name }) => name)).not.toContain(
       "已淘汰样本",
@@ -731,7 +746,10 @@ describe("useOverviewSampleNetworkLayers", () => {
     });
     expect(repository.designPointDefinition).not.toHaveBeenCalled();
     expect(result.current.designPoints[0]?.businessValues).toEqual([]);
-    const detail = presentDesignSamplePoint(result.current.designPoints[0]!, agriculturalInputContract());
+    const detail = presentDesignSamplePoint(
+      result.current.designPoints[0]!,
+      agriculturalInputContract(),
+    );
     expect(detail).toMatchObject({
       name: "龙沙农资店",
       objectTypeLabel: "农资店",

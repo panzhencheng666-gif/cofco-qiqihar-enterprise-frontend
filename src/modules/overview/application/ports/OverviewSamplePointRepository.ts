@@ -94,7 +94,10 @@ export interface OverviewSamplePointRepository {
     options?: OverviewSamplePointRequestOptions,
   ): Promise<readonly OverviewSamplePointIcon[]>;
   mapCatalog?: NonNullable<OverviewSamplePointRepository["snapshot"]>;
-  designMapCatalog?(query: { regionCode?: string; productCode: string }): Promise<readonly OverviewDesignSamplePointRecord[]>;
+  designMapCatalog?(query: {
+    regionCode?: string;
+    productCode: string;
+  }): Promise<readonly OverviewDesignSamplePointRecord[]>;
   snapshot?(
     query: {
       regionCode: string;

@@ -8,29 +8,40 @@ import type {
 import { useOverviewRealtimeRefresh } from "./useOverviewRealtimeRefresh";
 
 describe("useOverviewRealtimeRefresh", () => {
-  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
 
   it("defers offline and hidden refreshes and reconciles once when available", () => {
     vi.useFakeTimers();
-    let visible = true; let online = true;
-    vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visible ? "visible" : "hidden");
+    let visible = true;
+    let online = true;
+    vi.spyOn(document, "visibilityState", "get").mockImplementation(() =>
+      visible ? "visible" : "hidden",
+    );
     vi.spyOn(navigator, "onLine", "get").mockImplementation(() => online);
     const stream = new FakeRealtimeStream();
     const { unmount } = render(<Harness stream={stream} />);
     act(() => {
-      online = false; window.dispatchEvent(new Event("offline"));
+      online = false;
+      window.dispatchEvent(new Event("offline"));
       stream.callbacks.onDisconnected();
       vi.advanceTimersByTime(120_000);
     });
     expect(screen.getByText("0:0:0")).toBeInTheDocument();
     act(() => {
-      visible = false; online = true; window.dispatchEvent(new Event("online"));
+      visible = false;
+      online = true;
+      window.dispatchEvent(new Event("online"));
       vi.advanceTimersByTime(60_000);
     });
     expect(screen.getByText("0:0:0")).toBeInTheDocument();
     act(() => {
-      visible = true; document.dispatchEvent(new Event("visibilitychange"));
-      stream.callbacks.onConnected(); vi.advanceTimersByTime(500);
+      visible = true;
+      document.dispatchEvent(new Event("visibilitychange"));
+      stream.callbacks.onConnected();
+      vi.advanceTimersByTime(500);
     });
     expect(screen.getByText("1:1:1")).toBeInTheDocument();
     unmount();
@@ -43,7 +54,11 @@ describe("useOverviewRealtimeRefresh", () => {
     render(<Harness stream={stream} />);
     act(() => {
       for (let i = 0; i < 10; i++) {
-        stream.callbacks.onBusinessChange({productCode:"CORN", regionCodes:["230200"], surveyYear:2026});
+        stream.callbacks.onBusinessChange({
+          productCode: "CORN",
+          regionCodes: ["230200"],
+          surveyYear: 2026,
+        });
         vi.advanceTimersByTime(100);
       }
     });

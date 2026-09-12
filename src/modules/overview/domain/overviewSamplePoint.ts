@@ -288,6 +288,7 @@ export interface OverviewHistoricalSamplePointDetail {
   retiredBy: string;
   roles: readonly OverviewSamplePointRoleRef[];
   lastBusinessData: readonly (Omit<OverviewSamplePointAssociation, "sourceRole"> & {
-    sourceRole: OverviewSamplePointAssociation["sourceRole"] | OverviewSamplePointCategoryCode;
+    sourceRole:
+      OverviewSamplePointAssociation["sourceRole"] | OverviewSamplePointCategoryCode;
   })[];
 }

@@ -102,7 +102,11 @@ export const samplePointIconPathData: Readonly<Record<string, string>> = {
 };
 
 function commandStageWidth() {
-  const scale = Math.min(1, window.innerHeight / STAGE_HEIGHT, window.innerWidth / 1280);
+  const scale = Math.min(
+    1,
+    window.innerHeight / STAGE_HEIGHT,
+    window.innerWidth / 1280,
+  );
   return Math.max(1280, window.innerWidth / Math.max(scale, 0.001));
 }
 
@@ -228,7 +232,10 @@ export default function TerrainReliefBoundaryMap({
   const [stageWidth, setStageWidth] = useState(commandStageWidth);
   const renderedStageWidth = Math.max(STAGE_WIDTH, Math.ceil(stageWidth));
   const wideStageOffset = overviewWideStageOffset(renderedStageWidth);
-  const fullMapFrame = useMemo(() => overviewReliefFrame(false, stageWidth), [stageWidth]);
+  const fullMapFrame = useMemo(
+    () => overviewReliefFrame(false, stageWidth),
+    [stageWidth],
+  );
   const detailMapFrame = useMemo(
     () => overviewReliefFrame(true, stageWidth),
     [stageWidth],
@@ -1364,7 +1371,12 @@ export function SamplePointMapSymbol({
   layerType?: OverviewSamplePointIcon["layerType"];
   roles?: OverviewSamplePointIcon["roles"];
 }) {
-  if ((!layerType || layerType === "ANNUAL_ACTUAL" || layerType === "HISTORICAL_ACTUAL") && roles?.length) {
+  if (
+    (!layerType ||
+      layerType === "ANNUAL_ACTUAL" ||
+      layerType === "HISTORICAL_ACTUAL") &&
+    roles?.length
+  ) {
     return (
       <>
         <span className="overview-sample-point-role-icons">
