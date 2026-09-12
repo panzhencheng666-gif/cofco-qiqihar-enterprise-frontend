@@ -6,16 +6,18 @@ import { HttpOverviewSamplePointRepository } from "./HttpOverviewSamplePointRepo
 describe("HttpOverviewSamplePointRepository", () => {
   it("bounds cache retention, expires entries, and never caches failed reads", async () => {
     const now = vi.spyOn(Date, "now").mockReturnValue(0);
-    const get = vi.fn<HttpClient["get"]>(async (_path, schema) =>
-      schema.parse({
-        data: {
-          items: [],
-          pageNumber: 0,
-          pageSize: 100,
-          totalElements: 0,
-          totalPages: 0,
-        },
-      }),
+    const get = vi.fn<HttpClient["get"]>((_path, schema) =>
+      Promise.resolve(
+        schema.parse({
+          data: {
+            items: [],
+            pageNumber: 0,
+            pageSize: 100,
+            totalElements: 0,
+            totalPages: 0,
+          },
+        }),
+      ),
     );
     const repository = new HttpOverviewSamplePointRepository({ get } as HttpClient);
     const query = { page: 0, pageSize: 100, regionCode: "230202" };

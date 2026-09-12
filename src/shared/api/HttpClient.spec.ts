@@ -25,7 +25,7 @@ describe("FetchHttpClient contract diagnostics", () => {
     const controller = new AbortController();
     const result = new FetchHttpClient()
       .get("/api/v1/cancel", z.unknown(), { signal: controller.signal })
-      .catch((error) => error);
+      .catch((error: unknown) => error);
     controller.abort();
     expect(await result).toBeInstanceOf(DOMException);
     expect(vi.getTimerCount()).toBe(0);
@@ -47,7 +47,7 @@ describe("FetchHttpClient contract diagnostics", () => {
     );
     const result = new FetchHttpClient()
       .get("/api/v1/stalled", z.unknown())
-      .catch((error) => error);
+      .catch((error: unknown) => error);
     await vi.advanceTimersByTimeAsync(15_001);
     expect(signal?.aborted).toBe(true);
     expect(await result).toBeInstanceOf(DOMException);

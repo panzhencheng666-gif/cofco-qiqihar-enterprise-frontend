@@ -149,7 +149,9 @@ export function useOverviewSampleNetworkLayers({
     repository &&
     productCode &&
     mode === "historical" &&
-    (regionCode ? repository.historicalIcons : repository.historicalAggregates),
+    (regionCode
+      ? typeof repository.historicalIcons === "function"
+      : typeof repository.historicalAggregates === "function"),
   );
   const canLoadDesignPoints = Boolean(
     repository?.designPoints &&

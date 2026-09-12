@@ -720,10 +720,13 @@ describe("useOverviewSampleNetworkLayers", () => {
         totalPages: 1,
       }),
     );
+    const designPointDefinition = vi.fn(() =>
+      Promise.resolve(agriculturalInputContract()),
+    );
     const repository = {
       ...repositoryWithSnapshot(),
       designPoints,
-      designPointDefinition: vi.fn(() => Promise.resolve(agriculturalInputContract())),
+      designPointDefinition,
     } as unknown as OverviewSamplePointRepository;
 
     const { result } = renderHook(() =>
@@ -744,7 +747,7 @@ describe("useOverviewSampleNetworkLayers", () => {
       productCode: "CORN",
       regionCode: "230202",
     });
-    expect(repository.designPointDefinition).not.toHaveBeenCalled();
+    expect(designPointDefinition).not.toHaveBeenCalled();
     expect(result.current.designPoints[0]?.businessValues).toEqual([]);
     const detail = presentDesignSamplePoint(
       result.current.designPoints[0]!,

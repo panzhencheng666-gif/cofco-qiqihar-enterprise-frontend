@@ -619,8 +619,6 @@ export function OverviewSamplePointPanel({
     : effectiveComparisonState === "unavailable"
       ? "年度样本网络不可用"
       : "正在同步年度样本网络";
-  const usesRegionalSummary =
-    region.level === "PREFECTURE" || region.level === "COUNTY";
   const locationCountLabel = "坐标样本";
   const normalizedDesignQuery = designQuery.trim().toLocaleLowerCase("zh-CN");
   const filteredDesignPoints = authoritativeDesignPoints.filter((point) => {

@@ -15,7 +15,7 @@ const row = {
 describe("thin map catalogue", () => {
   it("coalesces a region load and filters the same response without fetching observations or full master pages", async () => {
     const get = vi.fn().mockResolvedValue({ data: [row] });
-    const r = new HttpOverviewSamplePointRepository({ get } as unknown as HttpClient);
+    const r = new HttpOverviewSamplePointRepository({ get } as HttpClient);
     const scope = { regionCode: "230200", productCode: "CORN", year: 2026 };
     const [a, b] = await Promise.all([
       r.mapCatalog(scope),
@@ -35,7 +35,7 @@ describe("thin map catalogue", () => {
   });
   it("keeps products, years and regions out of each other's cache", async () => {
     const get = vi.fn().mockResolvedValue({ data: [row] });
-    const r = new HttpOverviewSamplePointRepository({ get } as unknown as HttpClient);
+    const r = new HttpOverviewSamplePointRepository({ get } as HttpClient);
     for (const regionCode of ["230200", "230225", "230225201", "230225201001"])
       await r.mapCatalog({ regionCode, year: 2026, productCode: "CORN" });
     await r.mapCatalog({ regionCode: "230225", year: 2025, productCode: "CORN" });
