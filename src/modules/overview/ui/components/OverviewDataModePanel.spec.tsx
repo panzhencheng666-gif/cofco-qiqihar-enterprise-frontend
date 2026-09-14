@@ -53,6 +53,74 @@ describe("OverviewDataModePanel", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows automatic crop structure and formula forecasts in the regional sidebar", () => {
+    render(
+      <OverviewDataModePanel
+        mode="REGIONAL_DATA"
+        agricultureProfile={{
+          regionCode: "231100",
+          regionName: "黑河市",
+          administrativeLevel: "PREFECTURE",
+          year: 2026,
+          automatic: true,
+          generatedAt: "2026-09-14T10:00:00Z",
+          sourceSummary: "地区年度正式数据优先，缺项由统计模型自动补齐",
+          calculationMethod: "结构系数估算；复合增长公式预测",
+          crops: [
+            {
+              productCode: "CORN",
+              productName: "玉米",
+              dataKind: "OBSERVED",
+              plantedAreaMu: "1000000",
+              yieldPerMuKg: "600",
+              totalOutputKg: "600000000",
+              structurePercent: "40",
+              basis: "采用地区年度正式数据自动汇总",
+              forecasts: [
+                {
+                  year: 2027,
+                  plantedAreaMu: "1012000",
+                  yieldPerMuKg: "604.8",
+                  totalOutputKg: "612057600",
+                },
+              ],
+            },
+            {
+              productCode: "SOYBEAN",
+              productName: "大豆",
+              dataKind: "MODEL_ESTIMATE",
+              plantedAreaMu: "1375000",
+              yieldPerMuKg: "155",
+              totalOutputKg: "213125000",
+              structurePercent: "55",
+              basis: "依据公开行政区边界面积和结构系数推算",
+              forecasts: [],
+            },
+            {
+              productCode: "RICE",
+              productName: "水稻",
+              dataKind: "MODEL_ESTIMATE",
+              plantedAreaMu: "125000",
+              yieldPerMuKg: "520",
+              totalOutputKg: "65000000",
+              structurePercent: "5",
+              basis: "依据公开行政区边界面积和结构系数推算",
+              forecasts: [],
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "黑河市农业概况" })).toBeVisible();
+    expect(screen.getByText("系统自动生成 · 无需人工填报")).toBeVisible();
+    expect(screen.getByText("种植结构")).toBeVisible();
+    expect(screen.getByText("未来三年推算")).toBeVisible();
+    expect(screen.getByText("统计值")).toBeVisible();
+    expect(screen.getAllByText("模型推算")).toHaveLength(2);
+    expect(screen.getByText("2027年")).toBeVisible();
+  });
+
   it("renders an unfilled manual balance field without rejecting the backend contract", () => {
     render(
       <OverviewDataModePanel

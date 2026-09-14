@@ -19,6 +19,7 @@ import type {
 } from "../../domain/overviewSamplePoint";
 import type {
   OverviewDataMode,
+  RegionalAgricultureProfile,
   RegionalCropSummary,
   SupplyBalanceSummary,
 } from "../../domain/overviewRegionalData";
@@ -231,6 +232,8 @@ export function OverviewPage({
   const [selectedSamplePointId, setSelectedSamplePointId] = useState<string>();
   const [dataMode, setDataMode] = useState<OverviewDataMode>("SAMPLE_POINTS");
   const [regionalSummary, setRegionalSummary] = useState<RegionalCropSummary>();
+  const [agricultureProfile, setAgricultureProfile] =
+    useState<RegionalAgricultureProfile>();
   const [supplyBalance, setSupplyBalance] = useState<SupplyBalanceSummary>();
   const [regionalDataLoading, setRegionalDataLoading] = useState(false);
   const [regionalDataIssue, setRegionalDataIssue] = useState<string>();
@@ -709,15 +712,20 @@ export function OverviewPage({
     const query = { regionCode: regionalDataRegionCode, productCode, year };
     const request =
       dataMode === "REGIONAL_DATA"
-        ? regionalDataRepository.regionalSummary(query).then((next) => {
+        ? Promise.all([
+            regionalDataRepository.regionalSummary(query),
+            regionalDataRepository.agricultureProfile?.(query),
+          ]).then(([next, profile]) => {
             if (!active) return;
             setRegionalSummary(next);
+            setAgricultureProfile(profile);
             setSupplyBalance(undefined);
           })
         : regionalDataRepository.supplyBalance(query).then((next) => {
             if (!active) return;
             setSupplyBalance(next);
             setRegionalSummary(undefined);
+            setAgricultureProfile(undefined);
           });
     Promise.resolve()
       .then(() => {
@@ -752,6 +760,12 @@ export function OverviewPage({
     regionalSummary.productCode === productCode &&
     regionalSummary.year === year
       ? regionalSummary
+      : undefined;
+  const currentAgricultureProfile =
+    agricultureProfile &&
+    agricultureProfile.regionCode === regionalDataRegionCode &&
+    agricultureProfile.year === year
+      ? agricultureProfile
       : undefined;
   const currentSupplyBalance =
     supplyBalance &&
@@ -1037,20 +1051,27 @@ export function OverviewPage({
                   {...(currentRegionalSummary
                     ? { regionalSummary: currentRegionalSummary }
                     : {})}
+                  {...(currentAgricultureProfile
+                    ? { agricultureProfile: currentAgricultureProfile }
+                    : {})}
                   {...(currentSupplyBalance
                     ? { supplyBalance: currentSupplyBalance }
                     : {})}
                 />
               ),
-              sideDataPanel: dataMode === "SUPPLY_BALANCE",
-              scopeLabel: "地区填报范围：当前授权地区及全部下级地区",
+              sideDataPanel: dataMode === "SUPPLY_BALANCE" || dataMode === "REGIONAL_DATA",
+              scopeLabel: "地区数据范围：齐齐哈尔、黑河、呼伦贝尔、大兴安岭及下级地区",
               dataSourceLabel:
-                "地区与供需数据保存后即为正式数据；历史版本由系统自动留存",
+                dataMode === "REGIONAL_DATA"
+                  ? "正式地区数据优先；缺项和未来值由系统统计模型自动生成"
+                  : "地区与供需数据保存后即为正式数据；历史版本由系统自动留存",
               dataStatusText: regionalDataLoading
-                ? "正在同步地区正式数据"
-                : currentRegionalSummary || currentSupplyBalance
-                  ? "已同步地区正式数据"
-                  : "等待地区填报",
+                ? "正在自动计算地区数据"
+                : currentAgricultureProfile
+                  ? "地区概况已自动生成"
+                  : currentRegionalSummary || currentSupplyBalance
+                    ? "已同步地区正式数据"
+                    : "请选择地图地区",
             }
           : {})}
         filters={
@@ -1123,7 +1144,7 @@ export function OverviewPage({
               : {})}
             samplePointIcons={visibleSampleNetworkIcons}
             onSamplePointSelect={updateSelectedSamplePoint}
-            reserveRightPanel={dataMode === "SUPPLY_BALANCE"}
+            reserveRightPanel={dataMode === "SUPPLY_BALANCE" || dataMode === "REGIONAL_DATA"}
             selectedCode={selectedRegionCode}
             {...(selectedSamplePointId ? { selectedSamplePointId } : {})}
             onSelect={selectRegion}

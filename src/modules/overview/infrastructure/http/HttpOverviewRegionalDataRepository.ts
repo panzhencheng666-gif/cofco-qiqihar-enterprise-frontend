@@ -26,6 +26,39 @@ const regionalSummarySchema = z.object({
   }),
 });
 
+const regionalAgricultureProfileSchema = z.object({
+  data: z.object({
+    regionCode: z.string(),
+    regionName: z.string(),
+    administrativeLevel: z.string(),
+    year: z.number().int(),
+    automatic: z.boolean(),
+    generatedAt: z.string(),
+    sourceSummary: z.string(),
+    calculationMethod: z.string(),
+    crops: z.array(
+      z.object({
+        productCode: z.enum(["CORN", "SOYBEAN", "RICE"]),
+        productName: z.string(),
+        dataKind: z.enum(["OBSERVED", "MODEL_ESTIMATE"]),
+        plantedAreaMu: z.string(),
+        yieldPerMuKg: z.string(),
+        totalOutputKg: z.string(),
+        structurePercent: z.string(),
+        basis: z.string(),
+        forecasts: z.array(
+          z.object({
+            year: z.number().int(),
+            plantedAreaMu: z.string(),
+            yieldPerMuKg: z.string(),
+            totalOutputKg: z.string(),
+          }),
+        ),
+      }),
+    ),
+  }),
+});
+
 const supplyBalanceSchema = z.object({
   data: z.object({
     regionCode: z.string(),
@@ -53,6 +86,18 @@ const supplyBalanceSchema = z.object({
 
 export class HttpOverviewRegionalDataRepository implements OverviewRegionalDataRepository {
   constructor(private readonly http: Pick<HttpClient, "get">) {}
+
+  async agricultureProfile(query: OverviewRegionalDataQuery) {
+    return (
+      await this.http.get(
+        `/api/v1/overview/regional-agriculture-profile${queryString({
+          regionCode: query.regionCode,
+          year: query.year,
+        })}`,
+        regionalAgricultureProfileSchema,
+      )
+    ).data;
+  }
 
   async regionalSummary(query: OverviewRegionalDataQuery) {
     return (

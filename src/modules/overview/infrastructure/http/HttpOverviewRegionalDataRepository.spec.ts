@@ -56,6 +56,42 @@ describe("HttpOverviewRegionalDataRepository", () => {
             },
           }),
         ),
+      )
+      .mockImplementationOnce((_path: string, schema: ZodType) =>
+        Promise.resolve(
+          schema.parse({
+            data: {
+              regionCode: "230200",
+              regionName: "齐齐哈尔市",
+              administrativeLevel: "PREFECTURE",
+              year: 2026,
+              automatic: true,
+              generatedAt: "2026-09-14T10:00:00Z",
+              sourceSummary: "地区年度正式数据优先，缺项由统计模型自动补齐",
+              calculationMethod: "结构系数估算；复合增长公式预测",
+              crops: [
+                {
+                  productCode: "CORN",
+                  productName: "玉米",
+                  dataKind: "OBSERVED",
+                  plantedAreaMu: "17844200.0000",
+                  yieldPerMuKg: "650.0000",
+                  totalOutputKg: "11598730000.0000",
+                  structurePercent: "62.0000",
+                  basis: "采用地区年度正式数据自动汇总",
+                  forecasts: [
+                    {
+                      year: 2027,
+                      plantedAreaMu: "18058330.4000",
+                      yieldPerMuKg: "655.2000",
+                      totalOutputKg: "11830738180.8000",
+                    },
+                  ],
+                },
+              ],
+            },
+          }),
+        ),
       );
     const repository = new HttpOverviewRegionalDataRepository({ get });
 
@@ -69,10 +105,19 @@ describe("HttpOverviewRegionalDataRepository", () => {
       year: 2026,
       productCode: "CORN",
     });
+    const profile = await repository.agricultureProfile({
+      regionCode: "230200",
+      year: 2026,
+      productCode: "CORN",
+    });
 
     expect(get.mock.calls[0]?.[0]).toContain("/api/v1/overview/regional-crop-summary?");
     expect(get.mock.calls[1]?.[0]).toContain("/api/v1/supply-balances?");
+    expect(get.mock.calls[2]?.[0]).toContain(
+      "/api/v1/overview/regional-agriculture-profile?",
+    );
     expect(summary.comparisonMessage).toBeNull();
     expect(balance.rows[0]?.display).toBeNull();
+    expect(profile.crops[0]?.forecasts[0]?.year).toBe(2027);
   });
 });

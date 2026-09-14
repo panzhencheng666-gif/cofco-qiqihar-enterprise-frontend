@@ -46,6 +46,29 @@ describe("OverviewPage", () => {
         comparisonMessage: "已按2025年对比",
       });
     const regionalDataRepository: OverviewRegionalDataRepository = {
+      agricultureProfile: vi.fn().mockResolvedValue({
+        regionCode: "230200",
+        regionName: "齐齐哈尔市",
+        administrativeLevel: "PREFECTURE",
+        year: 2026,
+        automatic: true,
+        generatedAt: "2026-09-14T10:00:00Z",
+        sourceSummary: "地区年度正式数据优先，缺项由统计模型自动补齐",
+        calculationMethod: "结构系数估算；复合增长公式预测",
+        crops: [
+          {
+            productCode: "CORN",
+            productName: "玉米",
+            dataKind: "OBSERVED",
+            plantedAreaMu: "1500000",
+            yieldPerMuKg: "650",
+            totalOutputKg: "975000000",
+            structurePercent: "62",
+            basis: "采用地区年度正式数据自动汇总",
+            forecasts: [],
+          },
+        ],
+      }),
       regionalSummary,
       supplyBalance: vi.fn(),
     };
@@ -80,8 +103,11 @@ describe("OverviewPage", () => {
         productCode: "CORN",
       }),
     );
-    expect(await screen.findByText("结构调整增减")).toBeInTheDocument();
-    expect(screen.getByText("地区填报范围：当前授权地区及全部下级地区")).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "齐齐哈尔市农业概况" })).toBeVisible();
+    expect(screen.getByText("系统自动生成 · 无需人工填报")).toBeVisible();
+    expect(
+      screen.getByText("地区数据范围：齐齐哈尔、黑河、呼伦贝尔、大兴安岭及下级地区"),
+    ).toBeVisible();
     expect(screen.queryByText(/数据范围：.*个县区/)).not.toBeInTheDocument();
   });
 

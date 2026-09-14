@@ -17,6 +17,33 @@ export interface RegionalCropSummary {
   comparisonMessage: string | null;
 }
 
+export interface RegionalAgricultureProfile {
+  regionCode: string;
+  regionName: string;
+  administrativeLevel: string;
+  year: number;
+  automatic: boolean;
+  generatedAt: string;
+  sourceSummary: string;
+  calculationMethod: string;
+  crops: readonly {
+    productCode: "CORN" | "SOYBEAN" | "RICE";
+    productName: string;
+    dataKind: "OBSERVED" | "MODEL_ESTIMATE";
+    plantedAreaMu: string;
+    yieldPerMuKg: string;
+    totalOutputKg: string;
+    structurePercent: string;
+    basis: string;
+    forecasts: readonly {
+      year: number;
+      plantedAreaMu: string;
+      yieldPerMuKg: string;
+      totalOutputKg: string;
+    }[];
+  }[];
+}
+
 export interface SupplyBalanceSummary {
   regionCode: string;
   regionName: string;

@@ -1,5 +1,6 @@
 import type {
   OverviewDataMode,
+  RegionalAgricultureProfile,
   RegionalCropSummary,
   SupplyBalanceSummary,
 } from "../../domain/overviewRegionalData";
@@ -68,6 +69,7 @@ export function OverviewDataModePanel({
   loading = false,
   mode,
   productLabel,
+  agricultureProfile,
   regionalSummary,
   supplyBalance,
 }: {
@@ -75,6 +77,7 @@ export function OverviewDataModePanel({
   loading?: boolean;
   mode: OverviewDataMode;
   productLabel?: string;
+  agricultureProfile?: RegionalAgricultureProfile;
   regionalSummary?: RegionalCropSummary;
   supplyBalance?: SupplyBalanceSummary;
 }) {
@@ -89,7 +92,67 @@ export function OverviewDataModePanel({
           {issue}
         </p>
       )}
-      {mode === "REGIONAL_DATA" && regionalSummary && (
+      {mode === "REGIONAL_DATA" && agricultureProfile && (
+        <div className="overview-data-mode__profile">
+          <header>
+            <div>
+              <h2>{agricultureProfile.regionName}农业概况</h2>
+              <span>{agricultureProfile.year}年</span>
+            </div>
+            <b>系统自动生成 · 无需人工填报</b>
+          </header>
+          <section aria-labelledby="regional-structure-title">
+            <h3 id="regional-structure-title">种植结构</h3>
+            <div className="overview-data-mode__crop-list">
+              {agricultureProfile.crops.map((crop) => (
+                <article key={crop.productCode}>
+                  <div className="overview-data-mode__crop-heading">
+                    <strong>{crop.productName}</strong>
+                    <span className={`is-${crop.dataKind.toLowerCase()}`}>
+                      {crop.dataKind === "OBSERVED" ? "统计值" : "模型推算"}
+                    </span>
+                  </div>
+                  <div className="overview-data-mode__structure-bar">
+                    <i style={{ width: `${Math.min(100, Number(crop.structurePercent))}%` }} />
+                    <b>{format(crop.structurePercent)}%</b>
+                  </div>
+                  <dl>
+                    <div><dt>面积</dt><dd>{format(crop.plantedAreaMu, 10_000)} 万亩</dd></div>
+                    <div><dt>单产</dt><dd>{format(crop.yieldPerMuKg)} 公斤/亩</dd></div>
+                    <div><dt>总产</dt><dd>{format(crop.totalOutputKg, 10_000_000)} 万吨</dd></div>
+                  </dl>
+                  <small title={crop.basis}>{crop.basis}</small>
+                </article>
+              ))}
+            </div>
+          </section>
+          <section aria-labelledby="regional-forecast-title">
+            <h3 id="regional-forecast-title">未来三年推算</h3>
+            <div className="overview-data-mode__forecast-table">
+              <table>
+                <thead><tr><th>品种</th><th>年度</th><th>面积(万亩)</th><th>总产(万吨)</th></tr></thead>
+                <tbody>
+                  {agricultureProfile.crops.flatMap((crop) =>
+                    crop.forecasts.map((forecast) => (
+                      <tr key={`${crop.productCode}-${forecast.year}`}>
+                        <th scope="row">{crop.productName}</th>
+                        <td>{forecast.year}年</td>
+                        <td>{format(forecast.plantedAreaMu, 10_000)}</td>
+                        <td>{format(forecast.totalOutputKg, 10_000_000)}</td>
+                      </tr>
+                    )),
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <footer>
+            <p>{agricultureProfile.sourceSummary}</p>
+            <p>{agricultureProfile.calculationMethod}</p>
+          </footer>
+        </div>
+      )}
+      {mode === "REGIONAL_DATA" && !agricultureProfile && regionalSummary && (
         <>
           <header>
             <strong>{regionalSummary.regionName}</strong>
@@ -133,7 +196,7 @@ export function OverviewDataModePanel({
           </p>
         </>
       )}
-      {mode === "REGIONAL_DATA" && !loading && !issue && !regionalSummary && (
+      {mode === "REGIONAL_DATA" && !loading && !issue && !regionalSummary && !agricultureProfile && (
         <p>请在地图上选择要查看的地区。</p>
       )}
       {mode === "SUPPLY_BALANCE" && supplyBalance && (
