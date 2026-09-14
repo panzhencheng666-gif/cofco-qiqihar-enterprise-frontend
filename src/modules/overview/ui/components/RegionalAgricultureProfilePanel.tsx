@@ -81,7 +81,7 @@ function categoryLabel(category: string): string {
       FISHERY: "渔业水产",
       ECONOMY: "农业产业经济",
       RURAL: "乡村人口与收入",
-      OUTLOOK: "本年补算与明年预测",
+      OUTLOOK: "公开历史趋势补算与预测",
       LAND: "土地与种植",
       PRODUCTION: "粮食生产",
       INFRASTRUCTURE: "农业基础设施",
@@ -90,6 +90,7 @@ function categoryLabel(category: string): string {
       PROCESSING: "加工能力",
       FINANCE: "金融与补贴",
       BRAND: "绿色农业与品牌",
+      FLOW: "粮食跨地区流向",
       LOGISTICS: "仓储与流通",
       RISK: "灾害与风险",
     }[category] ?? "农业综合指标"
@@ -142,6 +143,25 @@ function refreshResultLabel(value: string | null | undefined): string {
 }
 
 function indicatorGuide(label: string, category: string) {
+  if (category === "FLOW")
+    return {
+      definition: label.includes("净")
+        ? "同一年度、同一地区边界的粮食调入量减调出量；正数为净流入，负数为净流出。"
+        : "粮食跨越该统计地区边界实际调入或调出的数量；不等于当地粮食产量、销售额或全部货物运输量。",
+      rationale:
+        "只有统计期、地区边界、品种范围和运输口径一致时，才可对照流入与流出；同一运输批次不得跨方式重复计算。",
+    };
+  if (category === "LOGISTICS" && /铁路|公路|水路/.test(label))
+    return {
+      definition: label.includes("周转量")
+        ? "运输货物重量乘以运输距离，衡量运输工作量；吨公里与吨不同。"
+        : label.includes("里程")
+          ? "公开资料统计的运营线路长度；表示基础设施规模，不等于粮食运输能力。"
+          : "该运输方式承运的全部货物重量，通常包含煤炭、建材、粮食等，不能直接当作粮食调出量。",
+      rationale:
+        "用于了解当地运输条件。保留原文统计年和单位；只有取得粮食专门统计后才计入粮食流向。",
+    };
+
   if (category === "OUTLOOK")
     return {
       definition:
@@ -438,6 +458,44 @@ function forecastSteps(
     `政策修正系数取${formatFactor(policyFactor)}（${factorChange(policyFactor)}）。政策用于背景研判；尚无经历史数据校准的因果系数，不预设政策必然带来固定增产。`,
     `将本年面积、面积趋势、本年单产、单产趋势、天气修正和政策修正相乘，得到${forecast.year}年预测总产${format(forecast.totalOutputKg, 10_000_000)}万吨。`,
   ];
+}
+
+function indicatorEvidence(
+  indicator: NonNullable<RegionalAgricultureProfile["indicators"]>[number],
+): Partial<DataExplanation> {
+  if (indicator.category !== "OUTLOOK") return {};
+  const parts = indicator.method.split("。").filter(Boolean);
+  const field = (prefix: string) =>
+    parts.find((part) => part.startsWith(prefix))?.slice(prefix.length) ?? "未提供";
+  const formula = field("计算：");
+  const slope = formula.match(/exp\(([-0-9.]+)×(\d+)\)/);
+  const model = field("方法：");
+  return {
+    formula,
+    method: model,
+    steps: [
+      `先取同一地区、同一指标、同一单位的历史值；本次使用${field("历史输入：").split("；").length}期，具体数值见下方。`,
+      model.includes("最近值")
+        ? "选择最近值延续：不假设增长，把最后一期作为预测基线。"
+        : "拟合按比例变化的趋势：对数值取自然对数，再拟合年份与对数值的直线；这样可以得到年度变化倍率。",
+      `选择理由：${field("选择原因：")}。`,
+      slope
+        ? `斜率 b=${slope[1]}，年度倍率 exp(b)=${Math.exp(Number(slope[1])).toFixed(4)}；预测距离最近公开年为${slope[2]}年，因此使用 exp(b×${slope[2]})。`
+        : "使用上方选定模型计算到目标年份。",
+      "将最近公开值乘以预测倍率，得到目标年结果；不把新闻热度、当前天气或政策条数直接换算为增产。",
+    ],
+    inputs: field("历史输入：")
+      .split("；")
+      .map((entry) => {
+        const [period, value] = entry.split("=");
+        return {
+          label: period ?? "历史期",
+          value: value ?? entry,
+          status: "公开历史值",
+          basis: "对应年度统计公报；原文链接列于来源依据。",
+        };
+      }),
+  };
 }
 
 export function RegionalAgricultureProfilePanel({
@@ -1038,7 +1096,7 @@ export function RegionalAgricultureProfilePanel({
           <div>
             <span>本轮核验成功</span>
             <strong>{summary.successful}</strong>
-            <small>含有变化、无变化及有效基线</small>
+            <small>按最近成功核验记录计数</small>
           </div>
           <div>
             <span>发现数据变化</span>
@@ -1172,6 +1230,7 @@ export function RegionalAgricultureProfilePanel({
                                   "按原文统计口径提取数值、单位和资料期。",
                                   "如原文使用“超过、约”等表述，则按下限或上下文值记录并明确标记。",
                                 ],
+                          ...indicatorEvidence(indicator),
                           sources: explanationSources.filter(
                             (source) =>
                               source.url === indicator.sourceUrl ||
@@ -1342,7 +1401,11 @@ export function RegionalAgricultureProfilePanel({
                   );
                 })}
               </div>
-              <p>{crop.basis}</p>
+              <p>
+                {crop.dataKind === "OBSERVED"
+                  ? "采用地区年度数据；点击指标查看原始依据。"
+                  : "根据已有面积与历史单产补算；点击指标查看输入来源与假设。"}
+              </p>
               <small>
                 {crop.confidencePercent
                   ? `模型参考评分 ${format(crop.confidencePercent)}%`
@@ -1357,7 +1420,7 @@ export function RegionalAgricultureProfilePanel({
       </section>
 
       <section aria-labelledby="regional-forecast-title">
-        <h3 id="regional-forecast-title">本年补算与下一年预测</h3>
+        <h3 id="regional-forecast-title">面积与单产模型预测</h3>
         <div className="overview-data-mode__forecast-table">
           <table>
             <thead>
@@ -1428,6 +1491,22 @@ export function RegionalAgricultureProfilePanel({
         </div>
       </section>
 
+      <section aria-labelledby="regional-flow-title">
+        <h3 id="regional-flow-title">粮食流入、流出与铁路物流</h3>
+        <p className="overview-data-mode__indicator-note">
+          实际粮食调入、调出按同年度同地区边界统计；铁路、公路全货种运输量单独展示，不能当作粮食流出。
+        </p>
+        {!profile.indicators?.some((i) => i.category === "FLOW") && (
+          <p>
+            尚未取得可核验的粮食调入、调出统计。未披露不等于零；取得同口径数据后可自动计算净流入。
+          </p>
+        )}
+        {!profile.indicators?.some((i) => i.category === "LOGISTICS") && (
+          <p>
+            本地区铁路货运、货运站与物流设施资料仍待采集。上级地区数据只能作为背景参考。
+          </p>
+        )}
+      </section>
       <section aria-labelledby="regional-weather-title">
         <h3 id="regional-weather-title">农业天气</h3>
         {profile.weather ? (
