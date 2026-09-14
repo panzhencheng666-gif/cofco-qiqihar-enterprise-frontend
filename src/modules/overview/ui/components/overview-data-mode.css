@@ -881,12 +881,16 @@ button.overview-data-mode__structure-bar {
 }
 
 .overview-data-mode__detail-sheet {
-  position: sticky;
-  top: 0;
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  bottom: 16px;
+  left: 16px;
   z-index: 20;
   display: grid;
+  align-content: start;
   gap: 8px;
-  max-height: 66vh;
+  min-height: 0;
   padding: 12px;
   overflow-y: auto;
   border: 1px solid rgb(255 222 120 / 58%);

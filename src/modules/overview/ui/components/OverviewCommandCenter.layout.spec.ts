@@ -79,6 +79,9 @@ describe("Overview command center navigation layout", () => {
     expect(panelCss).toMatch(
       /\.overview-command-center\.has-side-data-panel \.overview-data-mode\s*\{[^}]*width:\s*var\(--command-details-width\)/s,
     );
+    expect(panelCss).toMatch(
+      /\.overview-data-mode__detail-sheet\s*\{[^}]*position:\s*absolute[^}]*top:\s*16px[^}]*bottom:\s*16px/s,
+    );
   });
 
   it("opens the relief safe frame whenever a regional data mode owns the right panel", () => {
