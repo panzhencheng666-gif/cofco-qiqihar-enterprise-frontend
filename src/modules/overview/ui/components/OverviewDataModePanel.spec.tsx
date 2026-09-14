@@ -227,7 +227,11 @@ describe("OverviewDataModePanel", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "查看黑河市人民政府计算与来源" }),
     );
-    expect(screen.getByRole("link", { name: /黑河市人民政府/ })).toHaveAttribute(
+    expect(screen.getByRole("heading", { name: "来源依据（1项）" })).toBeVisible();
+    expect(screen.getByText("资料期")).toBeVisible();
+    expect(screen.getByText("核验时间")).toBeVisible();
+    expect(screen.getByText("可靠度")).toBeVisible();
+    expect(screen.getByRole("link", { name: "查看公开原文" })).toHaveAttribute(
       "href",
       "https://example.test/report",
     );

@@ -9,13 +9,32 @@ type Crop = RegionalAgricultureProfile["crops"][number];
 interface DataExplanation {
   title: string;
   value: string;
+  kind: string;
+  status: string;
   dataPeriod: string;
   calculationTime: string;
+  verificationTime: string;
   method: string;
   formula?: string;
-  sourceName?: string;
-  sourceUrl?: string;
-  evidence?: string;
+  inputs?: readonly {
+    label: string;
+    value: string;
+    status: string;
+    basis?: string;
+  }[];
+  sources?: readonly {
+    id: string;
+    name: string;
+    type: string;
+    sourceClass: string;
+    status: string;
+    publishedOn: string;
+    verifiedAt: string;
+    reliability: string;
+    evidence: string;
+    url: string;
+  }[];
+  notes?: readonly string[];
 }
 
 function format(value: string | number | null | undefined, divisor = 1): string {
@@ -86,6 +105,27 @@ function sourceTypeLabel(value: Source["type"]): string {
 
 function sourceStatusLabel(value: string): string {
   return value === "SUCCESS" ? "本轮核验成功" : "保留最近有效值";
+}
+
+function sourcePurpose(type: Source["type"]): string {
+  if (type === "WEATHER") return "用于农业天气监测及预测中的天气修正";
+  if (type === "POLICY") return "用于政策影响判断及预测中的政策修正";
+  return "用于地区档案、种植规模、产量和农业专题指标";
+}
+
+function readableEvidence(source: Source): string {
+  const evidence = source.evidence.trim();
+  const looksLikePayload =
+    evidence.startsWith("{") ||
+    evidence.startsWith("[") ||
+    /"(?:latitude|longitude|generationtime_ms|timezone)"/.test(evidence);
+  if (looksLikePayload) {
+    if (source.type === "WEATHER") {
+      return "已提取本地区逐日气温、降水和表层土壤含水率；接口原始报文由系统留存，页面展示标准化后的农业天气指标。";
+    }
+    return `已从该公开渠道提取结构化记录，${sourcePurpose(source.type)}；接口原始报文由系统留存。`;
+  }
+  return evidence || `该来源${sourcePurpose(source.type)}。`;
 }
 
 function metricFormula(
@@ -179,6 +219,33 @@ export function RegionalAgricultureProfilePanel({
     return [...result.entries()];
   }, [profile.indicators]);
   const calculatedAt = formatDateTime(profile.generatedAt);
+  const verifiedAt = formatDateTime(profile.refreshStatus?.lastSuccessAt);
+  const explanationSources = useMemo(
+    () =>
+      (profile.sources ?? []).map((source) => ({
+        id: source.id,
+        name: source.name,
+        type: sourceTypeLabel(source.type),
+        sourceClass: sourceClassLabel(source.sourceClass),
+        status: sourceStatusLabel(source.status),
+        publishedOn: source.publishedOn ?? "来源页未标注",
+        verifiedAt: formatDateTime(source.fetchedAt),
+        reliability: `${format(Number(source.reliabilityWeight) * 100)}%`,
+        evidence: readableEvidence(source),
+        url: source.url,
+      })),
+    [profile.sources],
+  );
+  const cropInputs = useMemo(
+    () =>
+      profile.crops.map((crop) => ({
+        label: crop.productName,
+        value: `面积 ${format(crop.plantedAreaMu, 10_000)}万亩 · 单产 ${format(crop.yieldPerMuKg)}公斤/亩 · 总产 ${format(crop.totalOutputKg, 10_000_000)}万吨`,
+        status: crop.dataKind === "OBSERVED" ? "公开统计" : "模型补算",
+        basis: crop.basis,
+      })),
+    [profile.crops],
+  );
   const openSummary = (
     title: string,
     value: string,
@@ -188,10 +255,23 @@ export function RegionalAgricultureProfilePanel({
     setDetail({
       title,
       value,
+      kind: "公式计算",
+      status: "随当前基础数据自动重算",
       dataPeriod: `${profile.year}年`,
       calculationTime: calculatedAt,
+      verificationTime: verifiedAt,
       method,
       formula,
+      inputs: cropInputs,
+      sources: explanationSources.filter((source) =>
+        (profile.sources ?? []).some(
+          (item) => item.id === source.id && item.type === "AGRICULTURE",
+        ),
+      ),
+      notes: [
+        "每日08:30核验登记来源；来源更新后重新生成本年补算值。",
+        "来源临时失败时保留最近有效值，并进入每小时重试队列。",
+      ],
     });
 
   return (
@@ -212,15 +292,23 @@ export function RegionalAgricultureProfilePanel({
         >
           <header>
             <div>
-              <small>数据说明</small>
+              <small>{detail.kind} · 数据追溯</small>
               <h3>{detail.title}</h3>
             </div>
             <button type="button" onClick={() => setDetail(undefined)}>
               关闭
             </button>
           </header>
-          <strong>{detail.value}</strong>
-          <dl>
+          <div className="overview-data-mode__detail-result">
+            <span>当前结果</span>
+            <strong>{detail.value}</strong>
+            <b>{detail.status}</b>
+          </div>
+          <dl className="overview-data-mode__detail-meta">
+            <div>
+              <dt>数据性质</dt>
+              <dd>{detail.kind}</dd>
+            </div>
             <div>
               <dt>数据期</dt>
               <dd>{detail.dataPeriod}</dd>
@@ -230,26 +318,87 @@ export function RegionalAgricultureProfilePanel({
               <dd>{detail.calculationTime}</dd>
             </div>
             <div>
-              <dt>计算口径</dt>
-              <dd>{detail.method}</dd>
+              <dt>最近核验</dt>
+              <dd>{detail.verificationTime}</dd>
             </div>
-            {detail.formula && (
-              <div>
-                <dt>代入公式</dt>
-                <dd>{detail.formula}</dd>
-              </div>
-            )}
-            {detail.evidence && (
-              <div>
-                <dt>公开依据</dt>
-                <dd>{detail.evidence}</dd>
-              </div>
-            )}
           </dl>
-          {detail.sourceUrl && (
-            <a href={detail.sourceUrl} rel="noreferrer" target="_blank">
-              打开{detail.sourceName ?? "来源原文"}
-            </a>
+          <section className="overview-data-mode__detail-section">
+            <h4>结果口径</h4>
+            <p>{detail.method}</p>
+          </section>
+          {detail.inputs && detail.inputs.length > 0 && (
+            <section className="overview-data-mode__detail-section">
+              <h4>参与计算的数据</h4>
+              <div className="overview-data-mode__detail-inputs">
+                {detail.inputs.map((input) => (
+                  <article key={`${input.label}-${input.value}`}>
+                    <header>
+                      <b>{input.label}</b>
+                      <span>{input.status}</span>
+                    </header>
+                    <strong>{input.value}</strong>
+                    {input.basis && <p>{input.basis}</p>}
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+          {detail.formula && (
+            <section className="overview-data-mode__detail-section">
+              <h4>计算过程</h4>
+              <div className="overview-data-mode__detail-formula">
+                <span>代入公式</span>
+                <strong>{detail.formula}</strong>
+              </div>
+            </section>
+          )}
+          {detail.sources && detail.sources.length > 0 && (
+            <section className="overview-data-mode__detail-section">
+              <h4>来源依据（{detail.sources.length}项）</h4>
+              <div className="overview-data-mode__detail-sources">
+                {detail.sources.map((source) => (
+                  <article key={source.id}>
+                    <header>
+                      <div>
+                        <b>{source.name}</b>
+                        <span>
+                          {source.type} · {source.sourceClass}
+                        </span>
+                      </div>
+                      <i>{source.status}</i>
+                    </header>
+                    <dl>
+                      <div>
+                        <dt>资料期</dt>
+                        <dd>{source.publishedOn}</dd>
+                      </div>
+                      <div>
+                        <dt>核验时间</dt>
+                        <dd>{source.verifiedAt}</dd>
+                      </div>
+                      <div>
+                        <dt>可靠度</dt>
+                        <dd>{source.reliability}</dd>
+                      </div>
+                    </dl>
+                    <p>{source.evidence}</p>
+                    <a href={source.url} rel="noreferrer" target="_blank">
+                      查看公开原文
+                    </a>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+          {detail.notes && detail.notes.length > 0 && (
+            <section className="overview-data-mode__detail-section">
+              <h4>更新与质量说明</h4>
+              <ul>
+                {detail.notes.map((note) => (
+                  <li key={note}>{note}</li>
+                ))}
+              </ul>
+            </section>
           )}
         </aside>
       )}
@@ -493,15 +642,29 @@ export function RegionalAgricultureProfilePanel({
                         setDetail({
                           title: indicator.label,
                           value: `${format(indicator.value)} ${indicator.unit}`,
+                          kind: kindLabel(indicator.dataKind),
+                          status:
+                            indicator.dataKind === "ESTIMATED"
+                              ? "基础值更新后自动重算"
+                              : "采用最近有效公开值",
                           dataPeriod: `${indicator.dataYear}年`,
-                          calculationTime: formatDateTime(indicator.verifiedAt),
+                          calculationTime: calculatedAt,
+                          verificationTime: formatDateTime(indicator.verifiedAt),
                           method:
                             indicator.dataKind === "ESTIMATED"
                               ? "根据公开基础值动态计算"
                               : kindLabel(indicator.dataKind),
                           formula: indicator.method,
-                          sourceName: indicator.sourceName,
-                          sourceUrl: indicator.sourceUrl,
+                          sources: explanationSources.filter(
+                            (source) =>
+                              source.url === indicator.sourceUrl ||
+                              source.name === indicator.sourceName,
+                          ),
+                          notes: [
+                            indicator.dataKind === "ESTIMATED"
+                              ? "该结果不是原文直接公布值，由页面所列基础数据按公式自动生成。"
+                              : "该结果取自公开资料，系统每日核验来源状态并保留资料期。",
+                          ],
                         })
                       }
                     >
@@ -543,10 +706,23 @@ export function RegionalAgricultureProfilePanel({
                   setDetail({
                     title: `${crop.productName}种植占比`,
                     value: `${format(crop.structurePercent)}%`,
+                    kind: crop.dataKind === "OBSERVED" ? "公开统计" : "模型补算",
+                    status: "随本年种植结构自动重算",
                     dataPeriod: `${profile.year}年`,
                     calculationTime: calculatedAt,
+                    verificationTime: verifiedAt,
                     method: crop.basis,
                     formula: metricFormula(crop, "share", summary.totalArea),
+                    inputs: cropInputs,
+                    sources: explanationSources.filter((source) =>
+                      (profile.sources ?? []).some(
+                        (item) => item.id === source.id && item.type === "AGRICULTURE",
+                      ),
+                    ),
+                    notes: [
+                      "占比按该品种面积除以三品种合计面积计算。",
+                      `当前结果置信度 ${format(crop.confidencePercent)}%。`,
+                    ],
                   })
                 }
               >
@@ -571,10 +747,37 @@ export function RegionalAgricultureProfilePanel({
                         setDetail({
                           title: `${crop.productName}${labels[key]}`,
                           value: values[key],
+                          kind: crop.dataKind === "OBSERVED" ? "公开统计" : "模型补算",
+                          status:
+                            crop.dataKind === "OBSERVED"
+                              ? "采用最近有效公开值"
+                              : "公开基础值更新后自动重算",
                           dataPeriod: `${profile.year}年`,
                           calculationTime: calculatedAt,
+                          verificationTime: verifiedAt,
                           method: crop.basis,
                           formula: metricFormula(crop, key, summary.totalArea),
+                          inputs: [
+                            {
+                              label: crop.productName,
+                              value: `面积 ${format(crop.plantedAreaMu, 10_000)}万亩 · 单产 ${format(crop.yieldPerMuKg)}公斤/亩 · 总产 ${format(crop.totalOutputKg, 10_000_000)}万吨`,
+                              status:
+                                crop.dataKind === "OBSERVED" ? "公开统计" : "模型补算",
+                              basis: crop.basis,
+                            },
+                          ],
+                          sources: explanationSources.filter((source) =>
+                            (profile.sources ?? []).some(
+                              (item) =>
+                                item.id === source.id && item.type === "AGRICULTURE",
+                            ),
+                          ),
+                          notes: [
+                            `当前结果置信度 ${format(crop.confidencePercent)}%。`,
+                            crop.uncertaintyLowKg && crop.uncertaintyHighKg
+                              ? `总产合理区间为 ${format(crop.uncertaintyLowKg, 10_000_000)}–${format(crop.uncertaintyHighKg, 10_000_000)} 万吨。`
+                              : "公开值不额外生成不确定性区间。",
+                          ],
                         })
                       }
                     >
@@ -624,8 +827,11 @@ export function RegionalAgricultureProfilePanel({
                           setDetail({
                             title: `${crop.productName}${forecast.year}年产量预测`,
                             value: `${format(forecast.totalOutputKg, 10_000_000)} 万吨`,
+                            kind: "预测模型",
+                            status: "仅预测下一年",
                             dataPeriod: `${forecast.year}年预测`,
                             calculationTime: calculatedAt,
+                            verificationTime: verifiedAt,
                             method: `基于${profile.year}年面积和单产，叠加趋势、天气与政策修正`,
                             formula: forecast.formula
                               ? `${forecast.formula
@@ -638,6 +844,23 @@ export function RegionalAgricultureProfilePanel({
                                     `${format(crop.yieldPerMuKg)}公斤/亩`,
                                   )}=${format(forecast.totalOutputKg, 10_000_000)}万吨`
                               : "预测公式暂未返回",
+                            inputs: [
+                              {
+                                label: `${profile.year}年${crop.productName}基础值`,
+                                value: `面积 ${format(crop.plantedAreaMu, 10_000)}万亩 · 单产 ${format(crop.yieldPerMuKg)}公斤/亩`,
+                                status:
+                                  crop.dataKind === "OBSERVED"
+                                    ? "公开统计"
+                                    : "模型补算",
+                                basis: crop.basis,
+                              },
+                            ],
+                            sources: explanationSources,
+                            notes: [
+                              `预测置信度 ${format(forecast.confidencePercent)}%。`,
+                              "模型仅生成本年尚未公开的缺项和下一年预测；公开新值进入后会自动替换旧基础值并重新计算。",
+                              "趋势、天气和政策修正均记录在代入公式中，预测结果用于经营研判。",
+                            ],
                           })
                         }
                       >
@@ -717,14 +940,27 @@ export function RegionalAgricultureProfilePanel({
                 setDetail({
                   title: source.name,
                   value: sourceStatusLabel(source.status),
+                  kind: "公开来源",
+                  status:
+                    source.status === "SUCCESS"
+                      ? "当前核验可访问"
+                      : "当前使用最近有效记录",
                   dataPeriod: source.publishedOn
                     ? `资料发布于 ${source.publishedOn}`
                     : "来源页未标注发布日期",
-                  calculationTime: formatDateTime(source.fetchedAt),
-                  method: `${sourceTypeLabel(source.type)} · ${sourceClassLabel(source.sourceClass)} · 可靠度权重 ${format(Number(source.reliabilityWeight) * 100)}%`,
-                  evidence: source.evidence,
-                  sourceName: source.name,
-                  sourceUrl: source.url,
+                  calculationTime: calculatedAt,
+                  verificationTime: formatDateTime(source.fetchedAt),
+                  method: sourcePurpose(source.type),
+                  sources: explanationSources.filter(
+                    (reference) => reference.id === source.id,
+                  ),
+                  notes: [
+                    `系统给该来源配置的融合权重为 ${format(Number(source.reliabilityWeight) * 100)}%。`,
+                    source.status === "SUCCESS"
+                      ? "本轮已成功访问并完成内容核验。"
+                      : "本轮未取得新内容，当前结果保留此前核验通过的有效记录。",
+                    "系统每日08:30重新核验；失败来源每小时重试，恢复后自动参与下一轮计算。",
+                  ],
                 })
               }
             >
