@@ -211,7 +211,7 @@ describe("OverviewDataModePanel", () => {
     expect(screen.getByText("种子需求量")).toBeVisible();
     expect(screen.getByText("计划涉农贷款")).toBeVisible();
     expect(screen.getAllByText("公开计划")).toHaveLength(2);
-    expect(screen.getByText("三品种播种规模")).toBeVisible();
+    expect(screen.getByText("已覆盖作物播种规模")).toBeVisible();
     expect(screen.getByText("公开值覆盖")).toBeVisible();
     expect(screen.getByText("明年产量变化")).toBeVisible();
     expect(screen.getByText("562")).toBeVisible();
@@ -225,6 +225,13 @@ describe("OverviewDataModePanel", () => {
     ).toBeVisible();
     expect(screen.queryByText(/SUCCESS|PARTIAL|\{"/)).not.toBeInTheDocument();
 
+    await userEvent.type(
+      screen.getByRole("searchbox", { name: "搜索农业指标" }),
+      "贷款",
+    );
+    expect(screen.queryByText("种子需求量")).not.toBeInTheDocument();
+    expect(screen.getByText("计划涉农贷款")).toBeVisible();
+    await userEvent.clear(screen.getByRole("searchbox", { name: "搜索农业指标" }));
     expect(screen.queryByText("大豆2026.4万亩，玉米713.9万亩")).not.toBeInTheDocument();
     await userEvent.click(
       screen.getByRole("button", { name: "查看黑河市人民政府计算与来源" }),
@@ -235,8 +242,8 @@ describe("OverviewDataModePanel", () => {
     expect(screen.getByRole("heading", { name: "来源依据（1项）" })).toBeVisible();
     expect(screen.getByText("资料期")).toBeVisible();
     expect(screen.getByText("核验时间")).toBeVisible();
-    expect(screen.getByText("可靠度")).toBeVisible();
-    expect(screen.getByRole("link", { name: "查看公开原文" })).toHaveAttribute(
+    expect(screen.getByText("来源优先权重")).toBeVisible();
+    expect(screen.getByRole("link", { name: /查看公开原文/ })).toHaveAttribute(
       "href",
       "https://example.test/report",
     );
@@ -247,10 +254,8 @@ describe("OverviewDataModePanel", () => {
     expect(
       screen.getByRole("dialog", { name: "玉米2027年产量预测计算与来源说明" }),
     ).toBeVisible();
-    expect(
-      screen.getByText(/明年总产=当年总产×趋势系数×天气系数×政策系数=61.21万吨/),
-    ).toBeVisible();
-    expect(screen.getByText(/置信度 92/)).toBeVisible();
+    expect(screen.getByText(/÷1000=61.21万吨/)).toBeVisible();
+    expect(screen.getByText(/模型参考评分 92/)).toBeVisible();
   });
 
   it("renders an unfilled manual balance field without rejecting the backend contract", () => {

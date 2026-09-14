@@ -70,6 +70,18 @@ function formatDateTime(value: string | null | undefined): string {
 function categoryLabel(category: string): string {
   return (
     {
+      CROP_GRAIN: "粮食作物",
+      CROP_TUBER: "薯类",
+      CROP_OIL: "油料作物",
+      CROP_VEGETABLE: "蔬菜与食用菌",
+      CROP_FRUIT: "瓜果",
+      CROP_ECONOMIC: "经济与特色作物",
+      CROP_FORAGE: "饲草饲料",
+      LIVESTOCK: "畜牧与肉蛋奶",
+      FISHERY: "渔业水产",
+      ECONOMY: "农业产业经济",
+      RURAL: "乡村人口与收入",
+      OUTLOOK: "本年补算与明年预测",
       LAND: "土地与种植",
       PRODUCTION: "粮食生产",
       INFRASTRUCTURE: "农业基础设施",
@@ -108,6 +120,12 @@ function sourceTypeLabel(value: Source["type"]): string {
 }
 
 function sourceStatusLabel(value: string): string {
+  if (value === "SEARCH_NOT_CONFIGURED") return "联网搜索尚未配置";
+  if (value === "SEARCH_FAILED") return "联网搜索失败，等待重试";
+  if (value === "SEARCH_SUCCESS") return "联网搜索已完成";
+  if (value === "WAITING_FOR_SOURCE_SYNC" || value === "BOOTSTRAP")
+    return "等待首次联网核验";
+  if (value.startsWith("BOOTSTRAP_")) return "历史参考，尚未完成本轮核验";
   if (value === "SUCCESS_CHANGED") return "已核验 · 数据有变化";
   if (value === "SUCCESS_UNCHANGED") return "已核验 · 确认无变化";
   if (["SUCCESS", "BOOTSTRAP_VERIFIED", "BOOTSTRAP_REFERENCE"].includes(value)) {
@@ -124,6 +142,57 @@ function refreshResultLabel(value: string | null | undefined): string {
 }
 
 function indicatorGuide(label: string, category: string) {
+  if (category === "OUTLOOK")
+    return {
+      definition:
+        "本地区该指标在目标年度的模型估计；尚未公开的本年数据标为补算，下一年标为预测。",
+      rationale:
+        "按同地区、同指标、同单位的历史序列计算。三期及以上数据通过逐期回测比较趋势模型与最近值模型；两期按年均变化率；仅一期则延续最近值。所有参数随新数据重新拟合。",
+    };
+  if (category.startsWith("CROP_"))
+    return {
+      definition: label.includes("折粮")
+        ? "薯类按公报折粮口径统计的产量，用于粮食总量统计；不能当作鲜薯重量，也不能与鲜薯直接相加。"
+        : label.includes("平均单产")
+          ? "同一地区、同一年度、同一作物每亩播种面积对应的产量。蔬菜及食用菌等总类仅表示该统计类别的综合值。"
+          : label.includes("面积")
+            ? "报告期内该作物或统计作物类别的播种面积。总类包含子类，不将总类与子类重复相加。"
+            : "该作物或统计作物类别在报告期的收获产量。蔬菜及食用菌是合并统计，不能据此认定番茄、辣椒等各占多少。",
+      rationale: label.includes("平均单产")
+        ? "只有同一公报同时披露面积与产量，才用产量除以面积计算单产；单位先统一。"
+        : "按原文的作物名称、统计年度和单位提取；未披露的小品种保留缺项，不平均拆分合计数。",
+    };
+  if (category === "LIVESTOCK" || category === "FISHERY")
+    return {
+      definition: label.includes("存栏")
+        ? "统计时点仍在饲养的畜禽数量，是时点数。"
+        : label.includes("出栏")
+          ? "报告期内出栏的畜禽数量，是全年累计数，与年末存栏口径不同。"
+          : "报告期内该类畜禽或水产品的产出数量；肉类总量和分项不能重复相加，原奶与加工乳制品分别统计。",
+      rationale:
+        "保留原文物种、时间范围及数量口径，统一质量单位；不从畜禽数量直接推断肉产量。",
+    };
+  if (category === "ECONOMY")
+    return {
+      definition: label.includes("增加值")
+        ? "第一产业生产活动新创造的价值，与农林牧渔业总产值口径不同，不能相加。"
+        : "按统计公报口径计价的农业生产规模，反映产业经济体量；产值不等于利润或农民收入。",
+      rationale:
+        "保留公报现价金额。价格变化和产量变化都会影响金额，因此不把产值变化直接解释为实物增产。",
+    };
+  if (category === "RURAL")
+    return {
+      definition: label.includes("收入")
+        ? "农村居民报告期可用于消费和储蓄的人均收入，涵盖多种收入来源，不等于种粮净利润。"
+        : "按来源公报定义统计的乡村人口；常住人口与户籍人口口径需结合原文核对。",
+      rationale: "使用对应年度原文数值，人口和收入不能根据作物面积简单换算。",
+    };
+  if (category === "LOGISTICS")
+    return {
+      definition:
+        "地区农产品冷藏储运容量或配送网络规模，属于流通基础设施指标。设计容量并不等于实际库存或年度运输量。",
+      rationale: "使用报道明确披露的设施或线路数量，注明资料期；不与粮食库存混用。",
+    };
   if (label.includes("绿色食品认证面积")) {
     return {
       definition:
@@ -219,7 +288,7 @@ function summaryGuide(title: string) {
     string,
     { definition: string; rationale: string; steps: string[] }
   > = {
-    三品种播种规模: {
+    已覆盖作物播种规模: {
       definition:
         "玉米、大豆和水稻本年播种面积之和，仅表示三种主粮，不代表全部农作物面积。",
       rationale:
@@ -230,7 +299,7 @@ function summaryGuide(title: string) {
         "三个品种面积相加得到结果。",
       ],
     },
-    三品种总产: {
+    已覆盖作物总产: {
       definition: "玉米、大豆和水稻本年总产之和，仅表示三种主粮合计。",
       rationale:
         "每个品种先按面积×单产得到总产，再汇总，能够保留品种差异并追溯每个输入。",
@@ -253,7 +322,7 @@ function summaryGuide(title: string) {
     最大品种占比: {
       definition: "三种主粮中播种面积占比最高的品种及其比例。",
       rationale: "用于识别种植结构集中度，比例越高说明结构越集中。",
-      steps: ["计算每个品种面积÷三品种合计面积。", "比较三个比例并取最大值。"],
+      steps: ["计算每个品种面积÷已覆盖作物合计面积。", "比较三个比例并取最大值。"],
     },
     种植多样性指数: {
       definition: "根据三个品种面积占比计算的结构均衡程度，数值越高表示结构越分散。",
@@ -329,7 +398,7 @@ function metricFormula(
   if (key === "yield")
     return `${crop.productName}亩均单产=${format(crop.yieldPerMuKg)}公斤/亩`;
   if (key === "output") {
-    return `${format(crop.plantedAreaMu, 10_000)}万亩×${format(crop.yieldPerMuKg)}公斤/亩÷100=${format(crop.totalOutputKg, 10_000_000)}万吨`;
+    return `${format(crop.plantedAreaMu, 10_000)}万亩×${format(crop.yieldPerMuKg)}公斤/亩÷1000=${format(crop.totalOutputKg, 10_000_000)}万吨`;
   }
   return `${format(crop.plantedAreaMu, 10_000)}÷${format(totalArea, 10_000)}×100=${format(crop.structurePercent)}%`;
 }
@@ -353,7 +422,7 @@ function formatFactor(factor: number): string {
 }
 
 function forecastSteps(
-  profile: RegionalAgricultureProfile,
+  _profile: RegionalAgricultureProfile,
   crop: Crop,
   forecast: Forecast,
 ): string[] {
@@ -363,10 +432,10 @@ function forecastSteps(
   const policyFactor = forecastFactor(forecast.formula, "政策修正");
   return [
     `本年面积基线为${format(crop.plantedAreaMu, 10_000)}万亩，来源状态为${crop.dataKind === "OBSERVED" ? "公开统计" : "模型补算"}。`,
-    `面积趋势系数取${formatFactor(areaFactor)}（${factorChange(areaFactor)}）。当前使用该品种的年度趋势参数；历史序列充足后由滚动回归结果替换。`,
+    `面积趋势系数取${formatFactor(areaFactor)}（${factorChange(areaFactor)}）。来自本地区同作物历史面积序列；只有一期或缺少历史时取1，沿用基线。`,
     `本年单产基线为${format(crop.yieldPerMuKg)}公斤/亩，单产趋势系数取${formatFactor(yieldFactor)}（${factorChange(yieldFactor)}）。`,
-    `天气修正系数取${formatFactor(weatherFactor)}（${factorChange(weatherFactor)}），依据最近气温、降水、土壤墒情及风险阈值判断${profile.weather ? `；当前判断为“${profile.weather.risk}”` : "；当前无新天气观测时使用中性系数"}。`,
-    `政策修正系数取${formatFactor(policyFactor)}（${factorChange(policyFactor)}），依据${profile.policies?.length ? `${profile.policies.length}项已登记政策及其适用作物` : "当前无可用政策证据，使用中性系数"}。`,
+    `天气系数取${formatFactor(weatherFactor)}：当前未以历史产量校准天气影响，因此不把实时天气直接乘入全年预测。天气仍单独更新展示。`,
+    `政策修正系数取${formatFactor(policyFactor)}（${factorChange(policyFactor)}）。政策用于背景研判；尚无经历史数据校准的因果系数，不预设政策必然带来固定增产。`,
     `将本年面积、面积趋势、本年单产、单产趋势、天气修正和政策修正相乘，得到${forecast.year}年预测总产${format(forecast.totalOutputKg, 10_000_000)}万吨。`,
   ];
 }
@@ -377,6 +446,11 @@ export function RegionalAgricultureProfilePanel({
   profile: RegionalAgricultureProfile;
 }) {
   const [detail, setDetail] = useState<DataExplanation>();
+  const [indicatorSearch, setIndicatorSearch] = useState("");
+  const [indicatorCategory, setIndicatorCategory] = useState("ALL");
+  const [copiedSource, setCopiedSource] = useState<string>();
+  const topics = [...new Set((profile.indicators ?? []).map((i) => i.category))];
+  const searchSource = profile.sources?.find((s) => s.sourceClass === "PUBLIC_SEARCH");
   const summary = useMemo(() => {
     const totalArea = profile.crops.reduce(
       (sum, crop) => sum + Number(crop.plantedAreaMu),
@@ -399,13 +473,7 @@ export function RegionalAgricultureProfilePanel({
       ["OFFICIAL", "GOVERNMENT_MEDIA"].includes(source.sourceClass),
     ).length;
     const successful = sources.filter((source) =>
-      [
-        "SUCCESS",
-        "SUCCESS_CHANGED",
-        "SUCCESS_UNCHANGED",
-        "BOOTSTRAP_VERIFIED",
-        "BOOTSTRAP_REFERENCE",
-      ].includes(source.status),
+      ["SUCCESS", "SUCCESS_CHANGED", "SUCCESS_UNCHANGED"].includes(source.status),
     ).length;
     const changed = sources.filter(
       (source) => source.status === "SUCCESS_CHANGED",
@@ -414,7 +482,9 @@ export function RegionalAgricultureProfilePanel({
       (source) => source.status === "SUCCESS_UNCHANGED",
     ).length;
     const forecastConfidences = profile.crops.flatMap((crop) =>
-      crop.forecasts.map((forecast) => Number(forecast.confidencePercent ?? 0)),
+      crop.forecasts
+        .filter((forecast) => forecast.confidencePercent != null)
+        .map((forecast) => Number(forecast.confidencePercent)),
     );
     return {
       totalArea,
@@ -441,7 +511,7 @@ export function RegionalAgricultureProfilePanel({
       forecastConfidence: forecastConfidences.length
         ? forecastConfidences.reduce((sum, value) => sum + value, 0) /
           forecastConfidences.length
-        : 0,
+        : null,
     };
   }, [profile]);
 
@@ -454,14 +524,22 @@ export function RegionalAgricultureProfilePanel({
   );
   const groups = useMemo(() => {
     const result = new Map<string, Indicator[]>();
-    (profile.indicators ?? []).forEach((indicator) => {
-      result.set(indicator.category, [
-        ...(result.get(indicator.category) ?? []),
-        indicator,
-      ]);
-    });
+    (profile.indicators ?? [])
+      .filter(
+        (i) =>
+          (indicatorCategory === "ALL" || i.category === indicatorCategory) &&
+          (i.label + categoryLabel(i.category) + i.dataYear).includes(
+            indicatorSearch.trim(),
+          ),
+      )
+      .forEach((indicator) => {
+        result.set(indicator.category, [
+          ...(result.get(indicator.category) ?? []),
+          indicator,
+        ]);
+      });
     return [...result.entries()];
-  }, [profile.indicators]);
+  }, [profile.indicators, indicatorCategory, indicatorSearch]);
   const calculatedAt = formatDateTime(profile.generatedAt);
   const verifiedAt = formatDateTime(profile.refreshStatus?.lastSuccessAt);
   const explanationSources = useMemo(
@@ -508,7 +586,7 @@ export function RegionalAgricultureProfilePanel({
             label: `${crop.productName}总产`,
             value: `${format(crop.totalOutputKg, 10_000_000)}万吨`,
             status: "公式计算",
-            basis: `${format(crop.plantedAreaMu, 10_000)}万亩×${format(crop.yieldPerMuKg)}公斤/亩÷100=${format(crop.totalOutputKg, 10_000_000)}万吨。`,
+            basis: `${format(crop.plantedAreaMu, 10_000)}万亩×${format(crop.yieldPerMuKg)}公斤/亩÷1000=${format(crop.totalOutputKg, 10_000_000)}万吨。`,
           },
         ];
       }),
@@ -632,7 +710,11 @@ export function RegionalAgricultureProfilePanel({
           )}
           {detail.formula && (
             <section className="overview-data-mode__detail-section">
-              <h4>计算过程</h4>
+              <h4>
+                {detail.kind === "公开统计" || detail.kind === "公开参考"
+                  ? "原始依据与口径"
+                  : "计算过程"}
+              </h4>
               <div className="overview-data-mode__detail-formula">
                 <span>代入公式</span>
                 <strong>{detail.formula}</strong>
@@ -664,14 +746,50 @@ export function RegionalAgricultureProfilePanel({
                         <dd>{source.verifiedAt}</dd>
                       </div>
                       <div>
-                        <dt>可靠度</dt>
+                        <dt>来源优先权重</dt>
                         <dd>{source.reliability}</dd>
                       </div>
                     </dl>
                     <p>{source.evidence}</p>
-                    <a href={source.url} rel="noreferrer" target="_blank">
-                      查看公开原文
-                    </a>
+                    <div className="overview-data-mode__source-actions">
+                      <a href={source.url} rel="noopener noreferrer" target="_blank">
+                        查看公开原文 ↗
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void navigator.clipboard
+                            .writeText(source.url)
+                            .then(() => setCopiedSource(source.id))
+                            .catch(() => setCopiedSource("failed"))
+                        }
+                      >
+                        {copiedSource === source.id ? "链接已复制" : "复制原文链接"}
+                      </button>
+                    </div>
+                    <small className="overview-data-mode__source-address">
+                      {source.url}
+                    </small>
+                    {source.status.includes("失败") && (
+                      <p>
+                        该来源最近访问未成功。可先查阅上方已留存依据，原文恢复后将重新核验。
+                      </p>
+                    )}
+                    {source.url ===
+                      "https://hlj.people.com.cn/n2/2026/0515/c220024-41581714.html" && (
+                      <a
+                        href="https://drc.hlj.gov.cn/drc/c111429/202605/c00_31944370.shtml"
+                        rel="noopener noreferrer"
+                        target="_blank"
+                      >
+                        查看相关政务报道（省发改委） ↗
+                      </a>
+                    )}
+                    {copiedSource === "failed" && (
+                      <small role="status">
+                        复制暂不可用，可选中上方完整地址复制。
+                      </small>
+                    )}
                   </article>
                 ))}
               </div>
@@ -726,6 +844,28 @@ export function RegionalAgricultureProfilePanel({
         <p className="overview-data-mode__coverage">{profile.coverageDescription}</p>
       )}
 
+      <div className="overview-data-mode__refresh-result" role="status">
+        <span>每日联网搜索</span>
+        <strong>
+          {searchSource
+            ? sourceStatusLabel(searchSource.status)
+            : "尚无联网搜索执行记录"}
+        </strong>
+        <small>
+          {searchSource?.evidence ?? "固定来源核验与搜索发现新资料分开记录。"}
+        </small>
+      </div>
+      {profile.crops.length < 3 && (
+        <p className="overview-data-mode__assessment">
+          三大作物目前有 {profile.crops.length}/3
+          项具备可计算的面积和单产依据。以下合计只覆盖这些作物；未具备完整依据的作物不按零处理，公开面积与其他产量仍可在农业指标中查看。
+        </p>
+      )}
+      {profile.administrativeLevel !== "PREFECTURE" && (
+        <p className="overview-data-mode__assessment">
+          下方扩展农业指标、天气和政策为所属地市背景资料，来源覆盖范围不自动等同于本县、乡镇或行政村。本地推算单独说明面积分摊依据。
+        </p>
+      )}
       <section aria-labelledby="regional-facts-title">
         <h3 id="regional-facts-title">地区档案</h3>
         <div className="overview-data-mode__fact-grid">
@@ -757,7 +897,7 @@ export function RegionalAgricultureProfilePanel({
           <div>
             <span>主导作物</span>
             <strong>{leadingCrop?.productName ?? "—"}</strong>
-            <small>按三品种结构</small>
+            <small>按已覆盖作物结构</small>
           </div>
         </div>
         {leadingCrop && (
@@ -766,7 +906,7 @@ export function RegionalAgricultureProfilePanel({
             {format(profile.regionFacts.areaSquareKilometres)}平方公里， 共纳入
             {profile.regionFacts.countyCount}个县级地区、
             {profile.regionFacts.townshipCount}个乡镇和
-            {profile.regionFacts.villageCount}个行政村；玉米、大豆、水稻合计约
+            {profile.regionFacts.villageCount}个行政村；已覆盖作物合计约
             {format(summary.totalArea, 10_000)}万亩，结构以{leadingCrop.productName}
             为主。
           </p>
@@ -777,12 +917,12 @@ export function RegionalAgricultureProfilePanel({
         <h3 id="regional-scale-title">农业规模、结构与效率</h3>
         <div className="overview-data-mode__metric-grid">
           <MetricButton
-            label="三品种播种规模"
+            label="已覆盖作物播种规模"
             value={`${format(summary.totalArea, 10_000)} 万亩`}
             meta={`${profile.year}年 · 点击查看计算`}
             onClick={() =>
               openSummary(
-                "三品种播种规模",
+                "已覆盖作物播种规模",
                 `${format(summary.totalArea, 10_000)} 万亩`,
                 profile.crops
                   .map((crop) => format(crop.plantedAreaMu, 10_000))
@@ -791,12 +931,12 @@ export function RegionalAgricultureProfilePanel({
             }
           />
           <MetricButton
-            label="三品种总产"
+            label="已覆盖作物总产"
             value={`${format(summary.totalOutput, 10_000_000)} 万吨`}
             meta={`${profile.year}年 · 点击查看计算`}
             onClick={() =>
               openSummary(
-                "三品种总产",
+                "已覆盖作物总产",
                 `${format(summary.totalOutput, 10_000_000)} 万吨`,
                 profile.crops
                   .map((crop) => format(crop.totalOutputKg, 10_000_000))
@@ -916,9 +1056,13 @@ export function RegionalAgricultureProfilePanel({
             <small>保留有效值并每小时重试</small>
           </div>
           <div>
-            <span>明年预测置信度</span>
-            <strong>{format(summary.forecastConfidence)}%</strong>
-            <small>三品种平均</small>
+            <span>明年预测模型参考评分</span>
+            <strong>
+              {summary.forecastConfidence == null
+                ? "尚未校准"
+                : `${format(summary.forecastConfidence)}%`}
+            </strong>
+            <small>未校准时不提供置信概率</small>
           </div>
           <div>
             <span>定时运行</span>
@@ -928,11 +1072,40 @@ export function RegionalAgricultureProfilePanel({
         </div>
       </section>
 
-      {groups.length > 0 && (
+      {(profile.indicators?.length ?? 0) > 0 && (
         <section aria-labelledby="regional-indicators-title">
           <h3 id="regional-indicators-title">
             农业粮食专题指标（{profile.indicators?.length ?? 0}项）
           </h3>
+          <div className="overview-data-mode__indicator-tools">
+            <input
+              type="search"
+              aria-label="搜索农业指标"
+              placeholder="搜索作物、畜牧、产业、年份…"
+              value={indicatorSearch}
+              onChange={(e) => setIndicatorSearch(e.target.value)}
+            />
+            <select
+              aria-label="农业指标主题"
+              value={indicatorCategory}
+              onChange={(e) => setIndicatorCategory(e.target.value)}
+            >
+              <option value="ALL">全部主题</option>
+              {topics.map((topic) => (
+                <option key={topic} value={topic}>
+                  {categoryLabel(topic)}（
+                  {profile.indicators?.filter((i) => i.category === topic).length}）
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="overview-data-mode__indicator-note">
+            共{topics.length}个主题 ·
+            每个数值均标注资料期。总类与分项分别展示，不重复汇总；未披露的小品种不从合计数中平均拆分。
+          </p>
+          {groups.length === 0 && (
+            <p role="status">没有匹配的已采集指标，请调整关键词或主题。</p>
+          )}
           {profile.administrativeLevel !== "PREFECTURE" && (
             <p className="overview-data-mode__indicator-note">
               专题指标采用所属地市公开资料作为环境背景；本级作物数据按本行政区边界另行补算。
@@ -966,22 +1139,45 @@ export function RegionalAgricultureProfilePanel({
                               ? "根据公开基础值动态计算"
                               : kindLabel(indicator.dataKind),
                           formula: indicator.method,
-                          steps:
-                            indicator.dataKind === "ESTIMATED"
+                          inputs:
+                            indicator.category === "OUTLOOK"
                               ? [
-                                  "读取公式中列明的公开基础指标，并检查资料期和单位。",
+                                  {
+                                    label: "拟合历史与计算理由",
+                                    value: "由本地区公开序列自动生成",
+                                    status: "逐期回测或基线延续",
+                                    basis: indicator.method,
+                                  },
+                                ]
+                              : [
+                                  {
+                                    label: "原始证据与口径",
+                                    value: `${format(indicator.value)} ${indicator.unit}`,
+                                    status: kindLabel(indicator.dataKind),
+                                    basis: indicator.method,
+                                  },
+                                ],
+                          steps: indicator.method.includes("历史输入：")
+                            ? indicator.method.split("。").filter(Boolean)
+                            : indicator.dataKind === "ESTIMATED"
+                              ? [
+                                  `依据：${indicator.method}`,
+                                  "先核对资料期和统计口径；跨年数据或范围不同的数据不直接相除。",
                                   "把分子、分母或面积统一到公式要求的单位。",
                                   "代入下方公式计算，并随任一基础值变化自动重算。",
                                 ]
                               : [
-                                  "定位与所选地区匹配的公开资料。",
+                                  `读取来源：${indicator.sourceName}，数据期为${indicator.dataYear}年。`,
+                                  indicator.method,
                                   "按原文统计口径提取数值、单位和资料期。",
                                   "如原文使用“超过、约”等表述，则按下限或上下文值记录并明确标记。",
                                 ],
                           sources: explanationSources.filter(
                             (source) =>
                               source.url === indicator.sourceUrl ||
-                              source.name === indicator.sourceName,
+                              source.name === indicator.sourceName ||
+                              (indicator.category === "OUTLOOK" &&
+                                source.name.includes("统计公报")),
                           ),
                           notes: [
                             indicator.dataKind === "ESTIMATED"
@@ -1027,9 +1223,9 @@ export function RegionalAgricultureProfilePanel({
                 type="button"
                 onClick={() =>
                   setDetail({
-                    title: `${crop.productName}种植占比`,
+                    title: `${crop.productName}已覆盖作物种植占比`,
                     value: `${format(crop.structurePercent)}%`,
-                    definition: `${crop.productName}播种面积占玉米、大豆、水稻三品种面积合计的比例。`,
+                    definition: `${crop.productName}播种面积占目前具备计算依据的作物面积合计的比例；不表示全部农作物结构。`,
                     rationale:
                       "使用面积占比展示种植结构；分母只包含当前三种主粮，因此不能解释为占全部农作物的比例。",
                     kind: crop.dataKind === "OBSERVED" ? "公开统计" : "模型补算",
@@ -1041,8 +1237,8 @@ export function RegionalAgricultureProfilePanel({
                     formula: metricFormula(crop, "share", summary.totalArea),
                     steps: [
                       `读取${crop.productName}播种面积${format(crop.plantedAreaMu, 10_000)}万亩。`,
-                      `汇总三品种播种面积${format(summary.totalArea, 10_000)}万亩。`,
-                      "本品种面积除以三品种合计面积并转换为百分比。",
+                      `汇总已覆盖作物播种面积${format(summary.totalArea, 10_000)}万亩。`,
+                      "本品种面积除以已覆盖作物合计面积并转换为百分比。",
                     ],
                     inputs: cropInputs,
                     sources: explanationSources.filter((source) =>
@@ -1051,8 +1247,10 @@ export function RegionalAgricultureProfilePanel({
                       ),
                     ),
                     notes: [
-                      "占比按该品种面积除以三品种合计面积计算。",
-                      `当前结果置信度 ${format(crop.confidencePercent)}%。`,
+                      "占比按该品种面积除以已覆盖作物合计面积计算。",
+                      crop.confidencePercent
+                        ? `模型参考评分 ${format(crop.confidencePercent)}%。`
+                        : "尚未完成统计误差校准，不提供置信概率或虚构区间。",
                     ],
                   })
                 }
@@ -1128,7 +1326,9 @@ export function RegionalAgricultureProfilePanel({
                             ),
                           ),
                           notes: [
-                            `当前结果置信度 ${format(crop.confidencePercent)}%。`,
+                            crop.confidencePercent
+                              ? `模型参考评分 ${format(crop.confidencePercent)}%。`
+                              : "尚未完成统计误差校准，不提供置信概率或虚构区间。",
                             crop.uncertaintyLowKg && crop.uncertaintyHighKg
                               ? `总产合理区间为 ${format(crop.uncertaintyLowKg, 10_000_000)}–${format(crop.uncertaintyHighKg, 10_000_000)} 万吨。`
                               : "公开值不额外生成不确定性区间。",
@@ -1144,9 +1344,11 @@ export function RegionalAgricultureProfilePanel({
               </div>
               <p>{crop.basis}</p>
               <small>
-                置信度 {format(crop.confidencePercent)}%
+                {crop.confidencePercent
+                  ? `模型参考评分 ${format(crop.confidencePercent)}%`
+                  : "误差范围尚待历史验证"}
                 {crop.uncertaintyLowKg && crop.uncertaintyHighKg
-                  ? ` · 总产区间 ${format(crop.uncertaintyLowKg, 10_000_000)}–${format(crop.uncertaintyHighKg, 10_000_000)} 万吨`
+                  ? ` · 情景参考范围 ${format(crop.uncertaintyLowKg, 10_000_000)}–${format(crop.uncertaintyHighKg, 10_000_000)} 万吨`
                   : ""}
               </small>
             </article>
@@ -1184,24 +1386,14 @@ export function RegionalAgricultureProfilePanel({
                             value: `${format(forecast.totalOutputKg, 10_000_000)} 万吨`,
                             definition: `${crop.productName}${forecast.year}年预测总产，表示在当前基础数据、趋势、天气和政策条件下的模型结果。`,
                             rationale:
-                              "面积和单产的变化机制不同，因此分别计算趋势，再叠加天气与政策修正；只预测下一年以控制远期不确定性。",
+                              "先分别预测种植规模和每亩产出，再相乘得到总产。历史序列决定使用趋势或最近值延续；未校准的天气和政策不预设增产系数。",
                             kind: "预测模型",
                             status: "仅预测下一年",
                             dataPeriod: `${forecast.year}年预测`,
                             calculationTime: calculatedAt,
                             verificationTime: verifiedAt,
-                            method: `基于${profile.year}年面积和单产，叠加趋势、天气与政策修正`,
-                            formula: forecast.formula
-                              ? `${forecast.formula
-                                  .replace(
-                                    "当年面积",
-                                    `${format(crop.plantedAreaMu, 10_000)}万亩`,
-                                  )
-                                  .replace(
-                                    "当年单产",
-                                    `${format(crop.yieldPerMuKg)}公斤/亩`,
-                                  )}=${format(forecast.totalOutputKg, 10_000_000)}万吨`
-                              : "预测公式暂未返回",
+                            method: forecast.formula ?? "历史基线延续",
+                            formula: `${format(forecast.plantedAreaMu, 10_000)}万亩×${format(forecast.yieldPerMuKg)}公斤/亩÷1000=${format(forecast.totalOutputKg, 10_000_000)}万吨`,
                             steps: forecastSteps(profile, crop, forecast),
                             inputs: [
                               {
@@ -1216,7 +1408,9 @@ export function RegionalAgricultureProfilePanel({
                             ],
                             sources: explanationSources,
                             notes: [
-                              `预测置信度 ${format(forecast.confidencePercent)}%。`,
+                              forecast.confidencePercent
+                                ? `模型参考评分 ${format(forecast.confidencePercent)}%。`
+                                : "历史数据较少，当前不提供置信概率。",
                               "模型仅生成本年尚未公开的缺项和下一年预测；公开新值进入后会自动替换旧基础值并重新计算。",
                               "趋势、天气和政策修正均记录在代入公式中，预测结果用于经营研判。",
                             ],

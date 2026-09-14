@@ -1344,3 +1344,45 @@ button.overview-data-mode__structure-bar {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.overview-data-mode__indicator-tools {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+.overview-data-mode__indicator-tools input,
+.overview-data-mode__indicator-tools select {
+  min-width: 0;
+  flex: 1 1 160px;
+  border: 1px solid #60a9c8;
+  background: #064365;
+  color: #effaff;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font: inherit;
+}
+.overview-data-mode__indicator-tools input::placeholder {
+  color: #bdd7e3;
+}
+.overview-data-mode__source-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.overview-data-mode__source-actions button {
+  padding: 6px 10px;
+  color: #eefaff;
+  border: 1px solid #60a9c8;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.overview-data-mode__source-address {
+  display: block;
+  overflow-wrap: anywhere;
+  margin-top: 8px;
+  line-height: 1.6;
+  color: #b7d2df;
+}

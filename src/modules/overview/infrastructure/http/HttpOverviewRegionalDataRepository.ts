@@ -124,9 +124,18 @@ const regionalAgricultureProfileSchema = z.object({
         structurePercent: z.string(),
         basis: z.string(),
         formula: z.string().optional(),
-        confidencePercent: z.string().optional(),
-        uncertaintyLowKg: z.string().optional(),
-        uncertaintyHighKg: z.string().optional(),
+        confidencePercent: z
+          .string()
+          .nullish()
+          .transform((value) => value ?? undefined),
+        uncertaintyLowKg: z
+          .string()
+          .nullish()
+          .transform((value) => value ?? undefined),
+        uncertaintyHighKg: z
+          .string()
+          .nullish()
+          .transform((value) => value ?? undefined),
         forecasts: z.array(
           z.object({
             year: z.number().int(),
@@ -134,7 +143,10 @@ const regionalAgricultureProfileSchema = z.object({
             yieldPerMuKg: z.string(),
             totalOutputKg: z.string(),
             formula: z.string().optional(),
-            confidencePercent: z.string().optional(),
+            confidencePercent: z
+              .string()
+              .nullish()
+              .transform((value) => value ?? undefined),
           }),
         ),
       }),
