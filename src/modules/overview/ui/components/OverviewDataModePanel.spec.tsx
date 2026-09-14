@@ -102,6 +102,18 @@ describe("OverviewDataModePanel", () => {
           ],
           indicators: [
             {
+              category: "OUTLOOK",
+              label: "玉米产量 · 2027年预测",
+              value: "133.10",
+              unit: "万吨",
+              dataYear: 2027,
+              dataKind: "ESTIMATED",
+              method:
+                "方法：两期年均趋势。选择原因：两期同口径数据。历史输入：2024年=100万吨；2025年=110万吨。计算：110×exp(0.095310×2)=133.10万吨。",
+              sourceName: "黑河市人民政府",
+              sourceUrl: "https://example.test/report",
+            },
+            {
               category: "INPUT",
               label: "种子需求量",
               value: "10.5",
@@ -193,7 +205,7 @@ describe("OverviewDataModePanel", () => {
     expect(screen.getByRole("heading", { name: "黑河市农业概况" })).toBeVisible();
     expect(screen.getByText("无需日常人工填报")).toBeVisible();
     expect(screen.getByRole("heading", { name: "种植结构与分品种数据" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "本年补算与下一年预测" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "面积与单产模型预测" })).toBeVisible();
     expect(screen.getByText("公开统计")).toBeVisible();
     expect(screen.getAllByText("模型补算")).toHaveLength(2);
     expect(screen.getByText("2027年")).toBeVisible();
@@ -204,7 +216,7 @@ describe("OverviewDataModePanel", () => {
     expect(screen.getByText(/黑河市区域面积约68,726.00平方公里/)).toBeVisible();
     expect(screen.getByText(/结构以大豆为主/)).toBeVisible();
     expect(
-      screen.getByRole("heading", { name: "农业粮食专题指标（2项）" }),
+      screen.getByRole("heading", { name: "农业粮食专题指标（3项）" }),
     ).toBeVisible();
     expect(screen.getByText("农资保障")).toBeVisible();
     expect(screen.getByText("金融与补贴")).toBeVisible();
@@ -232,6 +244,19 @@ describe("OverviewDataModePanel", () => {
     expect(screen.queryByText("种子需求量")).not.toBeInTheDocument();
     expect(screen.getByText("计划涉农贷款")).toBeVisible();
     await userEvent.clear(screen.getByRole("searchbox", { name: "搜索农业指标" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "查看玉米产量 · 2027年预测计算与来源" }),
+    );
+    const explanation = screen.getByRole("dialog", {
+      name: "玉米产量 · 2027年预测计算与来源说明",
+    });
+    expect(within(explanation).getByText("2024年")).toBeVisible();
+    expect(within(explanation).getByText("100万吨")).toBeVisible();
+    expect(within(explanation).getByText(/年度倍率 exp/)).toBeVisible();
+    expect(
+      within(explanation).getByText("110×exp(0.095310×2)=133.10万吨"),
+    ).toBeVisible();
+    await userEvent.click(within(explanation).getByRole("button", { name: "关闭" }));
     expect(screen.queryByText("大豆2026.4万亩，玉米713.9万亩")).not.toBeInTheDocument();
     await userEvent.click(
       screen.getByRole("button", { name: "查看黑河市人民政府计算与来源" }),
