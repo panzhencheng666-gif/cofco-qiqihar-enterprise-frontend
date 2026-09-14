@@ -26,25 +26,10 @@ import {
 import { HttpContractError, HttpError } from "../../../../shared/api/HttpClient";
 
 describe("OverviewPage", () => {
-  it("loads independent regional data only after switching away from the default sample mode", async () => {
+  it("loads the regional profile when the legacy summary is unavailable below county", async () => {
     const regionalSummary = vi
       .fn<OverviewRegionalDataRepository["regionalSummary"]>()
-      .mockResolvedValue({
-        regionCode: "230200",
-        regionName: "齐齐哈尔市",
-        administrativeLevel: "PREFECTURE",
-        year: 2026,
-        productCode: "CORN",
-        plantedAreaMu: "1500000",
-        yieldPerMuKg: "650",
-        totalOutputKg: "975000000",
-        areaChangeWanMu: "10",
-        areaChangeRatePercent: "7.1429",
-        currentDataAvailable: true,
-        comparisonAvailable: true,
-        areaChangeRateAvailable: true,
-        comparisonMessage: "已按2025年对比",
-      });
+      .mockRejectedValue(new Error("legacy summary does not support township"));
     const regionalDataRepository: OverviewRegionalDataRepository = {
       agricultureProfile: vi.fn().mockResolvedValue({
         regionCode: "230200",
@@ -103,7 +88,9 @@ describe("OverviewPage", () => {
         productCode: "CORN",
       }),
     );
-    expect(await screen.findByRole("heading", { name: "齐齐哈尔市农业概况" })).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: "齐齐哈尔市农业概况" }),
+    ).toBeVisible();
     expect(screen.getByText("系统自动生成 · 无需人工填报")).toBeVisible();
     expect(
       screen.getByText("地区数据范围：齐齐哈尔、黑河、呼伦贝尔、大兴安岭及下级地区"),

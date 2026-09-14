@@ -713,10 +713,12 @@ export function OverviewPage({
     const request =
       dataMode === "REGIONAL_DATA"
         ? Promise.all([
-            regionalDataRepository.regionalSummary(query),
-            regionalDataRepository.agricultureProfile?.(query),
+            regionalDataRepository.regionalSummary(query).catch(() => undefined),
+            regionalDataRepository.agricultureProfile?.(query) ??
+              Promise.resolve(undefined),
           ]).then(([next, profile]) => {
             if (!active) return;
+            if (!next && !profile) throw new Error("regional data unavailable");
             setRegionalSummary(next);
             setAgricultureProfile(profile);
             setSupplyBalance(undefined);
@@ -1059,7 +1061,8 @@ export function OverviewPage({
                     : {})}
                 />
               ),
-              sideDataPanel: dataMode === "SUPPLY_BALANCE" || dataMode === "REGIONAL_DATA",
+              sideDataPanel:
+                dataMode === "SUPPLY_BALANCE" || dataMode === "REGIONAL_DATA",
               scopeLabel: "地区数据范围：齐齐哈尔、黑河、呼伦贝尔、大兴安岭及下级地区",
               dataSourceLabel:
                 dataMode === "REGIONAL_DATA"
@@ -1144,7 +1147,9 @@ export function OverviewPage({
               : {})}
             samplePointIcons={visibleSampleNetworkIcons}
             onSamplePointSelect={updateSelectedSamplePoint}
-            reserveRightPanel={dataMode === "SUPPLY_BALANCE" || dataMode === "REGIONAL_DATA"}
+            reserveRightPanel={
+              dataMode === "SUPPLY_BALANCE" || dataMode === "REGIONAL_DATA"
+            }
             selectedCode={selectedRegionCode}
             {...(selectedSamplePointId ? { selectedSamplePointId } : {})}
             onSelect={selectRegion}

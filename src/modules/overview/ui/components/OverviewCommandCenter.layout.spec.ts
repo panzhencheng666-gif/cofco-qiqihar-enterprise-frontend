@@ -89,7 +89,7 @@ describe("Overview command center navigation layout", () => {
     );
 
     expect(page).toMatch(
-      /<BoundaryMap[\s\S]*?reserveRightPanel=\{dataMode === "SUPPLY_BALANCE" \|\| dataMode === "REGIONAL_DATA"\}/,
+      /<BoundaryMap[\s\S]*?reserveRightPanel=\{\s*dataMode === "SUPPLY_BALANCE" \|\| dataMode === "REGIONAL_DATA"\s*\}/,
     );
     expect(boundaryMap).toContain("reserveRightPanel={reserveRightPanel}");
     expect(reliefMap).toMatch(/activeDetailLayout\s*=\s*reserveRightPanel\s*\|\|/);
