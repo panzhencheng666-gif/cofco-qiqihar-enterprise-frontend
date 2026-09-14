@@ -301,7 +301,7 @@ export function OverviewCommandCenter({
         {boundarySource && (
           <span
             className="overview-boundary-provenance"
-            title={`${boundarySource.name} · ${boundarySource.license} · 来源可追溯的地图展示边界，非勘界或法律依据`}
+            title="公开地图资料，来源可追溯，仅作展示，非勘界或法律依据"
           >
             地图边界：{overtureBoundary ? "公开地图资料" : "来源资料"}
             （仅作展示） ·{" "}
