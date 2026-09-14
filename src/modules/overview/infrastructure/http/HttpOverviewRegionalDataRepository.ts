@@ -11,6 +11,57 @@ const decimalValueSchema = z
   .union([z.string(), z.number()])
   .transform((value) => String(value));
 
+const currentEstimateSchema = z.object({
+  value: decimalValueSchema,
+  model: z.string(),
+  selection: z.string(),
+  formula: z.string(),
+  inputs: z.array(
+    z.object({
+      year: z.number().int(),
+      value: decimalValueSchema,
+      unit: z.string(),
+      source: z.string(),
+      url: z.string(),
+    }),
+  ),
+  candidates: z.array(
+    z.object({
+      model: z.string(),
+      meanAbsoluteError: decimalValueSchema,
+      validationYears: z.number().int(),
+    }),
+  ),
+});
+const estimateBatchSchema = z.object({
+  rootRegionCode: z.string(),
+  year: z.number().int(),
+  calculatedAt: z.string().nullable(),
+  attemptedAt: z.string(),
+  sourceCheckedAt: z.string().nullable(),
+  calculationStatus: z.string(),
+  sourceStatus: z.string(),
+  modelVersion: z.string(),
+  comparisons: z.array(
+    z.object({
+      label: z.string(),
+      category: z.string(),
+      unit: z.string(),
+      publicYear: z.number().int(),
+      publicValue: decimalValueSchema,
+      sourceName: z.string(),
+      sourceUrl: z.string(),
+      estimateYear: z.number().int(),
+      current: currentEstimateSchema.nullable(),
+      difference: decimalValueSchema.nullable(),
+      differencePercent: decimalValueSchema.nullable(),
+      historicalCheck: currentEstimateSchema.nullable(),
+      historicalDifference: decimalValueSchema.nullable(),
+      conclusion: z.string(),
+    }),
+  ),
+});
+
 const regionalSummarySchema = z.object({
   data: z.object({
     regionCode: z.string(),
@@ -113,6 +164,9 @@ const regionalAgricultureProfileSchema = z.object({
         }),
       )
       .optional(),
+    estimateBatch: estimateBatchSchema
+      .nullish()
+      .transform((value) => value ?? undefined),
     crops: z.array(
       z.object({
         productCode: z.enum(["CORN", "SOYBEAN", "RICE"]),

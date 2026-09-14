@@ -1,0 +1,142 @@
+.regional-estimates {
+  min-width: 0;
+}
+.regional-estimates p {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #d6ebf4;
+  overflow-wrap: anywhere;
+}
+.regional-estimates h4 {
+  margin: 0 0 12px;
+  font-size: 17px;
+}
+.regional-estimates h5 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: #fff;
+}
+.regional-estimates > article {
+  padding: 16px;
+  margin-top: 12px;
+  border: 1px solid #ffffff28;
+  border-radius: 12px;
+  background: #034a6de6;
+  min-width: 0;
+}
+.regional-estimates__status {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  background: #013955;
+  border-left: 3px solid #69d1d8;
+}
+.regional-estimates small,
+.regional-estimates__values span {
+  font-size: 12px;
+  color: #bddce9;
+  line-height: 1.5;
+}
+.regional-estimates__search {
+  display: grid;
+  gap: 7px;
+  margin-top: 14px;
+  font-size: 13px;
+}
+.regional-estimates__search input {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px;
+  border-radius: 7px;
+  border: 1px solid #ffffff40;
+  background: #023e5e;
+  color: white;
+}
+.regional-estimates__values {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.regional-estimates__values > div {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 10px;
+  background: #ffffff09;
+  border-radius: 7px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.regional-estimates__values > div:last-child {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.regional-estimates__values strong {
+  font-size: 19px;
+  color: #ffdf88;
+}
+.regional-estimates a {
+  color: #9ee8ef;
+  text-decoration: underline;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.regional-estimates details {
+  margin-top: 12px;
+}
+.regional-estimates summary {
+  cursor: pointer;
+  color: #b5edf2;
+  font-size: 13px;
+  padding: 10px 0;
+}
+.regional-estimates summary:focus-visible,
+.regional-estimates a:focus-visible {
+  outline: 2px solid #ffdb75;
+  outline-offset: 3px;
+}
+.regional-estimates__logic {
+  display: grid;
+  gap: 16px;
+  padding: 12px 0;
+}
+.regional-estimates__inputs,
+.regional-estimates__candidates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.regional-estimates__inputs > div,
+.regional-estimates__candidates > div {
+  display: grid;
+  gap: 6px;
+  padding: 9px;
+  border: 1px solid #ffffff20;
+  border-radius: 6px;
+  font-size: 13px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.regional-estimates__formula {
+  background: #002d47;
+  padding: 12px;
+  border-left: 3px solid #f7cb64;
+}
+.regional-estimates__conclusion {
+  border-top: 1px solid #ffffff25;
+  padding-top: 12px;
+}
+.regional-estimates__historical {
+  border-top: 1px dashed #ffffff40;
+}
+.regional-estimates > button {
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px;
+  background: #0b6485;
+  color: white;
+  border: 1px solid #ffffff30;
+  border-radius: 7px;
+  cursor: pointer;
+}

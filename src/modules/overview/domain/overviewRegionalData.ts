@@ -1,3 +1,4 @@
+import type { RegionalEstimateBatch } from "./regionalEstimates";
 export type OverviewDataMode = "SAMPLE_POINTS" | "REGIONAL_DATA" | "SUPPLY_BALANCE";
 
 export interface RegionalCropSummary {
@@ -93,6 +94,7 @@ export interface RegionalAgricultureProfile {
         evidence: string;
       }[]
     | undefined;
+  estimateBatch?: RegionalEstimateBatch | undefined;
   crops: readonly {
     productCode: "CORN" | "SOYBEAN" | "RICE";
     productName: string;

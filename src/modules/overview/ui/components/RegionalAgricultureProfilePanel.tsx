@@ -1,3 +1,4 @@
+import { RegionalEstimateComparison } from "./RegionalEstimateComparison";
 import { useMemo, useState } from "react";
 
 import type { RegionalAgricultureProfile } from "../../domain/overviewRegionalData";
@@ -123,6 +124,7 @@ function sourceTypeLabel(value: Source["type"]): string {
 function sourceStatusLabel(value: string): string {
   if (value === "SEARCH_NOT_CONFIGURED") return "联网搜索尚未配置";
   if (value === "SEARCH_FAILED") return "联网搜索失败，等待重试";
+  if (value === "SEARCH_PARTIAL") return "已联网检索，部分引擎未完成";
   if (value === "SEARCH_SUCCESS") return "联网搜索已完成";
   if (value === "WAITING_FOR_SOURCE_SYNC" || value === "BOOTSTRAP")
     return "等待首次联网核验";
@@ -924,6 +926,12 @@ export function RegionalAgricultureProfilePanel({
           下方扩展农业指标、天气和政策为所属地市背景资料，来源覆盖范围不自动等同于本县、乡镇或行政村。本地推算单独说明面积分摊依据。
         </p>
       )}
+      {profile.estimateBatch && (
+        <RegionalEstimateComparison
+          key={`${profile.regionCode}-${profile.year}`}
+          batch={profile.estimateBatch}
+        />
+      )}
       <section aria-labelledby="regional-facts-title">
         <h3 id="regional-facts-title">地区档案</h3>
         <div className="overview-data-mode__fact-grid">
@@ -1269,6 +1277,29 @@ export function RegionalAgricultureProfilePanel({
       <section aria-labelledby="regional-structure-title">
         <h3 id="regional-structure-title">种植结构与分品种数据</h3>
         <div className="overview-data-mode__crop-list">
+          {(
+            [
+              ["CORN", "玉米"],
+              ["SOYBEAN", "大豆"],
+              ["RICE", "稻谷"],
+            ] as const
+          )
+            .filter(
+              ([code]) => !profile.crops.some((crop) => crop.productCode === code),
+            )
+            .map(([code, name]) => (
+              <article key={code}>
+                <div className="overview-data-mode__crop-heading">
+                  <strong>{name}</strong>
+                  <span>依据待补齐</span>
+                </div>
+                <p>
+                  当前面积或单产依据不完整，未生成{profile.year}
+                  年总产；这不代表本地区没有种植{name}
+                  。已取得的公开产量可在“公开值与当前估算对比”及农业专题中查看。
+                </p>
+              </article>
+            ))}
           {profile.crops.map((crop) => (
             <article key={crop.productCode}>
               <div className="overview-data-mode__crop-heading">
