@@ -201,6 +201,8 @@ describe("OverviewDataModePanel", () => {
     expect(screen.getByText("政策影响")).toBeVisible();
     expect(screen.getByText("来源与计算证明")).toBeVisible();
     expect(screen.getByText("地区档案")).toBeVisible();
+    expect(screen.getByText(/黑河市区域面积约68,726.00平方公里/)).toBeVisible();
+    expect(screen.getByText(/种植结构以大豆为主/)).toBeVisible();
     expect(screen.getByText("农业粮食专题指标")).toBeVisible();
     expect(screen.getByText("农资保障")).toBeVisible();
     expect(screen.getByText("金融与补贴")).toBeVisible();

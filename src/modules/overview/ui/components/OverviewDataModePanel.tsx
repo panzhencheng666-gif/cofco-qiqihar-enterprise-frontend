@@ -47,6 +47,7 @@ function sourceClassLabel(sourceClass: string): string {
   if (sourceClass === "MAINSTREAM_MEDIA") return "主流媒体";
   if (sourceClass === "GOVERNMENT_MEDIA") return "政务媒体";
   if (sourceClass === "MEDIA_PUBLIC_ACCOUNT") return "媒体公众号";
+  if (sourceClass === "INDUSTRY_MEDIA") return "行业媒体";
   return "公开渠道";
 }
 
@@ -173,6 +174,9 @@ export function OverviewDataModePanel({
   const summary = agricultureProfile
     ? agricultureSummary(agricultureProfile)
     : undefined;
+  const leadingCrop = agricultureProfile?.crops.reduce((best, crop) =>
+    Number(crop.structurePercent) > Number(best.structurePercent) ? crop : best,
+  );
   const indicatorGroups = agricultureProfile
     ? Array.from(
         new Map(
@@ -245,18 +249,25 @@ export function OverviewDataModePanel({
               </div>
               <div>
                 <span>主导作物</span>
-                <strong>
-                  {
-                    agricultureProfile.crops.reduce((best, crop) =>
-                      Number(crop.structurePercent) > Number(best.structurePercent)
-                        ? crop
-                        : best,
-                    ).productName
-                  }
-                </strong>
+                <strong>{leadingCrop?.productName ?? "—"}</strong>
                 <small>按种植结构</small>
               </div>
             </div>
+            {summary && leadingCrop && (
+              <p className="overview-data-mode__introduction">
+                {agricultureProfile.regionName}区域面积约
+                {format(String(agricultureProfile.regionFacts.areaSquareKilometres))}
+                平方公里
+                {agricultureProfile.regionFacts.directChildCount > 0
+                  ? `，直接下辖${agricultureProfile.regionFacts.directChildCount}个行政区`
+                  : ""}
+                ；玉米、大豆、水稻播种规模约
+                {format(String(summary.plantedAreaMu), 10_000)}万亩，总产约
+                {format(String(summary.totalOutputKg), 10_000_000)}万吨，种植结构以
+                {leadingCrop.productName}
+                为主。档案由公开资料、行政区边界、天气和政策信息自动融合生成。
+              </p>
+            )}
           </section>
           {(agricultureProfile.sources ?? []).some(
             (source) => source.type === "AGRICULTURE",

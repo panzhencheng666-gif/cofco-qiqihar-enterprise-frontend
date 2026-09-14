@@ -228,6 +228,16 @@
   color: #fff1b8;
 }
 
+.overview-data-mode__introduction {
+  margin: 7px 0 0;
+  padding: 8px 10px;
+  border-left: 2px solid #6bd6e6;
+  color: #c7e5ed;
+  background: rgb(5 61 94 / 38%);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
 .overview-data-mode__scale-note {
   margin: 6px 0 0;
   color: #acd5e1;
