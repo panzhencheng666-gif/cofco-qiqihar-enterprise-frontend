@@ -62,4 +62,29 @@ describe("regional current estimates", () => {
       "https://example.org/report",
     );
   });
+  it("compares the same-year area-yield calculation with independent historical estimates using correct units", () => {
+    render(
+      <RegionalEstimateComparison
+        batch={batch}
+        currentCrops={[
+          {
+            productCode: "RICE",
+            productName: "稻谷",
+            dataKind: "MODEL_ESTIMATE",
+            plantedAreaMu: "5000000",
+            yieldPerMuKg: "500",
+            totalOutputKg: "2500000000",
+            structurePercent: "20",
+            basis: "同年面积与历史单产，需核查口径",
+            forecasts: [],
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByText("250 万吨")).toBeInTheDocument();
+    expect(screen.getByText("42 万吨")).toBeInTheDocument();
+    expect(screen.getByText("两种方法的差异，不是真实误差")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("查看稻谷产量的估算逻辑与对比"));
+    expect(screen.getByText(/播种面积 500 万亩/)).toBeVisible();
+  });
 });

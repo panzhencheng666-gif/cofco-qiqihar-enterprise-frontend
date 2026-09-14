@@ -1,3 +1,4 @@
+import type { RegionalAgricultureProfile } from "../../domain/overviewRegionalData";
 import { useState } from "react";
 import type {
   CurrentEstimate,
@@ -5,7 +6,7 @@ import type {
 } from "../../domain/regionalEstimates";
 import "./regional-estimate-comparison.css";
 
-const number = (value: string | null) =>
+const number = (value: string | number | null) =>
   value == null
     ? "—"
     : Number(value).toLocaleString("zh-CN", { maximumFractionDigits: 2 });
@@ -87,8 +88,10 @@ function EstimateLogic({
 
 export function RegionalEstimateComparison({
   batch,
+  currentCrops = [],
 }: {
   batch: RegionalEstimateBatch;
+  currentCrops?: RegionalAgricultureProfile["crops"];
 }) {
   const [search, setSearch] = useState("");
   const [limit, setLimit] = useState(8);
@@ -145,76 +148,130 @@ export function RegionalEstimateComparison({
           }}
         />
       </label>
-      {filtered.slice(0, limit).map((row) => (
-        <article key={`${row.label}-${row.unit}`}>
-          <h4>{row.label}</h4>
-          <div className="regional-estimates__values">
-            <div>
-              <span>公开值 · {row.publicYear}年</span>
-              <strong>
-                {number(row.publicValue)} {row.unit}
-              </strong>
-              <a
-                href={safeUrl(row.sourceUrl)}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {row.sourceName} ↗
-              </a>
+      {filtered.slice(0, limit).map((row) => {
+        const codes: Record<string, string> = {
+          稻谷产量: "RICE",
+          玉米产量: "CORN",
+          大豆产量: "SOYBEAN",
+        };
+        const crop =
+          row.unit === "万吨"
+            ? currentCrops.find((item) => item.productCode === codes[row.label])
+            : undefined;
+        const baseline = crop ? Number(crop.totalOutputKg) / 10_000_000 : null;
+        const methodDifference =
+          baseline != null && row.current ? Number(row.current.value) - baseline : null;
+        return (
+          <article key={`${row.label}-${row.unit}`}>
+            <h4>{row.label}</h4>
+            <div className="regional-estimates__values">
+              <div>
+                <span>公开值 · {row.publicYear}年</span>
+                <strong>
+                  {number(row.publicValue)} {row.unit}
+                </strong>
+                <a
+                  href={safeUrl(row.sourceUrl)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {row.sourceName} ↗
+                </a>
+              </div>
+              <div>
+                <span>当前估算 · {row.estimateYear}年</span>
+                <strong>
+                  {row.current
+                    ? `${number(row.current.value)} ${row.unit}`
+                    : "依据不足"}
+                </strong>
+                <small>{row.current?.model ?? "不以零代替"}</small>
+              </div>
+              <div>
+                <span>同年差额 · 估算减公开值</span>
+                <strong>
+                  {row.difference == null
+                    ? "—"
+                    : `${number(row.difference)} ${row.unit}`}
+                </strong>
+                <small>
+                  {row.publicYear !== row.estimateYear
+                    ? "年度不同，不计算差额"
+                    : row.differencePercent == null
+                      ? "无可用百分比"
+                      : `相对公开值 ${number(row.differencePercent)}%`}
+                </small>
+              </div>
             </div>
-            <div>
-              <span>当前估算 · {row.estimateYear}年</span>
-              <strong>
-                {row.current ? `${number(row.current.value)} ${row.unit}` : "依据不足"}
-              </strong>
-              <small>{row.current?.model ?? "不以零代替"}</small>
-            </div>
-            <div>
-              <span>同年差额 · 估算减公开值</span>
-              <strong>
-                {row.difference == null ? "—" : `${number(row.difference)} ${row.unit}`}
-              </strong>
-              <small>
-                {row.publicYear !== row.estimateYear
-                  ? "年度不同，不计算差额"
-                  : row.differencePercent == null
-                    ? "无可用百分比"
-                    : `相对公开值 ${number(row.differencePercent)}%`}
-              </small>
-            </div>
-          </div>
-          <details>
-            <summary>查看{row.label}的估算逻辑与对比</summary>
-            {row.current ? (
-              <EstimateLogic estimate={row.current} unit={row.unit} />
-            ) : (
-              <p>
-                当前没有足够的独立历史输入，或最近历史值距目标年超过两年。保留已查证公开值，待取得资料后由系统重新计算。
-              </p>
+            {crop && baseline != null && (
+              <div className="regional-estimates__values">
+                <div>
+                  <span>现有口径计算 · {batch.year}年</span>
+                  <strong>{number(baseline)} 万吨</strong>
+                  <small>本页面积与单产相乘</small>
+                </div>
+                <div>
+                  <span>同年方法差额 · 独立估算减现有计算</span>
+                  <strong>
+                    {methodDifference == null
+                      ? "依据不足"
+                      : `${number(methodDifference)} 万吨`}
+                  </strong>
+                  <small>两种方法的差异，不是真实误差</small>
+                </div>
+              </div>
             )}
-            <section className="regional-estimates__conclusion">
-              <h5>4. 这个差异说明什么</h5>
-              <p>{row.conclusion}</p>
-              <p>
-                这是一套可复算的系统判断，不是调查实测，也不会修改公开原值。比较范围限于上述地市；不得直接当作所属行政村的统计结果。
-              </p>
-            </section>
-            {row.publicYear !== row.estimateYear && row.historicalCheck && (
-              <details className="regional-estimates__historical">
-                <summary>对{row.publicYear}年公开值做历史检验</summary>
+            <details>
+              <summary>查看{row.label}的估算逻辑与对比</summary>
+              {row.current ? (
+                <EstimateLogic estimate={row.current} unit={row.unit} />
+              ) : (
                 <p>
-                  仅使用{row.publicYear}年以前的数据，估算得到
-                  {number(row.historicalCheck.value)}
-                  {row.unit}；公开值为{number(row.publicValue)}
-                  {row.unit}，差额{number(row.historicalDifference)}
-                  {row.unit}。
+                  当前没有足够的独立历史输入，或最近历史值距目标年超过两年。保留已查证公开值，待取得资料后由系统重新计算。
                 </p>
-                <EstimateLogic estimate={row.historicalCheck} unit={row.unit} />
-              </details>
-            )}
-          </details>
-        </article>
-      ))}
+              )}
+              {crop && (
+                <section>
+                  <h5>现有计算为什么与独立估算不同</h5>
+                  <p>
+                    现有计算从本页播种面积 {number(Number(crop.plantedAreaMu) / 10000)}{" "}
+                    万亩和单产 {number(crop.yieldPerMuKg)}{" "}
+                    公斤/亩出发，相乘再除以1000得到 {number(baseline)}{" "}
+                    万吨。独立估算从上列公开历史总产出发，两者使用的输入和假设不同。
+                  </p>
+                  <p>
+                    差异用于提示核查面积范围、作物定义和单产基线；不能直接认定其中一项错误，也不把两者简单平均。
+                  </p>
+                  <details>
+                    <summary>查看现有面积和单产的原始依据</summary>
+                    <p>{crop.basis}</p>
+                  </details>
+                </section>
+              )}
+              <section className="regional-estimates__conclusion">
+                <h5>4. 这个差异说明什么</h5>
+                <p>{row.conclusion}</p>
+                <p>
+                  这是一套可复算的系统判断，不是调查实测，也不会修改公开原值。比较范围限于上述地市；不得直接当作所属行政村的统计结果。
+                </p>
+              </section>
+              {row.publicYear !== row.estimateYear && row.historicalCheck && (
+                <details className="regional-estimates__historical">
+                  <summary>对{row.publicYear}年公开值做历史检验</summary>
+                  <p>
+                    仅使用{row.publicYear}年以前的数据，估算得到
+                    {number(row.historicalCheck.value)}
+                    {row.unit}；公开值为{number(row.publicValue)}
+                    {row.unit}，差额{number(row.historicalDifference)}
+                    {row.unit}。
+                  </p>
+                  <EstimateLogic estimate={row.historicalCheck} unit={row.unit} />
+                </details>
+              )}
+            </details>
+          </article>
+        );
+      })}
       {filtered.length === 0 && (
         <p>尚无符合条件、可核验的公开指标。未取得数据不等于没有农业活动。</p>
       )}

@@ -930,6 +930,11 @@ export function RegionalAgricultureProfilePanel({
         <RegionalEstimateComparison
           key={`${profile.regionCode}-${profile.year}`}
           batch={profile.estimateBatch}
+          currentCrops={
+            profile.regionCode === profile.estimateBatch.rootRegionCode
+              ? profile.crops
+              : []
+          }
         />
       )}
       <section aria-labelledby="regional-facts-title">
