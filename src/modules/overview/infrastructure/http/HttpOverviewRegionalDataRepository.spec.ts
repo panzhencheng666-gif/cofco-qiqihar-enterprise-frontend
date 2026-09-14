@@ -69,6 +69,15 @@ describe("HttpOverviewRegionalDataRepository", () => {
               generatedAt: "2026-09-14T10:00:00Z",
               sourceSummary: "地区年度正式数据优先，缺项由统计模型自动补齐",
               calculationMethod: "结构系数估算；复合增长公式预测",
+              weather: {
+                meanTemperatureC: 15.8,
+                precipitationMm: 0,
+                soilMoisturePercent: 30.5,
+                risk: "常规",
+                assessment: "墒情正常",
+                observedAt: "2026-09-14T11:00:00Z",
+                sourceId: "weather-qqhr",
+              },
               crops: [
                 {
                   productCode: "CORN",
@@ -119,5 +128,6 @@ describe("HttpOverviewRegionalDataRepository", () => {
     expect(summary.comparisonMessage).toBeNull();
     expect(balance.rows[0]?.display).toBeNull();
     expect(profile.crops[0]?.forecasts[0]?.year).toBe(2027);
+    expect(profile.weather?.meanTemperatureC).toBe("15.8");
   });
 });

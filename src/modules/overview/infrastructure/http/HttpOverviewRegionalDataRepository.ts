@@ -7,6 +7,10 @@ import type {
 import type { HttpClient } from "../../../../shared/api/HttpClient";
 import { queryString } from "../../../../shared/api/HttpClient";
 
+const decimalValueSchema = z
+  .union([z.string(), z.number()])
+  .transform((value) => String(value));
+
 const regionalSummarySchema = z.object({
   data: z.object({
     regionCode: z.string(),
@@ -48,9 +52,9 @@ const regionalAgricultureProfileSchema = z.object({
       .optional(),
     weather: z
       .object({
-        meanTemperatureC: z.string().nullable(),
-        precipitationMm: z.string().nullable(),
-        soilMoisturePercent: z.string().nullable(),
+        meanTemperatureC: decimalValueSchema.nullable(),
+        precipitationMm: decimalValueSchema.nullable(),
+        soilMoisturePercent: decimalValueSchema.nullable(),
         risk: z.string(),
         assessment: z.string(),
         observedAt: z.string(),
