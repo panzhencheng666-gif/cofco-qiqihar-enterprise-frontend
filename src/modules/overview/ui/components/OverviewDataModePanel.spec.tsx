@@ -76,7 +76,7 @@ describe("OverviewDataModePanel", () => {
           calculationMethod: "结构系数估算；复合增长公式预测",
           refreshStatus: {
             cadence: "每日",
-            status: "SUCCESS",
+            status: "SUCCESS_UNCHANGED",
             lastAttemptAt: "2026-09-14T02:00:00Z",
             lastSuccessAt: "2026-09-14T02:00:00Z",
             nextRefreshAt: "2026-09-15T02:00:00Z",
@@ -134,7 +134,7 @@ describe("OverviewDataModePanel", () => {
               reliabilityWeight: "1.0",
               publishedOn: "2026-04-29",
               fetchedAt: "2026-09-14T02:00:00Z",
-              status: "SUCCESS",
+              status: "SUCCESS_UNCHANGED",
               evidence: "大豆2026.4万亩，玉米713.9万亩",
             },
           ],
@@ -215,7 +215,9 @@ describe("OverviewDataModePanel", () => {
     expect(screen.getByText("公开值覆盖")).toBeVisible();
     expect(screen.getByText("明年产量变化")).toBeVisible();
     expect(screen.getByText("562")).toBeVisible();
-    expect(screen.getAllByText("本轮核验成功")).toHaveLength(2);
+    expect(screen.getByText("核验完成，公开数据确认无变化")).toBeVisible();
+    expect(screen.getByText("已核验 · 确认无变化")).toBeVisible();
+    expect(screen.getByText("确认数据无变化")).toBeVisible();
     expect(screen.getByText("本次计算")).toBeVisible();
     expect(screen.getByText("下次定时任务")).toBeVisible();
     expect(
@@ -227,6 +229,9 @@ describe("OverviewDataModePanel", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "查看黑河市人民政府计算与来源" }),
     );
+    expect(screen.getByRole("heading", { name: "指标解释" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "为什么这样计算" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "逐步计算逻辑" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "来源依据（1项）" })).toBeVisible();
     expect(screen.getByText("资料期")).toBeVisible();
     expect(screen.getByText("核验时间")).toBeVisible();
