@@ -76,6 +76,7 @@ export interface RegionalAgricultureProfile {
         method: string;
         sourceName: string;
         sourceUrl: string;
+        verifiedAt?: string | undefined;
       }[]
     | undefined;
   sources?:

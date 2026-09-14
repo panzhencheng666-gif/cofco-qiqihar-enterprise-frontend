@@ -53,7 +53,7 @@ describe("OverviewDataModePanel", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows automatic crop structure and formula forecasts in the regional sidebar", () => {
+  it("shows dated regional data and opens formulas or source evidence on demand", async () => {
     render(
       <OverviewDataModePanel
         mode="REGIONAL_DATA"
@@ -191,39 +191,56 @@ describe("OverviewDataModePanel", () => {
     );
 
     expect(screen.getByRole("heading", { name: "黑河市农业概况" })).toBeVisible();
-    expect(screen.getByText("系统自动生成 · 无需人工填报")).toBeVisible();
-    expect(screen.getByText("种植结构")).toBeVisible();
-    expect(screen.getByText("当年补算与明年预测")).toBeVisible();
-    expect(screen.getByText("统计值")).toBeVisible();
-    expect(screen.getAllByText("模型推算")).toHaveLength(2);
+    expect(screen.getByText("无需日常人工填报")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "种植结构与分品种数据" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "本年补算与下一年预测" })).toBeVisible();
+    expect(screen.getByText("公开统计")).toBeVisible();
+    expect(screen.getAllByText("模型补算")).toHaveLength(2);
     expect(screen.getByText("2027年")).toBeVisible();
     expect(screen.getByText("农业天气")).toBeVisible();
-    expect(screen.getByText("政策影响")).toBeVisible();
-    expect(screen.getByText("来源与计算证明")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "政策影响（1项）" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "来源档案（1个渠道）" })).toBeVisible();
     expect(screen.getByText("地区档案")).toBeVisible();
     expect(screen.getByText(/黑河市区域面积约68,726.00平方公里/)).toBeVisible();
-    expect(screen.getByText(/种植结构以大豆为主/)).toBeVisible();
-    expect(screen.getByText("农业粮食专题指标")).toBeVisible();
+    expect(screen.getByText(/结构以大豆为主/)).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "农业粮食专题指标（2项）" }),
+    ).toBeVisible();
     expect(screen.getByText("农资保障")).toBeVisible();
     expect(screen.getByText("金融与补贴")).toBeVisible();
     expect(screen.getByText("种子需求量")).toBeVisible();
     expect(screen.getByText("计划涉农贷款")).toBeVisible();
     expect(screen.getAllByText("公开计划")).toHaveLength(2);
-    expect(screen.getByText("区域农业要点")).toBeVisible();
     expect(screen.getByText("三品种播种规模")).toBeVisible();
     expect(screen.getByText("公开值覆盖")).toBeVisible();
     expect(screen.getByText("明年产量变化")).toBeVisible();
     expect(screen.getByText("562")).toBeVisible();
-    expect(screen.getByText("今日已核验")).toBeVisible();
-    expect(screen.getByText(/政府公开 · 权重 100/)).toBeVisible();
+    expect(screen.getAllByText("本轮核验成功")).toHaveLength(2);
+    expect(screen.getByText("本次计算")).toBeVisible();
+    expect(screen.getByText("下次定时任务")).toBeVisible();
     expect(
       screen.getByText("大豆", { selector: ".overview-data-mode__fact-grid strong" }),
     ).toBeVisible();
     expect(screen.queryByText(/SUCCESS|PARTIAL|\{"/)).not.toBeInTheDocument();
+
+    expect(screen.queryByText("大豆2026.4万亩，玉米713.9万亩")).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "查看黑河市人民政府计算与来源" }),
+    );
     expect(screen.getByRole("link", { name: /黑河市人民政府/ })).toHaveAttribute(
       "href",
       "https://example.test/report",
     );
+    expect(screen.getByText("大豆2026.4万亩，玉米713.9万亩")).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "关闭" }));
+
+    await userEvent.click(screen.getByRole("button", { name: "查看公式" }));
+    expect(
+      screen.getByRole("dialog", { name: "玉米2027年产量预测计算与来源说明" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/明年总产=当年总产×趋势系数×天气系数×政策系数=61.21万吨/),
+    ).toBeVisible();
     expect(screen.getByText(/置信度 92/)).toBeVisible();
   });
 

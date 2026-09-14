@@ -93,6 +93,7 @@ const regionalAgricultureProfileSchema = z.object({
           method: z.string(),
           sourceName: z.string(),
           sourceUrl: z.string(),
+          verifiedAt: z.string().optional(),
         }),
       )
       .optional(),

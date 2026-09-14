@@ -63,6 +63,10 @@ describe("Overview command center navigation layout", () => {
 
   it("reserves exactly the same details width in CSS and the relief frame", () => {
     const css = readFileSync(resolve("src/app/styles/global.css"), "utf8");
+    const panelCss = readFileSync(
+      resolve("src/modules/overview/ui/components/overview-data-mode.css"),
+      "utf8",
+    );
     const geometry = readFileSync(
       resolve("src/modules/overview/ui/components/terrainReliefGeometry.ts"),
       "utf8",
@@ -72,6 +76,9 @@ describe("Overview command center navigation layout", () => {
 
     expect(cssWidth).toBeDefined();
     expect(cssWidth).toBe(frameWidth);
+    expect(panelCss).toMatch(
+      /\.overview-command-center\.has-side-data-panel \.overview-data-mode\s*\{[^}]*width:\s*var\(--command-details-width\)/s,
+    );
   });
 
   it("opens the relief safe frame whenever a regional data mode owns the right panel", () => {

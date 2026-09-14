@@ -98,7 +98,7 @@ describe("OverviewPage", () => {
     expect(
       await screen.findByRole("heading", { name: "齐齐哈尔市农业概况" }),
     ).toBeVisible();
-    expect(screen.getByText("系统自动生成 · 无需人工填报")).toBeVisible();
+    expect(screen.getByText("无需日常人工填报")).toBeVisible();
     expect(
       screen.getByText("地区数据范围：齐齐哈尔、黑河、呼伦贝尔、大兴安岭及下级地区"),
     ).toBeVisible();
