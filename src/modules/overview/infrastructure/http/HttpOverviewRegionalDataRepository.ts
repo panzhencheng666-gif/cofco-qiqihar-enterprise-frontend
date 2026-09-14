@@ -34,8 +34,56 @@ const regionalAgricultureProfileSchema = z.object({
     year: z.number().int(),
     automatic: z.boolean(),
     generatedAt: z.string(),
+    coverageDescription: z.string().optional(),
     sourceSummary: z.string(),
     calculationMethod: z.string(),
+    refreshStatus: z
+      .object({
+        cadence: z.string(),
+        status: z.string(),
+        lastAttemptAt: z.string().nullable(),
+        lastSuccessAt: z.string().nullable(),
+        nextRefreshAt: z.string().nullable(),
+      })
+      .optional(),
+    weather: z
+      .object({
+        meanTemperatureC: z.string().nullable(),
+        precipitationMm: z.string().nullable(),
+        soilMoisturePercent: z.string().nullable(),
+        risk: z.string(),
+        assessment: z.string(),
+        observedAt: z.string(),
+        sourceId: z.string(),
+      })
+      .nullable()
+      .optional(),
+    policies: z
+      .array(
+        z.object({
+          title: z.string(),
+          publishedOn: z.string().nullable(),
+          sourceName: z.string(),
+          sourceUrl: z.string(),
+          affectedCrops: z.string(),
+          impact: z.string(),
+        }),
+      )
+      .optional(),
+    sources: z
+      .array(
+        z.object({
+          id: z.string(),
+          type: z.enum(["AGRICULTURE", "WEATHER", "POLICY"]),
+          name: z.string(),
+          url: z.string(),
+          publishedOn: z.string().nullable(),
+          fetchedAt: z.string().nullable(),
+          status: z.string(),
+          evidence: z.string(),
+        }),
+      )
+      .optional(),
     crops: z.array(
       z.object({
         productCode: z.enum(["CORN", "SOYBEAN", "RICE"]),
@@ -46,12 +94,18 @@ const regionalAgricultureProfileSchema = z.object({
         totalOutputKg: z.string(),
         structurePercent: z.string(),
         basis: z.string(),
+        formula: z.string().optional(),
+        confidencePercent: z.string().optional(),
+        uncertaintyLowKg: z.string().optional(),
+        uncertaintyHighKg: z.string().optional(),
         forecasts: z.array(
           z.object({
             year: z.number().int(),
             plantedAreaMu: z.string(),
             yieldPerMuKg: z.string(),
             totalOutputKg: z.string(),
+            formula: z.string().optional(),
+            confidencePercent: z.string().optional(),
           }),
         ),
       }),

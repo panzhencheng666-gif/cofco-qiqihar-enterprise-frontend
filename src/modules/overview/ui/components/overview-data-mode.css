@@ -193,6 +193,17 @@
   font-size: 13px;
 }
 
+.overview-data-mode__coverage,
+.overview-data-mode__pending {
+  margin: -7px 0 0;
+  padding: 7px 9px;
+  border-left: 2px solid #6bd6e6;
+  color: #bde3ee;
+  background: rgb(5 65 96 / 38%);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 .overview-data-mode__crop-list {
   display: grid;
   gap: 8px;
@@ -274,6 +285,29 @@
   font-size: 10px;
 }
 
+.overview-data-mode__confidence {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 7px;
+  color: #b8e9d3;
+  font-size: 9px;
+}
+
+.overview-data-mode__crop-list details {
+  margin-top: 6px;
+  color: #b9dce7;
+  font-size: 9px;
+}
+
+.overview-data-mode__crop-list details summary {
+  cursor: pointer;
+}
+.overview-data-mode__crop-list details p {
+  margin: 5px 0 0;
+  line-height: 1.45;
+}
+
 .overview-data-mode__forecast-table {
   overflow: hidden;
   border: 1px solid rgb(190 231 243 / 17%);
@@ -310,6 +344,72 @@
 
 .overview-data-mode__profile footer p {
   margin: 0 0 4px;
+}
+
+.overview-data-mode__weather,
+.overview-data-mode__policy-list article,
+.overview-data-mode__source-list article {
+  padding: 9px;
+  border: 1px solid rgb(190 231 243 / 17%);
+  border-radius: 8px;
+  background: rgb(5 61 94 / 42%);
+}
+
+.overview-data-mode__weather dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.overview-data-mode__weather dl > div {
+  display: grid;
+  gap: 2px;
+}
+.overview-data-mode__weather :is(dt, small),
+.overview-data-mode__policy-list small,
+.overview-data-mode__source-list small {
+  color: #98c8d8;
+  font-size: 9px;
+}
+.overview-data-mode__weather dd {
+  margin: 0;
+  color: #f7fdff;
+  font-size: 12px;
+}
+.overview-data-mode__weather p,
+.overview-data-mode__policy-list p,
+.overview-data-mode__source-list p {
+  margin: 6px 0;
+  color: #c9e4ec;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.overview-data-mode__policy-list,
+.overview-data-mode__source-list {
+  display: grid;
+  gap: 7px;
+}
+.overview-data-mode__policy-list a,
+.overview-data-mode__source-list a {
+  color: #dff8ff;
+  font-size: 10px;
+  text-decoration-color: #5fc7dd;
+}
+.overview-data-mode__policy-list article > small {
+  display: block;
+  margin-top: 4px;
+}
+.overview-data-mode__source-list article > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.overview-data-mode__source-list b {
+  color: #a8f4d1;
+  font-size: 9px;
+  white-space: nowrap;
 }
 
 .overview-data-mode__balance {

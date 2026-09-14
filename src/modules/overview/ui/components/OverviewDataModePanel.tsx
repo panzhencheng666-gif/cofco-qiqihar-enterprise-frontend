@@ -97,10 +97,18 @@ export function OverviewDataModePanel({
           <header>
             <div>
               <h2>{agricultureProfile.regionName}农业概况</h2>
-              <span>{agricultureProfile.year}年</span>
+              <span>
+                {agricultureProfile.year}年 ·{" "}
+                {agricultureProfile.refreshStatus?.cadence ?? "自动"}更新
+              </span>
             </div>
             <b>系统自动生成 · 无需人工填报</b>
           </header>
+          {agricultureProfile.coverageDescription && (
+            <p className="overview-data-mode__coverage">
+              {agricultureProfile.coverageDescription}
+            </p>
+          )}
           <section aria-labelledby="regional-structure-title">
             <h3 id="regional-structure-title">种植结构</h3>
             <div className="overview-data-mode__crop-list">
@@ -113,24 +121,62 @@ export function OverviewDataModePanel({
                     </span>
                   </div>
                   <div className="overview-data-mode__structure-bar">
-                    <i style={{ width: `${Math.min(100, Number(crop.structurePercent))}%` }} />
+                    <i
+                      style={{
+                        width: `${Math.min(100, Number(crop.structurePercent))}%`,
+                      }}
+                    />
                     <b>{format(crop.structurePercent)}%</b>
                   </div>
                   <dl>
-                    <div><dt>面积</dt><dd>{format(crop.plantedAreaMu, 10_000)} 万亩</dd></div>
-                    <div><dt>单产</dt><dd>{format(crop.yieldPerMuKg)} 公斤/亩</dd></div>
-                    <div><dt>总产</dt><dd>{format(crop.totalOutputKg, 10_000_000)} 万吨</dd></div>
+                    <div>
+                      <dt>面积</dt>
+                      <dd>{format(crop.plantedAreaMu, 10_000)} 万亩</dd>
+                    </div>
+                    <div>
+                      <dt>单产</dt>
+                      <dd>{format(crop.yieldPerMuKg)} 公斤/亩</dd>
+                    </div>
+                    <div>
+                      <dt>总产</dt>
+                      <dd>{format(crop.totalOutputKg, 10_000_000)} 万吨</dd>
+                    </div>
                   </dl>
                   <small title={crop.basis}>{crop.basis}</small>
+                  {crop.confidencePercent && (
+                    <div className="overview-data-mode__confidence">
+                      <span>置信度 {format(crop.confidencePercent)}%</span>
+                      {crop.uncertaintyLowKg && crop.uncertaintyHighKg && (
+                        <span>
+                          总产区间 {format(crop.uncertaintyLowKg, 10_000_000)}–
+                          {format(crop.uncertaintyHighKg, 10_000_000)} 万吨
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {crop.formula && (
+                    <details>
+                      <summary>查看计算公式</summary>
+                      <p>{crop.formula}</p>
+                    </details>
+                  )}
                 </article>
               ))}
             </div>
           </section>
           <section aria-labelledby="regional-forecast-title">
-            <h3 id="regional-forecast-title">未来三年推算</h3>
+            <h3 id="regional-forecast-title">当年补算与明年预测</h3>
             <div className="overview-data-mode__forecast-table">
               <table>
-                <thead><tr><th>品种</th><th>年度</th><th>面积(万亩)</th><th>总产(万吨)</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th>品种</th>
+                    <th>年度</th>
+                    <th>面积(万亩)</th>
+                    <th>总产(万吨)</th>
+                    <th>置信度</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {agricultureProfile.crops.flatMap((crop) =>
                     crop.forecasts.map((forecast) => (
@@ -139,6 +185,7 @@ export function OverviewDataModePanel({
                         <td>{forecast.year}年</td>
                         <td>{format(forecast.plantedAreaMu, 10_000)}</td>
                         <td>{format(forecast.totalOutputKg, 10_000_000)}</td>
+                        <td>{format(forecast.confidencePercent)}%</td>
                       </tr>
                     )),
                   )}
@@ -146,9 +193,77 @@ export function OverviewDataModePanel({
               </table>
             </div>
           </section>
+          <section aria-labelledby="regional-weather-title">
+            <h3 id="regional-weather-title">农业天气</h3>
+            {agricultureProfile.weather ? (
+              <div className="overview-data-mode__weather">
+                <dl>
+                  <div>
+                    <dt>气温</dt>
+                    <dd>{format(agricultureProfile.weather.meanTemperatureC)}℃</dd>
+                  </div>
+                  <div>
+                    <dt>降水</dt>
+                    <dd>{format(agricultureProfile.weather.precipitationMm)} mm</dd>
+                  </div>
+                  <div>
+                    <dt>表层墒情</dt>
+                    <dd>{format(agricultureProfile.weather.soilMoisturePercent)}%</dd>
+                  </div>
+                </dl>
+                <p>{agricultureProfile.weather.assessment}</p>
+                <small>{agricultureProfile.weather.risk}</small>
+              </div>
+            ) : (
+              <p className="overview-data-mode__pending">
+                天气源正在进行首次自动同步，计算暂用区域多年气候系数。
+              </p>
+            )}
+          </section>
+          <section aria-labelledby="regional-policy-title">
+            <h3 id="regional-policy-title">政策影响</h3>
+            <div className="overview-data-mode__policy-list">
+              {(agricultureProfile.policies ?? []).map((policy) => (
+                <article key={policy.sourceUrl}>
+                  <a href={policy.sourceUrl} target="_blank" rel="noreferrer">
+                    {policy.title}
+                  </a>
+                  <small>
+                    {policy.publishedOn ?? "日期待源站更新"} · {policy.sourceName}
+                  </small>
+                  <p>{policy.impact}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+          <section aria-labelledby="regional-source-title">
+            <h3 id="regional-source-title">来源与计算证明</h3>
+            <div className="overview-data-mode__source-list">
+              {(agricultureProfile.sources ?? []).map((source) => (
+                <article key={source.id}>
+                  <div>
+                    <a href={source.url} target="_blank" rel="noreferrer">
+                      {source.name} · 查看原文
+                    </a>
+                    <b>{source.status === "SUCCESS" ? "已同步" : "已有基线"}</b>
+                  </div>
+                  <p>{source.evidence}</p>
+                  <small>
+                    发布 {source.publishedOn ?? "待识别"} · 抓取{" "}
+                    {source.fetchedAt ?? "等待首次每日任务"}
+                  </small>
+                </article>
+              ))}
+            </div>
+          </section>
           <footer>
             <p>{agricultureProfile.sourceSummary}</p>
             <p>{agricultureProfile.calculationMethod}</p>
+            <p>
+              更新状态：{agricultureProfile.refreshStatus?.status ?? "自动计算"}
+              ；最近成功：
+              {agricultureProfile.refreshStatus?.lastSuccessAt ?? "等待首次每日任务"}
+            </p>
           </footer>
         </div>
       )}
@@ -196,9 +311,11 @@ export function OverviewDataModePanel({
           </p>
         </>
       )}
-      {mode === "REGIONAL_DATA" && !loading && !issue && !regionalSummary && !agricultureProfile && (
-        <p>请在地图上选择要查看的地区。</p>
-      )}
+      {mode === "REGIONAL_DATA" &&
+        !loading &&
+        !issue &&
+        !regionalSummary &&
+        !agricultureProfile && <p>请在地图上选择要查看的地区。</p>}
       {mode === "SUPPLY_BALANCE" && supplyBalance && (
         <div className="overview-data-mode__balance">
           <header>

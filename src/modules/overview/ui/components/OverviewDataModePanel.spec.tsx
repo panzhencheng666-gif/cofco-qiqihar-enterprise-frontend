@@ -64,8 +64,47 @@ describe("OverviewDataModePanel", () => {
           year: 2026,
           automatic: true,
           generatedAt: "2026-09-14T10:00:00Z",
+          coverageDescription: "乡镇级自动估算：继承上级公开统计并按边界面积分摊",
           sourceSummary: "地区年度正式数据优先，缺项由统计模型自动补齐",
           calculationMethod: "结构系数估算；复合增长公式预测",
+          refreshStatus: {
+            cadence: "每日",
+            status: "SUCCESS",
+            lastAttemptAt: "2026-09-14T02:00:00Z",
+            lastSuccessAt: "2026-09-14T02:00:00Z",
+            nextRefreshAt: "2026-09-15T02:00:00Z",
+          },
+          weather: {
+            meanTemperatureC: "18.4",
+            precipitationMm: "1.2",
+            soilMoisturePercent: "27",
+            risk: "当前天气指标处于常规模型区间",
+            assessment: "墒情适宜",
+            observedAt: "2026-09-14T02:15:00Z",
+            sourceId: "weather-heihe",
+          },
+          policies: [
+            {
+              title: "2026年强农惠农富农政策清单",
+              publishedOn: "2026-03-25",
+              sourceName: "农业农村部",
+              sourceUrl: "https://example.test/policy",
+              affectedCrops: "玉米、大豆、水稻",
+              impact: "生产者补贴与农业保险作为预测修正依据",
+            },
+          ],
+          sources: [
+            {
+              id: "heihe-report",
+              type: "AGRICULTURE",
+              name: "黑河市人民政府",
+              url: "https://example.test/report",
+              publishedOn: "2026-04-29",
+              fetchedAt: "2026-09-14T02:00:00Z",
+              status: "SUCCESS",
+              evidence: "大豆2026.4万亩，玉米713.9万亩",
+            },
+          ],
           crops: [
             {
               productCode: "CORN",
@@ -76,12 +115,18 @@ describe("OverviewDataModePanel", () => {
               totalOutputKg: "600000000",
               structurePercent: "40",
               basis: "采用地区年度正式数据自动汇总",
+              formula: "总产=播种面积×亩均单产",
+              confidencePercent: "92",
+              uncertaintyLowKg: "540000000",
+              uncertaintyHighKg: "660000000",
               forecasts: [
                 {
                   year: 2027,
                   plantedAreaMu: "1012000",
                   yieldPerMuKg: "604.8",
                   totalOutputKg: "612057600",
+                  formula: "明年总产=当年总产×趋势系数×天气系数×政策系数",
+                  confidencePercent: "58",
                 },
               ],
             },
@@ -115,10 +160,18 @@ describe("OverviewDataModePanel", () => {
     expect(screen.getByRole("heading", { name: "黑河市农业概况" })).toBeVisible();
     expect(screen.getByText("系统自动生成 · 无需人工填报")).toBeVisible();
     expect(screen.getByText("种植结构")).toBeVisible();
-    expect(screen.getByText("未来三年推算")).toBeVisible();
+    expect(screen.getByText("当年补算与明年预测")).toBeVisible();
     expect(screen.getByText("统计值")).toBeVisible();
     expect(screen.getAllByText("模型推算")).toHaveLength(2);
     expect(screen.getByText("2027年")).toBeVisible();
+    expect(screen.getByText("农业天气")).toBeVisible();
+    expect(screen.getByText("政策影响")).toBeVisible();
+    expect(screen.getByText("来源与计算证明")).toBeVisible();
+    expect(screen.getByRole("link", { name: /黑河市人民政府/ })).toHaveAttribute(
+      "href",
+      "https://example.test/report",
+    );
+    expect(screen.getByText(/置信度 92/)).toBeVisible();
   });
 
   it("renders an unfilled manual balance field without rejecting the backend contract", () => {
