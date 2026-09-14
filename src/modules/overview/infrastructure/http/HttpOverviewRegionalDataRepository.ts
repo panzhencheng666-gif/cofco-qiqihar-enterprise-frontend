@@ -39,6 +39,13 @@ const regionalAgricultureProfileSchema = z.object({
     automatic: z.boolean(),
     generatedAt: z.string(),
     coverageDescription: z.string().optional(),
+    regionFacts: z.object({
+      areaSquareKilometres: decimalValueSchema,
+      directChildCount: z.number().int(),
+      countyCount: z.number().int(),
+      townshipCount: z.number().int(),
+      villageCount: z.number().int(),
+    }),
     sourceSummary: z.string(),
     calculationMethod: z.string(),
     refreshStatus: z
@@ -74,6 +81,21 @@ const regionalAgricultureProfileSchema = z.object({
         }),
       )
       .optional(),
+    indicators: z
+      .array(
+        z.object({
+          category: z.string(),
+          label: z.string(),
+          value: decimalValueSchema,
+          unit: z.string(),
+          dataYear: z.number().int(),
+          dataKind: z.enum(["OBSERVED", "ESTIMATED", "PLAN", "CONTEXT"]),
+          method: z.string(),
+          sourceName: z.string(),
+          sourceUrl: z.string(),
+        }),
+      )
+      .optional(),
     sources: z
       .array(
         z.object({
@@ -81,6 +103,8 @@ const regionalAgricultureProfileSchema = z.object({
           type: z.enum(["AGRICULTURE", "WEATHER", "POLICY"]),
           name: z.string(),
           url: z.string(),
+          sourceClass: z.string(),
+          reliabilityWeight: decimalValueSchema,
           publishedOn: z.string().nullable(),
           fetchedAt: z.string().nullable(),
           status: z.string(),

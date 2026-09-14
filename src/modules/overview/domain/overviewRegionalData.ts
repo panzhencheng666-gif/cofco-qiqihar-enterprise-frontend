@@ -25,6 +25,13 @@ export interface RegionalAgricultureProfile {
   automatic: boolean;
   generatedAt: string;
   coverageDescription?: string | undefined;
+  regionFacts: {
+    areaSquareKilometres: string | number;
+    directChildCount: number;
+    countyCount: number;
+    townshipCount: number;
+    villageCount: number;
+  };
   sourceSummary: string;
   calculationMethod: string;
   refreshStatus?:
@@ -58,12 +65,27 @@ export interface RegionalAgricultureProfile {
         impact: string;
       }[]
     | undefined;
+  indicators?:
+    | readonly {
+        category: string;
+        label: string;
+        value: string;
+        unit: string;
+        dataYear: number;
+        dataKind: "OBSERVED" | "ESTIMATED" | "PLAN" | "CONTEXT";
+        method: string;
+        sourceName: string;
+        sourceUrl: string;
+      }[]
+    | undefined;
   sources?:
     | readonly {
         id: string;
         type: "AGRICULTURE" | "WEATHER" | "POLICY";
         name: string;
         url: string;
+        sourceClass: string;
+        reliabilityWeight: string;
         publishedOn: string | null;
         fetchedAt: string | null;
         status: string;

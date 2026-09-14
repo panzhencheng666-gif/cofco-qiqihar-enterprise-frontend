@@ -17,6 +17,95 @@ function format(value: string | null | undefined, divisor = 1): string {
     : "—";
 }
 
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) return "尚未核验";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "尚未核验";
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(parsed);
+}
+
+function sourceTypeLabel(type: "AGRICULTURE" | "WEATHER" | "POLICY"): string {
+  if (type === "AGRICULTURE") return "统计资料";
+  if (type === "WEATHER") return "气象资料";
+  return "政策资料";
+}
+
+function sourceStatusLabel(status: string): string {
+  return status === "SUCCESS" ? "今日已核验" : "沿用最近有效资料";
+}
+
+function sourceClassLabel(sourceClass: string): string {
+  if (sourceClass === "OFFICIAL") return "政府公开";
+  if (sourceClass === "PUBLIC_DATA_SERVICE") return "公共数据服务";
+  if (sourceClass === "MAINSTREAM_MEDIA") return "主流媒体";
+  if (sourceClass === "GOVERNMENT_MEDIA") return "政务媒体";
+  if (sourceClass === "MEDIA_PUBLIC_ACCOUNT") return "媒体公众号";
+  return "公开渠道";
+}
+
+function indicatorCategoryLabel(category: string): string {
+  const labels: Record<string, string> = {
+    LAND: "土地与种植",
+    PRODUCTION: "粮食生产",
+    INFRASTRUCTURE: "农业基础设施",
+    TECHNOLOGY: "农机与技术",
+    INPUT: "农资保障",
+    PROCESSING: "加工能力",
+    FINANCE: "金融与补贴",
+    BRAND: "绿色农业与品牌",
+    LOGISTICS: "仓储与流通",
+    RISK: "灾害与风险",
+  };
+  return labels[category] ?? "农业综合指标";
+}
+
+function indicatorKindLabel(
+  kind: "OBSERVED" | "ESTIMATED" | "PLAN" | "CONTEXT",
+): string {
+  if (kind === "OBSERVED") return "公开统计";
+  if (kind === "ESTIMATED") return "模型推算";
+  if (kind === "PLAN") return "公开计划";
+  return "公开参考";
+}
+
+function agricultureSummary(profile: RegionalAgricultureProfile) {
+  const plantedAreaMu = profile.crops.reduce(
+    (sum, crop) => sum + Number(crop.plantedAreaMu),
+    0,
+  );
+  const totalOutputKg = profile.crops.reduce(
+    (sum, crop) => sum + Number(crop.totalOutputKg),
+    0,
+  );
+  const nextOutputKg = profile.crops.reduce(
+    (sum, crop) => sum + Number(crop.forecasts[0]?.totalOutputKg ?? 0),
+    0,
+  );
+  const observedCount = profile.crops.filter(
+    (crop) => crop.dataKind === "OBSERVED",
+  ).length;
+  return {
+    plantedAreaMu,
+    totalOutputKg,
+    weightedYield: plantedAreaMu > 0 ? totalOutputKg / plantedAreaMu : 0,
+    concentration: Math.max(
+      0,
+      ...profile.crops.map((crop) => Number(crop.structurePercent)),
+    ),
+    observedPercent:
+      profile.crops.length > 0 ? (observedCount / profile.crops.length) * 100 : 0,
+    estimatedCount: profile.crops.length - observedCount,
+    forecastChange: totalOutputKg > 0 ? (nextOutputKg / totalOutputKg - 1) * 100 : 0,
+  };
+}
+
 const DATA_MODES = ["SAMPLE_POINTS", "REGIONAL_DATA", "SUPPLY_BALANCE"] as const;
 const CORE_BALANCE_CODES = [
   "OUTPUT",
@@ -81,6 +170,21 @@ export function OverviewDataModePanel({
   regionalSummary?: RegionalCropSummary;
   supplyBalance?: SupplyBalanceSummary;
 }) {
+  const summary = agricultureProfile
+    ? agricultureSummary(agricultureProfile)
+    : undefined;
+  const indicatorGroups = agricultureProfile
+    ? Array.from(
+        new Map(
+          (agricultureProfile.indicators ?? []).map((indicator) => [
+            indicator.category,
+            (agricultureProfile.indicators ?? []).filter(
+              (candidate) => candidate.category === indicator.category,
+            ),
+          ]),
+        ),
+      )
+    : [];
   return (
     <section
       className={`overview-data-mode is-${mode.toLowerCase()}`}
@@ -108,6 +212,153 @@ export function OverviewDataModePanel({
             <p className="overview-data-mode__coverage">
               {agricultureProfile.coverageDescription}
             </p>
+          )}
+          <section aria-labelledby="regional-facts-title">
+            <h3 id="regional-facts-title">地区档案</h3>
+            <div className="overview-data-mode__fact-grid">
+              <div>
+                <span>区域面积</span>
+                <strong>
+                  {format(String(agricultureProfile.regionFacts.areaSquareKilometres))}
+                </strong>
+                <small>平方公里</small>
+              </div>
+              <div>
+                <span>直接下辖</span>
+                <strong>{agricultureProfile.regionFacts.directChildCount}</strong>
+                <small>个行政区</small>
+              </div>
+              <div>
+                <span>县级地区</span>
+                <strong>{agricultureProfile.regionFacts.countyCount}</strong>
+                <small>个</small>
+              </div>
+              <div>
+                <span>乡镇地区</span>
+                <strong>{agricultureProfile.regionFacts.townshipCount}</strong>
+                <small>个</small>
+              </div>
+              <div>
+                <span>行政村</span>
+                <strong>{agricultureProfile.regionFacts.villageCount}</strong>
+                <small>个</small>
+              </div>
+              <div>
+                <span>主导作物</span>
+                <strong>
+                  {
+                    agricultureProfile.crops.reduce((best, crop) =>
+                      Number(crop.structurePercent) > Number(best.structurePercent)
+                        ? crop
+                        : best,
+                    ).productName
+                  }
+                </strong>
+                <small>按种植结构</small>
+              </div>
+            </div>
+          </section>
+          {(agricultureProfile.sources ?? []).some(
+            (source) => source.type === "AGRICULTURE",
+          ) && (
+            <section aria-labelledby="regional-highlights-title">
+              <h3 id="regional-highlights-title">区域农业要点</h3>
+              <div className="overview-data-mode__highlight-list">
+                {(agricultureProfile.sources ?? [])
+                  .filter((source) => source.type === "AGRICULTURE")
+                  .slice(0, 4)
+                  .map((source) => (
+                    <article key={`highlight-${source.id}`}>
+                      <b>{source.name}</b>
+                      <p>{source.evidence}</p>
+                    </article>
+                  ))}
+              </div>
+            </section>
+          )}
+          {summary && (
+            <section aria-labelledby="regional-scale-title">
+              <h3 id="regional-scale-title">农业规模与效率</h3>
+              <div className="overview-data-mode__fact-grid is-agriculture">
+                <div>
+                  <span>三品种播种规模</span>
+                  <strong>{format(String(summary.plantedAreaMu), 10_000)}</strong>
+                  <small>万亩</small>
+                </div>
+                <div>
+                  <span>三品种总产</span>
+                  <strong>{format(String(summary.totalOutputKg), 10_000_000)}</strong>
+                  <small>万吨</small>
+                </div>
+                <div>
+                  <span>加权单产</span>
+                  <strong>{format(String(summary.weightedYield))}</strong>
+                  <small>公斤/亩</small>
+                </div>
+                <div>
+                  <span>种植集中度</span>
+                  <strong>{format(String(summary.concentration))}%</strong>
+                  <small>最大品种占比</small>
+                </div>
+                <div>
+                  <span>公开值覆盖</span>
+                  <strong>{format(String(summary.observedPercent))}%</strong>
+                  <small>其余由模型补算</small>
+                </div>
+                <div>
+                  <span>明年产量变化</span>
+                  <strong>
+                    {summary.forecastChange >= 0 ? "+" : ""}
+                    {format(String(summary.forecastChange))}%
+                  </strong>
+                  <small>三品种合计预测</small>
+                </div>
+              </div>
+              <p className="overview-data-mode__scale-note">
+                当前三品种中 {summary.estimatedCount}{" "}
+                个品种存在模型补算；全部结果均给出可信区间。
+              </p>
+            </section>
+          )}
+          {indicatorGroups.length > 0 && (
+            <section aria-labelledby="regional-indicators-title">
+              <h3 id="regional-indicators-title">农业粮食专题指标</h3>
+              {agricultureProfile.administrativeLevel !== "PREFECTURE" && (
+                <p className="overview-data-mode__indicator-note">
+                  专题指标为所属地市公开参考；本级种植结构与产量由边界和统计模型另行计算。
+                </p>
+              )}
+              <div className="overview-data-mode__indicator-groups">
+                {indicatorGroups.map(([category, indicators]) => (
+                  <section key={category}>
+                    <h4>{indicatorCategoryLabel(category)}</h4>
+                    <div className="overview-data-mode__indicator-grid">
+                      {indicators.map((indicator) => (
+                        <article key={`${category}-${indicator.label}`}>
+                          <div>
+                            <span>{indicator.label}</span>
+                            <b>{indicatorKindLabel(indicator.dataKind)}</b>
+                          </div>
+                          <strong>
+                            {format(indicator.value)} <small>{indicator.unit}</small>
+                          </strong>
+                          <p>
+                            {indicator.dataYear}年 · {indicator.method}
+                          </p>
+                          <a
+                            href={indicator.sourceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {indicator.sourceName} · 查看依据
+                          </a>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            </section>
           )}
           <section aria-labelledby="regional-structure-title">
             <h3 id="regional-structure-title">种植结构</h3>
@@ -142,7 +393,10 @@ export function OverviewDataModePanel({
                       <dd>{format(crop.totalOutputKg, 10_000_000)} 万吨</dd>
                     </div>
                   </dl>
-                  <small title={crop.basis}>{crop.basis}</small>
+                  <div className="overview-data-mode__basis">
+                    <span>数据依据</span>
+                    <p>{crop.basis}</p>
+                  </div>
                   {crop.confidencePercent && (
                     <div className="overview-data-mode__confidence">
                       <span>置信度 {format(crop.confidencePercent)}%</span>
@@ -156,8 +410,19 @@ export function OverviewDataModePanel({
                   )}
                   {crop.formula && (
                     <details>
-                      <summary>查看计算公式</summary>
-                      <p>{crop.formula}</p>
+                      <summary>数据如何得出</summary>
+                      <dl className="overview-data-mode__calculation">
+                        <div>
+                          <dt>当年计算</dt>
+                          <dd>{crop.formula}</dd>
+                        </div>
+                        {crop.forecasts[0]?.formula && (
+                          <div>
+                            <dt>明年预测</dt>
+                            <dd>{crop.forecasts[0].formula}</dd>
+                          </div>
+                        )}
+                      </dl>
                     </details>
                   )}
                 </article>
@@ -242,16 +507,30 @@ export function OverviewDataModePanel({
               {(agricultureProfile.sources ?? []).map((source) => (
                 <article key={source.id}>
                   <div>
-                    <a href={source.url} target="_blank" rel="noreferrer">
-                      {source.name} · 查看原文
-                    </a>
-                    <b>{source.status === "SUCCESS" ? "已同步" : "已有基线"}</b>
+                    <span>
+                      {sourceTypeLabel(source.type)} ·{" "}
+                      {sourceClassLabel(source.sourceClass)} · 权重{" "}
+                      {format(String(Number(source.reliabilityWeight) * 100))}%
+                    </span>
+                    <b>{sourceStatusLabel(source.status)}</b>
                   </div>
-                  <p>{source.evidence}</p>
-                  <small>
-                    发布 {source.publishedOn ?? "待识别"} · 抓取{" "}
-                    {source.fetchedAt ?? "等待首次每日任务"}
-                  </small>
+                  <a href={source.url} target="_blank" rel="noreferrer">
+                    {source.name} · 查看原文
+                  </a>
+                  <dl className="overview-data-mode__source-proof">
+                    <div>
+                      <dt>公开依据</dt>
+                      <dd>{source.evidence}</dd>
+                    </div>
+                    <div>
+                      <dt>资料日期</dt>
+                      <dd>{source.publishedOn ?? "来源页未标注"}</dd>
+                    </div>
+                    <div>
+                      <dt>最近核验</dt>
+                      <dd>{formatDateTime(source.fetchedAt)}</dd>
+                    </div>
+                  </dl>
                 </article>
               ))}
             </div>
@@ -260,9 +539,8 @@ export function OverviewDataModePanel({
             <p>{agricultureProfile.sourceSummary}</p>
             <p>{agricultureProfile.calculationMethod}</p>
             <p>
-              更新状态：{agricultureProfile.refreshStatus?.status ?? "自动计算"}
-              ；最近成功：
-              {agricultureProfile.refreshStatus?.lastSuccessAt ?? "等待首次每日任务"}
+              每日 08:30 自动查找公开资料并重新计算；最近完成：
+              {formatDateTime(agricultureProfile.refreshStatus?.lastSuccessAt)}
             </p>
           </footer>
         </div>

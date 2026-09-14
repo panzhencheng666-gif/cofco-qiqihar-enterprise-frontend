@@ -38,6 +38,13 @@ describe("OverviewPage", () => {
         year: 2026,
         automatic: true,
         generatedAt: "2026-09-14T10:00:00Z",
+        regionFacts: {
+          areaSquareKilometres: "42202.36",
+          directChildCount: 16,
+          countyCount: 16,
+          townshipCount: 232,
+          villageCount: 2332,
+        },
         sourceSummary: "地区年度正式数据优先，缺项由统计模型自动补齐",
         calculationMethod: "结构系数估算；复合增长公式预测",
         crops: [

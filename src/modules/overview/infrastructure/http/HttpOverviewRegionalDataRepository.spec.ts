@@ -67,8 +67,28 @@ describe("HttpOverviewRegionalDataRepository", () => {
               year: 2026,
               automatic: true,
               generatedAt: "2026-09-14T10:00:00Z",
+              regionFacts: {
+                areaSquareKilometres: 42202.36,
+                directChildCount: 16,
+                countyCount: 16,
+                townshipCount: 232,
+                villageCount: 2332,
+              },
               sourceSummary: "地区年度正式数据优先，缺项由统计模型自动补齐",
               calculationMethod: "结构系数估算；复合增长公式预测",
+              indicators: [
+                {
+                  category: "PROCESSING",
+                  label: "粮食加工企业",
+                  value: 191,
+                  unit: "家",
+                  dataYear: 2025,
+                  dataKind: "OBSERVED",
+                  method: "媒体公开数据",
+                  sourceName: "人民网黑龙江频道",
+                  sourceUrl: "https://example.test/processing",
+                },
+              ],
               weather: {
                 meanTemperatureC: 15.8,
                 precipitationMm: 0,
@@ -129,5 +149,6 @@ describe("HttpOverviewRegionalDataRepository", () => {
     expect(balance.rows[0]?.display).toBeNull();
     expect(profile.crops[0]?.forecasts[0]?.year).toBe(2027);
     expect(profile.weather?.meanTemperatureC).toBe("15.8");
+    expect(profile.indicators?.[0]?.value).toBe("191");
   });
 });

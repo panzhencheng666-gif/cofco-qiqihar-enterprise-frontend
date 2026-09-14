@@ -65,6 +65,13 @@ describe("OverviewDataModePanel", () => {
           automatic: true,
           generatedAt: "2026-09-14T10:00:00Z",
           coverageDescription: "乡镇级自动估算：继承上级公开统计并按边界面积分摊",
+          regionFacts: {
+            areaSquareKilometres: "68726.00",
+            directChildCount: 6,
+            countyCount: 6,
+            townshipCount: 64,
+            villageCount: 562,
+          },
           sourceSummary: "地区年度正式数据优先，缺项由统计模型自动补齐",
           calculationMethod: "结构系数估算；复合增长公式预测",
           refreshStatus: {
@@ -93,12 +100,38 @@ describe("OverviewDataModePanel", () => {
               impact: "生产者补贴与农业保险作为预测修正依据",
             },
           ],
+          indicators: [
+            {
+              category: "INPUT",
+              label: "种子需求量",
+              value: "10.5",
+              unit: "万吨",
+              dataYear: 2026,
+              dataKind: "PLAN",
+              method: "农业农村局春耕调度值",
+              sourceName: "黑河市农业农村局",
+              sourceUrl: "https://example.test/spring",
+            },
+            {
+              category: "FINANCE",
+              label: "计划涉农贷款",
+              value: "294",
+              unit: "亿元",
+              dataYear: 2026,
+              dataKind: "PLAN",
+              method: "公开报道的金融机构计划投放额",
+              sourceName: "黑河市农业农村局",
+              sourceUrl: "https://example.test/spring",
+            },
+          ],
           sources: [
             {
               id: "heihe-report",
               type: "AGRICULTURE",
               name: "黑河市人民政府",
               url: "https://example.test/report",
+              sourceClass: "OFFICIAL",
+              reliabilityWeight: "1.0",
               publishedOn: "2026-04-29",
               fetchedAt: "2026-09-14T02:00:00Z",
               status: "SUCCESS",
@@ -167,6 +200,24 @@ describe("OverviewDataModePanel", () => {
     expect(screen.getByText("农业天气")).toBeVisible();
     expect(screen.getByText("政策影响")).toBeVisible();
     expect(screen.getByText("来源与计算证明")).toBeVisible();
+    expect(screen.getByText("地区档案")).toBeVisible();
+    expect(screen.getByText("农业粮食专题指标")).toBeVisible();
+    expect(screen.getByText("农资保障")).toBeVisible();
+    expect(screen.getByText("金融与补贴")).toBeVisible();
+    expect(screen.getByText("种子需求量")).toBeVisible();
+    expect(screen.getByText("计划涉农贷款")).toBeVisible();
+    expect(screen.getAllByText("公开计划")).toHaveLength(2);
+    expect(screen.getByText("区域农业要点")).toBeVisible();
+    expect(screen.getByText("三品种播种规模")).toBeVisible();
+    expect(screen.getByText("公开值覆盖")).toBeVisible();
+    expect(screen.getByText("明年产量变化")).toBeVisible();
+    expect(screen.getByText("562")).toBeVisible();
+    expect(screen.getByText("今日已核验")).toBeVisible();
+    expect(screen.getByText(/政府公开 · 权重 100/)).toBeVisible();
+    expect(
+      screen.getByText("大豆", { selector: ".overview-data-mode__fact-grid strong" }),
+    ).toBeVisible();
+    expect(screen.queryByText(/SUCCESS|PARTIAL|\{"/)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /黑河市人民政府/ })).toHaveAttribute(
       "href",
       "https://example.test/report",
