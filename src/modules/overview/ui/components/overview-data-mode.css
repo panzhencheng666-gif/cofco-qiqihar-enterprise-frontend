@@ -1395,7 +1395,7 @@ button.overview-data-mode__structure-bar {
   );
 }
 .overview-command-center:has(.regional-workspace[data-reading-wide="true"]) {
-  --regional-reading-width: min(1280px, 70vw);
+  --regional-reading-width: min(1280px, 70vw, calc(100vw - 480px));
 }
 .overview-command-center.has-side-data-panel
   .overview-data-mode:has(.regional-workspace) {
@@ -1551,10 +1551,10 @@ button.overview-data-mode__structure-bar {
 }
 @media (max-width: 1100px) {
   .overview-command-center:has(.regional-workspace) {
-    --regional-reading-width: 58vw;
+    --regional-reading-width: min(58vw, calc(100vw - 480px));
   }
   .overview-command-center:has(.regional-workspace[data-reading-wide="true"]) {
-    --regional-reading-width: 66vw;
+    --regional-reading-width: min(66vw, calc(100vw - 480px));
   }
   .regional-workspace__tabs {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1594,4 +1594,24 @@ button.overview-data-mode__structure-bar {
 .regional-workspace__body .overview-data-mode__fact-grid + p {
   font-size: 13px;
   line-height: 1.75;
+}
+
+/* On small screens the map and the reading panel have separate rows. */
+@media (max-width: 800px) {
+  .overview-command-center.has-side-data-panel
+    .overview-data-mode:has(.regional-workspace) {
+    position: relative;
+    inset: auto;
+    order: 5;
+    zoom: 1;
+    width: calc(100% - 24px);
+    max-width: none;
+    height: 72svh;
+    min-height: 420px;
+    margin: 12px;
+    flex: 0 0 auto;
+  }
+  .regional-workspace > header > button {
+    display: none;
+  }
 }

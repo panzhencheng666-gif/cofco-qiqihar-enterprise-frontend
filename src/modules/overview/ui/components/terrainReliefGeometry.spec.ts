@@ -68,6 +68,12 @@ function polygonFeature(
 }
 
 describe("projectReliefScene", () => {
+  it("keeps geometry within the vertically stacked mobile map", () => {
+    const mobile = overviewReliefFrame(true, 1280, 390, 540);
+    expect(mobile.x + mobile.width).toBeLessThanOrEqual(390 - 24);
+    expect(mobile.y + mobile.height).toBeLessThanOrEqual(540 - 40);
+    expect(mobile.width).toBeGreaterThan(300);
+  });
   it("fits the complete map to the measured viewport as the reading panel changes width", () => {
     for (const right of [540, 820, 1100]) {
       const measured = overviewReliefFrame(true, 1920, right);

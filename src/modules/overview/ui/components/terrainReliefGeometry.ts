@@ -213,7 +213,16 @@ export function overviewReliefFrame(
   detailsOpen: boolean,
   stageWidth = 1920,
   visibleRight?: number,
+  compactHeight?: number,
 ): ReliefFrame {
+  if (compactHeight !== undefined && visibleRight !== undefined) {
+    return {
+      x: 24,
+      y: 40,
+      width: Math.max(1, visibleRight - 48),
+      height: Math.max(1, compactHeight - 80),
+    };
+  }
   const x = 180;
   const right = detailsOpen
     ? Math.min(
