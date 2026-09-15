@@ -2154,6 +2154,112 @@ describe("polygon-contained relief overlay layout", () => {
     },
   );
 
+  it("separates dense administrative names at readable size with anchored callouts", () => {
+    const features = Array.from({ length: 12 }, (_, index) => {
+      const x = 4 + (index % 4) * 0.06;
+      const y = 4 + Math.floor(index / 4) * 0.06;
+      return polygonFeature(
+        `dense-${index}`,
+        [
+          [x, y],
+          [x + 0.05, y],
+          [x + 0.05, y + 0.05],
+          [x, y + 0.05],
+          [x, y],
+        ],
+        "COUNTY",
+      );
+    });
+    const scene = projectReliefScene({
+      features,
+      backdrop: polygonFeature(
+        "context",
+        [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+          [0, 10],
+          [0, 0],
+        ],
+        "PREFECTURE",
+      ),
+      frame: { x: 0, y: 0, width: 480, height: 480 },
+      points: [],
+    });
+    const labels = createReliefOverlayLayout(scene).labels.filter(
+      (label) => label.visible,
+    );
+    expect(labels).toHaveLength(12);
+    labels.forEach((label, index) => {
+      expect(label.scale).toBe(1);
+      expect(label.point.x - label.footprint.width / 2).toBeGreaterThanOrEqual(
+        scene.frame.x,
+      );
+      expect(label.point.y - label.footprint.height / 2).toBeGreaterThanOrEqual(
+        scene.frame.y,
+      );
+      expect(label.point.x + label.footprint.width / 2).toBeLessThanOrEqual(
+        scene.frame.x + scene.frame.width,
+      );
+      expect(label.point.y + label.footprint.height / 2).toBeLessThanOrEqual(
+        scene.frame.y + scene.frame.height,
+      );
+      expect(label.leaderAnchor).toEqual(
+        scene.labels.find((item) => item.region.code === label.region.code)?.point,
+      );
+      labels.slice(index + 1).forEach((other) => {
+        expect(
+          Math.abs(label.point.x - other.point.x) >=
+            (label.footprint.width + other.footprint.width) / 2 ||
+            Math.abs(label.point.y - other.point.y) >=
+              (label.footprint.height + other.footprint.height) / 2,
+        ).toBe(true);
+      });
+    });
+  });
+
+  it("reserves scarce name space for the selected region without shrinking typography", () => {
+    const base = projectReliefScene({
+      features: [
+        polygonFeature(
+          "first",
+          [
+            [0, 0],
+            [1, 0],
+            [1, 1],
+            [0, 1],
+            [0, 0],
+          ],
+          "COUNTY",
+        ),
+      ],
+      frame: { x: 0, y: 0, width: 90, height: 40 },
+      points: [],
+    });
+    const first = {
+      ...base.labels[0]!,
+      region: { ...base.labels[0]!.region, name: "测试县" },
+    };
+    const scene = {
+      ...base,
+      features: [],
+      labels: [
+        { ...first, point: { x: 45, y: 20 } },
+        {
+          ...first,
+          point: { x: 45, y: 20 },
+          region: { ...first.region, code: "selected" },
+        },
+      ],
+    };
+    const layout = createReliefOverlayLayout(scene, "selected");
+    expect(
+      layout.labels.filter((label) => label.visible).map((label) => label.region.code),
+    ).toEqual(["selected"]);
+    expect(layout.labels.every((label) => label.scale === 1)).toBe(true);
+    expect(createReliefOverlayLayout(scene, "selected")).toEqual(layout);
+  });
+
   it("keeps a small administrative surface named with an anchored fallback label", () => {
     const tiny = polygonFeature(
       "tiny",
@@ -2194,7 +2300,8 @@ describe("polygon-contained relief overlay layout", () => {
     expect(label?.visible).toBe(true);
     expect(label?.scale).toBe(1);
     if (polygon && label) {
-      expect(pointInReliefPolygon(label.point, polygon)).toBe(true);
+      expect(label.leaderAnchor).toBeDefined();
+      expect(pointInReliefPolygon(label.leaderAnchor!, polygon)).toBe(true);
       expect(
         reliefRectInsidePolygon(
           label.point,
