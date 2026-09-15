@@ -426,7 +426,7 @@ export default function TerrainReliefBoundaryMap({
     }
     // The detail drawer responds on the first click. The map itself keeps its
     // original hit positions for one double-click interval, so the second
-    // click can still drill without paying an artificial 220 ms selection
+    // click can still drill without paying an artificial selection
     // delay or losing its target while the safe frame is reflowed.
     layoutTimerRef.current = window.setTimeout(() => {
       layoutTimerRef.current = undefined;
