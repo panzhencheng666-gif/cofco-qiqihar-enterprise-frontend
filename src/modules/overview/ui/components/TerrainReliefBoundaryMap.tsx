@@ -316,13 +316,9 @@ export default function TerrainReliefBoundaryMap({
     terrainProjectionResult.duration + terrainDetailProjectionResult.duration;
   const activeProjection = activeDetailLayout ? detailProjection : sceneProjection;
   const activeSurfaceBounds = reliefSceneBounds(activeProjection);
-  const activeLayoutTransform = activeDetailLayout
-    ? calculateLayoutTransform(sceneProjection, detailProjection)
-    : IDENTITY_LAYOUT_TRANSFORM;
-  const selectedOverlayLift = COMPONENT_HIGHLIGHT_LIFT * activeLayoutTransform.scaleY;
   const overlayLayout = useMemo(
-    () => createReliefOverlayLayout(activeProjection),
-    [activeProjection],
+    () => createReliefOverlayLayout(activeProjection, selectedCode),
+    [activeProjection, selectedCode],
   );
   const coordinateGroupBySamplePointId = useMemo(() => {
     const groups = new Map<string, OverviewSamplePointIcon[]>();
@@ -1114,62 +1110,98 @@ export default function TerrainReliefBoundaryMap({
       >
         {overlayLayout.labels
           .filter(({ region, visible }) => visible && !region.mapContextOnly)
-          .map(({ componentId, footprint, kind, point, region, scale }) => {
-            const identity = primaryComponentIdentity(activeProjection, region);
-            const isLeaf = region.mapContextOnly || region.level === "VILLAGE";
-            const selectedLift = region.code === selectedCode ? selectedOverlayLift : 0;
-            const aggregate = aggregateByRegion.get(region.code);
-            const visibleAggregateCount =
-              samplePointAggregateStatus === "ready" &&
-              aggregate &&
-              aggregate.samplePointCount > 0
-                ? aggregate.scopeKind === "PARENT_DIRECT"
-                  ? `本级${aggregate.samplePointCount}个`
-                  : `${aggregate.samplePointCount}个`
-                : undefined;
-            return (
-              <Fragment key={`${kind}-${region.code}-${componentId ?? "point"}`}>
-                <button
-                  aria-label={reliefRegionLabel({
-                    aggregate: aggregateByRegion.get(region.code),
-                    isLeaf,
-                    region,
-                    status: samplePointAggregateStatus,
-                  })}
-                  className={`overview-relief-label is-${kind} is-${region.level.toLowerCase()}${kind === "region" || aggregateRegionCodes.has(region.code) ? " can-have-count" : ""}${aggregateRegionCodes.has(region.code) ? " has-sample-point-aggregate" : ""}${region.code === selectedCode ? " is-selected" : ""}`}
-                  onClick={() =>
-                    identity
-                      ? scheduleComponentSelection(region, identity.componentId)
-                      : scheduleSelection(region)
-                  }
-                  {...(!isLeaf
-                    ? { onDoubleClick: () => drillImmediately(region) }
-                    : {})}
-                  onPointerEnter={() => hoverUpdateRef.current(identity)}
-                  onPointerLeave={() => hoverUpdateRef.current(undefined)}
-                  data-layout-scale={scale}
-                  data-region-code={region.code}
-                  style={{
-                    left: point.x,
-                    top: point.y - selectedLift,
-                    width: footprint.width,
-                    height: footprint.height,
-                    transform: `translate(-50%, -50%) scale(${scale})`,
-                  }}
-                  type="button"
-                >
-                  <span aria-hidden="true" className="overview-relief-label-name">
-                    {compactAdministrativeName(region.name)}
-                  </span>
-                  {visibleAggregateCount ? (
-                    <span aria-hidden="true" className="overview-relief-label-count">
-                      {visibleAggregateCount}
-                    </span>
+          .map(
+            ({ componentId, footprint, kind, leaderAnchor, point, region, scale }) => {
+              const identity = primaryComponentIdentity(activeProjection, region);
+              const leaderRatio = leaderAnchor
+                ? Math.max(
+                    Math.abs(leaderAnchor.x - point.x) / (footprint.width / 2),
+                    Math.abs(leaderAnchor.y - point.y) / (footprint.height / 2),
+                    1,
+                  )
+                : 1;
+              const isLeaf = region.mapContextOnly || region.level === "VILLAGE";
+              const aggregate = aggregateByRegion.get(region.code);
+              const visibleAggregateCount =
+                samplePointAggregateStatus === "ready" &&
+                aggregate &&
+                aggregate.samplePointCount > 0
+                  ? aggregate.scopeKind === "PARENT_DIRECT"
+                    ? `本级${aggregate.samplePointCount}个`
+                    : `${aggregate.samplePointCount}个`
+                  : undefined;
+              return (
+                <Fragment key={`${kind}-${region.code}-${componentId ?? "point"}`}>
+                  {leaderAnchor ? (
+                    <svg
+                      aria-hidden="true"
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        width: "100%",
+                        height: "100%",
+                        overflow: "visible",
+                        pointerEvents: "none",
+                      }}
+                    >
+                      <line
+                        x1={leaderAnchor.x}
+                        y1={leaderAnchor.y}
+                        x2={point.x + (leaderAnchor.x - point.x) / leaderRatio}
+                        y2={point.y + (leaderAnchor.y - point.y) / leaderRatio}
+                        stroke="rgba(221, 238, 247, 0.8)"
+                        strokeWidth={1}
+                      />
+                      <circle
+                        cx={leaderAnchor.x}
+                        cy={leaderAnchor.y}
+                        r={2}
+                        fill="rgba(221, 238, 247, 0.9)"
+                      />
+                    </svg>
                   ) : null}
-                </button>
-              </Fragment>
-            );
-          })}
+                  <button
+                    aria-label={reliefRegionLabel({
+                      aggregate: aggregateByRegion.get(region.code),
+                      isLeaf,
+                      region,
+                      status: samplePointAggregateStatus,
+                    })}
+                    className={`overview-relief-label is-${kind} is-${region.level.toLowerCase()}${kind === "region" || aggregateRegionCodes.has(region.code) ? " can-have-count" : ""}${aggregateRegionCodes.has(region.code) ? " has-sample-point-aggregate" : ""}${region.code === selectedCode ? " is-selected" : ""}`}
+                    onClick={() =>
+                      identity
+                        ? scheduleComponentSelection(region, identity.componentId)
+                        : scheduleSelection(region)
+                    }
+                    {...(!isLeaf
+                      ? { onDoubleClick: () => drillImmediately(region) }
+                      : {})}
+                    onPointerEnter={() => hoverUpdateRef.current(identity)}
+                    onPointerLeave={() => hoverUpdateRef.current(undefined)}
+                    data-layout-scale={scale}
+                    data-region-code={region.code}
+                    style={{
+                      left: point.x,
+                      top: point.y,
+                      width: footprint.width,
+                      height: footprint.height,
+                      transform: `translate(-50%, -50%) scale(${scale})`,
+                    }}
+                    type="button"
+                  >
+                    <span aria-hidden="true" className="overview-relief-label-name">
+                      {compactAdministrativeName(region.name)}
+                    </span>
+                    {visibleAggregateCount ? (
+                      <span aria-hidden="true" className="overview-relief-label-count">
+                        {visibleAggregateCount}
+                      </span>
+                    ) : null}
+                  </button>
+                </Fragment>
+              );
+            },
+          )}
         {activeProjection.points
           .filter(({ region }) => region.level === "VILLAGE")
           .map(({ point, region }) => {
