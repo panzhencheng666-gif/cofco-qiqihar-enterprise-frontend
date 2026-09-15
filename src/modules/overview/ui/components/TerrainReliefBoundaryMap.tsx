@@ -1,3 +1,7 @@
+import {
+  RELIEF_DOUBLE_CLICK_LAYOUT_DELAY_MS,
+  useReliefLabelPriority,
+} from "./useReliefLabelPriority";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { Line2 } from "three/examples/jsm/lines/Line2.js";
@@ -316,9 +320,10 @@ export default function TerrainReliefBoundaryMap({
     terrainProjectionResult.duration + terrainDetailProjectionResult.duration;
   const activeProjection = activeDetailLayout ? detailProjection : sceneProjection;
   const activeSurfaceBounds = reliefSceneBounds(activeProjection);
+  const labelPriorityCode = useReliefLabelPriority(selectedCode);
   const overlayLayout = useMemo(
-    () => createReliefOverlayLayout(activeProjection, selectedCode),
-    [activeProjection, selectedCode],
+    () => createReliefOverlayLayout(activeProjection, labelPriorityCode),
+    [activeProjection, labelPriorityCode],
   );
   const coordinateGroupBySamplePointId = useMemo(() => {
     const groups = new Map<string, OverviewSamplePointIcon[]>();
@@ -426,7 +431,7 @@ export default function TerrainReliefBoundaryMap({
     layoutTimerRef.current = window.setTimeout(() => {
       layoutTimerRef.current = undefined;
       setDetailLayoutOpen(true);
-    }, 220);
+    }, RELIEF_DOUBLE_CLICK_LAYOUT_DELAY_MS);
     return cancelLayoutTimer;
   }, [cancelLayoutTimer, detailsOpen, selectedCode]);
 
