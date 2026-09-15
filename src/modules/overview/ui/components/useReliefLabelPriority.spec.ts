@@ -16,7 +16,7 @@ describe("relief label selection priority", () => {
     );
     rerender({ code: "second" });
     expect(result.current).toBe("first");
-    await act(() => vi.advanceTimersByTime(499));
+    await act(() => vi.advanceTimersByTime(219));
     expect(result.current).toBe("first");
     await act(() => vi.advanceTimersByTime(1));
     expect(result.current).toBe("second");
@@ -35,7 +35,7 @@ describe("relief label selection priority", () => {
     rerender({ code: "third" });
     await act(() => vi.advanceTimersByTime(70));
     expect(result.current).toBe("first");
-    await act(() => vi.advanceTimersByTime(430));
+    await act(() => vi.advanceTimersByTime(150));
     expect(result.current).toBe("third");
     rerender({ code: "fourth" });
     unmount();

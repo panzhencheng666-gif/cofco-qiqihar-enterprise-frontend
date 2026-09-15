@@ -1,3 +1,4 @@
+import { useDeferredMapSelection } from "./useDeferredMapSelection";
 import {
   RELIEF_DOUBLE_CLICK_LAYOUT_DELAY_MS,
   useReliefLabelPriority,
@@ -365,9 +366,11 @@ export default function TerrainReliefBoundaryMap({
     window.clearTimeout(layoutTimerRef.current);
     layoutTimerRef.current = undefined;
   }, []);
+  const { schedule: deferSelection, cancel: cancelSelection } = useDeferredMapSelection();
   const scheduleSelection = useCallback((region: OverviewRegion) => {
-    callbacksRef.current.onSelect(region);
-  }, []);
+    if (region.level === "VILLAGE") callbacksRef.current.onSelect(region);
+    else deferSelection(() => callbacksRef.current.onSelect(region));
+  }, [deferSelection]);
   const scheduleComponentSelection = useCallback(
     (region: OverviewRegion, componentId: number) => {
       const identity: ReliefComponentIdentity = {
@@ -376,17 +379,22 @@ export default function TerrainReliefBoundaryMap({
         parentCode: region.parentCode,
         regionCode: region.code,
       };
-      componentSelectionUpdateRef.current(identity);
-      callbacksRef.current.onSelect(region);
+      const select = () => {
+        componentSelectionUpdateRef.current(identity);
+        callbacksRef.current.onSelect(region);
+      };
+      if (region.level === "VILLAGE") select();
+      else deferSelection(select);
     },
-    [],
+    [deferSelection],
   );
   const drillImmediately = useCallback(
     (region: OverviewRegion) => {
+      cancelSelection();
       cancelLayoutTimer();
       callbacksRef.current.onDrill(region);
     },
-    [cancelLayoutTimer],
+    [cancelLayoutTimer, cancelSelection],
   );
 
   useEffect(() => {
@@ -424,10 +432,7 @@ export default function TerrainReliefBoundaryMap({
       }, 0);
       return cancelLayoutTimer;
     }
-    // The detail drawer responds on the first click. The map itself keeps its
-    // original hit positions for one double-click interval, so the second
-    // click can still drill without paying an artificial selection
-    // delay or losing its target while the safe frame is reflowed.
+    // Keep hit positions stable while the selected region's reading panel settles.
     layoutTimerRef.current = window.setTimeout(() => {
       layoutTimerRef.current = undefined;
       setDetailLayoutOpen(true);

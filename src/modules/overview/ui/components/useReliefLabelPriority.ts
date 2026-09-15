@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-export const RELIEF_DOUBLE_CLICK_LAYOUT_DELAY_MS = 500;
+export const RELIEF_DOUBLE_CLICK_LAYOUT_DELAY_MS = 220;
 
 /** Preserve the first-click target while details respond immediately. */
 export function useReliefLabelPriority(selectedCode: string) {
