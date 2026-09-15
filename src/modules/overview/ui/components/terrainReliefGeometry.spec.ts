@@ -68,6 +68,19 @@ function polygonFeature(
 }
 
 describe("projectReliefScene", () => {
+  it("fits the complete map to the measured viewport as the reading panel changes width", () => {
+    for (const right of [540, 820, 1100]) {
+      const measured = overviewReliefFrame(true, 1920, right);
+      expect(measured.x + measured.width).toBeLessThanOrEqual(
+        right - OVERVIEW_DETAILS_MAP_SAFE_GAP,
+      );
+      expect(measured.width).toBeGreaterThan(200);
+    }
+    expect(overviewReliefFrame(true, 1920, 1100).width).toBeGreaterThan(
+      overviewReliefFrame(true, 1920, 540).width,
+    );
+  });
+
   it("fits the full map inside a narrow stage", () => {
     const frame = overviewReliefFrame(false, 1280);
     expect(frame.x + frame.width).toBeLessThanOrEqual(1180);

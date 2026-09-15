@@ -230,6 +230,7 @@ export default function TerrainReliefBoundaryMap({
   const activeDetailLayout = reserveRightPanel || (detailsOpen && detailLayoutOpen);
   const detailLayoutOpenRef = useRef(false);
   const [stageWidth, setStageWidth] = useState(commandStageWidth);
+  const [visibleMapWidth, setVisibleMapWidth] = useState<number>();
   const renderedStageWidth = Math.max(STAGE_WIDTH, Math.ceil(stageWidth));
   const wideStageOffset = overviewWideStageOffset(renderedStageWidth);
   const terrainSourceKey = useMemo(
@@ -248,8 +249,13 @@ export default function TerrainReliefBoundaryMap({
     [stageWidth],
   );
   const detailMapFrame = useMemo(
-    () => overviewReliefFrame(true, stageWidth),
-    [stageWidth],
+    () =>
+      overviewReliefFrame(
+        true,
+        stageWidth,
+        visibleMapWidth === undefined ? undefined : visibleMapWidth - wideStageOffset,
+      ),
+    [stageWidth, visibleMapWidth, wideStageOffset],
   );
   const terrainProjectionResult = useMemo(() => {
     const startedAt = window.performance.now();
@@ -383,6 +389,19 @@ export default function TerrainReliefBoundaryMap({
   useEffect(() => {
     detailLayoutOpenRef.current = activeDetailLayout;
   }, [activeDetailLayout]);
+
+  useEffect(() => {
+    const viewport = hostRef.current?.parentElement;
+    if (!viewport) return;
+    // CSS reserves the real reading-panel width, including its unscaled text.
+    // Observe that viewport in stage coordinates so geometry and hit targets
+    // reframe together when the panel expands, collapses or the window resizes.
+    const measure = () => setVisibleMapWidth(viewport.clientWidth);
+    const observer = new ResizeObserver(measure);
+    observer.observe(viewport);
+    measure();
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const updateStageWidth = () => setStageWidth(commandStageWidth());
@@ -1072,7 +1091,7 @@ export default function TerrainReliefBoundaryMap({
     <div
       className="overview-terrain-relief-map"
       data-command-stage-width={stageWidth}
-      data-details-panel-left={overviewDetailsPanelLeft(stageWidth)}
+      data-details-panel-left={visibleMapWidth ?? overviewDetailsPanelLeft(stageWidth)}
       data-visible-surface-max-x={activeSurfaceBounds?.maxX}
       data-visible-surface-max-y={activeSurfaceBounds?.maxY}
       data-visible-surface-min-x={activeSurfaceBounds?.minX}

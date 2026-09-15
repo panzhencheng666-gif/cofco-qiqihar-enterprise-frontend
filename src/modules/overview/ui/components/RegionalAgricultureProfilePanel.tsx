@@ -1,3 +1,4 @@
+import { RegionalLocalEstimateComparison } from "./RegionalLocalEstimateComparison";
 import { RegionalEstimateComparison } from "./RegionalEstimateComparison";
 import { useMemo, useRef, useState } from "react";
 import { RegionalReadingDialog } from "./RegionalReadingDialog";
@@ -1565,21 +1566,17 @@ export function RegionalAgricultureProfilePanel({
         )}
         {view === "comparison" && (
           <>
-            {profile.estimateBatch && (
+            {profile.estimateBatch?.rootRegionCode === profile.regionCode ? (
               <RegionalEstimateComparison
                 key={`${profile.regionCode}-${profile.year}`}
                 batch={profile.estimateBatch}
-                currentCrops={
-                  profile.regionCode === profile.estimateBatch.rootRegionCode
-                    ? profile.crops
-                    : []
-                }
+                currentCrops={profile.crops}
               />
-            )}
-            {!profile.estimateBatch && (
-              <p role="status">
-                该地区的公开值与独立估算对照尚未形成，可在种植预测和来源更新中查看现有资料。
-              </p>
+            ) : (
+              <RegionalLocalEstimateComparison
+                key={`${profile.regionCode}-${profile.year}`}
+                profile={profile}
+              />
             )}
           </>
         )}
@@ -1587,6 +1584,12 @@ export function RegionalAgricultureProfilePanel({
           <>
             <section aria-labelledby="regional-weather-title">
               <h3 id="regional-weather-title">农业天气</h3>
+              {profile.administrativeLevel !== "PREFECTURE" && (
+                <p className="overview-data-mode__indicator-note">
+                  尚未取得{profile.regionName}
+                  的独立气象观测。下列数据来自上级地区气象参考点，不能代表本地区实测天气。
+                </p>
+              )}
               {profile.weather ? (
                 <div className="overview-data-mode__weather">
                   <dl>
@@ -1620,6 +1623,10 @@ export function RegionalAgricultureProfilePanel({
               <h3 id="regional-policy-title">
                 政策影响（{profile.policies?.length ?? 0}项）
               </h3>
+              <p className="overview-data-mode__indicator-note">
+                政策资料按上级地区及通用政策汇集，政策适用范围以原文为准；尚未逐项确认对
+                {profile.regionName}的适用性。
+              </p>
               <div className="overview-data-mode__policy-list">
                 {(profile.policies ?? []).map((policy) => (
                   <article key={policy.sourceUrl}>
