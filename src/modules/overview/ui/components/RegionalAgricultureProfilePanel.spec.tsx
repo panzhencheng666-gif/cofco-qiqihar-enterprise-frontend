@@ -53,6 +53,14 @@ it("shows business wording and separates each step of a village estimate", () =>
   expect(container.textContent).not.toMatch(
     /HTTP 500|generationtime_ms|耕作系数|避免把网页正文堆进页面/,
   );
+  expect(screen.getByRole("tab", { name: "地区概况" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  expect(screen.queryByRole("button", { name: /^面积/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("tab", { name: "种植预测" }));
+  fireEvent.click(screen.getByRole("button", { name: "宽屏阅读" }));
+  expect(screen.getByRole("button", { name: "恢复分栏" })).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: /^面积/ }));
   const detail = screen.getByRole("dialog", { name: "稻谷面积计算与来源说明" });
   expect(within(detail).getByText("选择依据：龙江镇同作物资料。")).toBeVisible();

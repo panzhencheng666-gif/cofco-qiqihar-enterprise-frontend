@@ -94,7 +94,10 @@ export function OverviewDataModePanel({
         </p>
       )}
       {mode === "REGIONAL_DATA" && agricultureProfile && (
-        <RegionalAgricultureProfilePanel profile={agricultureProfile} />
+        <RegionalAgricultureProfilePanel
+          key={`${agricultureProfile.regionCode}-${agricultureProfile.year}`}
+          profile={agricultureProfile}
+        />
       )}
       {mode === "REGIONAL_DATA" && !agricultureProfile && regionalSummary && (
         <>

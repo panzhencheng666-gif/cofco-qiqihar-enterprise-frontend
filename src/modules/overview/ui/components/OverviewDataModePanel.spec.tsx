@@ -203,18 +203,22 @@ describe("OverviewDataModePanel", () => {
     );
 
     expect(screen.getByRole("heading", { name: "黑河市农业概况" })).toBeVisible();
-    expect(screen.getByText("无需日常人工填报")).toBeVisible();
+    await userEvent.click(screen.getByRole("tab", { name: "种植预测" }));
     expect(screen.getByRole("heading", { name: "种植结构与分品种数据" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "面积与单产模型预测" })).toBeVisible();
     expect(screen.getByText("公开统计")).toBeVisible();
     expect(screen.getAllByText("模型补算")).toHaveLength(2);
     expect(screen.getByText("2027年")).toBeVisible();
+    await userEvent.click(screen.getByRole("tab", { name: "天气政策" }));
     expect(screen.getByText("农业天气")).toBeVisible();
     expect(screen.getByRole("heading", { name: "政策影响（1项）" })).toBeVisible();
+    await userEvent.click(screen.getByRole("tab", { name: "来源更新" }));
     expect(screen.getByRole("heading", { name: "来源档案（1个渠道）" })).toBeVisible();
+    await userEvent.click(screen.getByRole("tab", { name: "地区概况" }));
     expect(screen.getByText("地区档案")).toBeVisible();
-    expect(screen.getByText(/黑河市区域面积约68,726.00平方公里/)).toBeVisible();
+    expect(screen.getByText(/黑河市边界参考面积约68,726.00平方公里/)).toBeVisible();
     expect(screen.getByText(/结构以大豆为主/)).toBeVisible();
+    await userEvent.click(screen.getByRole("tab", { name: "农业指标" }));
     expect(
       screen.getByRole("heading", { name: "农业粮食专题指标（3项）" }),
     ).toBeVisible();
@@ -223,20 +227,24 @@ describe("OverviewDataModePanel", () => {
     expect(screen.getByText("种子需求量")).toBeVisible();
     expect(screen.getByText("计划涉农贷款")).toBeVisible();
     expect(screen.getAllByText("公开计划")).toHaveLength(2);
+    await userEvent.click(screen.getByRole("tab", { name: "地区概况" }));
     expect(screen.getByText("已覆盖作物播种规模")).toBeVisible();
     expect(screen.getByText("公开值覆盖")).toBeVisible();
     expect(screen.getByText("明年产量变化")).toBeVisible();
     expect(screen.getByText("562")).toBeVisible();
+    await userEvent.click(screen.getByRole("tab", { name: "来源更新" }));
     expect(screen.getByText("核验完成，公开数据确认无变化")).toBeVisible();
     expect(screen.getByText("已核验 · 确认无变化")).toBeVisible();
     expect(screen.getByText("确认数据无变化")).toBeVisible();
     expect(screen.getByText("本次计算")).toBeVisible();
-    expect(screen.getByText("下次定时任务")).toBeVisible();
+    expect(screen.getByText("下次资料核验")).toBeVisible();
+    await userEvent.click(screen.getByRole("tab", { name: "地区概况" }));
     expect(
       screen.getByText("大豆", { selector: ".overview-data-mode__fact-grid strong" }),
     ).toBeVisible();
     expect(screen.queryByText(/SUCCESS|PARTIAL|\{"/)).not.toBeInTheDocument();
 
+    await userEvent.click(screen.getByRole("tab", { name: "农业指标" }));
     await userEvent.type(
       screen.getByRole("searchbox", { name: "搜索农业指标" }),
       "贷款",
@@ -244,6 +252,7 @@ describe("OverviewDataModePanel", () => {
     expect(screen.queryByText("种子需求量")).not.toBeInTheDocument();
     expect(screen.getByText("计划涉农贷款")).toBeVisible();
     await userEvent.clear(screen.getByRole("searchbox", { name: "搜索农业指标" }));
+    await userEvent.click(screen.getByRole("tab", { name: "农业指标" }));
     await userEvent.click(
       screen.getByRole("button", { name: "查看玉米产量 · 2027年预测计算与来源" }),
     );
@@ -258,6 +267,7 @@ describe("OverviewDataModePanel", () => {
     ).toBeVisible();
     await userEvent.click(within(explanation).getByRole("button", { name: "关闭" }));
     expect(screen.queryByText("大豆2026.4万亩，玉米713.9万亩")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "来源更新" }));
     await userEvent.click(
       screen.getByRole("button", { name: "查看黑河市人民政府计算与来源" }),
     );
@@ -275,6 +285,7 @@ describe("OverviewDataModePanel", () => {
     expect(screen.getByText("大豆2026.4万亩，玉米713.9万亩")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "关闭" }));
 
+    await userEvent.click(screen.getByRole("tab", { name: "种植预测" }));
     await userEvent.click(screen.getByRole("button", { name: "查看公式" }));
     expect(
       screen.getByRole("dialog", { name: "玉米2027年产量预测计算与来源说明" }),

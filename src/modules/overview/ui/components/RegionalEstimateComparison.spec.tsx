@@ -54,8 +54,10 @@ describe("regional current estimates", () => {
     expect(screen.getByText("部分来源未完成核验")).toBeInTheDocument();
     expect(screen.getByText("公开值 · 2025年")).toBeInTheDocument();
     expect(screen.getByText("当前估算 · 2026年")).toBeInTheDocument();
-    expect(screen.getByText("年度不同，不计算差额")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("查看稻谷产量的估算逻辑与对比"));
+    expect(screen.getByRole("table", { name: "地区指标对照表" })).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "查看稻谷产量的估算逻辑与对比" }),
+    );
     expect(screen.getByText("逐年留出回测误差较低")).toBeVisible();
     expect(screen.getByRole("link", { name: "2025年 · 统计公报" })).toHaveAttribute(
       "href",
@@ -82,9 +84,14 @@ describe("regional current estimates", () => {
       />,
     );
     expect(screen.getByText("250 万吨")).toBeInTheDocument();
-    expect(screen.getByText("42 万吨")).toBeInTheDocument();
-    expect(screen.getByText("两种方法的差异，不是真实误差")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("查看稻谷产量的估算逻辑与对比"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "查看稻谷产量的估算逻辑与对比" }),
+    );
     expect(screen.getByText(/播种面积 500 万亩/)).toBeVisible();
+    expect(screen.getByText("42 万吨")).toBeVisible();
+    expect(screen.getByText("同年面积与历史单产，需核查口径")).toBeVisible();
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("table")).toBeVisible();
   });
 });
