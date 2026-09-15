@@ -116,7 +116,7 @@ export function RegionalEstimateComparison({
         ? "已重新计算，结果有变化"
         : batch.calculationStatus === "FAILED_RETAINED"
           ? "本次计算失败，保留上次结果"
-          : "即时估算，尚未写入每日批次";
+          : "按当前有效资料估算";
   return (
     <section className="regional-estimates" aria-label="公开值与当前估算对比">
       <h3>公开值与当前估算对比</h3>

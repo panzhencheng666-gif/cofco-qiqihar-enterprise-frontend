@@ -124,7 +124,7 @@ function sourceTypeLabel(value: Source["type"]): string {
 function sourceStatusLabel(value: string): string {
   if (value === "SEARCH_NOT_CONFIGURED") return "联网搜索尚未配置";
   if (value === "SEARCH_FAILED") return "联网搜索失败，等待重试";
-  if (value === "SEARCH_PARTIAL") return "已联网检索，部分引擎未完成";
+  if (value === "SEARCH_PARTIAL") return "已联网检索，部分渠道暂不可用";
   if (value === "SEARCH_SUCCESS") return "联网搜索已完成";
   if (value === "WAITING_FOR_SOURCE_SYNC" || value === "BOOTSTRAP")
     return "等待首次联网核验";
@@ -390,12 +390,21 @@ function summaryGuide(title: string) {
 }
 
 function sourcePurpose(type: Source["type"]): string {
-  if (type === "WEATHER") return "用于农业天气监测及预测中的天气修正";
-  if (type === "POLICY") return "用于政策影响判断及预测中的政策修正";
+  if (type === "WEATHER")
+    return "用于了解气温、降水和墒情；未验证影响程度前，不据此调整产量";
+  if (type === "POLICY")
+    return "用于了解政策适用范围与农业背景；不将政策条文直接折算为增产比例";
   return "用于地区档案、种植规模、产量和农业专题指标";
 }
 
 function readableEvidence(source: Source): string {
+  if (source.sourceClass === "PUBLIC_SEARCH") {
+    return ["SEARCH_PARTIAL", "SEARCH_FAILED", "SEARCH_NOT_CONFIGURED"].includes(
+      source.status,
+    )
+      ? "本次资料检索尚未全部完成，已取得的资料继续核验，其余渠道稍后复核。"
+      : "已完成本次资料检索；新找到的资料需进一步核对原文、地区和资料年度后才能参与计算。";
+  }
   const evidence = source.evidence.trim();
   const looksLikePayload =
     evidence.startsWith("{") ||
@@ -403,9 +412,9 @@ function readableEvidence(source: Source): string {
     /"(?:latitude|longitude|generationtime_ms|timezone)"/.test(evidence);
   if (looksLikePayload) {
     if (source.type === "WEATHER") {
-      return "已提取本地区逐日气温、降水和表层土壤含水率；接口原始报文由系统留存，页面展示标准化后的农业天气指标。";
+      return "提供气温、降水和表层土壤含水率；请结合观测日期和覆盖地区使用。";
     }
-    return `已从该公开渠道提取结构化记录，${sourcePurpose(source.type)}；接口原始报文由系统留存。`;
+    return `已核对该来源资料，${sourcePurpose(source.type)}。`;
   }
   return evidence || `该来源${sourcePurpose(source.type)}。`;
 }
@@ -631,13 +640,13 @@ export function RegionalAgricultureProfilePanel({
               crop.dataKind === "OBSERVED" || officialArea ? "公开基线" : "模型补算",
             basis: officialArea
               ? "取地区公开资料中的面积值；若资料年度早于当前年度，再按面积趋势补齐年度差。"
-              : "公开资料未给出本级完整面积，按行政区边界面积、耕作系数和地区品种结构权重分摊。",
+              : "依据当前资料按层级估算；具体原值、地区权重与假设见下方计算步骤。",
           },
           {
             label: `${crop.productName}亩均单产`,
             value: `${format(crop.yieldPerMuKg)}公斤/亩`,
             status:
-              crop.dataKind === "OBSERVED" && !modeledYield ? "公开统计" : "模型参数",
+              crop.dataKind === "OBSERVED" && !modeledYield ? "公开统计" : "估算单产",
             basis: modeledYield
               ? "当前公开资料缺少可直接使用的本年单产，采用该品种地区多年单产基线并按年度趋势调整。"
               : "由同一公开资料的总产除以播种面积换算，或直接采用公开单产。",
@@ -882,7 +891,7 @@ export function RegionalAgricultureProfilePanel({
           <strong>{formatDateTime(profile.refreshStatus?.lastSuccessAt)}</strong>
         </div>
         <div>
-          <span>下次定时任务</span>
+          <span>下次资料核验</span>
           <strong>{formatDateTime(profile.refreshStatus?.nextRefreshAt)}</strong>
         </div>
       </section>
@@ -896,12 +905,32 @@ export function RegionalAgricultureProfilePanel({
           <strong>{refreshResultLabel(profile.refreshStatus?.status)}</strong>
         </div>
         <small>
-          每日08:30固定执行；即使公开数据没有变化，也会记录“确认无变化”和本次核验时间。
+          每日08:30启动联网核验与计算；成功核验后，即使数值相同也记录“确认无变化”。获取失败会另行标明。
         </small>
       </section>
 
       {profile.coverageDescription && (
         <p className="overview-data-mode__coverage">{profile.coverageDescription}</p>
+      )}
+
+      {profile.regionalCalculation && (
+        <section
+          className="overview-data-mode__refresh-result"
+          aria-label="本地区自动计算结果"
+        >
+          <span>本地区自动更新</span>
+          <strong>
+            {profile.regionalCalculation.status === "RECALCULATED_UNCHANGED"
+              ? "已更新，结果无变化"
+              : profile.regionalCalculation.status === "RECALCULATED_CHANGED"
+                ? "已更新，结果有变化"
+                : "本次未完成，保留最近有效结果"}
+          </strong>
+          <small>
+            最近尝试：{formatDateTime(profile.regionalCalculation.attemptedAt)} ·
+            计算完成：{formatDateTime(profile.regionalCalculation.calculatedAt)}
+          </small>
+        </section>
       )}
 
       <div className="overview-data-mode__refresh-result" role="status">
@@ -912,7 +941,9 @@ export function RegionalAgricultureProfilePanel({
             : "尚无联网搜索执行记录"}
         </strong>
         <small>
-          {searchSource?.evidence ?? "固定来源核验与搜索发现新资料分开记录。"}
+          {searchSource
+            ? readableEvidence(searchSource)
+            : "查找新发布资料，并复核已有依据。"}
         </small>
       </div>
       {profile.crops.length < 3 && (
@@ -923,7 +954,7 @@ export function RegionalAgricultureProfilePanel({
       )}
       {profile.administrativeLevel !== "PREFECTURE" && (
         <p className="overview-data-mode__assessment">
-          下方扩展农业指标、天气和政策为所属地市背景资料，来源覆盖范围不自动等同于本县、乡镇或行政村。本地推算单独说明面积分摊依据。
+          本级缺项按上级资料逐级估算；标有“上级参考”的资料仅作背景，不是当地统计。点击数值可查看分配依据与假设。
         </p>
       )}
       {profile.estimateBatch && (
@@ -941,7 +972,7 @@ export function RegionalAgricultureProfilePanel({
         <h3 id="regional-facts-title">地区档案</h3>
         <div className="overview-data-mode__fact-grid">
           <div>
-            <span>区域面积</span>
+            <span>边界参考面积</span>
             <strong>{format(profile.regionFacts.areaSquareKilometres)}</strong>
             <small>平方公里</small>
           </div>
@@ -973,8 +1004,9 @@ export function RegionalAgricultureProfilePanel({
         </div>
         {leadingCrop && (
           <p className="overview-data-mode__introduction">
-            {profile.regionName}区域面积约
-            {format(profile.regionFacts.areaSquareKilometres)}平方公里， 共纳入
+            {profile.regionName}边界参考面积约
+            {format(profile.regionFacts.areaSquareKilometres)}
+            平方公里（缺少本级边界时按上级范围估算），目录纳入
             {profile.regionFacts.countyCount}个县级地区、
             {profile.regionFacts.townshipCount}个乡镇和
             {profile.regionFacts.villageCount}个行政村；已覆盖作物合计约
@@ -1094,7 +1126,7 @@ export function RegionalAgricultureProfilePanel({
       </section>
 
       <section aria-labelledby="regional-model-title">
-        <h3 id="regional-model-title">来源覆盖与模型诊断</h3>
+        <h3 id="regional-model-title">资料覆盖与估算依据</h3>
         <div className="overview-data-mode__diagnostic-grid">
           <div>
             <span>来源总数</span>
@@ -1179,7 +1211,7 @@ export function RegionalAgricultureProfilePanel({
           )}
           {profile.administrativeLevel !== "PREFECTURE" && (
             <p className="overview-data-mode__indicator-note">
-              专题指标采用所属地市公开资料作为环境背景；本级作物数据按本行政区边界另行补算。
+              面积、产量等可分配总量提供本级估算；认证、跨区运输和比率保留上级参考，避免混淆统计范围。
             </p>
           )}
           <div className="overview-data-mode__indicator-groups">
@@ -1228,21 +1260,23 @@ export function RegionalAgricultureProfilePanel({
                                     basis: indicator.method,
                                   },
                                 ],
-                          steps: indicator.method.includes("历史输入：")
-                            ? indicator.method.split("。").filter(Boolean)
-                            : indicator.dataKind === "ESTIMATED"
-                              ? [
-                                  `依据：${indicator.method}`,
-                                  "先核对资料期和统计口径；跨年数据或范围不同的数据不直接相除。",
-                                  "把分子、分母或面积统一到公式要求的单位。",
-                                  "代入下方公式计算，并随任一基础值变化自动重算。",
-                                ]
-                              : [
-                                  `读取来源：${indicator.sourceName}，数据期为${indicator.dataYear}年。`,
-                                  indicator.method,
-                                  "按原文统计口径提取数值、单位和资料期。",
-                                  "如原文使用“超过、约”等表述，则按下限或上下文值记录并明确标记。",
-                                ],
+                          steps: indicator.method.includes("\n")
+                            ? indicator.method.split("\n").filter(Boolean)
+                            : indicator.method.includes("历史输入：")
+                              ? indicator.method.split("。").filter(Boolean)
+                              : indicator.dataKind === "ESTIMATED"
+                                ? [
+                                    `依据：${indicator.method}`,
+                                    "先核对资料期和统计口径；跨年数据或范围不同的数据不直接相除。",
+                                    "把分子、分母或面积统一到公式要求的单位。",
+                                    "代入下方公式计算，并随任一基础值变化自动重算。",
+                                  ]
+                                : [
+                                    `读取来源：${indicator.sourceName}，数据期为${indicator.dataYear}年。`,
+                                    indicator.method,
+                                    "按原文统计口径提取数值、单位和资料期。",
+                                    "如原文使用“超过、约”等表述，则按下限或上下文值记录并明确标记。",
+                                  ],
                           ...indicatorEvidence(indicator),
                           sources: explanationSources.filter(
                             (source) =>
@@ -1328,7 +1362,9 @@ export function RegionalAgricultureProfilePanel({
                     dataPeriod: `${profile.year}年`,
                     calculationTime: calculatedAt,
                     verificationTime: verifiedAt,
-                    method: crop.basis,
+                    method: crop.basis.includes("\n")
+                      ? "按下列步骤逐级计算；每步列出依据、换算与适用假设。"
+                      : crop.basis,
                     formula: metricFormula(crop, "share", summary.totalArea),
                     steps: [
                       `读取${crop.productName}播种面积${format(crop.plantedAreaMu, 10_000)}万亩。`,
@@ -1345,7 +1381,7 @@ export function RegionalAgricultureProfilePanel({
                       "占比按该品种面积除以已覆盖作物合计面积计算。",
                       crop.confidencePercent
                         ? `模型参考评分 ${format(crop.confidencePercent)}%。`
-                        : "尚未完成统计误差校准，不提供置信概率或虚构区间。",
+                        : "尚缺独立实测资料，误差范围待验证。",
                     ],
                   })
                 }
@@ -1380,7 +1416,7 @@ export function RegionalAgricultureProfilePanel({
                           rationale:
                             key === "output"
                               ? "总产必须由同一地区、同一年度的面积与单产相乘，避免混用不同资料期。"
-                              : crop.basis,
+                              : "在本地资料不足时，优先使用最近层级的同作物资料，并保留推算假设。",
                           kind: crop.dataKind === "OBSERVED" ? "公开统计" : "模型补算",
                           status:
                             crop.dataKind === "OBSERVED"
@@ -1389,10 +1425,13 @@ export function RegionalAgricultureProfilePanel({
                           dataPeriod: `${profile.year}年`,
                           calculationTime: calculatedAt,
                           verificationTime: verifiedAt,
-                          method: crop.basis,
+                          method: crop.basis.includes("\n")
+                            ? "按下列步骤逐级计算；每步列出依据、换算与适用假设。"
+                            : crop.basis,
                           formula: metricFormula(crop, key, summary.totalArea),
-                          steps:
-                            key === "output"
+                          steps: crop.basis.includes("\n")
+                            ? crop.basis.split("\n").filter(Boolean)
+                            : key === "output"
                               ? [
                                   `确定面积输入为${format(crop.plantedAreaMu, 10_000)}万亩。`,
                                   `确定单产输入为${format(crop.yieldPerMuKg)}公斤/亩。`,
@@ -1411,7 +1450,7 @@ export function RegionalAgricultureProfilePanel({
                               value: `面积 ${format(crop.plantedAreaMu, 10_000)}万亩 · 单产 ${format(crop.yieldPerMuKg)}公斤/亩 · 总产 ${format(crop.totalOutputKg, 10_000_000)}万吨`,
                               status:
                                 crop.dataKind === "OBSERVED" ? "公开统计" : "模型补算",
-                              basis: crop.basis,
+                              basis: "详细输入依据见上方逐步说明。",
                             },
                           ],
                           sources: explanationSources.filter((source) =>
@@ -1423,7 +1462,7 @@ export function RegionalAgricultureProfilePanel({
                           notes: [
                             crop.confidencePercent
                               ? `模型参考评分 ${format(crop.confidencePercent)}%。`
-                              : "尚未完成统计误差校准，不提供置信概率或虚构区间。",
+                              : "尚缺独立实测资料，误差范围待验证。",
                             crop.uncertaintyLowKg && crop.uncertaintyHighKg
                               ? `总产合理区间为 ${format(crop.uncertaintyLowKg, 10_000_000)}–${format(crop.uncertaintyHighKg, 10_000_000)} 万吨。`
                               : "公开值不额外生成不确定性区间。",
@@ -1502,7 +1541,7 @@ export function RegionalAgricultureProfilePanel({
                                   crop.dataKind === "OBSERVED"
                                     ? "公开统计"
                                     : "模型补算",
-                                basis: crop.basis,
+                                basis: "详细输入依据见上方逐步说明。",
                               },
                             ],
                             sources: explanationSources,
@@ -1596,7 +1635,7 @@ export function RegionalAgricultureProfilePanel({
       <section aria-labelledby="regional-source-title">
         <h3 id="regional-source-title">来源档案（{summary.sourceCount}个渠道）</h3>
         <p className="overview-data-mode__source-note">
-          这里只显示来源状态。点击来源后查看公开依据、资料日期和原文，避免把网页正文堆进页面。
+          点击资料查看发布机构、资料年度、核验结果及参与计算的依据。
         </p>
         <div className="overview-data-mode__source-list">
           {(profile.sources ?? []).map((source) => (
@@ -1630,8 +1669,8 @@ export function RegionalAgricultureProfilePanel({
                   method: sourcePurpose(source.type),
                   steps: [
                     "每日08:30访问公开地址并取得页面或接口内容。",
-                    "清洗正文、识别可用字段并统一面积、重量和时间单位。",
-                    "将本次结构化内容与上次内容指纹比较，判断“有变化”或“确认无变化”。",
+                    "核对原文的指标含义、统计地区、年份和单位。",
+                    "逐项比较本次与上次的数值、单位、资料日期和适用地区，判断是否变化。",
                     "有变化时保存新值并触发补算；无变化时记录本次核验成功但不改业务数值。",
                     "访问或解析失败时保留最近有效值，并每小时重试。",
                   ],

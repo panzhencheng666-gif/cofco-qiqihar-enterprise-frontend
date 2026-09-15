@@ -90,6 +90,14 @@ const regionalAgricultureProfileSchema = z.object({
     automatic: z.boolean(),
     generatedAt: z.string(),
     coverageDescription: z.string().optional(),
+    regionalCalculation: z
+      .object({
+        status: z.string(),
+        attemptedAt: z.string(),
+        calculatedAt: z.string().nullable(),
+        sourceStatus: z.string(),
+      })
+      .nullish(),
     regionFacts: z.object({
       areaSquareKilometres: decimalValueSchema,
       directChildCount: z.number().int(),

@@ -95,6 +95,15 @@ export interface RegionalAgricultureProfile {
       }[]
     | undefined;
   estimateBatch?: RegionalEstimateBatch | undefined;
+  regionalCalculation?:
+    | {
+        status: string;
+        attemptedAt: string;
+        calculatedAt: string | null;
+        sourceStatus: string;
+      }
+    | null
+    | undefined;
   crops: readonly {
     productCode: "CORN" | "SOYBEAN" | "RICE";
     productName: string;
