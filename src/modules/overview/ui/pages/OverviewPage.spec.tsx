@@ -98,7 +98,7 @@ describe("OverviewPage", () => {
     expect(
       await screen.findByRole("heading", { name: "齐齐哈尔市农业概况" }),
     ).toBeVisible();
-    expect(screen.getByText("无需日常人工填报")).toBeVisible();
+    expect(screen.getByText("公开资料自动核验 · 缺项自动补算 · 仅预测下一年")).toBeVisible();
     expect(
       screen.getByText("地区数据范围：齐齐哈尔、黑河、呼伦贝尔、大兴安岭及下级地区"),
     ).toBeVisible();
@@ -388,7 +388,7 @@ describe("OverviewPage", () => {
       });
 
       expect(optionsRequest).toHaveBeenCalledTimes(2);
-      expect(screen.getByRole("combobox", { name: "产品" })).toBeVisible();
+      expect(screen.getByRole("combobox", { name: "品种" })).toBeVisible();
     } finally {
       vi.useRealTimers();
     }
@@ -735,7 +735,7 @@ describe("OverviewPage", () => {
       />,
     );
     expect(
-      await screen.findByText("当前总揽筛选条件无效，请重新选择地区、产品和年度。"),
+      await screen.findByText("当前总揽筛选条件无效，请重新选择地区、品种和年度。"),
     ).toHaveAttribute("role", "alert");
     invalid.unmount();
 
@@ -1709,7 +1709,7 @@ describe("OverviewPage", () => {
     const listCalls = list.mock.calls.length;
     const iconCalls = icons.mock.calls.length;
 
-    await userEvent.setup().selectOptions(screen.getByLabelText("产品"), "SOYBEAN");
+    await userEvent.setup().selectOptions(screen.getByLabelText("品种"), "SOYBEAN");
 
     expect(
       screen.getByRole("complementary", { name: "所选地区样本点详情" }),

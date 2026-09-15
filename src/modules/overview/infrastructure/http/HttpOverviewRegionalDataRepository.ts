@@ -172,6 +172,41 @@ const regionalAgricultureProfileSchema = z.object({
         }),
       )
       .optional(),
+    railway: z
+      .object({
+        regionCode: z.string(),
+        boundaryAvailable: z.boolean(),
+        sourceAsOf: z.string().nullable(),
+        facilities: z.array(
+          z.object({
+            sourceId: z.string(),
+            name: z.string(),
+            kind: z.string(),
+            longitude: z.number(),
+            latitude: z.number(),
+            operator: z.string(),
+            reference: z.string(),
+            status: z.string(),
+            service: z.string(),
+            locationRelation: z.enum(["WITHIN", "NEARBY"]),
+            distanceKm: z.number(),
+            nearbyLines: z.string(),
+            sourceUrl: z.string(),
+          }),
+        ),
+        lines: z.array(
+          z.object({
+            name: z.string(),
+            mappedTrackKm: z.number(),
+            usage: z.string(),
+            electrification: z.string(),
+            gauge: z.string(),
+            operator: z.string(),
+            sourceUrl: z.string(),
+          }),
+        ),
+      })
+      .nullish(),
     estimateBatch: estimateBatchSchema
       .nullish()
       .transform((value) => value ?? undefined),

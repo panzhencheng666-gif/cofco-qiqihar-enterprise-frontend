@@ -172,7 +172,7 @@ function overviewDataIssue(error: unknown, fallback: string): string {
     return "当前账号无权查看该地区的核定业务数据，请返回已授权地区或联系权限管理员。";
   }
   if (error instanceof HttpError && error.status === 400) {
-    return "当前总揽筛选条件无效，请重新选择地区、产品和年度。";
+    return "当前总揽筛选条件无效，请重新选择地区、品种和年度。";
   }
   return fallback;
 }
@@ -1095,9 +1095,9 @@ export function OverviewPage({
               </select>
             </label>
             <label>
-              <span>产品</span>
+              <span>品种</span>
               <select
-                aria-label="产品"
+                aria-label="品种"
                 value={productCode}
                 onChange={(event) => {
                   setProductCode(event.target.value);

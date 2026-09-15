@@ -1,3 +1,4 @@
+import { RegionalRailwayPanel } from "./RegionalRailwayPanel";
 import { RegionalLocalEstimateComparison } from "./RegionalLocalEstimateComparison";
 import { RegionalEstimateComparison } from "./RegionalEstimateComparison";
 import { useMemo, useRef, useState } from "react";
@@ -10,6 +11,7 @@ const PROFILE_TABS: [string, string][] = [
   ["crops", "种植预测"],
   ["indicators", "农业指标"],
   ["comparison", "估算对比"],
+  ["railway", "铁路交通"],
   ["weather", "天气政策"],
   ["sources", "来源更新"],
 ];
@@ -59,7 +61,7 @@ function format(value: string | number | null | undefined, divisor = 1): string 
   return Number.isFinite(number)
     ? number.toLocaleString("zh-CN", {
         minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
+        maximumFractionDigits: number !== 0 && Math.abs(number) < 1 ? 6 : 2,
       })
     : "—";
 }
@@ -965,6 +967,78 @@ export function RegionalAgricultureProfilePanel({
       >
         {view === "overview" && (
           <>
+            <section aria-labelledby="regional-selected-crops-title">
+              <h3 id="regional-selected-crops-title">{profile.regionName}分品种数据</h3>
+              <p>{profile.year}年 · 点击品种查看计算依据与预测</p>
+              <div className="regional-selected-crops">
+                <table aria-label="所选地区分品种数据">
+                  <thead>
+                    <tr>
+                      <th>品种 / 性质</th>
+                      <th>
+                        面积
+                        <br />
+                        万亩
+                      </th>
+                      <th>
+                        单产
+                        <br />
+                        公斤/亩
+                      </th>
+                      <th>
+                        总产
+                        <br />
+                        万吨
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(
+                      [
+                        ["CORN", "玉米"],
+                        ["SOYBEAN", "大豆"],
+                        ["RICE", "稻谷"],
+                      ] as const
+                    ).map(([code, name]) => {
+                      const crop = profile.crops.find(
+                        (item) => item.productCode === code,
+                      );
+                      return (
+                        <tr key={code} aria-label={`${name}地区数据`}>
+                          <th scope="row">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setView("crops");
+                                if (body.current) body.current.scrollTop = 0;
+                              }}
+                            >
+                              {name}
+                            </button>
+                            <small>
+                              {!crop
+                                ? "依据待补齐"
+                                : crop.dataKind === "OBSERVED"
+                                  ? "公开统计"
+                                  : crop.basis.includes("参考情景")
+                                    ? "参考情景估算"
+                                    : "模型补算"}
+                            </small>
+                          </th>
+                          <td>
+                            {crop ? format(crop.plantedAreaMu, 10_000) : "依据不足"}
+                          </td>
+                          <td>{crop ? format(crop.yieldPerMuKg) : "依据不足"}</td>
+                          <td>
+                            {crop ? format(crop.totalOutputKg, 10_000_000) : "依据不足"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
             <section aria-labelledby="regional-facts-title">
               <h3 id="regional-facts-title">地区档案</h3>
               <div className="overview-data-mode__fact-grid">
@@ -1579,6 +1653,12 @@ export function RegionalAgricultureProfilePanel({
               />
             )}
           </>
+        )}
+        {view === "railway" && (
+          <RegionalRailwayPanel
+            regionName={profile.regionName}
+            railway={profile.railway}
+          />
         )}
         {view === "weather" && (
           <>

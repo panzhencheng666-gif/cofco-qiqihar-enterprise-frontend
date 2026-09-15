@@ -94,6 +94,7 @@ export interface RegionalAgricultureProfile {
         evidence: string;
       }[]
     | undefined;
+  railway?: RegionalRailways | null | undefined;
   estimateBatch?: RegionalEstimateBatch | undefined;
   regionalCalculation?:
     | {
@@ -146,5 +147,35 @@ export interface SupplyBalanceSummary {
     value: string | null;
     display: string | null;
     note: string | null;
+  }[];
+}
+
+export interface RegionalRailways {
+  regionCode: string;
+  boundaryAvailable: boolean;
+  sourceAsOf: string | null;
+  facilities: readonly {
+    sourceId: string;
+    name: string;
+    kind: string;
+    longitude: number;
+    latitude: number;
+    operator: string;
+    reference: string;
+    status: string;
+    service: string;
+    locationRelation: "WITHIN" | "NEARBY";
+    distanceKm: number;
+    nearbyLines: string;
+    sourceUrl: string;
+  }[];
+  lines: readonly {
+    name: string;
+    mappedTrackKm: number;
+    usage: string;
+    electrification: string;
+    gauge: string;
+    operator: string;
+    sourceUrl: string;
   }[];
 }

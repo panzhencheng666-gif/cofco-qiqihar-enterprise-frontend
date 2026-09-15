@@ -9,6 +9,10 @@ export default tseslint.config(
   },
   js.configs.recommended,
   {
+    files: ["public/session-recovery-v1.js"],
+    languageOptions: { globals: globals.browser },
+  },
+  {
     files: ["**/*.{ts,tsx}"],
     extends: [...tseslint.configs.recommendedTypeChecked],
     languageOptions: {

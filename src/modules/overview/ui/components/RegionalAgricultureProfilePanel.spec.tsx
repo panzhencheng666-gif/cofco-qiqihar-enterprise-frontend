@@ -136,3 +136,19 @@ it.each([
     expect(screen.getByText(/政策适用范围以原文为准/)).toBeVisible();
   },
 );
+
+it("shows all three selected-region crops immediately and keeps missing data explicit", () => {
+  render(<RegionalAgricultureProfilePanel profile={profile} />);
+  const rice = screen.getByRole("row", { name: "稻谷地区数据" });
+  expect(within(rice).getByText("0.01")).toBeVisible();
+  expect(within(rice).getByText("0.005")).toBeVisible();
+  expect(within(rice).getByText("500.00")).toBeVisible();
+  expect(within(rice).getByText("模型补算")).toBeVisible();
+  const corn = screen.getByRole("row", { name: "玉米地区数据" });
+  expect(within(corn).getAllByText("依据不足")).toHaveLength(3);
+  fireEvent.click(within(rice).getByRole("button", { name: "稻谷" }));
+  expect(screen.getByRole("tab", { name: "种植预测" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+});

@@ -1459,7 +1459,7 @@ button.overview-data-mode__structure-bar {
 }
 .regional-workspace__tabs {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   flex: 0 0 auto;
   padding: 0 12px;
   background: #0b536f;
@@ -1614,4 +1614,98 @@ button.overview-data-mode__structure-bar {
   .regional-workspace > header > button {
     display: none;
   }
+}
+
+.regional-railway__filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+.regional-railway__filters button {
+  padding: 8px 12px;
+  border: 1px solid #ffffff44;
+  border-radius: 6px;
+  background: #155e78;
+  color: #eaf8ff;
+  cursor: pointer;
+}
+.regional-railway__filters button[aria-pressed="true"] {
+  border-color: #f1ce79;
+  color: #ffe1a1;
+}
+.regional-railway__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 12px;
+}
+.regional-railway__cards article {
+  padding: 16px;
+  border: 1px solid #ffffff33;
+  border-radius: 10px;
+  background: #ffffff08;
+}
+.regional-railway__cards h4 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  color: #f4d794;
+}
+.regional-railway__cards p {
+  margin: 7px 0;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+.regional-railway__cards a {
+  color: #abecff;
+}
+.regional-railway__source {
+  font-size: 12px;
+  line-height: 1.7;
+  margin-top: 16px;
+  color: #c2dce8;
+}
+
+.regional-selected-crops {
+  overflow-x: auto;
+}
+.regional-selected-crops table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.regional-selected-crops th,
+.regional-selected-crops td {
+  padding: 10px 6px;
+  text-align: right;
+  border-bottom: 1px solid #ffffff24;
+  overflow-wrap: anywhere;
+}
+.regional-selected-crops th:first-child {
+  text-align: left;
+  width: 28%;
+}
+.regional-selected-crops thead {
+  color: #b5dbe7;
+  font-size: 12px;
+}
+.regional-selected-crops td {
+  color: #f6d88c;
+  font-weight: 700;
+}
+.regional-selected-crops small {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: #b5dbe7;
+  margin-top: 4px;
+}
+.regional-selected-crops button {
+  color: #eefaff;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
