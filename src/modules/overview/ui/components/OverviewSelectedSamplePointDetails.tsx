@@ -164,7 +164,7 @@ export function OverviewSelectedSamplePointDetails({
             {association.productName}
           </h5>
           <p>
-            审核来源历史：{sourceRoleLabel(association.sourceRole)} · 业务日期{" "}
+            入库来源历史：{sourceRoleLabel(association.sourceRole)} · 业务日期{" "}
             {formatChineseDate(association.occurrenceDate)} · 第
             {association.sourceVersion}版
           </p>

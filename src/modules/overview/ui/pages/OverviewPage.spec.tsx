@@ -98,7 +98,9 @@ describe("OverviewPage", () => {
     expect(
       await screen.findByRole("heading", { name: "齐齐哈尔市农业概况" }),
     ).toBeVisible();
-    expect(screen.getByText("公开资料自动核验 · 缺项自动补算 · 仅预测下一年")).toBeVisible();
+    expect(
+      screen.getByText("公开资料自动核验 · 缺项自动补算 · 仅预测下一年"),
+    ).toBeVisible();
     expect(
       screen.getByText("地区数据范围：齐齐哈尔、黑河、呼伦贝尔、大兴安岭及下级地区"),
     ).toBeVisible();
@@ -698,7 +700,7 @@ describe("OverviewPage", () => {
       await screen.findByText("总揽业务聚合数据加载失败，请稍后重试。"),
     ).toHaveAttribute("role", "alert");
     expect(screen.queryByText("120")).not.toBeInTheDocument();
-    expect(screen.getAllByText("暂无审核数据").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("暂无入库数据").length).toBeGreaterThan(0);
   });
 
   it("distinguishes region authorization failures from invalid filters and empty data", async () => {
@@ -747,7 +749,7 @@ describe("OverviewPage", () => {
         }}
       />,
     );
-    expect((await screen.findAllByText("暂无审核数据")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("暂无入库数据")).length).toBeGreaterThan(0);
     expect(screen.queryByText(/无权查看|筛选条件无效/u)).not.toBeInTheDocument();
   });
 
@@ -910,7 +912,7 @@ describe("OverviewPage", () => {
     );
 
     expect(await screen.findByRole("img", { name: "行政区边界地图" })).toBeVisible();
-    expect((await screen.findAllByText("暂无审核数据")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("暂无入库数据")).length).toBeGreaterThan(0);
     expect(
       screen.queryByRole("complementary", { name: "所选地区样本点详情" }),
     ).not.toBeInTheDocument();
@@ -1889,7 +1891,7 @@ describe("OverviewPage", () => {
     );
     expect(await screen.findByRole("img", { name: "行政区边界地图" })).toBeVisible();
     expect(
-      screen.getByText("2026年度暂无审核正式业务数据", { exact: false }),
+      screen.getByText("2026年度暂无正式入库业务数据", { exact: false }),
     ).toBeInTheDocument();
     const map = screen.getByLabelText("粮食商情总览地图");
     fireEvent.doubleClick(

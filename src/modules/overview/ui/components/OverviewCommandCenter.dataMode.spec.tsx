@@ -54,7 +54,7 @@ describe("OverviewCommandCenter data mode slot", () => {
     expect(screen.getByLabelText("地区数据指标")).toBeInTheDocument();
     expect(screen.queryByLabelText("总揽关键指标")).not.toBeInTheDocument();
     expect(screen.getByText("已同步地区正式数据")).toBeInTheDocument();
-    expect(screen.queryByText("等待审核数据")).not.toBeInTheDocument();
+    expect(screen.queryByText("等待入库数据")).not.toBeInTheDocument();
   });
 
   it("reserves the right side for supply balance without covering the map", () => {

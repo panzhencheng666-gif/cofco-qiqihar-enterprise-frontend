@@ -18,7 +18,7 @@ export function OverviewCommandCenter({
   dataModePanel,
   dataModeControls,
   sideDataPanel = false,
-  dataSourceLabel = "业务数据仅展示已填报并审核内容",
+  dataSourceLabel = "业务数据仅展示已填报并通过自动校验的内容",
   dataStatusText,
   filters,
   map,
@@ -147,10 +147,10 @@ export function OverviewCommandCenter({
             <i />
             {dataStatusText ??
               (awaitingDashboard
-                ? "正在同步审核数据"
+                ? "正在同步入库数据"
                 : hasApprovedSources
                   ? "已核验数据"
-                  : "等待审核数据")}
+                  : "等待入库数据")}
           </span>
           <b>更新于</b>
           <strong>
@@ -389,7 +389,7 @@ function metric(
   if (loading) {
     return {
       label,
-      sourceLabel: "正在同步审核数据",
+      sourceLabel: "正在同步入库数据",
       tone,
       unit: "",
       value: "正在同步",
@@ -397,7 +397,7 @@ function metric(
   }
   return {
     label,
-    sourceLabel: value?.sourceCount ? formatMetricAuditLabel(value) : "暂无审核数据",
+    sourceLabel: value?.sourceCount ? formatMetricAuditLabel(value) : "暂无入库数据",
     tone,
     unit: value?.unitCode ?? "",
     value:
@@ -405,7 +405,7 @@ function metric(
         ? formatNumber(value.value)
         : value?.sourceCount
           ? "计算条件未完整"
-          : "暂无审核数据",
+          : "暂无入库数据",
   };
 }
 
@@ -417,7 +417,7 @@ function formatNumber(value: string) {
 }
 
 function formatDateTime(value?: string) {
-  if (!value) return "暂无审核数据";
+  if (!value) return "暂无入库数据";
   const date = new Date(value);
   return Number.isNaN(date.valueOf())
     ? value

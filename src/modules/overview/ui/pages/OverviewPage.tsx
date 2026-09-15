@@ -1242,7 +1242,7 @@ export function OverviewPage({
       {sampleMode && year !== undefined && !hasApprovedBusinessYear && (
         <p className="overview-cockpit-guidance" role="status">
           {year}
-          年度暂无审核正式业务数据：样本网络可查看，业务指标将在平台完成正式填报并审核后自动接入。
+          年度暂无正式入库业务数据：样本网络可查看，业务指标将在填报通过自动校验后自动接入。
         </p>
       )}
       {pendingNavigationLabel && (

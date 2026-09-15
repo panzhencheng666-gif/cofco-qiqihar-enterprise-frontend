@@ -305,7 +305,7 @@ describe("OverviewSamplePointPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: "市场类 3" }));
     expect(await screen.findByText("当前条件：正式样本 3 · 坐标样本 0")).toBeVisible();
     expect(
-      screen.getByText("系统契约异常：另有 3 条审核通过样本未生成坐标样本"),
+      screen.getByText("系统契约异常：另有 3 条正式入库样本未生成坐标样本"),
     ).toBeVisible();
     expect(await screen.findByText("贸易商甲")).toBeVisible();
     expect(screen.getByText("贸易商乙")).toBeVisible();
@@ -623,14 +623,14 @@ describe("OverviewSamplePointPanel", () => {
     expect(screen.getByText("15 亩")).toBeVisible();
     expect(screen.queryByText("10 亩")).not.toBeInTheDocument();
     expect(
-      screen.getByText("审核来源历史：调研填报 · 业务日期 2026年9月5日 · 第0版"),
+      screen.getByText("入库来源历史：调研填报 · 业务日期 2026年9月5日 · 第0版"),
     ).toBeVisible();
 
     await userEvent.click(screen.getByRole("button", { name: "2026年5月" }));
     expect(screen.getByText("10 亩")).toBeVisible();
     expect(screen.queryByText("15 亩")).not.toBeInTheDocument();
     expect(
-      screen.getByText("审核来源历史：调研填报 · 业务日期 2026年5月5日 · 第0版"),
+      screen.getByText("入库来源历史：调研填报 · 业务日期 2026年5月5日 · 第0版"),
     ).toBeVisible();
   });
 

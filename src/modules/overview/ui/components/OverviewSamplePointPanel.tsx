@@ -1016,7 +1016,7 @@ export function OverviewSamplePointPanel({
                 {catalog.dataQualityIssueCount ? (
                   <p className="overview-sample-point-location-blocked" role="status">
                     系统契约异常：{catalog.dataQualityIssueCount}{" "}
-                    条审核通过样本未生成坐标样本；请回填报导入环节治理，系统不会推测坐标。
+                    条正式入库样本未生成坐标样本；请回填报导入环节治理，系统不会推测坐标。
                   </p>
                 ) : null}
                 <p className="overview-sample-point-filter-label">
@@ -1112,7 +1112,7 @@ export function OverviewSamplePointPanel({
                   {blockedLocationCount ? (
                     <span>
                       系统契约异常：另有 {blockedLocationCount}{" "}
-                      条审核通过样本未生成坐标样本
+                      条正式入库样本未生成坐标样本
                     </span>
                   ) : null}
                 </div>
@@ -1135,7 +1135,7 @@ export function OverviewSamplePointPanel({
                       <span>
                         {item.types.length
                           ? item.types.map((type) => type.name).join(" / ")
-                          : `${item.categories.map((role) => role.name).join(" / ")} · 当前品种暂无审核通过对象类型`}{" "}
+                          : `${item.categories.map((role) => role.name).join(" / ")} · 当前品种暂无正式入库对象类型`}{" "}
                         · {item.regionName}
                       </span>
                       <small>
@@ -1305,7 +1305,7 @@ export function OverviewSamplePointPanel({
                       </>
                     ) : (
                       <p className="overview-sample-point-period-note">
-                        该样本身份已正式入网；当前品种暂无审核通过业务记录。
+                        该样本身份已正式入网；当前品种暂无正式入库业务记录。
                       </p>
                     )}
                     {visibleAssociations.map((association, index) => (
@@ -1323,7 +1323,7 @@ export function OverviewSamplePointPanel({
                         </p>
                         {association.sourceVersion !== undefined ? (
                           <p>
-                            审核来源历史：{sourceRoleLabel(association.sourceRole)} ·
+                            入库来源历史：{sourceRoleLabel(association.sourceRole)} ·
                             业务日期 {formatChineseDate(association.occurrenceDate)} ·
                             第{association.sourceVersion}版
                           </p>

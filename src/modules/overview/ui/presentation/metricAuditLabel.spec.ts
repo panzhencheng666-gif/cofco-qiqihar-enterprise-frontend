@@ -14,7 +14,7 @@ describe("formatMetricAuditLabel", () => {
         }),
       ),
     ).toBe(
-      "2 条审核来源 · 截止 2026年08月09日 12:34:56 · 覆盖 所选地区及全部下级地区、所选产品、2026年度 · 版本 总揽指标口径第1版 · 公式 核定种植面积合计 · 来源 产情核定记录",
+      "2 条入库来源 · 截止 2026年08月09日 12:34:56 · 覆盖 所选地区及全部下级地区、所选产品、2026年度 · 版本 总揽指标口径第1版 · 公式 核定种植面积合计 · 来源 产情核定记录",
     );
   });
 
@@ -29,7 +29,7 @@ describe("formatMetricAuditLabel", () => {
           sourceRelation: "",
         }),
       ),
-    ).toBe("2 条审核来源");
+    ).toBe("2 条入库来源");
   });
 
   it("converts ISO cutoff time and refuses technical identifiers", () => {
@@ -43,7 +43,7 @@ describe("formatMetricAuditLabel", () => {
       }),
     );
 
-    expect(label).toBe("2 条审核来源 · 截止 2026年08月09日 12:34:56");
+    expect(label).toBe("2 条入库来源 · 截止 2026年08月09日 12:34:56");
     expect(label).not.toMatch(/SUM\(|production\.|OVERVIEW_|region=|T04:/);
   });
 });
