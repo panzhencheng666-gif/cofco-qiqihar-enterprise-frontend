@@ -943,14 +943,14 @@ button.overview-data-mode__structure-bar {
 
 .overview-data-mode__detail-sheet > header small {
   color: #7edbed;
-  font-size: 9px;
+  font-size: 13px;
   letter-spacing: 0.04em;
 }
 
 .overview-data-mode__detail-sheet > header h3 {
   margin-top: 3px;
   color: #eefbff;
-  font-size: 15px;
+  font-size: 18px;
 }
 
 .overview-data-mode__detail-sheet > header button {
@@ -975,13 +975,13 @@ button.overview-data-mode__structure-bar {
 .overview-data-mode__detail-result > span {
   grid-column: 1 / -1;
   color: #8ec8da;
-  font-size: 9px;
+  font-size: 13px;
 }
 
 .overview-data-mode__detail-result > strong {
   color: #fff1b8;
   font-family: "DIN Alternate", "Bahnschrift", sans-serif;
-  font-size: 20px;
+  font-size: 24px;
 }
 
 .overview-data-mode__detail-result > b {
@@ -990,7 +990,7 @@ button.overview-data-mode__structure-bar {
   border-radius: 999px;
   color: #b8ecd4;
   background: rgb(49 135 108 / 28%);
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 500;
 }
 
@@ -1012,7 +1012,7 @@ button.overview-data-mode__structure-bar {
 
 .overview-data-mode__detail-sheet :is(dt, dd) {
   margin: 0;
-  font-size: 9px;
+  font-size: 13px;
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
@@ -1035,7 +1035,7 @@ button.overview-data-mode__structure-bar {
 .overview-data-mode__detail-section > h4 {
   margin: 0;
   color: #dff8ff;
-  font-size: 11px;
+  font-size: 14px;
 }
 
 .overview-data-mode__detail-section > p,
@@ -1043,7 +1043,7 @@ button.overview-data-mode__structure-bar {
 .overview-data-mode__detail-section > ol {
   margin: 0;
   color: #bedce6;
-  font-size: 9px;
+  font-size: 13px;
   line-height: 1.65;
 }
 
@@ -1071,7 +1071,7 @@ button.overview-data-mode__structure-bar {
 
 .overview-data-mode__detail-section > ol b {
   color: #7edbed;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 500;
 }
 
@@ -1116,7 +1116,7 @@ button.overview-data-mode__structure-bar {
 .overview-data-mode__detail-sources header span,
 .overview-data-mode__detail-sources header i {
   color: #8ec8da;
-  font-size: 8px;
+  font-size: 12px;
   font-style: normal;
 }
 
@@ -1139,7 +1139,7 @@ button.overview-data-mode__structure-bar {
 .overview-data-mode__detail-sources p {
   margin: 0;
   color: #b7d7e1;
-  font-size: 9px;
+  font-size: 13px;
   line-height: 1.6;
 }
 
@@ -1154,13 +1154,13 @@ button.overview-data-mode__structure-bar {
 
 .overview-data-mode__detail-formula span {
   color: #8ec8da;
-  font-size: 8px;
+  font-size: 12px;
 }
 
 .overview-data-mode__detail-formula strong {
   color: #fff1b8;
   font-family: "DIN Alternate", "Bahnschrift", sans-serif;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 500;
   line-height: 1.65;
   overflow-wrap: anywhere;
@@ -1187,7 +1187,7 @@ button.overview-data-mode__structure-bar {
 .overview-data-mode__detail-sources a {
   width: fit-content;
   color: #fff1b8;
-  font-size: 9px;
+  font-size: 13px;
   text-underline-offset: 2px;
 }
 
@@ -1250,7 +1250,7 @@ button.overview-data-mode__structure-bar {
 .overview-data-mode__balance :is(th, td) {
   padding: 8px 12px;
   border-bottom: 1px solid rgb(190 220 232 / 16%);
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.35;
   text-align: left;
   overflow-wrap: anywhere;

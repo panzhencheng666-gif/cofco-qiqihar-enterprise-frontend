@@ -462,7 +462,7 @@ function forecastSteps(
   const weatherFactor = forecastFactor(forecast.formula, "天气修正");
   const policyFactor = forecastFactor(forecast.formula, "政策修正");
   return [
-    `本年面积基线为${format(crop.plantedAreaMu, 10_000)}万亩，来源状态为${crop.dataKind === "OBSERVED" ? "公开统计" : "模型补算"}。`,
+    `本年面积基线为${format(crop.plantedAreaMu, 10_000)}万亩，来源状态为${crop.dataKind === "OBSERVED" ? "公开统计" : crop.basis.includes("参考情景") ? "参考情景估算" : "模型补算"}。`,
     `面积趋势系数取${formatFactor(areaFactor)}（${factorChange(areaFactor)}）。来自本地区同作物历史面积序列；只有一期或缺少历史时取1，沿用基线。`,
     `本年单产基线为${format(crop.yieldPerMuKg)}公斤/亩，单产趋势系数取${formatFactor(yieldFactor)}（${factorChange(yieldFactor)}）。`,
     `天气系数取${formatFactor(weatherFactor)}：当前未以历史产量校准天气影响，因此不把实时天气直接乘入全年预测。天气仍单独更新展示。`,
@@ -1344,7 +1344,11 @@ export function RegionalAgricultureProfilePanel({
               <div className="overview-data-mode__crop-heading">
                 <strong>{crop.productName}</strong>
                 <span className={`is-${crop.dataKind.toLowerCase()}`}>
-                  {crop.dataKind === "OBSERVED" ? "公开统计" : "模型补算"}
+                  {crop.dataKind === "OBSERVED"
+                    ? "公开统计"
+                    : crop.basis.includes("参考情景")
+                      ? "参考情景估算"
+                      : "模型补算"}
                 </span>
               </div>
               <button
@@ -1357,7 +1361,12 @@ export function RegionalAgricultureProfilePanel({
                     definition: `${crop.productName}播种面积占目前具备计算依据的作物面积合计的比例；不表示全部农作物结构。`,
                     rationale:
                       "使用面积占比展示种植结构；分母只包含当前三种主粮，因此不能解释为占全部农作物的比例。",
-                    kind: crop.dataKind === "OBSERVED" ? "公开统计" : "模型补算",
+                    kind:
+                      crop.dataKind === "OBSERVED"
+                        ? "公开统计"
+                        : crop.basis.includes("参考情景")
+                          ? "参考情景估算"
+                          : "模型补算",
                     status: "随本年种植结构自动重算",
                     dataPeriod: `${profile.year}年`,
                     calculationTime: calculatedAt,
@@ -1417,7 +1426,12 @@ export function RegionalAgricultureProfilePanel({
                             key === "output"
                               ? "总产必须由同一地区、同一年度的面积与单产相乘，避免混用不同资料期。"
                               : "在本地资料不足时，优先使用最近层级的同作物资料，并保留推算假设。",
-                          kind: crop.dataKind === "OBSERVED" ? "公开统计" : "模型补算",
+                          kind:
+                            crop.dataKind === "OBSERVED"
+                              ? "公开统计"
+                              : crop.basis.includes("参考情景")
+                                ? "参考情景估算"
+                                : "模型补算",
                           status:
                             crop.dataKind === "OBSERVED"
                               ? "采用最近有效公开值"
@@ -1449,7 +1463,11 @@ export function RegionalAgricultureProfilePanel({
                               label: crop.productName,
                               value: `面积 ${format(crop.plantedAreaMu, 10_000)}万亩 · 单产 ${format(crop.yieldPerMuKg)}公斤/亩 · 总产 ${format(crop.totalOutputKg, 10_000_000)}万吨`,
                               status:
-                                crop.dataKind === "OBSERVED" ? "公开统计" : "模型补算",
+                                crop.dataKind === "OBSERVED"
+                                  ? "公开统计"
+                                  : crop.basis.includes("参考情景")
+                                    ? "参考情景估算"
+                                    : "模型补算",
                               basis: "详细输入依据见上方逐步说明。",
                             },
                           ],
