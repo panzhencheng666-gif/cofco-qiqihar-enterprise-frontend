@@ -32,6 +32,8 @@ import type { OverviewRegionalDataRepository } from "../modules/overview/applica
 import { HttpOverviewRepository } from "../modules/overview/infrastructure/http/HttpOverviewRepository";
 import { HttpOverviewSamplePointRepository } from "../modules/overview/infrastructure/http/HttpOverviewSamplePointRepository";
 import { HttpOverviewRegionalDataRepository } from "../modules/overview/infrastructure/http/HttpOverviewRegionalDataRepository";
+import type { MapAnnotationRepository } from "../modules/overview/application/ports/MapAnnotationRepository";
+import { HttpMapAnnotationRepository } from "../modules/overview/infrastructure/http/HttpMapAnnotationRepository";
 import { BrowserOverviewRealtimeStream } from "../modules/overview/infrastructure/realtime/BrowserOverviewRealtimeStream";
 import { OverviewPage } from "../modules/overview/ui/pages/OverviewPage";
 import { HttpDesignSampleFieldDefinitionRepository } from "../modules/design-sample/infrastructure/http/HttpDesignSampleFieldDefinitionRepository";
@@ -68,6 +70,7 @@ const overviewSamplePointRepository = new HttpOverviewSamplePointRepository(
 const overviewRegionalDataRepository = new HttpOverviewRegionalDataRepository(
   httpClient,
 );
+const mapAnnotationRepository = new HttpMapAnnotationRepository(httpClient);
 const overviewRealtimeStream = new BrowserOverviewRealtimeStream();
 
 export interface AppDependencies {
@@ -82,6 +85,7 @@ export interface AppDependencies {
   overviewRealtimeStream?: OverviewRealtimeStream;
   overviewSamplePointRepository?: OverviewSamplePointRepository;
   overviewRegionalDataRepository?: OverviewRegionalDataRepository;
+  mapAnnotationRepository?: MapAnnotationRepository;
   workItemRepository: WorkItemRepository;
 }
 
@@ -97,6 +101,7 @@ const productionDependencies: AppDependencies = {
   overviewRealtimeStream,
   overviewSamplePointRepository,
   overviewRegionalDataRepository,
+  mapAnnotationRepository,
   workItemRepository,
 };
 
@@ -406,6 +411,9 @@ export function App({
         }
         regionalDataRepository={
           dependencies.overviewRegionalDataRepository ?? overviewRegionalDataRepository
+        }
+        mapAnnotationRepository={
+          dependencies.mapAnnotationRepository ?? mapAnnotationRepository
         }
       />
     );

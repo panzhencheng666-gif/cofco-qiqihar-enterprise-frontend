@@ -7,6 +7,7 @@ import type {
 import type { OverviewRealtimeStream } from "../../application/ports/OverviewRealtimeStream";
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
 import type { OverviewRegionalDataRepository } from "../../application/ports/OverviewRegionalDataRepository";
+import type { MapAnnotationRepository } from "../../application/ports/MapAnnotationRepository";
 import type {
   OverviewDashboardSummary,
   OverviewMapScope,
@@ -41,6 +42,8 @@ import { useOverviewRealtimeRefresh } from "../hooks/useOverviewRealtimeRefresh"
 import { useOverviewSampleNetworkLayers } from "../hooks/useOverviewSampleNetworkLayers";
 import { visibleSampleNetworkMapIcons } from "../presentation/sampleNetworkLayers";
 import { HttpContractError, HttpError } from "../../../../shared/api/HttpClient";
+import { MapAnnotationOverlay } from "../components/MapAnnotationOverlay";
+import { flattenCoordinates, type MapFeature } from "../components/boundaryGeometry";
 
 const OVERALL_SCOPE = "__OVERALL__";
 const MAP_SCOPE_RETRY_DELAYS_MS = [500, 1_000, 2_000] as const;
@@ -50,6 +53,27 @@ const ANNUAL_SAMPLE_NETWORK_START_YEAR = 2026;
 const NOOP_REALTIME_STREAM: OverviewRealtimeStream = {
   subscribe: () => () => undefined,
 };
+
+function mapAnnotationBounds(features: readonly MapFeature[], backdrop?: MapFeature) {
+  const positions = [...(backdrop ? [backdrop] : []), ...features].flatMap(
+    ({ geometry }) => flattenCoordinates(geometry),
+  );
+  if (!positions.length) return undefined;
+  const longitudes = positions.map(([longitude]) => longitude);
+  const latitudes = positions.map(([, latitude]) => latitude);
+  return {
+    minLongitude: Math.min(...longitudes),
+    minLatitude: Math.min(...latitudes),
+    maxLongitude: Math.max(...longitudes),
+    maxLatitude: Math.max(...latitudes),
+  };
+}
+
+function annotationLevel(level?: OverviewRegion["level"]) {
+  if (level === "PREFECTURE") return "CITY" as const;
+  if (level === "COUNTY" || level === "TOWNSHIP" || level === "VILLAGE") return level;
+  return undefined;
+}
 
 function selectableOverviewYears(
   approvedBusinessYears: readonly number[],
@@ -188,11 +212,13 @@ function mapRegionTimeScope(
 export function OverviewPage({
   realtimeStream,
   regionalDataRepository,
+  mapAnnotationRepository,
   repository,
   samplePointRepository,
 }: {
   realtimeStream?: OverviewRealtimeStream;
   regionalDataRepository?: OverviewRegionalDataRepository;
+  mapAnnotationRepository?: MapAnnotationRepository;
   repository: OverviewRepository;
   samplePointRepository?: OverviewSamplePointRepository;
 }) {
@@ -706,7 +732,11 @@ export function OverviewPage({
     (scopeRootCode !== OVERALL_SCOPE ? scopeRootCode : "");
 
   useEffect(() => {
-    if (!regionalDataRepository || dataMode === "SAMPLE_POINTS") return;
+    if (
+      !regionalDataRepository ||
+      (dataMode !== "REGIONAL_DATA" && dataMode !== "SUPPLY_BALANCE")
+    )
+      return;
     if (!regionalDataRegionCode || !productCode || year === undefined) return;
     let active = true;
     const query = { regionCode: regionalDataRegionCode, productCode, year };
@@ -1028,7 +1058,7 @@ export function OverviewPage({
           !dashboard &&
           dashboardIssue === undefined
         }
-        {...(regionalDataRepository
+        {...(regionalDataRepository || mapAnnotationRepository
           ? {
               dataModeControls: (
                 <OverviewDataModeTabs
@@ -1042,7 +1072,7 @@ export function OverviewPage({
               ),
             }
           : {})}
-        {...(regionalDataRepository && !sampleMode
+        {...((regionalDataRepository || mapAnnotationRepository) && !sampleMode
           ? {
               dataModePanel: (
                 <OverviewDataModePanel
@@ -1137,25 +1167,44 @@ export function OverviewPage({
           </section>
         }
         map={
-          <BoundaryMap
-            {...(mapBackdrop ? { backdrop: mapBackdrop } : {})}
-            features={mapFeatures}
-            points={mapPoints}
-            samplePointAggregates={sampleMode ? visibleSamplePointAggregates : []}
-            {...(activeSamplePointRepository
-              ? { samplePointAggregateStatus: visibleSamplePointAggregateStatus }
-              : {})}
-            samplePointIcons={visibleSampleNetworkIcons}
-            onSamplePointSelect={updateSelectedSamplePoint}
-            reserveRightPanel={
-              dataMode === "SUPPLY_BALANCE" || dataMode === "REGIONAL_DATA"
-            }
-            selectedCode={selectedRegionCode}
-            {...(selectedSamplePointId ? { selectedSamplePointId } : {})}
-            onSelect={selectRegion}
-            onSelectionPosition={updateMapSelectionPoint}
-            onDrill={drillDown}
-          />
+          <div className="overview-map-annotation-stage">
+            <BoundaryMap
+              {...(mapBackdrop ? { backdrop: mapBackdrop } : {})}
+              features={mapFeatures}
+              points={mapPoints}
+              samplePointAggregates={sampleMode ? visibleSamplePointAggregates : []}
+              {...(activeSamplePointRepository
+                ? { samplePointAggregateStatus: visibleSamplePointAggregateStatus }
+                : {})}
+              samplePointIcons={visibleSampleNetworkIcons}
+              onSamplePointSelect={updateSelectedSamplePoint}
+              reserveRightPanel={
+                dataMode === "SUPPLY_BALANCE" || dataMode === "REGIONAL_DATA"
+              }
+              selectedCode={selectedRegionCode}
+              {...(selectedSamplePointId ? { selectedSamplePointId } : {})}
+              onSelect={selectRegion}
+              onSelectionPosition={updateMapSelectionPoint}
+              onDrill={drillDown}
+            />
+            {dataMode === "MAP_ANNOTATION" &&
+              mapAnnotationRepository &&
+              mapAnnotationBounds(mapFeatures, mapBackdrop) && (
+                <MapAnnotationOverlay
+                  active
+                  bounds={mapAnnotationBounds(mapFeatures, mapBackdrop)!}
+                  repository={mapAnnotationRepository}
+                  {...(selectedRegionCode ? { regionCode: selectedRegionCode } : {})}
+                  {...(annotationLevel(selectedRegionSnapshot?.level)
+                    ? {
+                        administrativeLevel: annotationLevel(
+                          selectedRegionSnapshot?.level,
+                        )!,
+                      }
+                    : {})}
+                />
+              )}
+          </div>
         }
         navigation={
           <nav

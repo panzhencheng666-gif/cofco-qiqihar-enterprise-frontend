@@ -4,6 +4,7 @@ export interface HttpClient {
   get<T>(path: string, schema: ZodType<T>, options?: HttpRequestOptions): Promise<T>;
   post?<T>(path: string, body: unknown, schema: ZodType<T>): Promise<T>;
   put?<T>(path: string, body: unknown, schema: ZodType<T>): Promise<T>;
+  delete?<T>(path: string, schema: ZodType<T>): Promise<T>;
   download?(path: string): Promise<HttpDownload>;
 }
 
@@ -73,6 +74,10 @@ export class FetchHttpClient implements HttpClient {
 
   async put<T>(path: string, body: unknown, schema: ZodType<T>): Promise<T> {
     return this.request("PUT", path, body, schema);
+  }
+
+  async delete<T>(path: string, schema: ZodType<T>): Promise<T> {
+    return this.request("DELETE", path, undefined, schema);
   }
 
   async download(path: string): Promise<HttpDownload> {

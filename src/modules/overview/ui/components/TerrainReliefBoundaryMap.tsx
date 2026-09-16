@@ -366,11 +366,15 @@ export default function TerrainReliefBoundaryMap({
     window.clearTimeout(layoutTimerRef.current);
     layoutTimerRef.current = undefined;
   }, []);
-  const { schedule: deferSelection, cancel: cancelSelection } = useDeferredMapSelection();
-  const scheduleSelection = useCallback((region: OverviewRegion) => {
-    if (region.level === "VILLAGE") callbacksRef.current.onSelect(region);
-    else deferSelection(() => callbacksRef.current.onSelect(region));
-  }, [deferSelection]);
+  const { schedule: deferSelection, cancel: cancelSelection } =
+    useDeferredMapSelection();
+  const scheduleSelection = useCallback(
+    (region: OverviewRegion) => {
+      if (region.level === "VILLAGE") callbacksRef.current.onSelect(region);
+      else deferSelection(() => callbacksRef.current.onSelect(region));
+    },
+    [deferSelection],
+  );
   const scheduleComponentSelection = useCallback(
     (region: OverviewRegion, componentId: number) => {
       const identity: ReliefComponentIdentity = {
@@ -1107,6 +1111,14 @@ export default function TerrainReliefBoundaryMap({
       data-visible-surface-max-y={activeSurfaceBounds?.maxY}
       data-visible-surface-min-x={activeSurfaceBounds?.minX}
       data-visible-surface-min-y={activeSurfaceBounds?.minY}
+      data-projection-source-min-x={activeProjection.sourceBounds?.minX}
+      data-projection-source-max-x={activeProjection.sourceBounds?.maxX}
+      data-projection-source-min-y={activeProjection.sourceBounds?.minY}
+      data-projection-source-max-y={activeProjection.sourceBounds?.maxY}
+      data-projection-frame-x={activeProjection.frame.x}
+      data-projection-frame-y={activeProjection.frame.y}
+      data-projection-frame-width={activeProjection.frame.width}
+      data-projection-frame-height={activeProjection.frame.height}
     >
       <div
         className="overview-terrain-relief-canvas"

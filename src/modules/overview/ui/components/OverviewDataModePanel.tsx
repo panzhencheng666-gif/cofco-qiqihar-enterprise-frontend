@@ -18,7 +18,12 @@ function format(value: string | null | undefined, divisor = 1): string {
     : "—";
 }
 
-const DATA_MODES = ["SAMPLE_POINTS", "REGIONAL_DATA", "SUPPLY_BALANCE"] as const;
+const DATA_MODES = [
+  "SAMPLE_POINTS",
+  "REGIONAL_DATA",
+  "SUPPLY_BALANCE",
+  "MAP_ANNOTATION",
+] as const;
 const CORE_BALANCE_CODES = [
   "OUTPUT",
   "TOTAL_SUPPLY",
@@ -32,7 +37,8 @@ type SupplyBalanceRow = SupplyBalanceSummary["rows"][number];
 function modeLabel(mode: OverviewDataMode): string {
   if (mode === "SAMPLE_POINTS") return "样本点";
   if (mode === "REGIONAL_DATA") return "地区数据";
-  return "供需平衡";
+  if (mode === "SUPPLY_BALANCE") return "供需平衡";
+  return "地图标注";
 }
 
 function balanceValueLabel(row: SupplyBalanceRow): string {
@@ -207,6 +213,9 @@ export function OverviewDataModePanel({
       )}
       {mode === "SUPPLY_BALANCE" && !loading && !issue && !supplyBalance && (
         <p>请在地图上选择要查看的地区。</p>
+      )}
+      {mode === "MAP_ANNOTATION" && (
+        <p>单击“开始标注”后，可单击地图保存一个点，或按住鼠标拖拽保存一个矩形范围。</p>
       )}
     </section>
   );
