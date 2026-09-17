@@ -35,6 +35,51 @@ describe("MapAnnotationOverlay", () => {
     expect(onArmedChange).toHaveBeenLastCalledWith(true);
   });
 
+  it("keeps controls outside the map stacking context while drawing stays inside", async () => {
+    const save = vi.fn();
+    const { container, unmount } = render(
+      <main className="overview-command-center">
+        <section className="overview-command-map">
+          <div className="overview-map-annotation-stage">
+            <MapAnnotationOverlay
+              active
+              bounds={{
+                minLongitude: 123,
+                minLatitude: 47,
+                maxLongitude: 125,
+                maxLatitude: 49,
+              }}
+              repository={{
+                current: () => Promise.resolve(undefined),
+                save,
+                delete: vi.fn(),
+              }}
+            />
+          </div>
+        </section>
+      </main>,
+    );
+    const start = screen.getByRole("button", { name: "开始标注" });
+    await waitFor(() => expect(start.closest(".overview-command-map")).toBeNull());
+    expect(
+      screen.getByTestId("map-annotation-surface").closest(".overview-command-map"),
+    ).not.toBeNull();
+    await userEvent.click(start);
+    expect(
+      screen
+        .getByRole("dialog", { name: "标注经纬度" })
+        .closest(".overview-command-map"),
+    ).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "放大地图" }));
+    expect(save).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "浏览地图" }));
+    expect(
+      screen.queryByRole("dialog", { name: "标注经纬度" }),
+    ).not.toBeInTheDocument();
+    unmount();
+    expect(container.querySelector(".overview-map-annotation-actions")).toBeNull();
+  });
+
   it("locks the administrative scope captured when annotation is armed", async () => {
     const save = vi.fn((command) =>
       Promise.resolve({ ...command, version: 1, updatedAt: "2026-09-16T00:00:00Z" }),

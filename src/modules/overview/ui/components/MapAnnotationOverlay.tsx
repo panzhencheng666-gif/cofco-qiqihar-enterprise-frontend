@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import { createPortal } from "react-dom";
+
 import type {
   MapAnnotation,
   MapAnnotationRepository,
@@ -211,8 +213,8 @@ export function MapAnnotationOverlay({
       setIssue("标注删除失败，请重试。");
     }
   };
-  return (
-    <div className="overview-map-annotation-layer">
+  const controls = (
+    <>
       <div className="overview-map-annotation-actions">
         <button
           type="button"
@@ -252,6 +254,50 @@ export function MapAnnotationOverlay({
           －
         </button>
       </div>
+      {(annotation || armed) && (
+        <aside
+          aria-label="标注经纬度"
+          role="dialog"
+          className="overview-map-annotation-panel"
+        >
+          <strong>
+            {!annotation
+              ? "标注工作区"
+              : annotation.type === "POINT"
+                ? "点标注"
+                : "矩形范围"}
+          </strong>
+          {!annotation ? (
+            <span>当前行政层级已锁定，请在地图中点击或拖动标注。</span>
+          ) : annotation.type === "POINT" ? (
+            <>
+              <span>经度：{format(annotation.minLongitude)}</span>
+              <span>纬度：{format(annotation.minLatitude)}</span>
+            </>
+          ) : (
+            <>
+              <span>
+                经度范围：{format(annotation.minLongitude)} ～{" "}
+                {format(annotation.maxLongitude)}
+              </span>
+              <span>
+                纬度范围：{format(annotation.minLatitude)} ～{" "}
+                {format(annotation.maxLatitude)}
+              </span>
+            </>
+          )}
+        </aside>
+      )}
+      {issue && (
+        <p role="alert" className="overview-map-annotation-issue">
+          {issue}
+        </p>
+      )}
+    </>
+  );
+  const controlsHost = surfaceElement?.closest(".overview-command-center");
+  return (
+    <div className="overview-map-annotation-layer">
       <div
         className={`overview-map-annotation-surface${armed ? " is-armed" : ""}`}
         data-testid="map-annotation-surface"
@@ -295,45 +341,7 @@ export function MapAnnotationOverlay({
           />
         )}
       </div>
-      {(annotation || armed) && (
-        <aside
-          aria-label="标注经纬度"
-          role="dialog"
-          className="overview-map-annotation-panel"
-        >
-          <strong>
-            {!annotation
-              ? "标注工作区"
-              : annotation.type === "POINT"
-                ? "点标注"
-                : "矩形范围"}
-          </strong>
-          {!annotation ? (
-            <span>当前行政层级已锁定，请在地图中点击或拖动标注。</span>
-          ) : annotation.type === "POINT" ? (
-            <>
-              <span>经度：{format(annotation.minLongitude)}</span>
-              <span>纬度：{format(annotation.minLatitude)}</span>
-            </>
-          ) : (
-            <>
-              <span>
-                经度范围：{format(annotation.minLongitude)} ～{" "}
-                {format(annotation.maxLongitude)}
-              </span>
-              <span>
-                纬度范围：{format(annotation.minLatitude)} ～{" "}
-                {format(annotation.maxLatitude)}
-              </span>
-            </>
-          )}
-        </aside>
-      )}
-      {issue && (
-        <p role="alert" className="overview-map-annotation-issue">
-          {issue}
-        </p>
-      )}
+      {controlsHost ? createPortal(controls, controlsHost) : controls}
     </div>
   );
 }

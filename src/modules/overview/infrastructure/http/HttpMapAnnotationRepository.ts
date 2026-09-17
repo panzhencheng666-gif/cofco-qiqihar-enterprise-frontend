@@ -39,8 +39,22 @@ export class HttpMapAnnotationRepository implements MapAnnotationRepository {
   }
   async save(command: SaveMapAnnotation) {
     if (!this.http.put) throw new Error("HTTP PUT is unavailable");
+    const coordinate = (value: number) => Number(value.toFixed(8));
+    const payload = {
+      ...command,
+      minLongitude: coordinate(command.minLongitude),
+      minLatitude: coordinate(command.minLatitude),
+      maxLongitude:
+        command.maxLongitude == null
+          ? command.maxLongitude
+          : coordinate(command.maxLongitude),
+      maxLatitude:
+        command.maxLatitude == null
+          ? command.maxLatitude
+          : coordinate(command.maxLatitude),
+    };
     return (
-      await this.http.put("/api/v1/overview/map-annotation", command, saveResponse)
+      await this.http.put("/api/v1/overview/map-annotation", payload, saveResponse)
     ).data;
   }
   async delete() {
