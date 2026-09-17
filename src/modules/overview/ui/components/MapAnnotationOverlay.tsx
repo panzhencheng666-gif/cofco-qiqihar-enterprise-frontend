@@ -36,19 +36,26 @@ export function MapAnnotationOverlay({
   repository,
   regionCode,
   administrativeLevel,
+  onArmedChange,
 }: {
   active: boolean;
   bounds: AnnotationBounds;
   repository: MapAnnotationRepository;
   regionCode?: string;
   administrativeLevel?: SaveMapAnnotation["administrativeLevel"];
+  onArmedChange?: (armed: boolean) => void;
 }) {
   const [annotation, setAnnotation] = useState<MapAnnotation>();
   const [armed, setArmed] = useState(false);
   const [start, setStart] = useState<PixelPoint>();
   const [preview, setPreview] = useState<PixelPoint>();
   const [issue, setIssue] = useState("");
+  const [zoom, setZoom] = useState(1);
   const [surfaceElement, setSurfaceElement] = useState<HTMLDivElement | null>(null);
+  const [lockedScope, setLockedScope] = useState<{
+    regionCode?: string;
+    administrativeLevel?: SaveMapAnnotation["administrativeLevel"];
+  }>();
 
   useEffect(() => {
     if (!active) return;
@@ -65,9 +72,17 @@ export function MapAnnotationOverlay({
       live = false;
     };
   }, [active, repository]);
+  useEffect(() => {
+    const stage = surfaceElement?.closest<HTMLElement>(".overview-map-annotation-stage");
+    if (!stage) return;
+    stage.style.setProperty("--annotation-map-zoom", String(zoom));
+    return () => {
+      stage.style.removeProperty("--annotation-map-zoom");
+    };
+  }, [surfaceElement, zoom]);
   const shape = useMemo(
-    () => annotation && shapeStyle(annotation, bounds, surfaceElement),
-    [annotation, bounds, surfaceElement],
+    () => annotation && shapeStyle(annotation, bounds, surfaceElement, zoom),
+    [annotation, bounds, surfaceElement, zoom],
   );
   if (!active) return null;
   const point = (event: React.PointerEvent<HTMLDivElement>): PixelPoint => {
@@ -91,8 +106,8 @@ export function MapAnnotationOverlay({
     setStart(undefined);
     setPreview(undefined);
     setArmed(false);
-    const first = toCoordinate(start, event.currentTarget, bounds);
-    const last = toCoordinate(end, event.currentTarget, bounds);
+    const first = toCoordinate(start, event.currentTarget, bounds, zoom);
+    const last = toCoordinate(end, event.currentTarget, bounds, zoom);
     const dragged = Math.hypot(end.x - start.x, end.y - start.y) >= 5;
     const command: SaveMapAnnotation = dragged
       ? {
@@ -101,8 +116,10 @@ export function MapAnnotationOverlay({
           maxLongitude: Math.max(first.longitude, last.longitude),
           minLatitude: Math.min(first.latitude, last.latitude),
           maxLatitude: Math.max(first.latitude, last.latitude),
-          ...(regionCode ? { regionCode } : {}),
-          ...(administrativeLevel ? { administrativeLevel } : {}),
+          ...(lockedScope?.regionCode ? { regionCode: lockedScope.regionCode } : {}),
+          ...(lockedScope?.administrativeLevel
+            ? { administrativeLevel: lockedScope.administrativeLevel }
+            : {}),
         }
       : {
           type: "POINT",
@@ -110,8 +127,10 @@ export function MapAnnotationOverlay({
           minLatitude: last.latitude,
           maxLongitude: null,
           maxLatitude: null,
-          ...(regionCode ? { regionCode } : {}),
-          ...(administrativeLevel ? { administrativeLevel } : {}),
+          ...(lockedScope?.regionCode ? { regionCode: lockedScope.regionCode } : {}),
+          ...(lockedScope?.administrativeLevel
+            ? { administrativeLevel: lockedScope.administrativeLevel }
+            : {}),
         };
     try {
       setIssue("");
@@ -134,7 +153,17 @@ export function MapAnnotationOverlay({
         <button
           type="button"
           onClick={() => {
-            setArmed((value) => !value);
+            setArmed((value) => {
+              const next = !value;
+              if (next)
+                setLockedScope({
+                  ...(regionCode ? { regionCode } : {}),
+                  ...(administrativeLevel ? { administrativeLevel } : {}),
+                });
+              else setLockedScope(undefined);
+              onArmedChange?.(next);
+              return next;
+            });
             setStart(undefined);
             setPreview(undefined);
           }}
@@ -151,6 +180,10 @@ export function MapAnnotationOverlay({
             删除标注
           </button>
         )}
+      </div>
+      <div className="overview-map-annotation-zoom">
+        <button aria-label="放大地图" type="button" onClick={() => setZoom((value) => Math.min(2, value + 0.2))}>＋</button>
+        <button aria-label="缩小地图" type="button" onClick={() => setZoom((value) => Math.max(0.8, value - 0.2))}>－</button>
       </div>
       <div
         className={`overview-map-annotation-surface${armed ? " is-armed" : ""}`}
@@ -195,14 +228,22 @@ export function MapAnnotationOverlay({
           />
         )}
       </div>
-      {annotation && (
+      {(annotation || armed) && (
         <aside
           aria-label="标注经纬度"
           role="dialog"
           className="overview-map-annotation-panel"
         >
-          <strong>{annotation.type === "POINT" ? "点标注" : "矩形范围"}</strong>
-          {annotation.type === "POINT" ? (
+          <strong>
+            {!annotation
+              ? "标注工作区"
+              : annotation.type === "POINT"
+                ? "点标注"
+                : "矩形范围"}
+          </strong>
+          {!annotation ? (
+            <span>当前行政层级已锁定，请在地图中点击或拖动标注。</span>
+          ) : annotation.type === "POINT" ? (
             <>
               <span>经度：{format(annotation.minLongitude)}</span>
               <span>纬度：{format(annotation.minLatitude)}</span>
@@ -234,10 +275,11 @@ function toCoordinate(
   point: PixelPoint,
   surface: HTMLElement,
   bounds: AnnotationBounds,
+  zoom = 1,
 ) {
   const projection = projectionMetadata(surface);
   if (projection) {
-    const transform = projectionTransform(projection);
+    const transform = projectionTransform(projection, zoom);
     return {
       longitude: clamp(
         projection.minLongitude + (point.x - transform.originX) / transform.scale,
@@ -270,11 +312,12 @@ function shapeStyle(
   value: MapAnnotation,
   bounds: AnnotationBounds,
   surface: HTMLElement | null,
+  zoom = 1,
 ) {
   const project = (longitude: number, latitude: number) => {
     const projection = surface && projectionMetadata(surface);
     if (projection) {
-      const transform = projectionTransform(projection);
+      const transform = projectionTransform(projection, zoom);
       return {
         x: transform.originX + (longitude - projection.minLongitude) * transform.scale,
         y:
@@ -324,16 +367,17 @@ function projectionMetadata(surface: HTMLElement): ProjectionMetadata | undefine
   };
   return Object.values(metadata).every(Number.isFinite) ? metadata : undefined;
 }
-function projectionTransform(value: ProjectionMetadata) {
+function projectionTransform(value: ProjectionMetadata, zoom = 1) {
   const insetX = value.frameWidth * 0.035,
     insetY = value.frameHeight * 0.035;
   const sourceWidth = Math.max(value.maxLongitude - value.minLongitude, 0.000001);
   const sourceHeight = Math.max(value.maxLatitude - value.minLatitude, 0.000001);
   const verticalCompression = value.frameWidth < 1300 ? 0.7 : 0.62;
-  const scale = Math.min(
+  const fittedScale = Math.min(
     (value.frameWidth - insetX * 2) / sourceWidth,
     (value.frameHeight - insetY * 2) / (sourceHeight * verticalCompression),
   );
+  const scale = fittedScale * zoom;
   const drawnWidth = sourceWidth * scale,
     drawnHeight = sourceHeight * scale * verticalCompression;
   return {

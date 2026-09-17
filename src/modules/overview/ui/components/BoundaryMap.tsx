@@ -41,6 +41,7 @@ export function BoundaryMap({
   selectedCode,
   selectedSamplePointId,
   command,
+  annotationMode = false,
 }: {
   backdrop?: MapFeature;
   features: readonly MapFeature[];
@@ -56,6 +57,7 @@ export function BoundaryMap({
   selectedCode: string;
   selectedSamplePointId?: string;
   command?: OverviewMapCommand;
+  annotationMode?: boolean;
 }) {
   const [webGlEnabled, setWebGlEnabled] = useState(canRenderWebGlMap);
   const [fallbackReason, setFallbackReason] = useState("");
@@ -139,6 +141,7 @@ export function BoundaryMap({
         {...(samplePointAggregateStatus ? { samplePointAggregateStatus } : {})}
         samplePointIcons={samplePointIcons}
         reserveRightPanel={reserveRightPanel}
+        annotationMode={annotationMode}
         {...(onSamplePointSelect ? { onSamplePointSelect } : {})}
         {...(selectedSamplePointId ? { selectedSamplePointId } : {})}
         selectedCode={selectedCode}

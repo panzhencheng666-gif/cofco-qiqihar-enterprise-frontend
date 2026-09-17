@@ -152,8 +152,8 @@ export function useOverviewSampleNetworkLayers({
       : typeof repository.historicalAggregates === "function"),
   );
   const canLoadDesignPoints = Boolean(
-    repository?.designPoints &&
-    repository.designPointDefinition &&
+    (repository?.designMapCatalog ||
+      (repository?.designPoints && repository.designPointDefinition)) &&
     productCode &&
     regionCode &&
     pointLevel,
@@ -176,8 +176,9 @@ export function useOverviewSampleNetworkLayers({
     });
     if (
       !canLoadDesignPoints ||
-      !repository?.designPoints ||
-      !repository.designPointDefinition
+      !repository ||
+      (!repository.designMapCatalog &&
+        (!repository.designPoints || !repository.designPointDefinition))
     ) {
       return () => {
         active = false;
@@ -626,7 +627,6 @@ async function loadDesignSamplePoints(
   productCode: string,
   regionCode?: string,
 ): Promise<readonly OverviewDesignSamplePoint[]> {
-  if (!repository.designPoints || !repository.designPointDefinition) return [];
   if (repository.designMapCatalog) {
     const records = await repository.designMapCatalog({
       productCode,
@@ -641,11 +641,15 @@ async function loadDesignSamplePoints(
             string
           >
         )[record.context.domainCode] ?? "样本",
-      productLabel: record.context.productCode,
+      productLabel:
+        record.context.productCode === "GENERAL"
+          ? "通用"
+          : record.context.productCode,
       objectTypeLabel: "设计样本",
       businessValues: [],
     }));
   }
+  if (!repository.designPoints || !repository.designPointDefinition) return [];
   const first = await repository.designPoints({
     page: 0,
     pageSize: DESIGN_SAMPLE_PAGE_SIZE,

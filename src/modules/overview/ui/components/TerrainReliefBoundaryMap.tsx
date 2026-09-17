@@ -185,6 +185,7 @@ export default function TerrainReliefBoundaryMap({
   reserveRightPanel = false,
   selectedCode,
   selectedSamplePointId,
+  annotationMode = false,
 }: {
   backdrop?: MapFeature;
   command?: OverviewMapCommand;
@@ -202,6 +203,7 @@ export default function TerrainReliefBoundaryMap({
   reserveRightPanel?: boolean;
   selectedCode: string;
   selectedSamplePointId?: string;
+  annotationMode?: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const callbacksRef = useRef<RendererCallbacks>({
@@ -447,6 +449,11 @@ export default function TerrainReliefBoundaryMap({
   useEffect(() => {
     callbacksRef.current = { onDrill, onReady, onSelect, onUnavailable };
   }, [onDrill, onReady, onSelect, onUnavailable]);
+
+  useEffect(() => {
+    if (!annotationMode) return;
+    hoverUpdateRef.current(undefined);
+  }, [annotationMode]);
 
   useEffect(() => {
     positionCallbackRef.current = onSelectionPosition;
@@ -1044,6 +1051,11 @@ export default function TerrainReliefBoundaryMap({
       if (target) drillImmediately(target.region);
     };
     const handlePointerMove = (event: PointerEvent) => {
+      if (annotationMode) {
+        renderer.domElement.style.cursor = "default";
+        hoverUpdateRef.current(undefined);
+        return;
+      }
       const target = eventTarget(event);
       renderer.domElement.style.cursor = target ? "pointer" : "default";
       hoverUpdateRef.current(target);
@@ -1100,6 +1112,7 @@ export default function TerrainReliefBoundaryMap({
     scheduleSelection,
     stageWidth,
     terrainProjection,
+    annotationMode,
   ]);
 
   return (
@@ -1198,7 +1211,9 @@ export default function TerrainReliefBoundaryMap({
                     {...(!isLeaf
                       ? { onDoubleClick: () => drillImmediately(region) }
                       : {})}
-                    onPointerEnter={() => hoverUpdateRef.current(identity)}
+                    onPointerEnter={() => {
+                      if (!annotationMode) hoverUpdateRef.current(identity);
+                    }}
                     onPointerLeave={() => hoverUpdateRef.current(undefined)}
                     data-layout-scale={scale}
                     data-region-code={region.code}
@@ -1238,7 +1253,9 @@ export default function TerrainReliefBoundaryMap({
                     ? scheduleComponentSelection(region, identity.componentId)
                     : scheduleSelection(region)
                 }
-                onPointerEnter={() => hoverUpdateRef.current(identity)}
+                onPointerEnter={() => {
+                  if (!annotationMode) hoverUpdateRef.current(identity);
+                }}
                 onPointerLeave={() => hoverUpdateRef.current(undefined)}
                 style={{ left: point.x, top: point.y }}
                 type="button"

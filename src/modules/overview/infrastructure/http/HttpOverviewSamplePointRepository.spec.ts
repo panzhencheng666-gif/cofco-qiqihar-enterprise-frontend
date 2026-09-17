@@ -1392,6 +1392,43 @@ describe("HttpOverviewSamplePointRepository", () => {
   });
 });
 
+describe("design map catalog", () => {
+  it("decodes an ACTIVE GENERAL record without replacing its identity or region", async () => {
+    const record = {
+      id: "94000000-0000-0000-0000-000000000099",
+      contractVersion: "design-sample-fields-v1",
+      contractDigest: `sha256:${"a".repeat(64)}`,
+      context: {
+        domainCode: "PRODUCTION",
+        productCode: "GENERAL",
+        objectTypeCode: "FARMER",
+      },
+      name: "通用设计样本",
+      regionCode: "230230100001",
+      regionPath: "克东县/克东镇/万发村",
+      longitude: 126.2,
+      latitude: 48.0,
+      version: 1,
+      updatedAt: "2026-09-17T00:00:00Z",
+    };
+    const get = respondingWith([record]);
+
+    const result = await repositoryWith(get).designMapCatalog({
+      productCode: "CORN",
+      regionCode: "230230",
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.id).toBe(record.id);
+    expect(result[0]?.regionCode).toBe(record.regionCode);
+    expect(result[0]?.context.productCode).toBe("GENERAL");
+    expect(get).toHaveBeenCalledWith(
+      "/api/v1/overview/design-map-samples?productCode=CORN&regionCode=230230",
+      expect.anything(),
+    );
+  });
+});
+
 function respondingWith(data: unknown) {
   return vi.fn<HttpClient["get"]>((_path, schema) =>
     Promise.resolve(schema.parse({ data })),

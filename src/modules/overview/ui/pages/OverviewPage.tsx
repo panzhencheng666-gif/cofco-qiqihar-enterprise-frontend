@@ -257,6 +257,7 @@ export function OverviewPage({
   const [samplePointAggregateIssue, setSamplePointAggregateIssue] = useState<string>();
   const [selectedSamplePointId, setSelectedSamplePointId] = useState<string>();
   const [dataMode, setDataMode] = useState<OverviewDataMode>("SAMPLE_POINTS");
+  const [annotationArmed, setAnnotationArmed] = useState(false);
   const [regionalSummary, setRegionalSummary] = useState<RegionalCropSummary>();
   const [agricultureProfile, setAgricultureProfile] =
     useState<RegionalAgricultureProfile>();
@@ -871,6 +872,7 @@ export function OverviewPage({
   }
 
   function selectRegion(region: OverviewRegion) {
+    if (annotationArmed) return;
     if (selectedRegionCode !== region.code) {
       setSelectedRegionCode(region.code);
       setSelectedRegionSnapshot(region);
@@ -922,6 +924,7 @@ export function OverviewPage({
   }
 
   function drillDown(region: OverviewRegion) {
+    if (annotationArmed) return;
     if (
       region.mapContextOnly ||
       region.level === "VILLAGE" ||
@@ -1064,6 +1067,7 @@ export function OverviewPage({
                 <OverviewDataModeTabs
                   mode={dataMode}
                   onModeChange={(nextMode) => {
+                    setAnnotationArmed(false);
                     setDataMode(nextMode);
                     setRegionalDataIssue(undefined);
                     clearSamplePointSelection();
@@ -1169,6 +1173,7 @@ export function OverviewPage({
         map={
           <div className="overview-map-annotation-stage">
             <BoundaryMap
+              annotationMode={dataMode === "MAP_ANNOTATION"}
               {...(mapBackdrop ? { backdrop: mapBackdrop } : {})}
               features={mapFeatures}
               points={mapPoints}
@@ -1179,7 +1184,9 @@ export function OverviewPage({
               samplePointIcons={visibleSampleNetworkIcons}
               onSamplePointSelect={updateSelectedSamplePoint}
               reserveRightPanel={
-                dataMode === "SUPPLY_BALANCE" || dataMode === "REGIONAL_DATA"
+                annotationArmed ||
+                dataMode === "SUPPLY_BALANCE" ||
+                dataMode === "REGIONAL_DATA"
               }
               selectedCode={selectedRegionCode}
               {...(selectedSamplePointId ? { selectedSamplePointId } : {})}
@@ -1194,6 +1201,7 @@ export function OverviewPage({
                   active
                   bounds={mapAnnotationBounds(mapFeatures, mapBackdrop)!}
                   repository={mapAnnotationRepository}
+                  onArmedChange={setAnnotationArmed}
                   {...(selectedRegionCode ? { regionCode: selectedRegionCode } : {})}
                   {...(annotationLevel(selectedRegionSnapshot?.level)
                     ? {

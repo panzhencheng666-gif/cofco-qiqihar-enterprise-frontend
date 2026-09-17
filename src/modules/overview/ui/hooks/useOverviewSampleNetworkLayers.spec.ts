@@ -36,6 +36,42 @@ const comparison: SampleNetworkComparison = {
 };
 
 describe("useOverviewSampleNetworkLayers", () => {
+  it("loads GENERAL design catalog records for village detail without legacy definition endpoints", async () => {
+    const general = {
+      id: "94000000-0000-0000-0000-000000000099",
+      contractVersion: "design-sample-fields-v1" as const,
+      contractDigest: `sha256:${"a".repeat(64)}`,
+      context: { domainCode: "PRODUCTION", productCode: "GENERAL", objectTypeCode: "FARMER" },
+      values: {},
+      name: "通用设计样本",
+      regionCode: "230202997001",
+      regionPath: "齐齐哈尔市/龙沙区/某镇/某村",
+      longitude: 123.95,
+      latitude: 47.35,
+      version: 1,
+      updatedAt: "2026-09-17T00:00:00Z",
+    };
+    const repository = {
+      ...repositoryWithSnapshot(),
+      designMapCatalog: vi.fn(() => Promise.resolve([general])),
+    } satisfies OverviewSamplePointRepository;
+    const { result } = renderHook(() =>
+      useOverviewSampleNetworkLayers({
+        productCode: "CORN",
+        refreshSequence: 0,
+        region: { code: "230202997001", level: "VILLAGE", name: "某村", parentCode: "230202997" },
+        repository,
+        year: 2026,
+      }),
+    );
+
+    await waitFor(() =>
+      expect(result.current.designPoints).toEqual([
+        expect.objectContaining({ id: general.id, regionCode: general.regionCode, productLabel: "通用" }),
+      ]),
+    );
+  });
+
   afterEach(() => {
     vi.useRealTimers();
   });
