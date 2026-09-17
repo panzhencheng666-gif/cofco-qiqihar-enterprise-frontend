@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type {
   MapAnnotation,
@@ -54,6 +54,7 @@ export function MapAnnotationOverlay({
   const [issue, setIssue] = useState("");
   const [zoom, setZoom] = useState(1);
   const [surfaceElement, setSurfaceElement] = useState<HTMLDivElement | null>(null);
+  const [, setProjectionRevision] = useState(0);
   const [lockedScope, setLockedScope] = useState<{
     regionCode?: string;
     administrativeLevel?: SaveMapAnnotation["administrativeLevel"];
@@ -120,10 +121,35 @@ export function MapAnnotationOverlay({
       stage.style.removeProperty("--annotation-map-zoom");
     };
   }, [surfaceElement, zoom]);
-  const shape = useMemo(
-    () => annotation && shapeStyle(annotation, bounds, surfaceElement, zoom),
-    [annotation, bounds, surfaceElement, zoom],
-  );
+  useLayoutEffect(() => {
+    const map = surfaceElement
+      ?.closest(".overview-map-annotation-stage")
+      ?.querySelector<HTMLElement>(".overview-terrain-relief-map");
+    if (!map) return;
+    const update = () => setProjectionRevision((current) => current + 1);
+    const mutation = new MutationObserver(update);
+    mutation.observe(map, {
+      attributes: true,
+      attributeFilter: [
+        "data-projection-source-min-x",
+        "data-projection-source-max-x",
+        "data-projection-source-min-y",
+        "data-projection-source-max-y",
+        "data-projection-frame-x",
+        "data-projection-frame-y",
+        "data-projection-frame-width",
+        "data-projection-frame-height",
+      ],
+    });
+    const resize =
+      typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(update);
+    resize?.observe(map);
+    return () => {
+      mutation.disconnect();
+      resize?.disconnect();
+    };
+  }, [surfaceElement]);
+  const shape = annotation && shapeStyle(annotation, bounds, surfaceElement, zoom);
   if (!active) return null;
   const point = (event: React.PointerEvent<HTMLDivElement>): PixelPoint => {
     const rect = event.currentTarget.getBoundingClientRect();

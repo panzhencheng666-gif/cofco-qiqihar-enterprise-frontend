@@ -888,8 +888,55 @@ describe("useOverviewSampleNetworkLayers", () => {
           unit: null,
         },
       ],
+      hasRetainedUnpresentedOriginalValues: false,
     });
     expect(detail.businessValues).toEqual([]);
+  });
+
+  it("uses the real reference v3 identity shape and distinguishes retained unsupported origin fields", () => {
+    const record = {
+      ...agriculturalInputStorePoint(),
+      contractVersion: "design-sample-fields-v3" as const,
+      context: {
+        domainCode: "REFERENCE",
+        productCode: "GENERAL",
+        objectTypeCode: "REFERENCE_POINT",
+      },
+      values: {
+        DSP_ADDRESS: "万发村设计地址",
+        DSP_MAINTAINER_NAME: "现维护人",
+        DSP_MAINTAINER_UNIT: "克东镇维护单位",
+        DSP_ALLOCATION_PROVENANCE: {
+          coordinateSource: "GENERATED_DESIGN",
+          businessValuesStatus: "ORIGIN_ONLY_NOT_VERIFIED_AT_TARGET",
+          originalName: "原始参考点",
+          originalAddress: "原始地址",
+          originalValues: {
+            DSP_MAINTAINER_NAME: "原维护人",
+            RETIRED_PRICE_FIELD: 8.5,
+          },
+        },
+      },
+    };
+
+    const detail = presentDesignSamplePoint(record, referencePointV3Contract());
+
+    expect(detail.businessValues).toEqual([
+      { code: "DSP_ADDRESS", label: "详细地址", value: "万发村设计地址", unit: null },
+      { code: "DSP_MAINTAINER_NAME", label: "维护人", value: "现维护人", unit: null },
+      {
+        code: "DSP_MAINTAINER_UNIT",
+        label: "维护单位",
+        value: "克东镇维护单位",
+        unit: null,
+      },
+    ]);
+    expect(detail.allocationProvenance).toMatchObject({
+      originalBusinessValues: [
+        { code: "DSP_MAINTAINER_NAME", label: "维护人", value: "原维护人", unit: null },
+      ],
+      hasRetainedUnpresentedOriginalValues: true,
+    });
   });
 
   it("does not fall back to legacy design coverage while the authoritative list is loading", async () => {
@@ -1061,6 +1108,77 @@ function agriculturalInputContract(): DesignSampleFieldContract {
       field("AGRI_INPUT_SUPPLY_STATUS", "供货状态", "ENUM", 330),
       field("AGRI_INPUT_PLANTING_INTENTION_TREND", "种植意向趋势", "ENUM", 340),
     ],
+  };
+}
+
+function referencePointV3Contract(): DesignSampleFieldContract {
+  const identity = (code: string, label: string, sortOrder: number) => ({
+    code,
+    sectionCode: "IDENTITY" as const,
+    label,
+    description: label,
+    valueType: "STRING" as const,
+    precision: null,
+    scale: null,
+    maxLength: 200,
+    unit: null,
+    enumOptions: [],
+    required: false,
+    nullable: true,
+    defaultValue: null,
+    editable: true,
+    minimumValue: null,
+    maximumValue: null,
+    groupCode: "IDENTITY",
+    sortOrder,
+    analysisRole: "IDENTITY",
+  });
+  return {
+    contractVersion: "design-sample-fields-v3",
+    contractDigest:
+      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    context: {
+      domainCode: "REFERENCE",
+      productCode: "GENERAL",
+      objectTypeCode: "REFERENCE_POINT",
+    },
+    domains: [
+      {
+        code: "REFERENCE",
+        label: "参考点",
+        description: "设计参考点",
+        aliases: [],
+        sortOrder: 30,
+      },
+    ],
+    products: [{ code: "GENERAL", label: "通用", aliases: [], sortOrder: 40 }],
+    objectTypes: [
+      {
+        domainCode: "REFERENCE",
+        code: "REFERENCE_POINT",
+        label: "参考点",
+        aliases: [],
+        sortOrder: 190,
+      },
+    ],
+    supportedContexts: [
+      {
+        domainCode: "REFERENCE",
+        productCode: "GENERAL",
+        objectTypeCode: "REFERENCE_POINT",
+        sortOrder: 280,
+      },
+    ],
+    identityFields: [
+      identity("DSP_NAME", "名称", 10),
+      identity("DSP_REGION_CODE", "行政区", 20),
+      identity("DSP_ADDRESS", "详细地址", 30),
+      identity("DSP_LONGITUDE", "经度", 40),
+      identity("DSP_LATITUDE", "纬度", 50),
+      identity("DSP_MAINTAINER_NAME", "维护人", 60),
+      identity("DSP_MAINTAINER_UNIT", "维护单位", 70),
+    ],
+    observationFields: [],
   };
 }
 

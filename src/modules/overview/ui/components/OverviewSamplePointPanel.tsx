@@ -1466,6 +1466,9 @@ function DesignAllocationProvenance({
       ) : (
         <p>来源地点没有可展示的已填写业务事实。</p>
       )}
+      {provenance.hasRetainedUnpresentedOriginalValues ? (
+        <p>另有历史字段已保留，但当前权威元数据未定义，不能在此准确展示。</p>
+      ) : null}
     </section>
   );
 }

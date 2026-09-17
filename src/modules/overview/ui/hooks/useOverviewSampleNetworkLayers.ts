@@ -704,24 +704,14 @@ export function presentDesignSamplePoint(
     throw new Error("Design sample point catalog mismatch");
   }
   const allocationProvenance = designAllocationProvenance(record, definition);
+  const detailFields = presentableDesignFields(definition);
   return {
     ...record,
     domainLabel,
     productLabel,
     objectTypeLabel,
     ...(allocationProvenance ? { allocationProvenance } : {}),
-    businessValues: definition.observationFields.flatMap((field) => {
-      const value = record.values[field.code];
-      if (value === undefined || value === null) return [];
-      return [
-        {
-          code: field.code,
-          label: field.label,
-          value: designSampleValueLabel(value),
-          unit: field.unit,
-        },
-      ];
-    }),
+    businessValues: presentDesignValues(record.values, detailFields),
   };
 }
 
@@ -739,6 +729,8 @@ function designAllocationProvenance(
   )
     return undefined;
   const originalValues = isRecord(raw.originalValues) ? raw.originalValues : {};
+  const presentableFields = presentableDesignFields(definition);
+  const presentableCodes = new Set(presentableFields.map(({ code }) => code));
   return {
     coordinateSource: raw.coordinateSource,
     businessValuesStatus: raw.businessValuesStatus,
@@ -748,19 +740,49 @@ function designAllocationProvenance(
     ...(typeof raw.originalAddress === "string" && raw.originalAddress.trim()
       ? { originalAddress: raw.originalAddress }
       : {}),
-    originalBusinessValues: definition.observationFields.flatMap((field) => {
-      const value = originalValues[field.code];
-      if (value === undefined || value === null) return [];
-      return [
-        {
-          code: field.code,
-          label: field.label,
-          value: designSampleValueLabel(value),
-          unit: field.unit,
-        },
-      ];
-    }),
+    originalBusinessValues: presentDesignValues(originalValues, presentableFields),
+    hasRetainedUnpresentedOriginalValues: Object.entries(originalValues).some(
+      ([code, value]) =>
+        value !== undefined && value !== null && !presentableCodes.has(code),
+    ),
   } as const;
+}
+
+const PRESENTABLE_IDENTITY_CODES = new Set([
+  "DSP_ADDRESS",
+  "DSP_MAINTAINER_NAME",
+  "DSP_MAINTAINER_UNIT",
+]);
+
+function presentableDesignFields(
+  definition: Awaited<
+    ReturnType<NonNullable<OverviewSamplePointRepository["designPointDefinition"]>>
+  >,
+) {
+  return [
+    ...definition.identityFields.filter(({ code }) =>
+      PRESENTABLE_IDENTITY_CODES.has(code),
+    ),
+    ...definition.observationFields,
+  ];
+}
+
+function presentDesignValues(
+  values: Readonly<Record<string, unknown>>,
+  fields: ReturnType<typeof presentableDesignFields>,
+) {
+  return fields.flatMap((field) => {
+    const value = values[field.code];
+    if (value === undefined || value === null) return [];
+    return [
+      {
+        code: field.code,
+        label: field.label,
+        value: designSampleValueLabel(value),
+        unit: field.unit,
+      },
+    ];
+  });
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

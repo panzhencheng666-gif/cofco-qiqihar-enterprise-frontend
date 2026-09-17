@@ -290,6 +290,187 @@ describe("MapAnnotationOverlay", () => {
     ).toBe("1.2");
   });
 
+  it.each(["POINT", "RECTANGLE"] as const)(
+    "reprojects a saved %s after arm changes the committed sibling frame and again after cancel",
+    async (type) => {
+      const bounds = {
+        minLongitude: 123,
+        minLatitude: 47,
+        maxLongitude: 125,
+        maxLatitude: 49,
+      };
+      const annotation =
+        type === "POINT"
+          ? {
+              type,
+              minLongitude: 124.5,
+              minLatitude: 48,
+              maxLongitude: 124.5,
+              maxLatitude: 48,
+            }
+          : {
+              type,
+              minLongitude: 123.5,
+              minLatitude: 47.5,
+              maxLongitude: 124.5,
+              maxLatitude: 48.5,
+            };
+      function Harness() {
+        const [armed, setArmed] = useState(false);
+        return (
+          <div className="overview-map-annotation-stage">
+            <div
+              className="overview-terrain-relief-map"
+              data-projection-source-min-x="123"
+              data-projection-source-max-x="125"
+              data-projection-source-min-y="47"
+              data-projection-source-max-y="49"
+              data-projection-frame-x={armed ? "50" : "0"}
+              data-projection-frame-y="0"
+              data-projection-frame-width={armed ? "100" : "200"}
+              data-projection-frame-height="200"
+            />
+            <MapAnnotationOverlay
+              active
+              bounds={bounds}
+              repository={{
+                current: () =>
+                  Promise.resolve({
+                    ...annotation,
+                    version: 1,
+                    updatedAt: "2026-09-16T00:00:00Z",
+                  }),
+                save: vi.fn(),
+                delete: vi.fn(),
+              }}
+              onArmedChange={setArmed}
+            />
+          </div>
+        );
+      }
+      render(<Harness />);
+      const shape = await screen.findByLabelText(
+        type === "POINT" ? "已保存点标注" : "已保存矩形标注",
+      );
+      const initialLeft = shape.style.left;
+      const initialWidth = shape.style.width;
+
+      await userEvent.click(screen.getByRole("button", { name: "开始标注" }));
+      await waitFor(() => expect(shape.style.left).not.toBe(initialLeft));
+      if (type === "RECTANGLE") expect(shape.style.width).not.toBe(initialWidth);
+
+      await userEvent.click(screen.getByRole("button", { name: "浏览地图" }));
+      await waitFor(() => expect(shape.style.left).toBe(initialLeft));
+      if (type === "RECTANGLE") expect(shape.style.width).toBe(initialWidth);
+    },
+  );
+
+  it("reprojects a saved point after a terrain element resize and keeps inverse alignment", async () => {
+    let resize: ResizeObserverCallback | undefined;
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          resize = callback;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    const save = vi.fn((command) =>
+      Promise.resolve({ ...command, version: 2, updatedAt: "2026-09-16T00:00:00Z" }),
+    );
+    try {
+      render(
+        <div className="overview-map-annotation-stage">
+          <div
+            className="overview-terrain-relief-map"
+            data-projection-source-min-x="123"
+            data-projection-source-max-x="125"
+            data-projection-source-min-y="47"
+            data-projection-source-max-y="49"
+            data-projection-frame-x="180"
+            data-projection-frame-y="290"
+            data-projection-frame-width="720"
+            data-projection-frame-height="706"
+          />
+          <MapAnnotationOverlay
+            active
+            bounds={{
+              minLongitude: 123,
+              minLatitude: 47,
+              maxLongitude: 125,
+              maxLatitude: 49,
+            }}
+            repository={{
+              current: () =>
+                Promise.resolve({
+                  type: "POINT",
+                  minLongitude: 124.5,
+                  minLatitude: 48,
+                  maxLongitude: 124.5,
+                  maxLatitude: 48,
+                  version: 1,
+                  updatedAt: "2026-09-16T00:00:00Z",
+                }),
+              save,
+              delete: vi.fn(),
+            }}
+          />
+        </div>,
+      );
+      const surface = screen.getByTestId("map-annotation-surface");
+      const map = document.querySelector<HTMLElement>(".overview-terrain-relief-map")!;
+      Object.defineProperties(surface, {
+        clientWidth: { configurable: true, value: 1200 },
+        clientHeight: { configurable: true, value: 1080 },
+        getBoundingClientRect: {
+          configurable: true,
+          value: () => ({
+            left: 0,
+            top: 0,
+            width: 1200,
+            height: 1080,
+            right: 1200,
+            bottom: 1080,
+          }),
+        },
+      });
+      Object.defineProperties(map, {
+        clientWidth: { configurable: true, value: 1200 },
+        clientHeight: { configurable: true, value: 1080 },
+      });
+      const marker = await screen.findByLabelText("已保存点标注");
+      await userEvent.click(screen.getByRole("button", { name: "放大地图" }));
+      const before = marker.style.left;
+      Object.defineProperty(map, "clientWidth", { configurable: true, value: 1000 });
+      resize?.([], {} as ResizeObserver);
+      await waitFor(() => expect(marker.style.left).not.toBe(before));
+
+      await userEvent.click(screen.getByRole("button", { name: "开始标注" }));
+      const x = Number.parseFloat(marker.style.left);
+      const y = Number.parseFloat(marker.style.top);
+      fireEvent.pointerDown(surface, {
+        button: 0,
+        clientX: x,
+        clientY: y,
+        pointerId: 1,
+      });
+      fireEvent.pointerUp(surface, { clientX: x, clientY: y, pointerId: 1 });
+      await waitFor(() => expect(save).toHaveBeenCalled());
+      expect((save.mock.calls[0]?.[0] as SaveMapAnnotation).minLongitude).toBeCloseTo(
+        124.5,
+        6,
+      );
+      expect((save.mock.calls[0]?.[0] as SaveMapAnnotation).minLatitude).toBeCloseTo(
+        48,
+        6,
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("shows coordinates only after pointer release and replaces the previous shape", async () => {
     const save = vi
       .fn()

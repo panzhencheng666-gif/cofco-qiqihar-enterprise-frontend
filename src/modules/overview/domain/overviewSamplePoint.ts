@@ -166,6 +166,7 @@ export interface OverviewDesignSamplePointAllocationProvenance {
   originalName?: string;
   originalAddress?: string;
   originalBusinessValues: readonly OverviewDesignSamplePointBusinessValue[];
+  hasRetainedUnpresentedOriginalValues: boolean;
 }
 
 export interface OverviewDesignSamplePoint extends OverviewDesignSamplePointRecord {

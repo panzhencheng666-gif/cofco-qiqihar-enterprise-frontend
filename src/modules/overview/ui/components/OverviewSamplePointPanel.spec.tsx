@@ -1174,6 +1174,7 @@ describe("OverviewSamplePointPanel", () => {
         originalBusinessValues: [
           { code: "SEED_SALES", label: "种子销售量", value: "1200", unit: "公斤" },
         ],
+        hasRetainedUnpresentedOriginalValues: true,
       },
     };
     render(
@@ -1196,6 +1197,9 @@ describe("OverviewSamplePointPanel", () => {
     expect(within(detail).getByText("来源地址：龙沙区原地址")).toBeVisible();
     expect(within(detail).getByText("1200 公斤")).toBeVisible();
     expect(
+      within(detail).getByText(/历史字段已保留.*当前权威元数据未定义/u),
+    ).toBeVisible();
+    expect(
       within(detail).queryByText("地图按填报经纬度展示。"),
     ).not.toBeInTheDocument();
     expect(within(detail).queryByText("230202997001")).not.toBeInTheDocument();
@@ -1216,6 +1220,7 @@ describe("OverviewSamplePointPanel", () => {
                 coordinateSource: "GENERATED_DESIGN",
                 businessValuesStatus: "NO_OBSERVED_BUSINESS_FACTS",
                 originalBusinessValues: [],
+                hasRetainedUnpresentedOriginalValues: false,
               },
             },
           ],
