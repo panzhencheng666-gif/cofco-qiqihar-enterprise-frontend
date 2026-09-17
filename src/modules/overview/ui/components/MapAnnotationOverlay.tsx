@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   MapAnnotation,
@@ -28,6 +28,8 @@ interface ProjectionMetadata {
   maxLongitude: number;
   minLatitude: number;
   minLongitude: number;
+  viewportHeight: number;
+  viewportWidth: number;
 }
 
 export function MapAnnotationOverlay({
@@ -56,6 +58,42 @@ export function MapAnnotationOverlay({
     regionCode?: string;
     administrativeLevel?: SaveMapAnnotation["administrativeLevel"];
   }>();
+  const armedRef = useRef(false);
+  const onArmedChangeRef = useRef(onArmedChange);
+  useEffect(() => {
+    onArmedChangeRef.current = onArmedChange;
+  }, [onArmedChange]);
+  const changeArmed = useCallback(
+    (
+      next: boolean,
+      scope?: {
+        regionCode?: string;
+        administrativeLevel?: SaveMapAnnotation["administrativeLevel"];
+      },
+    ) => {
+      if (armedRef.current === next) return;
+      armedRef.current = next;
+      setArmed(next);
+      setLockedScope(next ? scope : undefined);
+      setStart(undefined);
+      setPreview(undefined);
+      onArmedChangeRef.current?.(next);
+    },
+    [],
+  );
+
+  useEffect(
+    () => () => {
+      if (armedRef.current) {
+        armedRef.current = false;
+        onArmedChangeRef.current?.(false);
+      }
+    },
+    [],
+  );
+  useEffect(() => {
+    if (!active) changeArmed(false);
+  }, [active, changeArmed]);
 
   useEffect(() => {
     if (!active) return;
@@ -73,7 +111,9 @@ export function MapAnnotationOverlay({
     };
   }, [active, repository]);
   useEffect(() => {
-    const stage = surfaceElement?.closest<HTMLElement>(".overview-map-annotation-stage");
+    const stage = surfaceElement?.closest<HTMLElement>(
+      ".overview-map-annotation-stage",
+    );
     if (!stage) return;
     stage.style.setProperty("--annotation-map-zoom", String(zoom));
     return () => {
@@ -103,9 +143,7 @@ export function MapAnnotationOverlay({
   const finish = async (event: React.PointerEvent<HTMLDivElement>) => {
     if (!armed || !start) return;
     const end = point(event);
-    setStart(undefined);
-    setPreview(undefined);
-    setArmed(false);
+    changeArmed(false);
     const first = toCoordinate(start, event.currentTarget, bounds, zoom);
     const last = toCoordinate(end, event.currentTarget, bounds, zoom);
     const dragged = Math.hypot(end.x - start.x, end.y - start.y) >= 5;
@@ -153,19 +191,10 @@ export function MapAnnotationOverlay({
         <button
           type="button"
           onClick={() => {
-            setArmed((value) => {
-              const next = !value;
-              if (next)
-                setLockedScope({
-                  ...(regionCode ? { regionCode } : {}),
-                  ...(administrativeLevel ? { administrativeLevel } : {}),
-                });
-              else setLockedScope(undefined);
-              onArmedChange?.(next);
-              return next;
+            changeArmed(!armed, {
+              ...(regionCode ? { regionCode } : {}),
+              ...(administrativeLevel ? { administrativeLevel } : {}),
             });
-            setStart(undefined);
-            setPreview(undefined);
           }}
         >
           {armed ? "浏览地图" : "开始标注"}
@@ -182,8 +211,20 @@ export function MapAnnotationOverlay({
         )}
       </div>
       <div className="overview-map-annotation-zoom">
-        <button aria-label="放大地图" type="button" onClick={() => setZoom((value) => Math.min(2, value + 0.2))}>＋</button>
-        <button aria-label="缩小地图" type="button" onClick={() => setZoom((value) => Math.max(0.8, value - 0.2))}>－</button>
+        <button
+          aria-label="放大地图"
+          type="button"
+          onClick={() => setZoom((value) => Math.min(2, value + 0.2))}
+        >
+          ＋
+        </button>
+        <button
+          aria-label="缩小地图"
+          type="button"
+          onClick={() => setZoom((value) => Math.max(0.8, value - 0.2))}
+        >
+          －
+        </button>
       </div>
       <div
         className={`overview-map-annotation-surface${armed ? " is-armed" : ""}`}
@@ -298,12 +339,12 @@ function toCoordinate(
   return {
     longitude:
       bounds.minLongitude +
-      (point.x /
+      (unzoom(point, surface, zoom).x /
         Math.max(surface.clientWidth || surface.getBoundingClientRect().width, 1)) *
         (bounds.maxLongitude - bounds.minLongitude),
     latitude:
       bounds.maxLatitude -
-      (point.y /
+      (unzoom(point, surface, zoom).y /
         Math.max(surface.clientHeight || surface.getBoundingClientRect().height, 1)) *
         (bounds.maxLatitude - bounds.minLatitude),
   };
@@ -327,7 +368,7 @@ function shapeStyle(
             transform.verticalCompression,
       };
     }
-    return {
+    const point = {
       x:
         ((longitude - bounds.minLongitude) /
           (bounds.maxLongitude - bounds.minLongitude || 1)) *
@@ -337,6 +378,7 @@ function shapeStyle(
           (bounds.maxLatitude - bounds.minLatitude || 1)) *
         (surface?.clientHeight || 100),
     };
+    return surface ? zoomPoint(point, surface, zoom) : point;
   };
   const lowerLeft = project(value.minLongitude, value.minLatitude);
   const upperRight = project(value.maxLongitude, value.maxLatitude);
@@ -364,6 +406,8 @@ function projectionMetadata(surface: HTMLElement): ProjectionMetadata | undefine
     frameY: value("projectionFrameY"),
     frameWidth: value("projectionFrameWidth"),
     frameHeight: value("projectionFrameHeight"),
+    viewportWidth: map.clientWidth || viewportSize(surface).width,
+    viewportHeight: map.clientHeight || viewportSize(surface).height,
   };
   return Object.values(metadata).every(Number.isFinite) ? metadata : undefined;
 }
@@ -377,17 +421,39 @@ function projectionTransform(value: ProjectionMetadata, zoom = 1) {
     (value.frameWidth - insetX * 2) / sourceWidth,
     (value.frameHeight - insetY * 2) / (sourceHeight * verticalCompression),
   );
-  const scale = fittedScale * zoom;
-  const drawnWidth = sourceWidth * scale,
-    drawnHeight = sourceHeight * scale * verticalCompression;
+  const drawnWidth = sourceWidth * fittedScale,
+    drawnHeight = sourceHeight * fittedScale * verticalCompression;
+  const baseOriginX = value.frameX + (value.frameWidth - drawnWidth) / 2;
+  const baseOriginY =
+    value.frameY +
+    (value.frameHeight - drawnHeight) / 2 -
+    (value.frameWidth < 1300 ? 12 : 0);
   return {
-    scale,
+    scale: fittedScale * zoom,
     verticalCompression,
-    originX: value.frameX + (value.frameWidth - drawnWidth) / 2,
-    originY:
-      value.frameY +
-      (value.frameHeight - drawnHeight) / 2 -
-      (value.frameWidth < 1300 ? 12 : 0),
+    originX: value.viewportWidth / 2 + (baseOriginX - value.viewportWidth / 2) * zoom,
+    originY: value.viewportHeight / 2 + (baseOriginY - value.viewportHeight / 2) * zoom,
+  };
+}
+function viewportSize(surface: HTMLElement) {
+  const rect = surface.getBoundingClientRect();
+  return {
+    width: Math.max(surface.clientWidth || rect.width, 1),
+    height: Math.max(surface.clientHeight || rect.height, 1),
+  };
+}
+function zoomPoint(point: PixelPoint, surface: HTMLElement, zoom: number) {
+  const viewport = viewportSize(surface);
+  return {
+    x: viewport.width / 2 + (point.x - viewport.width / 2) * zoom,
+    y: viewport.height / 2 + (point.y - viewport.height / 2) * zoom,
+  };
+}
+function unzoom(point: PixelPoint, surface: HTMLElement, zoom: number) {
+  const viewport = viewportSize(surface);
+  return {
+    x: viewport.width / 2 + (point.x - viewport.width / 2) / zoom,
+    y: viewport.height / 2 + (point.y - viewport.height / 2) / zoom,
   };
 }
 function pixelRectangle(a: PixelPoint, b: PixelPoint) {
