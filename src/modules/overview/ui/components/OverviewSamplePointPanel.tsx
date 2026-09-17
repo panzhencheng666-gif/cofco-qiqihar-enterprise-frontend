@@ -842,7 +842,9 @@ export function OverviewSamplePointPanel({
             <span aria-hidden="true">◆</span>
             设计样本点
           </h3>
-          <p>设计样本点不带年份；点位、行政区、坐标和业务字段来自权威清单。</p>
+          <p>
+            设计样本点不带年份；点位、行政区和详情来自权威清单，详情会标明设计坐标及原始事实的适用范围。
+          </p>
           {networkModel?.designPointState === "loading" ? (
             <p role="status">正在同步设计样本点…</p>
           ) : null}
@@ -1407,10 +1409,15 @@ function DesignSamplePointDetail({
       </header>
       <p>{point.regionPath}</p>
       <p>
-        {point.locationMode === "REGION_SCHEMATIC"
-          ? "地图为所属行政区内的示意位置，原始填报经纬度已保留。"
-          : "地图按填报经纬度展示。"}
+        {point.allocationProvenance?.coordinateSource === "GENERATED_DESIGN"
+          ? "地图按系统生成的设计坐标展示，不是填报坐标。"
+          : point.locationMode === "REGION_SCHEMATIC"
+            ? "地图为所属行政区内的示意位置，原始填报经纬度已保留。"
+            : "地图按填报经纬度展示。"}
       </p>
+      {point.allocationProvenance ? (
+        <DesignAllocationProvenance provenance={point.allocationProvenance} />
+      ) : null}
       {point.businessValues.length ? (
         <dl>
           {point.businessValues.map(({ code, label, unit, value }) => (
@@ -1425,6 +1432,39 @@ function DesignSamplePointDetail({
         </dl>
       ) : (
         <p>当前业务对象暂无已填写的适用信息。</p>
+      )}
+    </section>
+  );
+}
+
+function DesignAllocationProvenance({
+  provenance,
+}: {
+  provenance: NonNullable<OverviewDesignSamplePoint["allocationProvenance"]>;
+}) {
+  if (provenance.businessValuesStatus === "NO_OBSERVED_BUSINESS_FACTS")
+    return <p>当前目标地区没有已观测业务事实。</p>;
+  return (
+    <section aria-label="设计样本来源事实">
+      <p>以下为来源地点留存事实，未在当前目标地区核验，不作为当前地区已填报事实。</p>
+      {provenance.originalName ? <p>来源点位：{provenance.originalName}</p> : null}
+      {provenance.originalAddress ? (
+        <p>来源地址：{provenance.originalAddress}</p>
+      ) : null}
+      {provenance.originalBusinessValues.length ? (
+        <dl>
+          {provenance.originalBusinessValues.map(({ code, label, unit, value }) => (
+            <div key={code}>
+              <dt>{label}</dt>
+              <dd>
+                {value}
+                {unit ? ` ${unit}` : ""}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p>来源地点没有可展示的已填写业务事实。</p>
       )}
     </section>
   );

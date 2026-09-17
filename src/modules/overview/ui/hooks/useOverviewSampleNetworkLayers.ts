@@ -642,9 +642,7 @@ async function loadDesignSamplePoints(
           >
         )[record.context.domainCode] ?? "样本",
       productLabel:
-        record.context.productCode === "GENERAL"
-          ? "通用"
-          : record.context.productCode,
+        record.context.productCode === "GENERAL" ? "通用" : record.context.productCode,
       objectTypeLabel: "设计样本",
       businessValues: [],
     }));
@@ -705,11 +703,13 @@ export function presentDesignSamplePoint(
   if (!domainLabel || !productLabel || !objectTypeLabel) {
     throw new Error("Design sample point catalog mismatch");
   }
+  const allocationProvenance = designAllocationProvenance(record, definition);
   return {
     ...record,
     domainLabel,
     productLabel,
     objectTypeLabel,
+    ...(allocationProvenance ? { allocationProvenance } : {}),
     businessValues: definition.observationFields.flatMap((field) => {
       const value = record.values[field.code];
       if (value === undefined || value === null) return [];
@@ -723,6 +723,48 @@ export function presentDesignSamplePoint(
       ];
     }),
   };
+}
+
+function designAllocationProvenance(
+  record: OverviewDesignSamplePointRecord,
+  definition: Awaited<
+    ReturnType<NonNullable<OverviewSamplePointRepository["designPointDefinition"]>>
+  >,
+) {
+  const raw = record.values.DSP_ALLOCATION_PROVENANCE;
+  if (!isRecord(raw) || raw.coordinateSource !== "GENERATED_DESIGN") return undefined;
+  if (
+    raw.businessValuesStatus !== "ORIGIN_ONLY_NOT_VERIFIED_AT_TARGET" &&
+    raw.businessValuesStatus !== "NO_OBSERVED_BUSINESS_FACTS"
+  )
+    return undefined;
+  const originalValues = isRecord(raw.originalValues) ? raw.originalValues : {};
+  return {
+    coordinateSource: raw.coordinateSource,
+    businessValuesStatus: raw.businessValuesStatus,
+    ...(typeof raw.originalName === "string" && raw.originalName.trim()
+      ? { originalName: raw.originalName }
+      : {}),
+    ...(typeof raw.originalAddress === "string" && raw.originalAddress.trim()
+      ? { originalAddress: raw.originalAddress }
+      : {}),
+    originalBusinessValues: definition.observationFields.flatMap((field) => {
+      const value = originalValues[field.code];
+      if (value === undefined || value === null) return [];
+      return [
+        {
+          code: field.code,
+          label: field.label,
+          value: designSampleValueLabel(value),
+          unit: field.unit,
+        },
+      ];
+    }),
+  } as const;
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function designSampleValueLabel(value: unknown) {

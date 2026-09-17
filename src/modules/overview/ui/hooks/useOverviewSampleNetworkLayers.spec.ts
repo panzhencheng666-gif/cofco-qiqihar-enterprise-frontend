@@ -41,7 +41,11 @@ describe("useOverviewSampleNetworkLayers", () => {
       id: "94000000-0000-0000-0000-000000000099",
       contractVersion: "design-sample-fields-v1" as const,
       contractDigest: `sha256:${"a".repeat(64)}`,
-      context: { domainCode: "PRODUCTION", productCode: "GENERAL", objectTypeCode: "FARMER" },
+      context: {
+        domainCode: "PRODUCTION",
+        productCode: "GENERAL",
+        objectTypeCode: "FARMER",
+      },
       values: {},
       name: "通用设计样本",
       regionCode: "230202997001",
@@ -59,7 +63,12 @@ describe("useOverviewSampleNetworkLayers", () => {
       useOverviewSampleNetworkLayers({
         productCode: "CORN",
         refreshSequence: 0,
-        region: { code: "230202997001", level: "VILLAGE", name: "某村", parentCode: "230202997" },
+        region: {
+          code: "230202997001",
+          level: "VILLAGE",
+          name: "某村",
+          parentCode: "230202997",
+        },
         repository,
         year: 2026,
       }),
@@ -67,7 +76,11 @@ describe("useOverviewSampleNetworkLayers", () => {
 
     await waitFor(() =>
       expect(result.current.designPoints).toEqual([
-        expect.objectContaining({ id: general.id, regionCode: general.regionCode, productLabel: "通用" }),
+        expect.objectContaining({
+          id: general.id,
+          regionCode: general.regionCode,
+          productLabel: "通用",
+        }),
       ]),
     );
   });
@@ -831,6 +844,52 @@ describe("useOverviewSampleNetworkLayers", () => {
         }),
       ]),
     );
+  });
+
+  it("presents generated design provenance and keeps origin facts separate", () => {
+    const record = {
+      ...agriculturalInputStorePoint(),
+      name: "万发村设计点",
+      regionCode: "230230100001",
+      regionPath: "黑龙江省 / 齐齐哈尔市 / 克东县 / 克东镇 / 万发村",
+      values: {
+        DSP_ALLOCATION_PROVENANCE: {
+          coordinateSource: "GENERATED_DESIGN",
+          businessValuesStatus: "ORIGIN_ONLY_NOT_VERIFIED_AT_TARGET",
+          originalRegionCode: "230202997001",
+          originalName: "原龙沙农资店",
+          originalAddress: "龙沙区原地址",
+          originalValues: {
+            AGRI_INPUT_SEED_SALES_VOLUME: 1200,
+            AGRI_INPUT_SUPPLY_STATUS: "SUFFICIENT",
+          },
+        },
+      },
+    };
+
+    const detail = presentDesignSamplePoint(record, agriculturalInputContract());
+
+    expect(detail.allocationProvenance).toEqual({
+      coordinateSource: "GENERATED_DESIGN",
+      businessValuesStatus: "ORIGIN_ONLY_NOT_VERIFIED_AT_TARGET",
+      originalName: "原龙沙农资店",
+      originalAddress: "龙沙区原地址",
+      originalBusinessValues: [
+        {
+          code: "AGRI_INPUT_SEED_SALES_VOLUME",
+          label: "种子销售量",
+          value: "1200",
+          unit: "公斤",
+        },
+        {
+          code: "AGRI_INPUT_SUPPLY_STATUS",
+          label: "供货状态",
+          value: "充足",
+          unit: null,
+        },
+      ],
+    });
+    expect(detail.businessValues).toEqual([]);
   });
 
   it("does not fall back to legacy design coverage while the authoritative list is loading", async () => {

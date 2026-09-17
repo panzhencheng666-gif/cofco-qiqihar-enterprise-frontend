@@ -1145,6 +1145,7 @@ describe("OverviewSamplePointPanel", () => {
 
     const detail = screen.getByLabelText("设计样本点详情");
     expect(within(detail).getByText("农资店 · 玉米")).toBeVisible();
+    expect(within(detail).getByText("地图按填报经纬度展示。")).toBeVisible();
     expect(within(detail).getByText("种子销售量")).toBeVisible();
     expect(within(detail).getByText("1200 公斤")).toBeVisible();
     expect(within(detail).getByText("种子零售价")).toBeVisible();
@@ -1156,6 +1157,82 @@ describe("OverviewSamplePointPanel", () => {
     expect(screen.queryByText("AGRICULTURAL_INPUT_STORE")).not.toBeInTheDocument();
     expect(screen.queryByText("AGRI_INPUT_SUPPLY_STATUS")).not.toBeInTheDocument();
     expect(screen.queryByText("2026年")).not.toBeInTheDocument();
+  });
+
+  it("labels generated design coordinates and origin facts as unverified at the target", async () => {
+    const model = designPointNetworkModel();
+    const generatedPoint = {
+      ...model.designPoints[0]!,
+      name: "万发村设计点",
+      regionPath: "黑龙江省 / 齐齐哈尔市 / 克东县 / 克东镇 / 万发村",
+      businessValues: [],
+      allocationProvenance: {
+        coordinateSource: "GENERATED_DESIGN" as const,
+        businessValuesStatus: "ORIGIN_ONLY_NOT_VERIFIED_AT_TARGET" as const,
+        originalName: "原龙沙农资店",
+        originalAddress: "龙沙区原地址",
+        originalBusinessValues: [
+          { code: "SEED_SALES", label: "种子销售量", value: "1200", unit: "公斤" },
+        ],
+      },
+    };
+    render(
+      <PanelHarness
+        networkModel={{ ...model, designPoints: [generatedPoint] }}
+        onIconsChange={vi.fn()}
+        year={2026}
+        region={{ code: "230230100001", level: "VILLAGE", name: "万发村" }}
+        repository={repositoryStub()}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: /万发村设计点/u }));
+    const detail = screen.getByLabelText("设计样本点详情");
+    expect(
+      within(detail).getByText("地图按系统生成的设计坐标展示，不是填报坐标。"),
+    ).toBeVisible();
+    expect(within(detail).getByText(/未在当前目标地区核验/u)).toBeVisible();
+    expect(within(detail).getByText("来源点位：原龙沙农资店")).toBeVisible();
+    expect(within(detail).getByText("来源地址：龙沙区原地址")).toBeVisible();
+    expect(within(detail).getByText("1200 公斤")).toBeVisible();
+    expect(
+      within(detail).queryByText("地图按填报经纬度展示。"),
+    ).not.toBeInTheDocument();
+    expect(within(detail).queryByText("230202997001")).not.toBeInTheDocument();
+  });
+
+  it("states when a generated design point has no observed business facts", async () => {
+    const model = designPointNetworkModel();
+    render(
+      <PanelHarness
+        networkModel={{
+          ...model,
+          designPoints: [
+            {
+              ...model.designPoints[0]!,
+              name: "新建设计点",
+              businessValues: [],
+              allocationProvenance: {
+                coordinateSource: "GENERATED_DESIGN",
+                businessValuesStatus: "NO_OBSERVED_BUSINESS_FACTS",
+                originalBusinessValues: [],
+              },
+            },
+          ],
+        }}
+        onIconsChange={vi.fn()}
+        year={2026}
+        region={{ code: "230230100001", level: "VILLAGE", name: "万发村" }}
+        repository={repositoryStub()}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: /新建设计点/u }));
+    expect(
+      within(screen.getByLabelText("设计样本点详情")).getByText(
+        "当前目标地区没有已观测业务事实。",
+      ),
+    ).toBeVisible();
   });
 
   it("clears a selected design point after realtime refresh removes it", async () => {

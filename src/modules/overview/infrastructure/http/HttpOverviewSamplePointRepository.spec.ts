@@ -1393,6 +1393,41 @@ describe("HttpOverviewSamplePointRepository", () => {
 });
 
 describe("design map catalog", () => {
+  it("preserves nested allocation provenance in design detail values", async () => {
+    const provenance = {
+      coordinateSource: "GENERATED_DESIGN",
+      businessValuesStatus: "ORIGIN_ONLY_NOT_VERIFIED_AT_TARGET",
+      originalRegionCode: "230202997001",
+      originalName: "原龙沙农资店",
+      originalAddress: "龙沙区原地址",
+      originalValues: { AGRI_INPUT_SEED_SALES_VOLUME: 1200 },
+    };
+    const get = respondingWith({
+      id: "94000000-0000-0000-0000-000000000099",
+      contractVersion: "design-sample-fields-v1",
+      contractDigest: `sha256:${"a".repeat(64)}`,
+      context: {
+        domainCode: "PRODUCTION",
+        productCode: "GENERAL",
+        objectTypeCode: "FARMER",
+      },
+      values: { DSP_ALLOCATION_PROVENANCE: provenance },
+      name: "通用设计样本",
+      regionCode: "230230100001",
+      regionPath: "克东县/克东镇/万发村",
+      longitude: 126.2,
+      latitude: 48,
+      version: 1,
+      updatedAt: "2026-09-17T00:00:00Z",
+    });
+
+    const result = await repositoryWith(get).designPoint(
+      "94000000-0000-0000-0000-000000000099",
+    );
+
+    expect(result.values.DSP_ALLOCATION_PROVENANCE).toEqual(provenance);
+  });
+
   it("decodes an ACTIVE GENERAL record without replacing its identity or region", async () => {
     const record = {
       id: "94000000-0000-0000-0000-000000000099",

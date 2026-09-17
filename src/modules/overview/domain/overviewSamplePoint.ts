@@ -159,11 +159,21 @@ export interface OverviewDesignSamplePointBusinessValue {
   unit: string | null;
 }
 
+export interface OverviewDesignSamplePointAllocationProvenance {
+  coordinateSource: "GENERATED_DESIGN";
+  businessValuesStatus:
+    "ORIGIN_ONLY_NOT_VERIFIED_AT_TARGET" | "NO_OBSERVED_BUSINESS_FACTS";
+  originalName?: string;
+  originalAddress?: string;
+  originalBusinessValues: readonly OverviewDesignSamplePointBusinessValue[];
+}
+
 export interface OverviewDesignSamplePoint extends OverviewDesignSamplePointRecord {
   domainLabel: string;
   productLabel: string;
   objectTypeLabel: string;
   businessValues: readonly OverviewDesignSamplePointBusinessValue[];
+  allocationProvenance?: OverviewDesignSamplePointAllocationProvenance;
 }
 
 export interface SampleNetworkDesignPoint {
