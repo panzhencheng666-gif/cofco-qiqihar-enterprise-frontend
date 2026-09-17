@@ -632,6 +632,12 @@ export function OverviewSamplePointPanel({
       ...point.businessValues.flatMap(({ label, value }) => [label, value]),
     ].some((value) => value.toLocaleLowerCase("zh-CN").includes(normalizedDesignQuery));
   });
+  const expiredDesignPointCount = authoritativeDesignPoints.filter(
+    ({ lifecycleStatus }) => lifecycleStatus === "EXPIRED",
+  ).length;
+  const filteredExpiredDesignPointCount = filteredDesignPoints.filter(
+    ({ lifecycleStatus }) => lifecycleStatus === "EXPIRED",
+  ).length;
   const designPageCount = Math.max(
     1,
     Math.ceil(filteredDesignPoints.length / DESIGN_POINT_PAGE_SIZE),
@@ -865,7 +871,14 @@ export function OverviewSamplePointPanel({
                   value={designQuery}
                 />
               </label>
-              <p role="status">当前地区共 {filteredDesignPoints.length} 个设计样本点</p>
+              <p role="status">
+                当前地区共 {filteredDesignPoints.length} 个设计样本点；有效
+                {filteredDesignPoints.length - filteredExpiredDesignPointCount} 个，作废
+                {filteredExpiredDesignPointCount} 个
+                {normalizedDesignQuery
+                  ? `（全地区作废 ${expiredDesignPointCount} 个）`
+                  : ""}
+              </p>
               <div
                 aria-label="设计样本点列表"
                 className="overview-design-sample-list"
@@ -880,7 +893,12 @@ export function OverviewSamplePointPanel({
                       }
                       type="button"
                     >
-                      <strong>{point.name}</strong>
+                      <strong>
+                        {point.name}
+                        {point.lifecycleStatus === "EXPIRED" ? (
+                          <em className="overview-design-expired-tag">已作废</em>
+                        ) : null}
+                      </strong>
                       <span>
                         {point.objectTypeLabel} · {point.productLabel}
                       </span>
@@ -1386,7 +1404,12 @@ function DesignSamplePointDetail({
         const definition = await repository.designPointDefinition!(record.context);
         if (definition.contractDigest !== record.contractDigest)
           throw new Error("Metadata changed");
-        if (active) setDetail(presentDesignSamplePoint(record, definition));
+        if (active)
+          setDetail({
+            ...presentDesignSamplePoint(record, definition),
+            lifecycleStatus: selected.lifecycleStatus,
+            ...(selected.expiredAt ? { expiredAt: selected.expiredAt } : {}),
+          });
       })
       .catch(() => {
         if (active) setFailed(true);
@@ -1394,7 +1417,13 @@ function DesignSamplePointDetail({
     return () => {
       active = false;
     };
-  }, [selected.id, selected.version, repository]);
+  }, [
+    selected.expiredAt,
+    selected.id,
+    selected.lifecycleStatus,
+    selected.version,
+    repository,
+  ]);
   const point = detail?.id === selected.id ? detail : selected;
   if (repository.designPoint && !detail && !failed)
     return <p role="status">正在加载样本详情…</p>;
@@ -1407,6 +1436,11 @@ function DesignSamplePointDetail({
           {point.objectTypeLabel} · {point.productLabel}
         </span>
       </header>
+      {point.lifecycleStatus === "EXPIRED" ? (
+        <p className="overview-design-expired-notice">
+          已作废；保留在原地图位置，供后续设计样本分配时提取复用。
+        </p>
+      ) : null}
       <p>{point.regionPath}</p>
       <p>
         {point.allocationProvenance?.coordinateSource === "GENERATED_DESIGN"

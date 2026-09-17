@@ -1428,7 +1428,7 @@ describe("design map catalog", () => {
     expect(result.values.DSP_ALLOCATION_PROVENANCE).toEqual(provenance);
   });
 
-  it("decodes an ACTIVE GENERAL record without replacing its identity or region", async () => {
+  it("decodes an expired GENERAL record with its retained identity and map position", async () => {
     const record = {
       id: "94000000-0000-0000-0000-000000000099",
       contractVersion: "design-sample-fields-v1",
@@ -1443,6 +1443,8 @@ describe("design map catalog", () => {
       regionPath: "克东县/克东镇/万发村",
       longitude: 126.2,
       latitude: 48.0,
+      lifecycleStatus: "EXPIRED",
+      expiredAt: "2026-09-16T12:00:00Z",
       version: 1,
       updatedAt: "2026-09-17T00:00:00Z",
     };
@@ -1457,6 +1459,8 @@ describe("design map catalog", () => {
     expect(result[0]?.id).toBe(record.id);
     expect(result[0]?.regionCode).toBe(record.regionCode);
     expect(result[0]?.context.productCode).toBe("GENERAL");
+    expect(result[0]?.lifecycleStatus).toBe("EXPIRED");
+    expect(result[0]?.expiredAt).toBe("2026-09-16T12:00:00Z");
     expect(get).toHaveBeenCalledWith(
       "/api/v1/overview/design-map-samples?productCode=CORN&regionCode=230230",
       expect.anything(),

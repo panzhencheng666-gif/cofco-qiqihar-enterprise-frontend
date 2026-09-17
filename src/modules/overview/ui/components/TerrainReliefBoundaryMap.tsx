@@ -1278,8 +1278,10 @@ export default function TerrainReliefBoundaryMap({
             }) => {
               const isDesignCoverage = icon.layerType === "DESIGN_COVERAGE_BADGE";
               const isDesignExact = icon.layerType === "DESIGN_EXACT_LOCATION";
+              const isDesignExpired = icon.layerType === "DESIGN_EXPIRED_LOCATION";
               const isRegionalActual = icon.layerType === "REGIONAL_ACTUAL_BADGE";
-              const isReferenceLayer = isDesignCoverage || isDesignExact;
+              const isReferenceLayer =
+                isDesignCoverage || isDesignExact || isDesignExpired;
               const expanded =
                 Math.abs(anchorPoint.x - point.x) > 0.01 ||
                 Math.abs(anchorPoint.y - point.y) > 0.01;
@@ -1424,6 +1426,9 @@ function sampleNetworkMarkerTitle(icon: OverviewSamplePointIcon): string {
   }
   if (icon.layerType === "DESIGN_EXACT_LOCATION") {
     return `${icon.name}；设计样本位置，详情中可查看是否为区域内示意位置`;
+  }
+  if (icon.layerType === "DESIGN_EXPIRED_LOCATION") {
+    return `${icon.name}；作废设计样本保留位置，可供后续提取复用`;
   }
   return `区域级现有样本；仅确认到${regionalActualLevelLabel(icon.representedRegionLevel)}，不绘制图钉`;
 }

@@ -235,6 +235,10 @@ export function OverviewCommandCenter({
               <i className="is-design-exact" />
               设计样本位置
             </span>
+            <span>
+              <i className="is-design-expired" />
+              作废设计样本
+            </span>
           </>
         )}
       </aside>

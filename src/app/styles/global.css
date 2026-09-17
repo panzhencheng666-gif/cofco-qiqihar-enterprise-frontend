@@ -3583,6 +3583,18 @@ select:focus-visible {
   cursor: default;
   transform: translate(-50%, -50%);
 }
+.overview-sample-point-map-icon.is-layer-design_expired_location {
+  border-color: #ff9f8f;
+  color: #fff4f0;
+  background: repeating-linear-gradient(
+    135deg,
+    rgb(127 48 45 / 94%) 0 4px,
+    rgb(77 55 61 / 94%) 4px 8px
+  );
+  box-shadow:
+    0 0 0 3px rgb(255 120 111 / 20%),
+    0 7px 16px rgb(0 28 48 / 38%);
+}
 .overview-sample-point-map-icon.is-design-reference svg,
 .overview-sample-point-map-icon.is-regional-actual svg {
   transform: none;
@@ -4040,6 +4052,15 @@ select:focus-visible {
   box-shadow:
     0 0 0 2px rgb(255 215 106 / 24%),
     0 0 8px rgb(255 215 106 / 58%);
+}
+.overview-command-legend .is-design-expired {
+  width: 11px;
+  height: 11px;
+  margin-left: 2px;
+  border: 2px solid #ff9f8f;
+  border-radius: 50%;
+  background: repeating-linear-gradient(135deg, #7f302d 0 3px, #4d373d 3px 6px);
+  box-shadow: 0 0 8px rgb(255 120 111 / 58%);
 }
 
 .overview-command-tools {
@@ -4849,6 +4870,19 @@ select:focus-visible {
 .overview-design-sample-list > [role="listitem"] > button small {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+.overview-design-expired-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  border: 1px solid rgb(255 159 143 / 70%);
+  border-radius: 8px;
+  color: #ffd2ca;
+  font-size: 9px;
+  font-style: normal;
+}
+.overview-design-expired-notice {
+  color: #ffd2ca !important;
 }
 .overview-design-sample-list > [role="listitem"] > button span,
 .overview-design-sample-list > [role="listitem"] > button small {

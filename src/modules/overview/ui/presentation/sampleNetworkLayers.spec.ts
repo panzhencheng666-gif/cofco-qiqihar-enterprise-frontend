@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import type { SampleNetworkComparison } from "../../domain/overviewSamplePoint";
+import type {
+  OverviewDesignSamplePoint,
+  SampleNetworkComparison,
+} from "../../domain/overviewSamplePoint";
 import {
   designReferenceIconPathData,
   sampleNetworkLayerIcons,
@@ -293,6 +296,32 @@ describe("sampleNetworkLayerIcons", () => {
     expect(
       visible.filter((icon) => icon.layerType === "DESIGN_EXACT_LOCATION"),
     ).toHaveLength(0);
+  });
+
+  it("marks an expired design at its retained map position", () => {
+    const expired = {
+      id: "94000000-0000-0000-0000-000000000098",
+      name: "已作废设计样本",
+      regionCode: "230202997001",
+      longitude: 123.95,
+      latitude: 47.35,
+      lifecycleStatus: "EXPIRED",
+      domainLabel: "产情类",
+      objectTypeLabel: "农户",
+      productLabel: "通用",
+      context: { domainCode: "PRODUCTION", productCode: "GENERAL" },
+    } as OverviewDesignSamplePoint;
+
+    expect(
+      sampleNetworkLayerIcons("design", [], undefined, undefined, [expired]),
+    ).toEqual([
+      expect.objectContaining({
+        layerType: "DESIGN_EXPIRED_LOCATION",
+        name: "已作废设计样本（已作废）",
+        longitude: 123.95,
+        latitude: 47.35,
+      }),
+    ]);
   });
 
   it("creates an exact design location only after explicit authority approval", () => {

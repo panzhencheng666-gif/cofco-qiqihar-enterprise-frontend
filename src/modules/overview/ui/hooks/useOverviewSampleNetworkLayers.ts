@@ -155,8 +155,7 @@ export function useOverviewSampleNetworkLayers({
     (repository?.designMapCatalog ||
       (repository?.designPoints && repository.designPointDefinition)) &&
     productCode &&
-    regionCode &&
-    pointLevel,
+    regionCode,
   );
 
   const previousRefresh = useRef(refreshSequence);
@@ -531,9 +530,18 @@ export function useOverviewSampleNetworkLayers({
     [designPoints, region],
   );
   const designPointAggregates = useMemo(
+    () => designPointRegionAggregates(designPoints, mapRegions ?? []),
+    [designPoints, mapRegions],
+  );
+  const mapDesignPoints = useMemo(
     () =>
-      pointLevel ? designPointRegionAggregates(designPoints, mapRegions ?? []) : [],
-    [designPoints, mapRegions, pointLevel],
+      pointLevel
+        ? visibleDesignPoints
+        : visibleDesignPoints.filter(
+            (point) =>
+              point.regionCode === regionCode || point.displayRegionCode === regionCode,
+          ),
+    [pointLevel, regionCode, visibleDesignPoints],
   );
 
   const icons = useMemo(() => {
@@ -561,7 +569,7 @@ export function useOverviewSampleNetworkLayers({
           : {}),
         showExactDesignLocations,
       },
-      canLoadDesignPoints ? visibleDesignPoints : undefined,
+      canLoadDesignPoints ? mapDesignPoints : undefined,
     );
   }, [
     actualIcons,
@@ -575,7 +583,7 @@ export function useOverviewSampleNetworkLayers({
     regionLevel,
     regionParentCode,
     showExactDesignLocations,
-    visibleDesignPoints,
+    mapDesignPoints,
   ]);
 
   return {

@@ -3,7 +3,7 @@ import { expect, it, vi } from "vitest";
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
 import { useOverviewSampleNetworkLayers } from "./useOverviewSampleNetworkLayers";
 it.each(["PREFECTURE", "COUNTY"] as const)(
-  "loads the list without exact icons or design metadata at %s level",
+  "loads the list and design catalog without business icons at %s level",
   async (level) => {
     const designPoints = vi.fn().mockResolvedValue({ items: [], totalPages: 1 });
     const definition = vi.fn();
@@ -32,7 +32,12 @@ it.each(["PREFECTURE", "COUNTY"] as const)(
       }),
     );
     await waitFor(() => expect(result.current.state).toBe("ready"));
-    expect(designPoints).not.toHaveBeenCalled();
+    expect(designPoints).toHaveBeenCalledWith({
+      page: 0,
+      pageSize: 100,
+      productCode: "CORN",
+      regionCode: "230221",
+    });
     expect(list).toHaveBeenCalledTimes(1);
     expect(icons).not.toHaveBeenCalled();
     expect(snapshot).not.toHaveBeenCalled();

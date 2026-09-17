@@ -85,6 +85,73 @@ describe("useOverviewSampleNetworkLayers", () => {
     );
   });
 
+  it("loads the design catalog at county level so direct points and descendant counts are not hidden", async () => {
+    const direct = {
+      id: "94000000-0000-0000-0000-000000000090",
+      contractVersion: "design-sample-fields-v1" as const,
+      contractDigest: `sha256:${"a".repeat(64)}`,
+      context: {
+        domainCode: "PRODUCTION",
+        productCode: "CORN",
+        objectTypeCode: "FARMER",
+      },
+      values: {},
+      name: "县级设计点",
+      regionCode: "230202",
+      regionPath: "齐齐哈尔市/龙沙区",
+      longitude: 123.9,
+      latitude: 47.2,
+      version: 1,
+      updatedAt: "2026-09-17T00:00:00Z",
+      lifecycleStatus: "ACTIVE" as const,
+    };
+    const descendant = {
+      ...direct,
+      id: "94000000-0000-0000-0000-000000000091",
+      name: "村级作废设计点",
+      regionCode: "230202997001",
+      lifecycleStatus: "EXPIRED" as const,
+      expiredAt: "2026-09-16T00:00:00Z",
+    };
+    const repository = {
+      ...repositoryWithSnapshot(),
+      list: vi.fn<OverviewSamplePointRepository["list"]>(({ regionCode }) =>
+        Promise.resolve(emptySnapshot(regionCode).list),
+      ),
+      designMapCatalog: vi.fn(() => Promise.resolve([direct, descendant])),
+    } satisfies OverviewSamplePointRepository;
+    const { result } = renderHook(() =>
+      useOverviewSampleNetworkLayers({
+        productCode: "CORN",
+        refreshSequence: 0,
+        region: { code: "230202", level: "COUNTY", name: "龙沙区" },
+        mapRegions: [
+          {
+            code: "230202997",
+            level: "TOWNSHIP",
+            name: "某镇",
+            parentCode: "230202",
+          },
+        ],
+        repository,
+        year: 2026,
+      }),
+    );
+
+    await waitFor(() => expect(result.current.designPoints).toHaveLength(2));
+    act(() => result.current.setMode("design"));
+    expect(repository.designMapCatalog).toHaveBeenCalled();
+    expect(result.current.icons).toEqual([
+      expect.objectContaining({
+        name: "县级设计点",
+        layerType: "DESIGN_EXACT_LOCATION",
+      }),
+    ]);
+    expect(result.current.designPointAggregates?.[0]).toEqual(
+      expect.objectContaining({ samplePointCount: 1, expiredSamplePointCount: 1 }),
+    );
+  });
+
   afterEach(() => {
     vi.useRealTimers();
   });
