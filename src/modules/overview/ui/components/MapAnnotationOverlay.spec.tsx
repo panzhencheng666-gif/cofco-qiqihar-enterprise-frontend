@@ -1,12 +1,64 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const precisionMapMock = vi.hoisted(() => ({
+  ready: false,
+  reset: vi.fn(),
+  setViewAngle: vi.fn(),
+  unproject: vi.fn(({ x, y }: { x: number; y: number }) => ({
+    longitude: 123 + x / 100,
+    latitude: 49 - y / 100,
+  })),
+  zoomIn: vi.fn(),
+  zoomOut: vi.fn(),
+}));
+
+vi.mock("./MapAnnotationPrecisionMap", async () => {
+  const React = await import("react");
+  return {
+    MapAnnotationPrecisionMap: React.forwardRef(function PrecisionMapMock(
+      props: {
+        onDetailLevelChange?: (level: "REGION" | "GEOGRAPHY" | "SAMPLE") => void;
+        onReady?: () => void;
+      },
+      ref,
+    ) {
+      const readyReported = React.useRef(false);
+      React.useImperativeHandle(ref, () => ({
+        reset: precisionMapMock.reset,
+        setViewAngle: precisionMapMock.setViewAngle,
+        unproject: precisionMapMock.unproject,
+        zoomIn: precisionMapMock.zoomIn,
+        zoomOut: precisionMapMock.zoomOut,
+      }));
+      React.useEffect(() => {
+        if (!precisionMapMock.ready || readyReported.current) return;
+        readyReported.current = true;
+        props.onReady?.();
+        props.onDetailLevelChange?.("GEOGRAPHY");
+      }, [props]);
+      return React.createElement("div", {
+        "aria-label": "高精度地理底图",
+        "data-testid": "precision-map",
+      });
+    }),
+  };
+});
 
 import { MapAnnotationOverlay } from "./MapAnnotationOverlay";
 import type { SaveMapAnnotation } from "../../application/ports/MapAnnotationRepository";
 
 describe("MapAnnotationOverlay", () => {
+  beforeEach(() => {
+    precisionMapMock.ready = false;
+    precisionMapMock.reset.mockClear();
+    precisionMapMock.setViewAngle.mockClear();
+    precisionMapMock.unproject.mockClear();
+    precisionMapMock.zoomIn.mockClear();
+    precisionMapMock.zoomOut.mockClear();
+  });
   it("keeps the start action visible and opens the annotation sidebar when armed", async () => {
     const onArmedChange = vi.fn();
     render(
@@ -251,127 +303,49 @@ describe("MapAnnotationOverlay", () => {
     expect(onArmedChange).toHaveBeenLastCalledWith(false);
   });
 
-  it("pans, zooms, rotates, and resets only while browsing the annotation map", async () => {
-    const mapClick = vi.fn();
-    const save = vi.fn((command) =>
-      Promise.resolve({ ...command, version: 2, updatedAt: "2026-09-18T00:00:00Z" }),
+  it("zooms, adjusts pitch without rotation, and resets the precision map", async () => {
+    precisionMapMock.ready = true;
+    render(
+      <MapAnnotationOverlay
+        active
+        bounds={{
+          minLongitude: 123,
+          minLatitude: 47,
+          maxLongitude: 125,
+          maxLatitude: 49,
+        }}
+        repository={{
+          current: () => Promise.resolve(undefined),
+          save: vi.fn(),
+          delete: vi.fn(),
+        }}
+      />,
     );
-    const { container } = render(
-      <div className="overview-map-annotation-stage">
-        <div className="overview-terrain-relief-map">
-          <button type="button" onClick={mapClick}>
-            地图地区
-          </button>
-        </div>
-        <MapAnnotationOverlay
-          active
-          bounds={{
-            minLongitude: 123,
-            minLatitude: 47,
-            maxLongitude: 125,
-            maxLatitude: 49,
-          }}
-          repository={{
-            current: () => Promise.resolve(undefined),
-            save,
-            delete: vi.fn(),
-          }}
-        />
-      </div>,
-    );
-    const stage = container.querySelector<HTMLElement>(
-      ".overview-map-annotation-stage",
-    )!;
-    const map = container.querySelector<HTMLElement>(".overview-terrain-relief-map")!;
-    Object.defineProperties(map, {
-      clientWidth: { value: 1200 },
-      clientHeight: { value: 1080 },
-      getBoundingClientRect: {
-        value: () => ({
-          left: 0,
-          top: 0,
-          width: 600,
-          height: 540,
-          right: 600,
-          bottom: 540,
-        }),
-      },
-    });
-    const surface = screen.getByTestId("map-annotation-surface");
-    Object.defineProperties(surface, {
-      clientWidth: { value: 1200 },
-      clientHeight: { value: 1080 },
-      getBoundingClientRect: {
-        value: () => ({
-          left: 0,
-          top: 0,
-          width: 600,
-          height: 540,
-          right: 600,
-          bottom: 540,
-        }),
-      },
-    });
 
-    fireEvent.pointerDown(map, {
-      button: 0,
-      clientX: 100,
-      clientY: 120,
-      pointerId: 7,
-    });
-    fireEvent.pointerMove(map, { clientX: 160, clientY: 150, pointerId: 7 });
-    fireEvent.pointerUp(map, { clientX: 160, clientY: 150, pointerId: 7 });
-    fireEvent.click(screen.getByRole("button", { name: "地图地区" }));
-    await waitFor(() => {
-      expect(stage.style.getPropertyValue("--annotation-map-pan-x")).toBe("120px");
-      expect(stage.style.getPropertyValue("--annotation-map-pan-y")).toBe("60px");
-    });
-    expect(save).not.toHaveBeenCalled();
-    expect(mapClick).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole("button", { name: "地图地区" }));
-    expect(mapClick).toHaveBeenCalledOnce();
+    const angle = await screen.findByRole("slider", { name: "地图视角" });
+    await waitFor(() => expect(angle).toBeEnabled());
+    expect(screen.queryByRole("button", { name: /旋转地图/ })).not.toBeInTheDocument();
+    expect(screen.getByText("当前细节：道路、河流与地名")).toBeVisible();
 
-    await userEvent.click(screen.getByRole("button", { name: "顺时针旋转地图" }));
-    fireEvent.wheel(map, { deltaY: -100 });
-    await waitFor(() => {
-      expect(stage.style.getPropertyValue("--annotation-map-rotation")).toBe("15deg");
-      expect(stage.style.getPropertyValue("--annotation-map-zoom")).toBe("1.1");
-    });
-    fireEvent.pointerDown(map, {
-      button: 0,
-      clientX: 180,
-      clientY: 180,
-      pointerId: 10,
-    });
-    fireEvent.pointerMove(map, { clientX: 240, clientY: 210, pointerId: 10 });
-    fireEvent.pointerUp(map, { clientX: 240, clientY: 210, pointerId: 10 });
-    await waitFor(() => {
-      expect(stage.style.getPropertyValue("--annotation-map-pan-x")).toBe("240px");
-      expect(stage.style.getPropertyValue("--annotation-map-pan-y")).toBe("120px");
-    });
+    await userEvent.click(screen.getByRole("button", { name: "放大地图" }));
+    await userEvent.click(screen.getByRole("button", { name: "缩小地图" }));
+    fireEvent.change(angle, { target: { value: "30" } });
+    expect(precisionMapMock.zoomIn).toHaveBeenCalledOnce();
+    expect(precisionMapMock.zoomOut).toHaveBeenCalledOnce();
+    expect(precisionMapMock.setViewAngle).toHaveBeenLastCalledWith(30);
+    expect(screen.getByText("视角 30°")).toBeVisible();
 
     await userEvent.click(screen.getByRole("button", { name: "复位地图视角" }));
-    await waitFor(() => {
-      expect(stage.style.getPropertyValue("--annotation-map-pan-x")).toBe("0px");
-      expect(stage.style.getPropertyValue("--annotation-map-pan-y")).toBe("0px");
-      expect(stage.style.getPropertyValue("--annotation-map-rotation")).toBe("0deg");
-      expect(stage.style.getPropertyValue("--annotation-map-zoom")).toBe("1");
-    });
+    expect(precisionMapMock.reset).toHaveBeenCalledOnce();
+    expect(screen.getByText("视角 60°")).toBeVisible();
 
     await userEvent.click(screen.getByRole("button", { name: "开始标注" }));
-    expect(screen.getByRole("button", { name: "顺时针旋转地图" })).toBeDisabled();
-    fireEvent.pointerDown(surface, {
-      button: 0,
-      clientX: 300,
-      clientY: 320,
-      pointerId: 8,
-    });
-    fireEvent.pointerUp(surface, { clientX: 300, clientY: 320, pointerId: 8 });
-    await waitFor(() => expect(save).toHaveBeenCalledOnce());
-    expect(stage.style.getPropertyValue("--annotation-map-pan-x")).toBe("0px");
+    expect(angle).toBeDisabled();
+    expect(screen.getByRole("button", { name: "放大地图" })).toBeDisabled();
   });
 
-  it("uses all four screen corners for a rectangle drawn on a rotated map", async () => {
+  it("uses precision unprojection for every rectangle corner under a pitched view", async () => {
+    precisionMapMock.ready = true;
     const save = vi.fn((command) =>
       Promise.resolve({ ...command, version: 2, updatedAt: "2026-09-18T00:00:00Z" }),
     );
@@ -409,10 +383,12 @@ describe("MapAnnotationOverlay", () => {
         }),
       },
     });
-    const rotate = screen.getByRole("button", { name: "顺时针旋转地图" });
-    await userEvent.click(rotate);
-    await userEvent.click(rotate);
-    await userEvent.click(rotate);
+    await waitFor(() =>
+      expect(screen.getByRole("slider", { name: "地图视角" })).toBeEnabled(),
+    );
+    fireEvent.change(screen.getByRole("slider", { name: "地图视角" }), {
+      target: { value: "30" },
+    });
     await userEvent.click(screen.getByRole("button", { name: "开始标注" }));
     fireEvent.pointerDown(surface, {
       button: 0,
@@ -426,10 +402,12 @@ describe("MapAnnotationOverlay", () => {
     await waitFor(() => expect(save).toHaveBeenCalledOnce());
     const command = save.mock.calls[0]?.[0] as SaveMapAnnotation;
     expect(command.type).toBe("RECTANGLE");
-    expect(command.maxLongitude! - command.minLongitude).toBeGreaterThan(0.5);
-    expect(command.maxLatitude! - command.minLatitude).toBeGreaterThan(0.5);
-    const shape = await screen.findByLabelText("已保存矩形标注");
-    expect(shape.style.transform).toBe("rotate(45deg)");
+    expect(command.minLongitude).toBeCloseTo(123.4);
+    expect(command.maxLongitude).toBeCloseTo(123.6);
+    expect(command.minLatitude).toBeCloseTo(48.4);
+    expect(command.maxLatitude).toBeCloseTo(48.6);
+    expect(precisionMapMock.unproject).toHaveBeenCalledTimes(5);
+    expect(screen.queryByRole("button", { name: /旋转地图/ })).not.toBeInTheDocument();
   });
 
   it("keeps navigation controls available when the WebGL map uses its fallback", async () => {
@@ -488,20 +466,21 @@ describe("MapAnnotationOverlay", () => {
     );
     const fallback = container.querySelector<HTMLElement>(".overview-map-fallback")!;
 
+    await userEvent.click(screen.getByRole("button", { name: "放大地图" }));
     fireEvent.pointerDown(fallback, {
       button: 0,
       clientX: 100,
       clientY: 100,
       pointerId: 11,
     });
-    fireEvent.pointerMove(fallback, { clientX: 140, clientY: 120, pointerId: 11 });
-    fireEvent.pointerUp(fallback, { clientX: 140, clientY: 120, pointerId: 11 });
+    fireEvent.pointerMove(fallback, { clientX: 1_100, clientY: 1_100, pointerId: 11 });
+    fireEvent.pointerUp(fallback, { clientX: 1_100, clientY: 1_100, pointerId: 11 });
     await waitFor(() => {
-      expect(stage.style.getPropertyValue("--annotation-map-pan-x")).toBe("40px");
-      expect(stage.style.getPropertyValue("--annotation-map-pan-y")).toBe("20px");
+      expect(stage.style.getPropertyValue("--annotation-map-pan-x")).toBe("80px");
+      expect(stage.style.getPropertyValue("--annotation-map-pan-y")).toBe("60px");
     });
-    await userEvent.click(screen.getByRole("button", { name: "顺时针旋转地图" }));
-    expect(stage.style.getPropertyValue("--annotation-map-rotation")).toBe("15deg");
+    expect(screen.getByRole("slider", { name: "地图视角" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /旋转地图/ })).not.toBeInTheDocument();
   });
 
   it("round-trips coordinates under zoom around the terrain element pivot with a noncentral frame", async () => {

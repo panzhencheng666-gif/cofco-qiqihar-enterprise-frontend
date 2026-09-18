@@ -130,6 +130,9 @@ export const localAcceptanceContractGatePlugin = {
 
 export default defineConfig({
   base: "/overview-monitoring/",
+  optimizeDeps: {
+    exclude: ["maplibre-gl"],
+  },
   plugins: [localAcceptanceContractGatePlugin, react()],
   server: {
     host: "127.0.0.1",

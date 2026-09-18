@@ -726,6 +726,15 @@ export function OverviewPage({
         : [],
     [sampleMode, sampleNetworkModel.icons, visibleRegions, selectedSamplePointId],
   );
+  const annotationSampleNetworkIcons = useMemo(
+    () =>
+      visibleSampleNetworkMapIcons(
+        visibleRegions[0]?.level,
+        selectedSamplePointId,
+        sampleNetworkModel.icons,
+      ),
+    [sampleNetworkModel.icons, selectedSamplePointId, visibleRegions],
+  );
 
   const regionalDataRegionCode =
     selectedRegion?.code ||
@@ -852,6 +861,10 @@ export function OverviewPage({
       name: overallMapScope.name,
     })[0];
   }, [mapContextRegion, overallMapScope, rootRegions, scopeRootCode]);
+  const annotationBounds = useMemo(
+    () => mapAnnotationBounds(mapFeatures, mapBackdrop),
+    [mapBackdrop, mapFeatures],
+  );
   const productLabel =
     options?.products.find((product) => product.code === productCode)?.label ??
     "粮食产品";
@@ -1196,13 +1209,21 @@ export function OverviewPage({
             />
             {dataMode === "MAP_ANNOTATION" &&
               mapAnnotationRepository &&
-              mapAnnotationBounds(mapFeatures, mapBackdrop) && (
+              annotationBounds && (
                 <MapAnnotationOverlay
                   active
-                  bounds={mapAnnotationBounds(mapFeatures, mapBackdrop)!}
+                  bounds={annotationBounds}
+                  features={mapFeatures}
+                  onRegionDrill={drillDown}
+                  onRegionSelect={selectRegion}
+                  onSamplePointSelect={updateSelectedSamplePoint}
                   repository={mapAnnotationRepository}
+                  samplePointIcons={annotationSampleNetworkIcons}
                   onArmedChange={setAnnotationArmed}
+                  {...(mapBackdrop ? { backdrop: mapBackdrop } : {})}
                   {...(selectedRegionCode ? { regionCode: selectedRegionCode } : {})}
+                  {...(selectedRegionCode ? { selectedRegionCode } : {})}
+                  {...(selectedSamplePointId ? { selectedSamplePointId } : {})}
                   {...(annotationLevel(selectedRegionSnapshot?.level)
                     ? {
                         administrativeLevel: annotationLevel(

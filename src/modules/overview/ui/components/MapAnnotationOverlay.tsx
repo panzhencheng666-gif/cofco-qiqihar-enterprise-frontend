@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { createPortal } from "react-dom";
 
@@ -7,7 +15,17 @@ import type {
   MapAnnotationRepository,
   SaveMapAnnotation,
 } from "../../application/ports/MapAnnotationRepository";
+import type { OverviewRegion } from "../../domain/overview";
+import type { OverviewSamplePointIcon } from "../../domain/overviewSamplePoint";
+import type { MapFeature } from "./boundaryGeometry";
+import type { MapAnnotationPrecisionMapHandle } from "./MapAnnotationPrecisionMap";
 import "./map-annotation.css";
+
+const MapAnnotationPrecisionMap = lazy(() =>
+  import("./MapAnnotationPrecisionMap").then(({ MapAnnotationPrecisionMap }) => ({
+    default: MapAnnotationPrecisionMap,
+  })),
+);
 
 export interface AnnotationBounds {
   minLongitude: number;
@@ -48,6 +66,14 @@ export function MapAnnotationOverlay({
   regionCode,
   administrativeLevel,
   onArmedChange,
+  backdrop,
+  features,
+  onRegionDrill,
+  onRegionSelect,
+  onSamplePointSelect,
+  samplePointIcons,
+  selectedRegionCode,
+  selectedSamplePointId,
 }: {
   active: boolean;
   bounds: AnnotationBounds;
@@ -55,6 +81,14 @@ export function MapAnnotationOverlay({
   regionCode?: string;
   administrativeLevel?: SaveMapAnnotation["administrativeLevel"];
   onArmedChange?: (armed: boolean) => void;
+  backdrop?: MapFeature;
+  features?: readonly MapFeature[];
+  onRegionDrill?: (region: OverviewRegion) => void;
+  onRegionSelect?: (region: OverviewRegion) => void;
+  onSamplePointSelect?: (samplePointId: string) => void;
+  samplePointIcons?: readonly OverviewSamplePointIcon[];
+  selectedRegionCode?: string;
+  selectedSamplePointId?: string;
 }) {
   const [annotation, setAnnotation] = useState<MapAnnotation>();
   const [armed, setArmed] = useState(false);
@@ -63,8 +97,14 @@ export function MapAnnotationOverlay({
   const [issue, setIssue] = useState("");
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState<PixelPoint>({ x: 0, y: 0 });
-  const [rotation, setRotation] = useState(0);
+  const rotation = 0;
   const [panning, setPanning] = useState(false);
+  const [precisionMapReady, setPrecisionMapReady] = useState(false);
+  const [precisionMapIssue, setPrecisionMapIssue] = useState("");
+  const [viewAngle, setViewAngle] = useState(60);
+  const [detailLevel, setDetailLevel] = useState<"REGION" | "GEOGRAPHY" | "SAMPLE">(
+    "REGION",
+  );
   const [surfaceElement, setSurfaceElement] = useState<HTMLDivElement | null>(null);
   const [, setProjectionRevision] = useState(0);
   const [lockedScope, setLockedScope] = useState<{
@@ -73,6 +113,7 @@ export function MapAnnotationOverlay({
   }>();
   const armedRef = useRef(false);
   const panRef = useRef(pan);
+  const zoomRef = useRef(zoom);
   const panGestureRef = useRef<
     | {
         moved: boolean;
@@ -83,6 +124,8 @@ export function MapAnnotationOverlay({
     | undefined
   >(undefined);
   const suppressClickRef = useRef(false);
+  const precisionMapRef = useRef<MapAnnotationPrecisionMapHandle>(null);
+  const precisionMapReadyRef = useRef(false);
   const onArmedChangeRef = useRef(onArmedChange);
   useEffect(() => {
     onArmedChangeRef.current = onArmedChange;
@@ -90,6 +133,18 @@ export function MapAnnotationOverlay({
   useEffect(() => {
     panRef.current = pan;
   }, [pan]);
+  useEffect(() => {
+    zoomRef.current = zoom;
+    const surface = surfaceElement;
+    if (!surface) return;
+    const viewport = viewportSize(surface);
+    const bounded = clampPanToViewport(panRef.current, viewport, zoom);
+    if (bounded.x !== panRef.current.x || bounded.y !== panRef.current.y)
+      setPan(bounded);
+  }, [surfaceElement, zoom]);
+  useEffect(() => {
+    precisionMapReadyRef.current = precisionMapReady;
+  }, [precisionMapReady]);
   const changeArmed = useCallback(
     (
       next: boolean,
@@ -166,7 +221,13 @@ export function MapAnnotationOverlay({
     };
     let suppressClearTimer: number | undefined;
     const pointerDown = (event: PointerEvent) => {
-      if (armedRef.current || event.button !== 0 || !isMapEvent(event)) return;
+      if (
+        precisionMapReadyRef.current ||
+        armedRef.current ||
+        event.button !== 0 ||
+        !isMapEvent(event)
+      )
+        return;
       suppressClickRef.current = false;
       panGestureRef.current = {
         moved: false,
@@ -191,10 +252,13 @@ export function MapAnnotationOverlay({
       const deltaY =
         screenDeltaY *
         ((surface.clientHeight || rect.height) / Math.max(rect.height, 1));
-      setPan({
-        x: gesture.origin.x + deltaX,
-        y: gesture.origin.y + deltaY,
-      });
+      setPan(
+        clampPanToViewport(
+          { x: gesture.origin.x + deltaX, y: gesture.origin.y + deltaY },
+          viewportSize(surface),
+          zoomRef.current,
+        ),
+      );
     };
     const finishPan = (event: PointerEvent) => {
       const gesture = panGestureRef.current;
@@ -215,7 +279,8 @@ export function MapAnnotationOverlay({
       event.stopImmediatePropagation();
     };
     const wheel = (event: WheelEvent) => {
-      if (armedRef.current || !isMapEvent(event)) return;
+      if (precisionMapReadyRef.current || armedRef.current || !isMapEvent(event))
+        return;
       event.preventDefault();
       setZoom((value) => clamp(value + (event.deltaY < 0 ? 0.1 : -0.1), 0.8, 2));
     };
@@ -286,11 +351,16 @@ export function MapAnnotationOverlay({
     if (!armed || !start) return;
     const end = point(event);
     changeArmed(false);
-    const last = toCoordinate(end, event.currentTarget, bounds, viewTransform);
+    const coordinate = (value: PixelPoint) =>
+      precisionMapReady
+        ? (precisionMapRef.current?.unproject(value) ??
+          toCoordinate(value, event.currentTarget, bounds, viewTransform))
+        : toCoordinate(value, event.currentTarget, bounds, viewTransform);
+    const last = coordinate(end);
     const dragged = Math.hypot(end.x - start.x, end.y - start.y) >= 5;
     const rectangleCorners = dragged
       ? [start, { x: start.x, y: end.y }, end, { x: end.x, y: start.y }].map((corner) =>
-          toCoordinate(corner, event.currentTarget, bounds, viewTransform),
+          coordinate(corner),
         )
       : [];
     const command: SaveMapAnnotation = dragged
@@ -361,7 +431,10 @@ export function MapAnnotationOverlay({
           aria-label="放大地图"
           disabled={armed}
           type="button"
-          onClick={() => setZoom((value) => Math.min(2, value + 0.2))}
+          onClick={() => {
+            if (precisionMapReady) precisionMapRef.current?.zoomIn();
+            else setZoom((value) => Math.min(2, value + 0.2));
+          }}
         >
           ＋
         </button>
@@ -369,34 +442,42 @@ export function MapAnnotationOverlay({
           aria-label="缩小地图"
           disabled={armed}
           type="button"
-          onClick={() => setZoom((value) => Math.max(0.8, value - 0.2))}
+          onClick={() => {
+            if (precisionMapReady) precisionMapRef.current?.zoomOut();
+            else setZoom((value) => Math.max(1, value - 0.2));
+          }}
         >
           －
         </button>
-        <button
-          aria-label="逆时针旋转地图"
-          disabled={armed}
-          type="button"
-          onClick={() => setRotation((value) => value - 15)}
-        >
-          ↶
-        </button>
-        <button
-          aria-label="顺时针旋转地图"
-          disabled={armed}
-          type="button"
-          onClick={() => setRotation((value) => value + 15)}
-        >
-          ↷
-        </button>
+        <label className="overview-map-view-angle">
+          <span>视角 {viewAngle}°</span>
+          <input
+            aria-label="地图视角"
+            disabled={armed || !precisionMapReady}
+            max="90"
+            min="30"
+            step="5"
+            type="range"
+            value={viewAngle}
+            onChange={(event) => {
+              const angle = Number(event.currentTarget.value);
+              setViewAngle(angle);
+              precisionMapRef.current?.setViewAngle(angle);
+            }}
+          />
+        </label>
         <button
           aria-label="复位地图视角"
           disabled={armed}
           type="button"
           onClick={() => {
-            setZoom(1);
-            setPan({ x: 0, y: 0 });
-            setRotation(0);
+            if (precisionMapReady) {
+              setViewAngle(60);
+              precisionMapRef.current?.reset();
+            } else {
+              setZoom(1);
+              setPan({ x: 0, y: 0 });
+            }
           }}
         >
           复位
@@ -441,13 +522,32 @@ export function MapAnnotationOverlay({
           {issue}
         </p>
       )}
+      {precisionMapReady && (
+        <p className="overview-map-detail-level" aria-live="polite">
+          当前细节：
+          {detailLevel === "SAMPLE"
+            ? samplePointIcons?.length
+              ? "样本点、道路与环境纹理"
+              : "道路、地名与环境纹理"
+            : detailLevel === "GEOGRAPHY"
+              ? "道路、河流与地名"
+              : "行政区域"}
+        </p>
+      )}
+      {precisionMapIssue && !precisionMapReady && (
+        <p className="overview-map-annotation-issue is-precision-map" role="status">
+          {precisionMapIssue}
+        </p>
+      )}
     </>
   );
   const controlsHost = surfaceElement?.closest(".overview-command-center");
   return (
-    <div className="overview-map-annotation-layer">
+    <div
+      className={`overview-map-annotation-layer${precisionMapReady ? " has-precision-map" : ""}`}
+    >
       <div
-        className={`overview-map-annotation-surface${armed ? " is-armed" : " is-browsing"}${panning ? " is-panning" : ""}`}
+        className={`overview-map-annotation-surface${armed ? " is-armed" : " is-browsing"}${panning ? " is-panning" : ""}${precisionMapReady ? " has-precision-map" : ""}`}
         data-testid="map-annotation-surface"
         ref={setSurfaceElement}
         onPointerDown={(event) => {
@@ -476,7 +576,32 @@ export function MapAnnotationOverlay({
           setPreview(undefined);
         }}
       >
-        {shape && (
+        <Suspense fallback={null}>
+          <MapAnnotationPrecisionMap
+            ref={precisionMapRef}
+            bounds={bounds}
+            features={features ?? []}
+            samplePointIcons={samplePointIcons ?? []}
+            viewAngle={viewAngle}
+            {...(annotation ? { annotation } : {})}
+            {...(backdrop ? { backdrop } : {})}
+            {...(onRegionDrill ? { onRegionDrill } : {})}
+            {...(onRegionSelect ? { onRegionSelect } : {})}
+            {...(onSamplePointSelect ? { onSamplePointSelect } : {})}
+            {...(selectedRegionCode ? { selectedRegionCode } : {})}
+            {...(selectedSamplePointId ? { selectedSamplePointId } : {})}
+            onDetailLevelChange={setDetailLevel}
+            onReady={() => {
+              setPrecisionMapReady(true);
+              setPrecisionMapIssue("");
+            }}
+            onUnavailable={() => {
+              setPrecisionMapReady(false);
+              setPrecisionMapIssue("精细地理底图暂不可用，已保留行政区地图浏览。");
+            }}
+          />
+        </Suspense>
+        {shape && !precisionMapReady && (
           <span
             aria-label={
               annotation?.type === "POINT" ? "已保存点标注" : "已保存矩形标注"
@@ -657,6 +782,20 @@ function viewportSize(surface: HTMLElement) {
     height: Math.max(surface.clientHeight || rect.height, 1),
   };
 }
+
+function clampPanToViewport(
+  pan: PixelPoint,
+  viewport: { width: number; height: number },
+  zoom: number,
+) {
+  const maxX = Math.max(0, (viewport.width * (zoom - 1)) / 2);
+  const maxY = Math.max(0, (viewport.height * (zoom - 1)) / 2);
+  return {
+    x: Math.round(clamp(pan.x, -maxX, maxX) * 1_000) / 1_000,
+    y: Math.round(clamp(pan.y, -maxY, maxY) * 1_000) / 1_000,
+  };
+}
+
 function transformViewPoint(
   point: PixelPoint,
   viewportWidth: number,
