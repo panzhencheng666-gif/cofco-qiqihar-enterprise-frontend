@@ -33,6 +33,7 @@ describe("OverviewDataModePanel", () => {
           storageFacilities: [],
           railwayFacilities: [],
           railwayLines: [],
+          railwayRoutes: [],
           sources: [],
         }}
         operationalSituation={{
@@ -72,8 +73,64 @@ describe("OverviewDataModePanel", () => {
 
     expect(screen.getByRole("heading", { name: "公开运营态势" })).toBeVisible();
     expect(screen.getByText("NASA EONET")).toBeVisible();
-    expect(screen.getByText("齐齐哈尔市")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "齐齐哈尔市天气与风险" })).toBeVisible();
     expect(screen.getByText(/不会补造事件/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "天气" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("binds weather details to the selected administrative area without a weather marker", () => {
+    render(
+      <OverviewDataModePanel
+        mode="PUBLIC_SITUATION"
+        selectedRegion={{
+          code: "230229101",
+          name: "古城镇",
+          parentCode: "230229",
+          level: "TOWNSHIP",
+          approvedRecordCount: null,
+        }}
+        operationalFacilities={{
+          regionCode: "230229101",
+          productCode: "CORN",
+          asOf: "2026-09-18",
+          storageCategories: [],
+          storageFacilities: [],
+          railwayFacilities: [],
+          railwayLines: [],
+          railwayRoutes: [],
+          sources: [],
+        }}
+        operationalSituation={{
+          generatedAt: "2026-09-18T06:00:00Z",
+          weather: [
+            {
+              rootRegionCode: "230200",
+              regionName: "齐齐哈尔市",
+              longitude: 123.92,
+              latitude: 47.35,
+              observedAt: "2026-09-18T05:00:00Z",
+              meanTemperatureC: 18.2,
+              precipitationMm: 0,
+              soilMoisturePercent: 25.4,
+              risk: "连续降雨影响预警",
+              assessment: "近期持续降雨，需关注墒情。",
+              sourceName: "Open-Meteo",
+              sourceUrl: "https://open-meteo.com/",
+              fetchedAt: "2026-09-18T05:01:00Z",
+            },
+          ],
+          publicEvents: [],
+          sources: [],
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "古城镇天气与风险" })).toBeVisible();
+    expect(screen.getByText("连续降雨影响预警")).toBeVisible();
+    expect(screen.getByText(/所属齐齐哈尔市代表性公开观测/)).toBeVisible();
   });
 
   it("renders regional metrics without embedding the mode navigation", () => {

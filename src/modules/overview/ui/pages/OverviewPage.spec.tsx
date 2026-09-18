@@ -45,6 +45,7 @@ describe("OverviewPage", () => {
         storageFacilities: [],
         railwayFacilities: [],
         railwayLines: [],
+        railwayRoutes: [],
         sources: [
           {
             code: "STORAGE",

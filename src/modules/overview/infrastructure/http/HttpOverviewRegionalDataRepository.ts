@@ -364,6 +364,16 @@ const operationalFacilityCatalogueSchema = z.object({
         sourceUrl: z.string(),
       }),
     ),
+    railwayRoutes: z.array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        geometryGeoJson: z.string(),
+        usage: z.string(),
+        operator: z.string(),
+        sourceUrl: z.string(),
+      }),
+    ),
     sources: z.array(
       z.object({
         code: z.enum(["STORAGE", "RAILWAY"]),

@@ -12,6 +12,7 @@ export interface OperationalFacilityCatalogue {
   storageFacilities: readonly StorageFacility[];
   railwayFacilities: readonly RailwayFacility[];
   railwayLines: readonly RailwayLine[];
+  railwayRoutes: readonly RailwayRoute[];
   sources: readonly OperationalFacilitySource[];
 }
 
@@ -81,6 +82,15 @@ export interface RailwayLine {
   usage: string;
   electrification: string;
   gauge: string;
+  operator: string;
+  sourceUrl: string;
+}
+
+export interface RailwayRoute {
+  id: string;
+  name: string;
+  geometryGeoJson: string;
+  usage: string;
   operator: string;
   sourceUrl: string;
 }

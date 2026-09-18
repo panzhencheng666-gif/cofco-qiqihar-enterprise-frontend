@@ -49,7 +49,7 @@ describe("fitOperationalMap", () => {
     ];
     const padding = { bottom: 54, left: 54, right: 54, top: 175 };
 
-    fitOperationalMap(map as never, bounds, padding, 30);
+    fitOperationalMap(map, bounds, padding, 30);
 
     expect(map.cameraForBounds).toHaveBeenCalledWith(bounds, {
       bearing: 0,

@@ -770,7 +770,8 @@ export function OverviewPage({
     selectedOperationalFacilityId &&
     operationalFacilityIds.includes(selectedOperationalFacilityId)
       ? selectedOperationalFacilityId
-      : operationalFacilityIds[0];
+      : undefined;
+  const operationalSelectedRegion = selectedRegionSnapshot ?? mapContextRegion;
 
   useEffect(() => {
     if (!operationalMapMode || !regionalDataRepository?.operationalFacilities) return;
@@ -1210,6 +1211,9 @@ export function OverviewPage({
                   {...(effectiveOperationalFacilityId
                     ? { selectedOperationalFacilityId: effectiveOperationalFacilityId }
                     : {})}
+                  {...(operationalSelectedRegion
+                    ? { selectedRegion: operationalSelectedRegion }
+                    : {})}
                   onOperationalFacilitySelect={setSelectedOperationalFacilityId}
                   {...(currentRegionalSummary
                     ? { regionalSummary: currentRegionalSummary }
@@ -1336,12 +1340,21 @@ export function OverviewPage({
               operationalSituation &&
               annotationBounds && (
                 <OperationalSituationMap
+                  {...(mapBackdrop ? { backdrop: mapBackdrop } : {})}
                   bounds={annotationBounds}
+                  canReturnToParent={Boolean(
+                    parentCode && parentCode !== scopeRootCode,
+                  )}
                   facilities={operationalFacilities}
+                  features={mapFeatures}
                   onFacilitySelect={setSelectedOperationalFacilityId}
+                  onRegionDrill={drillDown}
+                  onRegionSelect={selectRegion}
+                  onReturnToParent={returnToParent}
                   {...(effectiveOperationalFacilityId
                     ? { selectedFacilityId: effectiveOperationalFacilityId }
                     : {})}
+                  {...(selectedRegionCode ? { selectedRegionCode } : {})}
                   situation={operationalSituation}
                 />
               )}

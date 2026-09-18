@@ -116,6 +116,17 @@ describe("HttpOverviewRegionalDataRepository", () => {
               },
             ],
             railwayLines: [],
+            railwayRoutes: [
+              {
+                id: "230200:cross-region",
+                name: "滨洲铁路",
+                geometryGeoJson:
+                  '{"type":"LineString","coordinates":[[123,47],[120,49]]}',
+                usage: "main",
+                operator: "",
+                sourceUrl: "https://www.openstreetmap.org/way/1",
+              },
+            ],
             sources: [
               {
                 code: "RAILWAY",
@@ -142,6 +153,7 @@ describe("HttpOverviewRegionalDataRepository", () => {
     );
     expect(result.storageFacilities[0]?.longitude).toBe(125.8476007);
     expect(result.railwayFacilities[0]?.name).toBe("泰来");
+    expect(result.railwayRoutes[0]?.name).toBe("滨洲铁路");
   });
 
   it("reads regional production and product-specific supply balance from independent endpoints", async () => {

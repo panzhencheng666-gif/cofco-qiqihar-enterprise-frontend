@@ -87,6 +87,7 @@ const catalogue: OperationalFacilityCatalogue = {
       sourceUrl: "https://www.openstreetmap.org/way/1",
     },
   ],
+  railwayRoutes: [],
   sources: [
     {
       code: "STORAGE",

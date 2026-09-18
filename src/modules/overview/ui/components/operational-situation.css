@@ -1,7 +1,7 @@
 .operational-situation-map-layer {
   position: absolute;
   inset: 0;
-  z-index: 25;
+  z-index: 3;
   overflow: hidden;
   border-radius: inherit;
   background: #071d29;
@@ -15,10 +15,10 @@
 .situation-layer-switcher {
   position: absolute;
   z-index: 4;
-  top: 1rem;
-  left: 1rem;
-  width: 12.5rem;
-  padding: 0.8rem;
+  top: 10.5rem;
+  left: 1.4rem;
+  width: 7.2rem;
+  padding: 0;
   border: 1px solid rgb(118 214 218 / 30%);
   border-radius: 0.9rem;
   background: rgb(4 25 37 / 88%);
@@ -27,12 +27,22 @@
   backdrop-filter: blur(14px);
 }
 
-.situation-layer-switcher > strong {
-  display: block;
-  margin-bottom: 0.5rem;
+.situation-layer-switcher > summary {
+  padding: 0.65rem 0.8rem;
   color: #77e4e8;
-  font-size: 0.72rem;
+  cursor: pointer;
+  font-size: 0.74rem;
+  font-weight: 800;
   letter-spacing: 0.12em;
+  list-style-position: inside;
+}
+
+.situation-layer-switcher[open] {
+  width: 12.5rem;
+}
+
+.situation-layer-switcher > div {
+  padding: 0 0.8rem 0.7rem;
 }
 
 .situation-layer-switcher label {
@@ -55,8 +65,8 @@
 .situation-map-tools {
   position: absolute;
   z-index: 4;
-  right: 22.8rem;
-  bottom: 1rem;
+  right: 1.4rem;
+  bottom: 4.6rem;
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -87,8 +97,9 @@
 .situation-map-caption {
   position: absolute;
   z-index: 4;
-  left: 14.5rem;
-  bottom: 1rem;
+  left: 50%;
+  bottom: 4.6rem;
+  transform: translateX(-50%);
   max-width: 31rem;
   margin: 0;
   padding: 0.55rem 0.8rem;
@@ -96,6 +107,7 @@
   background: rgb(4 25 37 / 82%);
   color: #c8e8ea;
   font-size: 0.7rem;
+  pointer-events: none;
 }
 
 .situation-map-marker {
@@ -134,9 +146,6 @@ button.situation-map-marker {
 .situation-map-marker.is-railway {
   background: #6c76c6;
 }
-.situation-map-marker.is-weather {
-  background: #268cb2;
-}
 .situation-map-marker.is-public_event {
   background: #d54f55;
   box-shadow: 0 0 0 0 rgb(229 82 88 / 48%);
@@ -154,7 +163,9 @@ button.situation-map-marker {
 
 .operational-situation-panel {
   display: grid;
+  align-content: start;
   gap: 1rem;
+  min-height: min-content;
 }
 .operational-situation-panel > header {
   display: flex;
@@ -241,13 +252,11 @@ button.situation-map-marker {
   background: rgb(51 120 139 / 68%);
 }
 .situation-source-grid,
-.situation-weather-list,
 .situation-event-list {
   display: grid;
   gap: 0.6rem;
 }
 .situation-source-grid article,
-.situation-weather-list article,
 .situation-event-list li {
   padding: 0.75rem;
   border: 1px solid #dcebec;
@@ -255,13 +264,13 @@ button.situation-map-marker {
   background: #fff;
 }
 .situation-source-grid article > div,
-.situation-weather-list article > div {
+.situation-weather-detail > header {
   display: flex;
   justify-content: space-between;
   gap: 0.5rem;
 }
 .situation-source-grid p,
-.situation-weather-list p,
+.situation-weather-detail p,
 .situation-event-list p {
   margin: 0.35rem 0;
   color: #5f7276;
@@ -269,6 +278,7 @@ button.situation-map-marker {
   line-height: 1.55;
 }
 .situation-source-grid a,
+.situation-weather-detail a,
 .situation-event-list a {
   color: #147687;
   font-size: 0.7rem;
@@ -290,35 +300,82 @@ button.situation-map-marker {
   background: #f5e2e2;
   color: #943e42;
 }
-.situation-weather-list h3,
 .situation-event-list h3 {
   margin: 0;
 }
-.situation-weather-list dl {
+.situation-weather-detail {
+  padding: 0.9rem;
+  border: 1px solid rgb(255 216 108 / 58%);
+  border-radius: 0.8rem;
+  background: linear-gradient(145deg, rgb(8 73 104 / 96%), rgb(7 54 82 / 96%));
+  color: #eefcff;
+}
+.situation-weather-detail > header {
+  align-items: flex-start;
+}
+.situation-weather-detail h3,
+.situation-weather-detail h4 {
+  margin: 0;
+}
+.situation-weather-detail > header strong {
+  max-width: 8rem;
+  padding: 0.3rem 0.55rem;
+  border-radius: 999px;
+  background: rgb(255 200 72 / 18%);
+  color: #ffe189;
+  font-size: 0.7rem;
+  text-align: right;
+}
+.situation-weather-detail dl {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 0.4rem;
   margin: 0.5rem 0;
 }
-.situation-weather-list dl div {
+.situation-weather-detail dl div {
   padding: 0.4rem;
   border-radius: 0.55rem;
   background: #eef7f7;
 }
-.situation-weather-list dt {
+.situation-weather-detail dt {
   color: #718285;
   font-size: 0.62rem;
 }
-.situation-weather-list dd {
+.situation-weather-detail dd {
   margin: 0.15rem 0 0;
   color: #173d44;
   font-size: 0.72rem;
   font-weight: 700;
 }
-.situation-weather-list small,
+.situation-weather-detail footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+  padding-top: 0.65rem;
+  border-top: 1px solid rgb(174 228 238 / 16%);
+}
+.situation-weather-detail footer span,
 .situation-event-list small {
   color: #849396;
   font-size: 0.64rem;
+}
+
+@media (max-width: 900px) {
+  .situation-layer-switcher {
+    top: 8.5rem;
+  }
+  .situation-map-tools {
+    right: 0.75rem;
+    bottom: 5.4rem;
+  }
+  .situation-map-caption {
+    right: 0.75rem;
+    bottom: 3.1rem;
+    left: 0.75rem;
+    max-width: none;
+    transform: none;
+  }
 }
 .situation-event-list ol {
   display: grid;

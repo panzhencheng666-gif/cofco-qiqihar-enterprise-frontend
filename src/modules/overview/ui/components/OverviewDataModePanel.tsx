@@ -4,6 +4,7 @@ import type {
   RegionalCropSummary,
   SupplyBalanceSummary,
 } from "../../domain/overviewRegionalData";
+import type { OverviewRegion } from "../../domain/overview";
 import type { OperationalFacilityCatalogue } from "../../domain/operationalFacilities";
 import type { OperationalSituationCatalogue } from "../../domain/operationalSituation";
 import "./overview-data-mode.css";
@@ -87,6 +88,7 @@ export function OverviewDataModePanel({
   operationalFacilities,
   operationalSituation,
   selectedOperationalFacilityId,
+  selectedRegion,
   onOperationalFacilitySelect,
 }: {
   issue?: string;
@@ -99,6 +101,7 @@ export function OverviewDataModePanel({
   operationalFacilities?: OperationalFacilityCatalogue;
   operationalSituation?: OperationalSituationCatalogue;
   selectedOperationalFacilityId?: string;
+  selectedRegion?: OverviewRegion;
   onOperationalFacilitySelect?: (id: string) => void;
 }) {
   return (
@@ -242,6 +245,7 @@ export function OverviewDataModePanel({
           {...(selectedOperationalFacilityId
             ? { selectedFacilityId: selectedOperationalFacilityId }
             : {})}
+          {...(selectedRegion ? { selectedRegion } : {})}
           situation={operationalSituation}
         />
       )}
