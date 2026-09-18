@@ -42,6 +42,20 @@ describe("Overview command center navigation layout", () => {
     expect(metricValueRule).toMatch(/white-space:\s*nowrap/);
   });
 
+  it("keeps public situation controls below the mode tabs when the side panel is open", () => {
+    const css = readFileSync(
+      resolve("src/modules/overview/ui/components/operational-situation.css"),
+      "utf8",
+    );
+
+    expect(css).toMatch(
+      /\.overview-command-center\.has-side-data-panel \.situation-intelligence-controls\s*\{[^}]*top:\s*calc\(var\(--command-kpi-top\) \+ var\(--command-map-tools-gap\) \+ 48px\)/s,
+    );
+    expect(css).toMatch(
+      /\.overview-command-center\.has-side-data-panel \.situation-layer-switcher\s*\{[^}]*top:\s*calc\(var\(--command-kpi-top\) \+ var\(--command-map-tools-gap\) \+ 102px\)/s,
+    );
+  });
+
   it("centers the region selector label inside its control", () => {
     const css = readFileSync(resolve("src/app/styles/global.css"), "utf8");
 

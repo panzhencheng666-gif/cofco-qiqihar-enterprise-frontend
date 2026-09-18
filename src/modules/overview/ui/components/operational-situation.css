@@ -75,6 +75,14 @@
   text-align: center;
 }
 
+.overview-command-center.has-side-data-panel .situation-intelligence-controls {
+  top: calc(var(--command-kpi-top) + var(--command-map-tools-gap) + 48px);
+}
+
+.overview-command-center.has-side-data-panel .situation-layer-switcher {
+  top: calc(var(--command-kpi-top) + var(--command-map-tools-gap) + 102px);
+}
+
 .situation-layer-switcher > summary {
   padding: 0.65rem 0.8rem;
   color: #77e4e8;
