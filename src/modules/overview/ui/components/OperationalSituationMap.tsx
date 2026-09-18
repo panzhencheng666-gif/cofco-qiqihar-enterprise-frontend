@@ -80,6 +80,7 @@ export function OperationalSituationMap({
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<Marker[]>([]);
   const fittedZoomRef = useRef(0);
+  const interactiveZoomRef = useRef(false);
   const navigationLockRef = useRef(false);
   const viewAngleRef = useRef(60);
   const callbacksRef = useRef({
@@ -156,6 +157,7 @@ export function OperationalSituationMap({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    interactiveZoomRef.current = false;
     navigationLockRef.current = false;
     const map = new MapLibreMap({
       attributionControl: { compact: true },
@@ -207,8 +209,13 @@ export function OperationalSituationMap({
     map.on("mouseleave", "situation-admin-fill", () => {
       map.getCanvas().style.cursor = "";
     });
+    map.on("zoomstart", (event) => {
+      if (event.originalEvent) interactiveZoomRef.current = true;
+    });
     map.on("zoomend", () => {
-      if (navigationLockRef.current) return;
+      const interactiveZoom = interactiveZoomRef.current;
+      interactiveZoomRef.current = false;
+      if (!interactiveZoom || navigationLockRef.current) return;
       const delta = map.getZoom() - fittedZoomRef.current;
       const selected = callbacksRef.current.selectedRegionCode
         ? regionByCodeRef.current.get(callbacksRef.current.selectedRegionCode)
@@ -336,6 +343,14 @@ export function OperationalSituationMap({
     navigationLockRef.current = false;
   }
 
+  function zoom(direction: "in" | "out") {
+    const map = mapRef.current;
+    if (!map) return;
+    interactiveZoomRef.current = true;
+    if (direction === "in") map.zoomIn();
+    else map.zoomOut();
+  }
+
   const currentLevel = features[0]?.region.level ?? backdrop?.region.level;
   return (
     <section className="operational-situation-map-layer" aria-label="公开运营态势地图">
@@ -369,14 +384,14 @@ export function OperationalSituationMap({
         <button
           type="button"
           aria-label="放大地图"
-          onClick={() => mapRef.current?.zoomIn()}
+          onClick={() => zoom("in")}
         >
           +
         </button>
         <button
           type="button"
           aria-label="缩小地图"
-          onClick={() => mapRef.current?.zoomOut()}
+          onClick={() => zoom("out")}
         >
           −
         </button>
