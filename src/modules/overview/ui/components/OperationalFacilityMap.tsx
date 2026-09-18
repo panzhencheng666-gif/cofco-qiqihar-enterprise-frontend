@@ -9,6 +9,7 @@ import type {
   StorageFacility,
 } from "../../domain/operationalFacilities";
 import { OVERVIEW_VECTOR_STYLE } from "./overviewVectorStyle";
+import { calculateOperationalMapPadding } from "./operationalMapViewport";
 
 interface FacilityMapBounds {
   maxLatitude: number;
@@ -39,6 +40,7 @@ export function OperationalFacilityMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<Marker[]>([]);
+  const viewAngleRef = useRef(60);
   const [viewAngle, setViewAngle] = useState(60);
 
   const facilities: readonly FacilityMarker[] = useMemo(
@@ -88,18 +90,36 @@ export function OperationalFacilityMap({
     });
     map.keyboard.disableRotation();
     map.touchZoomRotate.disableRotation();
-    map.on("style.load", () => {
-      map.fitBounds(toMapBounds(bounds), {
-        bearing: 0,
-        duration: 0,
-        padding: { bottom: 54, left: 54, right: 370, top: 160 },
-        pitch: 30,
+    const fitVisibleBounds = (duration = 0) => {
+      fitFacilityMap(map, bounds, container, viewAngleRef.current, duration);
+    };
+    map.on("style.load", fitVisibleBounds);
+    const commandCenter = container.closest(".overview-command-center");
+    const observed = [
+      container,
+      commandCenter?.querySelector<HTMLElement>(".overview-data-mode"),
+      commandCenter?.querySelector<HTMLElement>(".overview-command-tools"),
+    ].filter((element): element is HTMLElement => element instanceof HTMLElement);
+    let resizeFrame = 0;
+    const scheduleFit = () => {
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(() => {
+        map.resize();
+        if (map.isStyleLoaded()) fitVisibleBounds();
       });
-      map.setMinZoom(map.getZoom());
-      map.setMaxBounds(toMapBounds(bounds));
-    });
+    };
+    const resizeObserver =
+      typeof ResizeObserver === "undefined"
+        ? undefined
+        : new ResizeObserver(scheduleFit);
+    observed.forEach((element) => resizeObserver?.observe(element));
+    window.addEventListener("resize", scheduleFit);
     mapRef.current = map;
     return () => {
+      cancelAnimationFrame(resizeFrame);
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", scheduleFit);
+      map.off("style.load", fitVisibleBounds);
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
       mapRef.current = null;
@@ -134,20 +154,19 @@ export function OperationalFacilityMap({
   }, [facilities, onSelect, selectedId]);
 
   useEffect(() => {
-    mapRef.current?.easeTo({ duration: 180, pitch: 90 - viewAngle });
-  }, [viewAngle]);
+    viewAngleRef.current = viewAngle;
+    const map = mapRef.current;
+    const container = containerRef.current;
+    if (!map || !container || !map.isStyleLoaded()) return;
+    fitFacilityMap(map, bounds, container, viewAngle, 180);
+  }, [bounds, viewAngle]);
 
   function reset() {
     const map = mapRef.current;
     if (!map) return;
-    map.setMaxBounds(null);
-    map.fitBounds(toMapBounds(bounds), {
-      bearing: 0,
-      duration: 180,
-      padding: { bottom: 54, left: 54, right: 370, top: 160 },
-      pitch: 90 - viewAngle,
-    });
-    map.setMaxBounds(toMapBounds(bounds));
+    const container = containerRef.current;
+    if (!container) return;
+    fitFacilityMap(map, bounds, container, viewAngle, 180);
   }
 
   return (
@@ -193,6 +212,25 @@ export function OperationalFacilityMap({
       </p>
     </section>
   );
+}
+
+function fitFacilityMap(
+  map: MapLibreMap,
+  bounds: FacilityMapBounds,
+  container: HTMLElement,
+  viewAngle: number,
+  duration: number,
+) {
+  map.setMinZoom(-2);
+  map.setMaxBounds(null);
+  map.fitBounds(toMapBounds(bounds), {
+    bearing: 0,
+    duration,
+    padding: calculateOperationalMapPadding(container),
+    pitch: 90 - viewAngle,
+  });
+  map.setMinZoom(map.getZoom());
+  map.setMaxBounds(toMapBounds(bounds));
 }
 
 function toMapBounds(bounds: FacilityMapBounds): [[number, number], [number, number]] {
