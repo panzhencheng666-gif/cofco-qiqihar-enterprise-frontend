@@ -25,7 +25,72 @@ import {
 } from "./OverviewPage";
 import { HttpContractError, HttpError } from "../../../../shared/api/HttpClient";
 
+vi.mock("../components/OperationalFacilityMap", () => ({
+  OperationalFacilityMap: () => <div aria-label="运营设施地理地图" />,
+}));
+
 describe("OverviewPage", () => {
+  it("reuses one facility catalogue while switching storage and railway tabs", async () => {
+    const operationalFacilities = vi
+      .fn<NonNullable<OverviewRegionalDataRepository["operationalFacilities"]>>()
+      .mockResolvedValue({
+        regionCode: null,
+        productCode: "CORN",
+        asOf: "2026-09-18",
+        storageCategories: [
+          { code: "OWNED", label: "自有库点", count: 0 },
+          { code: "LEASED", label: "租赁库点", count: 0 },
+          { code: "HISTORICAL_LEASED", label: "历史租赁库点", count: 0 },
+        ],
+        storageFacilities: [],
+        railwayFacilities: [],
+        railwayLines: [],
+        sources: [
+          {
+            code: "STORAGE",
+            label: "关联库点",
+            status: "READY",
+            sourceAsOf: "2026-09-18",
+            sourceUrl: null,
+            notice: "仅展示核验数据。",
+          },
+          {
+            code: "RAILWAY",
+            label: "铁路站点",
+            status: "READY",
+            sourceAsOf: "2026-09-15",
+            sourceUrl: "https://www.openstreetmap.org/copyright",
+            notice: "公开地理参考。",
+          },
+        ],
+      });
+    render(
+      <OverviewPage
+        regionalDataRepository={{
+          operationalFacilities,
+          regionalSummary: vi.fn(),
+          supplyBalance: vi.fn(),
+        }}
+        repository={{
+          mapScope: () => Promise.resolve(sampleMapScope),
+          options: () => Promise.resolve(options),
+          regions: () => Promise.resolve([sampleRegion]),
+          locations: () => Promise.resolve([]),
+          indicators: () => Promise.resolve([]),
+          dashboard: () => Promise.resolve(emptyDashboard),
+        }}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "关联库点" }));
+    expect(await screen.findByRole("heading", { name: "关联库点" })).toBeVisible();
+    await waitFor(() => expect(operationalFacilities).toHaveBeenCalledTimes(1));
+
+    await userEvent.click(screen.getByRole("button", { name: "铁路站点" }));
+    expect(await screen.findByRole("heading", { name: "铁路站点" })).toBeVisible();
+    expect(operationalFacilities).toHaveBeenCalledTimes(1);
+  });
+
   it("loads the regional profile when the legacy summary is unavailable below county", async () => {
     const regionalSummary = vi
       .fn<OverviewRegionalDataRepository["regionalSummary"]>()

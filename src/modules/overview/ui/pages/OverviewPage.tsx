@@ -760,6 +760,20 @@ export function OverviewPage({
     dataMode === "STORAGE_FACILITIES" || dataMode === "RAILWAY_FACILITIES";
   const publicSituationMode = dataMode === "PUBLIC_SITUATION";
   const operationalMapMode = operationalFacilityMode || publicSituationMode;
+  const operationalFacilityIds =
+    dataMode === "STORAGE_FACILITIES"
+      ? (operationalFacilities?.storageFacilities.map((facility) => facility.code) ??
+        [])
+      : dataMode === "RAILWAY_FACILITIES"
+        ? (operationalFacilities?.railwayFacilities.map(
+            (facility) => facility.sourceId,
+          ) ?? [])
+        : [];
+  const effectiveOperationalFacilityId =
+    selectedOperationalFacilityId &&
+    operationalFacilityIds.includes(selectedOperationalFacilityId)
+      ? selectedOperationalFacilityId
+      : operationalFacilityIds[0];
 
   useEffect(() => {
     if (!operationalMapMode || !regionalDataRepository?.operationalFacilities) return;
@@ -782,14 +796,6 @@ export function OverviewPage({
       .then((next) => {
         if (controller.signal.aborted || !next) return;
         setOperationalFacilities(next);
-        setSelectedOperationalFacilityId((current) => {
-          if (dataMode === "PUBLIC_SITUATION") return undefined;
-          const ids =
-            dataMode === "STORAGE_FACILITIES"
-              ? next.storageFacilities.map((facility) => facility.code)
-              : next.railwayFacilities.map((facility) => facility.sourceId);
-          return current && ids.includes(current) ? current : ids[0];
-        });
         setOperationalFacilitiesLoading(false);
       })
       .catch(() => {
@@ -801,7 +807,6 @@ export function OverviewPage({
     return () => controller.abort();
   }, [
     businessSequence,
-    dataMode,
     operationalMapMode,
     productCode,
     regionalDataRegionCode,
@@ -1205,8 +1210,8 @@ export function OverviewPage({
                       : {})}
                   {...(operationalFacilities ? { operationalFacilities } : {})}
                   {...(operationalSituation ? { operationalSituation } : {})}
-                  {...(selectedOperationalFacilityId
-                    ? { selectedOperationalFacilityId }
+                  {...(effectiveOperationalFacilityId
+                    ? { selectedOperationalFacilityId: effectiveOperationalFacilityId }
                     : {})}
                   onOperationalFacilitySelect={setSelectedOperationalFacilityId}
                   {...(currentRegionalSummary
@@ -1344,8 +1349,8 @@ export function OverviewPage({
                 onSelect={setSelectedOperationalFacilityId}
                 railwayFacilities={operationalFacilities.railwayFacilities}
                 storageFacilities={operationalFacilities.storageFacilities}
-                {...(selectedOperationalFacilityId
-                  ? { selectedId: selectedOperationalFacilityId }
+                {...(effectiveOperationalFacilityId
+                  ? { selectedId: effectiveOperationalFacilityId }
                   : {})}
               />
             )}
