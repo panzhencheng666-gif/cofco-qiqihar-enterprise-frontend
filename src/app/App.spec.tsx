@@ -198,6 +198,28 @@ describe("App production composition", () => {
     expect(safeHash()).toBe("#/报表中心");
   });
 
+  it("renders only report content when the current business shell embeds the reporting route", async () => {
+    window.history.replaceState(null, "", "/overview-monitoring/?embed=1#/报表中心");
+    const dependencies = dependenciesFixture(() => Promise.resolve(page([], 0, 20, 0)));
+    dependencies.reportingRepository = {
+      options: () => new Promise(() => undefined),
+      preview: () => Promise.reject(new Error("not called")),
+      export: () => Promise.reject(new Error("not called")),
+      download: () => Promise.reject(new Error("not called")),
+      publish: () => Promise.reject(new Error("not called")),
+    };
+
+    const view = render(<App dependencies={dependencies} />);
+
+    expect(await screen.findByText("正在加载报表中心参数")).toBeVisible();
+    expect(
+      view.container.querySelector(".enterprise-app-shell"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("navigation", { name: "业务应用" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("revalidates filter and page-size state arriving through browser history", async () => {
     const searches: Array<Record<string, unknown>> = [];
     render(

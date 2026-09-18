@@ -296,6 +296,7 @@ export function App({
   const normalizedHash = safeDecodedHash(window.location.hash);
   const overviewRoute = normalizedHash === "#/overview";
   const reportingRoute = hashState.utilityRoute === "reporting";
+  const embedded = new URLSearchParams(window.location.search).get("embed") === "1";
   const { domain: navigationDomain, pageKind: navigationPageKind } =
     supportedPageContext(hashState.location?.key);
   const utilityRoute = hashState.utilityRoute;
@@ -402,6 +403,14 @@ export function App({
       invalid: false,
       workLocation: { scope: workLocation.scope, query },
     });
+  }
+
+  if (reportingRoute && embedded) {
+    return (
+      <ReportingCenterPage
+        repository={dependencies.reportingRepository ?? reportingRepository}
+      />
+    );
   }
 
   if (overviewRoute) {
