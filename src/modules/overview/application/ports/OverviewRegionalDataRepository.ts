@@ -4,6 +4,7 @@ import type {
   SupplyBalanceSummary,
 } from "../../domain/overviewRegionalData";
 import type { OperationalFacilityCatalogue } from "../../domain/operationalFacilities";
+import type { OperationalSituationCatalogue } from "../../domain/operationalSituation";
 
 export interface OverviewRegionalDataQuery {
   regionCode: string;
@@ -25,4 +26,5 @@ export interface OverviewRegionalDataRepository {
     },
     signal?: AbortSignal,
   ): Promise<OperationalFacilityCatalogue>;
+  operationalSituation?(signal?: AbortSignal): Promise<OperationalSituationCatalogue>;
 }

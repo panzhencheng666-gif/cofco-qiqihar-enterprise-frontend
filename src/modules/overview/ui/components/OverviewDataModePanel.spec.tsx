@@ -15,6 +15,63 @@ describe("OverviewDataModePanel", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: "地区数据" }));
     expect(onModeChange).toHaveBeenCalledWith("REGIONAL_DATA");
+    await userEvent.click(screen.getByRole("button", { name: "公开态势" }));
+    expect(onModeChange).toHaveBeenCalledWith("PUBLIC_SITUATION");
+  });
+
+  it("keeps public events, weather and operational nodes source-labelled", () => {
+    render(
+      <OverviewDataModePanel
+        mode="PUBLIC_SITUATION"
+        operationalFacilities={{
+          regionCode: null,
+          productCode: "CORN",
+          asOf: "2026-09-18",
+          storageCategories: [],
+          storageFacilities: [],
+          railwayFacilities: [],
+          railwayLines: [],
+          sources: [],
+        }}
+        operationalSituation={{
+          generatedAt: "2026-09-18T06:00:00Z",
+          weather: [
+            {
+              rootRegionCode: "230200",
+              regionName: "齐齐哈尔市",
+              longitude: 123.92,
+              latitude: 47.35,
+              observedAt: "2026-09-18T05:00:00Z",
+              meanTemperatureC: 18.2,
+              precipitationMm: 0,
+              soilMoisturePercent: 25.4,
+              risk: "未触发提示阈值",
+              assessment: "公开天气模型快照",
+              sourceName: "Open-Meteo",
+              sourceUrl: "https://open-meteo.com/",
+              fetchedAt: "2026-09-18T05:01:00Z",
+            },
+          ],
+          publicEvents: [],
+          sources: [
+            {
+              code: "NASA_EONET",
+              label: "NASA EONET",
+              status: "READY",
+              lastAttemptAt: "2026-09-18T05:02:00Z",
+              lastSuccessAt: "2026-09-18T05:02:00Z",
+              sourceUrl: "https://eonet.gsfc.nasa.gov/api/v3/events",
+              notice: "仅展示公开事件。",
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "公开运营态势" })).toBeVisible();
+    expect(screen.getByText("NASA EONET")).toBeVisible();
+    expect(screen.getByText("齐齐哈尔市")).toBeVisible();
+    expect(screen.getByText(/不会补造事件/)).toBeVisible();
   });
 
   it("renders regional metrics without embedding the mode navigation", () => {

@@ -4,6 +4,70 @@ import type { ZodType } from "zod";
 import { HttpOverviewRegionalDataRepository } from "./HttpOverviewRegionalDataRepository";
 
 describe("HttpOverviewRegionalDataRepository", () => {
+  it("reads source-aware public events and weather as a cached operational picture", async () => {
+    const get = vi.fn().mockImplementation((_path: string, schema: ZodType) =>
+      Promise.resolve(
+        schema.parse({
+          data: {
+            generatedAt: "2026-09-18T06:00:00Z",
+            weather: [
+              {
+                rootRegionCode: "230200",
+                regionName: "齐齐哈尔市",
+                longitude: "123.92",
+                latitude: "47.35",
+                observedAt: "2026-09-18T05:00:00Z",
+                meanTemperatureC: "18.2",
+                precipitationMm: "0",
+                soilMoisturePercent: "25.4",
+                risk: "未触发提示阈值",
+                assessment: "公开天气模型快照",
+                sourceName: "Open-Meteo",
+                sourceUrl: "https://open-meteo.com/",
+                fetchedAt: "2026-09-18T05:01:00Z",
+              },
+            ],
+            publicEvents: [
+              {
+                eventId: "EONET_1",
+                title: "公开事件",
+                description: null,
+                categoryCode: "severeStorms",
+                categoryLabel: "Severe Storms",
+                longitude: "125.1",
+                latitude: "47.2",
+                observedAt: "2026-09-18T00:00:00Z",
+                magnitudeValue: "55",
+                magnitudeUnit: "kts",
+                eventUrl: "https://eonet.gsfc.nasa.gov/api/v3/events/EONET_1",
+                evidenceUrl: null,
+                fetchedAt: "2026-09-18T05:02:00Z",
+              },
+            ],
+            sources: [
+              {
+                code: "NASA_EONET",
+                label: "NASA EONET",
+                status: "READY",
+                lastAttemptAt: "2026-09-18T05:02:00Z",
+                lastSuccessAt: "2026-09-18T05:02:00Z",
+                sourceUrl: "https://eonet.gsfc.nasa.gov/api/v3/events",
+                notice: "仅展示公开事件。",
+              },
+            ],
+          },
+        }),
+      ),
+    );
+    const repository = new HttpOverviewRegionalDataRepository({ get });
+
+    const result = await repository.operationalSituation();
+
+    expect(get.mock.calls[0]?.[0]).toBe("/api/v1/overview/operational-situation");
+    expect(result.weather[0]?.meanTemperatureC).toBe(18.2);
+    expect(result.publicEvents[0]?.magnitudeValue).toBe(55);
+  });
+
   it("reads governed storage and railway facilities for the overall map", async () => {
     const get = vi.fn().mockImplementation((_path: string, schema: ZodType) =>
       Promise.resolve(

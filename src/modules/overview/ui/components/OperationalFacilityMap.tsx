@@ -8,7 +8,7 @@ import type {
   RailwayFacility,
   StorageFacility,
 } from "../../domain/operationalFacilities";
-import { OVERVIEW_VECTOR_STYLE } from "./MapAnnotationPrecisionMap";
+import { OVERVIEW_VECTOR_STYLE } from "./overviewVectorStyle";
 
 interface FacilityMapBounds {
   maxLatitude: number;

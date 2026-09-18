@@ -377,6 +377,57 @@ const operationalFacilityCatalogueSchema = z.object({
   }),
 });
 
+const operationalSituationSchema = z.object({
+  data: z.object({
+    generatedAt: z.string(),
+    weather: z.array(
+      z.object({
+        rootRegionCode: z.string(),
+        regionName: z.string(),
+        longitude: decimalNumberSchema,
+        latitude: decimalNumberSchema,
+        observedAt: z.string(),
+        meanTemperatureC: decimalNumberSchema.nullable(),
+        precipitationMm: decimalNumberSchema.nullable(),
+        soilMoisturePercent: decimalNumberSchema.nullable(),
+        risk: z.string(),
+        assessment: z.string(),
+        sourceName: z.string(),
+        sourceUrl: z.string(),
+        fetchedAt: z.string(),
+      }),
+    ),
+    publicEvents: z.array(
+      z.object({
+        eventId: z.string(),
+        title: z.string(),
+        description: z.string().nullable(),
+        categoryCode: z.string(),
+        categoryLabel: z.string(),
+        longitude: decimalNumberSchema,
+        latitude: decimalNumberSchema,
+        observedAt: z.string(),
+        magnitudeValue: decimalNumberSchema.nullable(),
+        magnitudeUnit: z.string().nullable(),
+        eventUrl: z.string(),
+        evidenceUrl: z.string().nullable(),
+        fetchedAt: z.string(),
+      }),
+    ),
+    sources: z.array(
+      z.object({
+        code: z.string(),
+        label: z.string(),
+        status: z.enum(["READY", "STALE", "UNAVAILABLE"]),
+        lastAttemptAt: z.string().nullable(),
+        lastSuccessAt: z.string().nullable(),
+        sourceUrl: z.string(),
+        notice: z.string(),
+      }),
+    ),
+  }),
+});
+
 export class HttpOverviewRegionalDataRepository implements OverviewRegionalDataRepository {
   constructor(private readonly http: Pick<HttpClient, "get">) {}
 
@@ -426,6 +477,16 @@ export class HttpOverviewRegionalDataRepository implements OverviewRegionalDataR
       await this.http.get(
         `/api/v1/overview/operational-facilities${queryString(query)}`,
         operationalFacilityCatalogueSchema,
+        signal ? { signal } : undefined,
+      )
+    ).data;
+  }
+
+  async operationalSituation(signal?: AbortSignal) {
+    return (
+      await this.http.get(
+        "/api/v1/overview/operational-situation",
+        operationalSituationSchema,
         signal ? { signal } : undefined,
       )
     ).data;

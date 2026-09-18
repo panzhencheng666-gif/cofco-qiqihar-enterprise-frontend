@@ -5,7 +5,6 @@ import {
   Map as MapLibreMap,
   type GeoJSONSource,
   type MapLayerMouseEvent,
-  type StyleSpecification,
 } from "maplibre-gl";
 
 import type { MapAnnotation } from "../../application/ports/MapAnnotationRepository";
@@ -18,6 +17,7 @@ import {
   emptyCollection,
   samplePointGeoJson,
 } from "./mapAnnotationPrecisionData";
+import { OVERVIEW_VECTOR_STYLE } from "./overviewVectorStyle";
 
 interface PrecisionMapBounds {
   maxLatitude: number;
@@ -29,181 +29,6 @@ interface PrecisionMapBounds {
 const ADMIN_SOURCE = "annotation-admin-regions";
 const SAMPLE_SOURCE = "annotation-sample-points";
 const ANNOTATION_SOURCE = "annotation-user-shape";
-export const OVERVIEW_VECTOR_STYLE: StyleSpecification = {
-  version: 8,
-  glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
-  sources: {
-    "natural-earth": {
-      type: "raster",
-      tiles: ["https://tiles.openfreemap.org/natural_earth/ne2sr/{z}/{x}/{y}.png"],
-      tileSize: 256,
-      maxzoom: 6,
-      attribution: "OpenFreeMap / OpenStreetMap contributors",
-    },
-    openmaptiles: {
-      type: "vector",
-      url: "https://tiles.openfreemap.org/planet",
-      attribution:
-        '<a href="https://openfreemap.org/">OpenFreeMap</a> · <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    },
-  },
-  layers: [
-    {
-      id: "background",
-      type: "background",
-      paint: { "background-color": "#47645b" },
-    },
-    {
-      id: "terrain-context",
-      type: "raster",
-      source: "natural-earth",
-      paint: { "raster-opacity": 0.54, "raster-saturation": -0.2 },
-    },
-    {
-      id: "landcover",
-      type: "fill",
-      source: "openmaptiles",
-      "source-layer": "landcover",
-      paint: {
-        "fill-color": [
-          "match",
-          ["get", "class"],
-          "wood",
-          "#285a47",
-          "grass",
-          "#3f6850",
-          "farmland",
-          "#6b7046",
-          "#385c49",
-        ],
-        "fill-opacity": 0.48,
-      },
-    },
-    {
-      id: "landuse",
-      type: "fill",
-      source: "openmaptiles",
-      "source-layer": "landuse",
-      minzoom: 7,
-      paint: {
-        "fill-color": [
-          "match",
-          ["get", "class"],
-          "agriculture",
-          "#7b7745",
-          "residential",
-          "#315269",
-          "industrial",
-          "#5a5965",
-          "#38594b",
-        ],
-        "fill-opacity": 0.42,
-      },
-    },
-    {
-      id: "water",
-      type: "fill",
-      source: "openmaptiles",
-      "source-layer": "water",
-      paint: { "fill-color": "#176784", "fill-opacity": 0.94 },
-    },
-    {
-      id: "waterway",
-      type: "line",
-      source: "openmaptiles",
-      "source-layer": "waterway",
-      paint: {
-        "line-color": "#39a6c4",
-        "line-opacity": 0.9,
-        "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.6, 13, 2.4],
-      },
-    },
-    {
-      id: "roads-casing",
-      type: "line",
-      source: "openmaptiles",
-      "source-layer": "transportation",
-      minzoom: 6,
-      paint: {
-        "line-color": "#061f2d",
-        "line-opacity": 0.82,
-        "line-width": ["interpolate", ["linear"], ["zoom"], 6, 1.2, 14, 8],
-      },
-    },
-    {
-      id: "roads",
-      type: "line",
-      source: "openmaptiles",
-      "source-layer": "transportation",
-      minzoom: 6,
-      paint: {
-        "line-color": [
-          "match",
-          ["get", "class"],
-          "motorway",
-          "#ffbd59",
-          "trunk",
-          "#e8aa52",
-          "primary",
-          "#e7d48b",
-          "secondary",
-          "#b7cfba",
-          "#72989c",
-        ],
-        "line-opacity": 0.94,
-        "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.5, 14, 5],
-      },
-    },
-    {
-      id: "buildings",
-      type: "fill",
-      source: "openmaptiles",
-      "source-layer": "building",
-      minzoom: 12,
-      paint: {
-        "fill-color": "#b5c9c4",
-        "fill-opacity": 0.55,
-        "fill-outline-color": "#7ea1a3",
-      },
-    },
-    {
-      id: "place-labels",
-      type: "symbol",
-      source: "openmaptiles",
-      "source-layer": "place",
-      minzoom: 4,
-      layout: {
-        "text-field": ["coalesce", ["get", "name:zh"], ["get", "name"]],
-        "text-font": ["Noto Sans Regular"],
-        "text-size": ["interpolate", ["linear"], ["zoom"], 4, 11, 12, 16],
-      },
-      paint: {
-        "text-color": "#eefcff",
-        "text-halo-color": "#06283a",
-        "text-halo-width": 1.5,
-      },
-    },
-    {
-      id: "road-labels",
-      type: "symbol",
-      source: "openmaptiles",
-      "source-layer": "transportation_name",
-      minzoom: 9,
-      layout: {
-        "symbol-placement": "line",
-        "text-field": ["coalesce", ["get", "name:zh"], ["get", "name"]],
-        "text-font": ["Noto Sans Regular"],
-        "text-size": 11,
-      },
-      paint: {
-        "text-color": "#f8f4d8",
-        "text-halo-color": "#17333d",
-        "text-halo-width": 1.2,
-      },
-    },
-  ],
-};
-
 export interface MapAnnotationPrecisionMapHandle {
   reset: () => void;
   unproject: (point: { x: number; y: number }) => {

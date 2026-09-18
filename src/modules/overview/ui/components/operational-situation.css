@@ -1,0 +1,294 @@
+.operational-situation-map-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  overflow: hidden;
+  border-radius: inherit;
+  background: #071d29;
+}
+
+.operational-situation-map {
+  position: absolute;
+  inset: 0;
+}
+
+.situation-layer-switcher {
+  position: absolute;
+  z-index: 4;
+  top: 1rem;
+  left: 1rem;
+  width: 12.5rem;
+  padding: 0.8rem;
+  border: 1px solid rgb(118 214 218 / 30%);
+  border-radius: 0.9rem;
+  background: rgb(4 25 37 / 88%);
+  box-shadow: 0 1rem 2.4rem rgb(0 0 0 / 28%);
+  color: #e6fbff;
+  backdrop-filter: blur(14px);
+}
+
+.situation-layer-switcher > strong {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #77e4e8;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+}
+
+.situation-layer-switcher label {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 1.9rem;
+  font-size: 0.78rem;
+}
+
+.situation-layer-switcher b {
+  min-width: 1.5rem;
+  border-radius: 1rem;
+  background: rgb(92 212 216 / 14%);
+  color: #90f3f5;
+  text-align: center;
+}
+
+.situation-map-tools {
+  position: absolute;
+  z-index: 4;
+  right: 22.8rem;
+  bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem;
+  border: 1px solid rgb(118 214 218 / 28%);
+  border-radius: 0.8rem;
+  background: rgb(4 25 37 / 88%);
+  color: #e6fbff;
+  backdrop-filter: blur(12px);
+}
+
+.situation-map-tools button {
+  min-width: 2rem;
+  min-height: 2rem;
+  border: 1px solid rgb(140 231 233 / 24%);
+  border-radius: 0.55rem;
+  background: rgb(28 91 102 / 48%);
+  color: inherit;
+}
+
+.situation-map-tools label {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 9rem;
+  font-size: 0.67rem;
+}
+
+.situation-map-caption {
+  position: absolute;
+  z-index: 4;
+  left: 14.5rem;
+  bottom: 1rem;
+  max-width: 31rem;
+  margin: 0;
+  padding: 0.55rem 0.8rem;
+  border-radius: 0.7rem;
+  background: rgb(4 25 37 / 82%);
+  color: #c8e8ea;
+  font-size: 0.7rem;
+}
+
+.situation-map-marker {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 2px solid #efffff;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 5px rgb(67 212 215 / 18%),
+    0 0.45rem 1.2rem rgb(0 0 0 / 35%);
+  background: #1e7f8b;
+  color: #fff;
+  font-size: 0.67rem;
+  font-weight: 800;
+}
+
+.situation-map-marker.is-storage {
+  background: #d19739;
+}
+.situation-map-marker.is-railway {
+  background: #6c76c6;
+}
+.situation-map-marker.is-weather {
+  background: #268cb2;
+}
+.situation-map-marker.is-public_event {
+  background: #d54f55;
+  box-shadow: 0 0 0 0 rgb(229 82 88 / 48%);
+  animation: situation-pulse 2s infinite;
+}
+
+@keyframes situation-pulse {
+  70% {
+    box-shadow: 0 0 0 12px rgb(229 82 88 / 0%);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(229 82 88 / 0%);
+  }
+}
+
+.operational-situation-panel {
+  display: grid;
+  gap: 1rem;
+}
+.operational-situation-panel > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid rgb(65 185 190 / 20%);
+  border-radius: 1rem;
+  background: linear-gradient(135deg, #0b3845, #102a3c 62%, #13213a);
+  color: #e8fbff;
+}
+.operational-situation-panel header span {
+  color: #73e0e4;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+}
+.operational-situation-panel header h2 {
+  margin: 0.25rem 0;
+}
+.operational-situation-panel header p {
+  margin: 0;
+  color: #b9d7dc;
+  font-size: 0.78rem;
+}
+.operational-situation-panel header time {
+  color: #9ec8ce;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+.operational-situation-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.6rem;
+}
+.operational-situation-kpis article {
+  padding: 0.8rem;
+  border: 1px solid rgb(56 168 177 / 18%);
+  border-radius: 0.8rem;
+  background: #f6fbfb;
+}
+.operational-situation-kpis b {
+  display: block;
+  color: #176c78;
+  font-size: 1.55rem;
+}
+.operational-situation-kpis span {
+  color: #5d7275;
+  font-size: 0.72rem;
+}
+.situation-source-grid,
+.situation-weather-list,
+.situation-event-list {
+  display: grid;
+  gap: 0.6rem;
+}
+.situation-source-grid article,
+.situation-weather-list article,
+.situation-event-list li {
+  padding: 0.75rem;
+  border: 1px solid #dcebec;
+  border-radius: 0.75rem;
+  background: #fff;
+}
+.situation-source-grid article > div,
+.situation-weather-list article > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.situation-source-grid p,
+.situation-weather-list p,
+.situation-event-list p {
+  margin: 0.35rem 0;
+  color: #5f7276;
+  font-size: 0.72rem;
+  line-height: 1.55;
+}
+.situation-source-grid a,
+.situation-event-list a {
+  color: #147687;
+  font-size: 0.7rem;
+}
+.situation-source-status {
+  padding: 0.15rem 0.45rem;
+  border-radius: 1rem;
+  font-size: 0.64rem;
+}
+.situation-source-status.is-ready {
+  background: #dff6ed;
+  color: #176b52;
+}
+.situation-source-status.is-stale {
+  background: #fff1d6;
+  color: #8c5a0c;
+}
+.situation-source-status.is-unavailable {
+  background: #f5e2e2;
+  color: #943e42;
+}
+.situation-weather-list h3,
+.situation-event-list h3 {
+  margin: 0;
+}
+.situation-weather-list dl {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+}
+.situation-weather-list dl div {
+  padding: 0.4rem;
+  border-radius: 0.55rem;
+  background: #eef7f7;
+}
+.situation-weather-list dt {
+  color: #718285;
+  font-size: 0.62rem;
+}
+.situation-weather-list dd {
+  margin: 0.15rem 0 0;
+  color: #173d44;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.situation-weather-list small,
+.situation-event-list small {
+  color: #849396;
+  font-size: 0.64rem;
+}
+.situation-event-list ol {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.situation-event-list li {
+  display: grid;
+  gap: 0.2rem;
+}
+.situation-event-list li > span {
+  color: #b34e53;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .situation-map-marker.is-public_event {
+    animation: none;
+  }
+}

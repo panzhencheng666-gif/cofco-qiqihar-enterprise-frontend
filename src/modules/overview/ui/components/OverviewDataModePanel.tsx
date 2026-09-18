@@ -5,8 +5,10 @@ import type {
   SupplyBalanceSummary,
 } from "../../domain/overviewRegionalData";
 import type { OperationalFacilityCatalogue } from "../../domain/operationalFacilities";
+import type { OperationalSituationCatalogue } from "../../domain/operationalSituation";
 import "./overview-data-mode.css";
 import { OperationalFacilityPanel } from "./OperationalFacilityPanel";
+import { OperationalSituationPanel } from "./OperationalSituationPanel";
 import { RegionalAgricultureProfilePanel } from "./RegionalAgricultureProfilePanel";
 
 function format(value: string | null | undefined, divisor = 1): string {
@@ -24,6 +26,7 @@ const DATA_MODES = [
   "SAMPLE_POINTS",
   "STORAGE_FACILITIES",
   "RAILWAY_FACILITIES",
+  "PUBLIC_SITUATION",
   "REGIONAL_DATA",
   "SUPPLY_BALANCE",
   "MAP_ANNOTATION",
@@ -42,6 +45,7 @@ function modeLabel(mode: OverviewDataMode): string {
   if (mode === "SAMPLE_POINTS") return "样本点";
   if (mode === "STORAGE_FACILITIES") return "关联库点";
   if (mode === "RAILWAY_FACILITIES") return "铁路站点";
+  if (mode === "PUBLIC_SITUATION") return "公开态势";
   if (mode === "REGIONAL_DATA") return "地区数据";
   if (mode === "SUPPLY_BALANCE") return "供需平衡";
   return "地图标注";
@@ -86,6 +90,7 @@ export function OverviewDataModePanel({
   regionalSummary,
   supplyBalance,
   operationalFacilities,
+  operationalSituation,
   selectedOperationalFacilityId,
   onOperationalFacilitySelect,
 }: {
@@ -97,6 +102,7 @@ export function OverviewDataModePanel({
   regionalSummary?: RegionalCropSummary;
   supplyBalance?: SupplyBalanceSummary;
   operationalFacilities?: OperationalFacilityCatalogue;
+  operationalSituation?: OperationalSituationCatalogue;
   selectedOperationalFacilityId?: string;
   onOperationalFacilitySelect?: (id: string) => void;
 }) {
@@ -108,7 +114,11 @@ export function OverviewDataModePanel({
     >
       {mode !== "SAMPLE_POINTS" && loading && (
         <p role="status">
-          {facilityMode ? "正在加载运营设施" : "正在同步地区正式数据"}
+          {mode === "PUBLIC_SITUATION"
+            ? "正在汇总公开态势快照"
+            : facilityMode
+              ? "正在加载运营设施"
+              : "正在同步地区正式数据"}
         </p>
       )}
       {mode !== "SAMPLE_POINTS" && issue && (
@@ -241,6 +251,18 @@ export function OverviewDataModePanel({
             : {})}
         />
       )}
+      {mode === "PUBLIC_SITUATION" && operationalFacilities && operationalSituation && (
+        <OperationalSituationPanel
+          facilities={operationalFacilities}
+          situation={operationalSituation}
+        />
+      )}
+      {mode === "PUBLIC_SITUATION" &&
+        !loading &&
+        !issue &&
+        (!operationalFacilities || !operationalSituation) && (
+          <p>当前没有可用的公开态势快照。</p>
+        )}
       {facilityMode && !loading && !issue && !operationalFacilities && (
         <p>当前地图范围没有可用的运营设施数据。</p>
       )}
