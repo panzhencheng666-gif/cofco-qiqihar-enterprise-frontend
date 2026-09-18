@@ -59,6 +59,15 @@ interface ProjectionMetadata {
   viewportWidth: number;
 }
 
+function boundsKey(bounds: AnnotationBounds) {
+  return [
+    bounds.minLongitude,
+    bounds.minLatitude,
+    bounds.maxLongitude,
+    bounds.maxLatitude,
+  ].join(":");
+}
+
 export function MapAnnotationOverlay({
   active,
   bounds,
@@ -90,6 +99,7 @@ export function MapAnnotationOverlay({
   selectedRegionCode?: string;
   selectedSamplePointId?: string;
 }) {
+  const precisionMapScopeKey = boundsKey(bounds);
   const [annotation, setAnnotation] = useState<MapAnnotation>();
   const [armed, setArmed] = useState(false);
   const [start, setStart] = useState<PixelPoint>();
@@ -99,8 +109,11 @@ export function MapAnnotationOverlay({
   const [pan, setPan] = useState<PixelPoint>({ x: 0, y: 0 });
   const rotation = 0;
   const [panning, setPanning] = useState(false);
-  const [precisionMapReady, setPrecisionMapReady] = useState(false);
-  const [precisionMapIssue, setPrecisionMapIssue] = useState("");
+  const [precisionMapReadyKey, setPrecisionMapReadyKey] = useState("");
+  const [precisionMapUnavailableKey, setPrecisionMapUnavailableKey] = useState("");
+  const precisionMapReady = precisionMapReadyKey === precisionMapScopeKey;
+  const precisionMapUnavailable = precisionMapUnavailableKey === precisionMapScopeKey;
+  const precisionMapPreparing = !precisionMapReady && !precisionMapUnavailable;
   const [viewAngle, setViewAngle] = useState(60);
   const [detailLevel, setDetailLevel] = useState<"REGION" | "GEOGRAPHY" | "SAMPLE">(
     "REGION",
@@ -176,6 +189,9 @@ export function MapAnnotationOverlay({
   useEffect(() => {
     if (!active) changeArmed(false);
   }, [active, changeArmed]);
+  useEffect(() => {
+    changeArmed(false);
+  }, [changeArmed, precisionMapScopeKey]);
 
   useEffect(() => {
     if (!active) return;
@@ -405,6 +421,7 @@ export function MapAnnotationOverlay({
     <>
       <div className="overview-map-annotation-actions">
         <button
+          disabled={precisionMapPreparing}
           type="button"
           onClick={() => {
             changeArmed(!armed, {
@@ -429,7 +446,7 @@ export function MapAnnotationOverlay({
       <div className="overview-map-annotation-zoom">
         <button
           aria-label="放大地图"
-          disabled={armed}
+          disabled={armed || precisionMapPreparing}
           type="button"
           onClick={() => {
             if (precisionMapReady) precisionMapRef.current?.zoomIn();
@@ -440,7 +457,7 @@ export function MapAnnotationOverlay({
         </button>
         <button
           aria-label="缩小地图"
-          disabled={armed}
+          disabled={armed || precisionMapPreparing}
           type="button"
           onClick={() => {
             if (precisionMapReady) precisionMapRef.current?.zoomOut();
@@ -462,13 +479,12 @@ export function MapAnnotationOverlay({
             onChange={(event) => {
               const angle = Number(event.currentTarget.value);
               setViewAngle(angle);
-              precisionMapRef.current?.setViewAngle(angle);
             }}
           />
         </label>
         <button
           aria-label="复位地图视角"
-          disabled={armed}
+          disabled={armed || precisionMapPreparing}
           type="button"
           onClick={() => {
             if (precisionMapReady) {
@@ -534,9 +550,9 @@ export function MapAnnotationOverlay({
               : "行政区域"}
         </p>
       )}
-      {precisionMapIssue && !precisionMapReady && (
+      {precisionMapUnavailable && (
         <p className="overview-map-annotation-issue is-precision-map" role="status">
-          {precisionMapIssue}
+          精细地理底图暂不可用，已保留行政区地图浏览。
         </p>
       )}
     </>
@@ -592,12 +608,12 @@ export function MapAnnotationOverlay({
             {...(selectedSamplePointId ? { selectedSamplePointId } : {})}
             onDetailLevelChange={setDetailLevel}
             onReady={() => {
-              setPrecisionMapReady(true);
-              setPrecisionMapIssue("");
+              setPrecisionMapReadyKey(precisionMapScopeKey);
+              setPrecisionMapUnavailableKey("");
             }}
             onUnavailable={() => {
-              setPrecisionMapReady(false);
-              setPrecisionMapIssue("精细地理底图暂不可用，已保留行政区地图浏览。");
+              setPrecisionMapReadyKey("");
+              setPrecisionMapUnavailableKey(precisionMapScopeKey);
             }}
           />
         </Suspense>

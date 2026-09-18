@@ -4,9 +4,9 @@ import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const precisionMapMock = vi.hoisted(() => ({
+  preparing: false,
   ready: false,
   reset: vi.fn(),
-  setViewAngle: vi.fn(),
   unproject: vi.fn(({ x, y }: { x: number; y: number }) => ({
     longitude: 123 + x / 100,
     latitude: 49 - y / 100,
@@ -20,24 +20,35 @@ vi.mock("./MapAnnotationPrecisionMap", async () => {
   return {
     MapAnnotationPrecisionMap: React.forwardRef(function PrecisionMapMock(
       props: {
+        bounds: {
+          minLongitude: number;
+          minLatitude: number;
+          maxLongitude: number;
+          maxLatitude: number;
+        };
         onDetailLevelChange?: (level: "REGION" | "GEOGRAPHY" | "SAMPLE") => void;
         onReady?: () => void;
+        onUnavailable?: () => void;
       },
       ref,
     ) {
-      const readyReported = React.useRef(false);
+      const lastReport = React.useRef("");
       React.useImperativeHandle(ref, () => ({
         reset: precisionMapMock.reset,
-        setViewAngle: precisionMapMock.setViewAngle,
         unproject: precisionMapMock.unproject,
         zoomIn: precisionMapMock.zoomIn,
         zoomOut: precisionMapMock.zoomOut,
       }));
       React.useEffect(() => {
-        if (!precisionMapMock.ready || readyReported.current) return;
-        readyReported.current = true;
-        props.onReady?.();
-        props.onDetailLevelChange?.("GEOGRAPHY");
+        if (precisionMapMock.preparing) return;
+        const boundsKey = Object.values(props.bounds).join(":");
+        const report = `${precisionMapMock.ready ? "ready" : "unavailable"}:${boundsKey}`;
+        if (lastReport.current === report) return;
+        lastReport.current = report;
+        if (precisionMapMock.ready) {
+          props.onReady?.();
+          props.onDetailLevelChange?.("GEOGRAPHY");
+        } else props.onUnavailable?.();
       }, [props]);
       return React.createElement("div", {
         "aria-label": "高精度地理底图",
@@ -52,9 +63,9 @@ import type { SaveMapAnnotation } from "../../application/ports/MapAnnotationRep
 
 describe("MapAnnotationOverlay", () => {
   beforeEach(() => {
+    precisionMapMock.preparing = false;
     precisionMapMock.ready = false;
     precisionMapMock.reset.mockClear();
-    precisionMapMock.setViewAngle.mockClear();
     precisionMapMock.unproject.mockClear();
     precisionMapMock.zoomIn.mockClear();
     precisionMapMock.zoomOut.mockClear();
@@ -81,6 +92,7 @@ describe("MapAnnotationOverlay", () => {
 
     const start = screen.getByRole("button", { name: "开始标注" });
     expect(start).toBeVisible();
+    await waitFor(() => expect(start).toBeEnabled());
     await userEvent.click(start);
 
     expect(screen.getByRole("dialog", { name: "标注经纬度" })).toBeVisible();
@@ -332,7 +344,6 @@ describe("MapAnnotationOverlay", () => {
     fireEvent.change(angle, { target: { value: "30" } });
     expect(precisionMapMock.zoomIn).toHaveBeenCalledOnce();
     expect(precisionMapMock.zoomOut).toHaveBeenCalledOnce();
-    expect(precisionMapMock.setViewAngle).toHaveBeenLastCalledWith(30);
     expect(screen.getByText("视角 30°")).toBeVisible();
 
     await userEvent.click(screen.getByRole("button", { name: "复位地图视角" }));
@@ -342,6 +353,65 @@ describe("MapAnnotationOverlay", () => {
     await userEvent.click(screen.getByRole("button", { name: "开始标注" }));
     expect(angle).toBeDisabled();
     expect(screen.getByRole("button", { name: "放大地图" })).toBeDisabled();
+  });
+
+  it("does not arm annotation while a new administrative scope is preparing", async () => {
+    precisionMapMock.ready = true;
+    const repository = {
+      current: () => Promise.resolve(undefined),
+      save: vi.fn(),
+      delete: vi.fn(),
+    };
+    const { rerender } = render(
+      <MapAnnotationOverlay
+        active
+        bounds={{
+          minLongitude: 123,
+          minLatitude: 47,
+          maxLongitude: 125,
+          maxLatitude: 49,
+        }}
+        repository={repository}
+      />,
+    );
+    const start = await screen.findByRole("button", { name: "开始标注" });
+    await waitFor(() => expect(start).toBeEnabled());
+
+    precisionMapMock.preparing = true;
+    rerender(
+      <MapAnnotationOverlay
+        active
+        bounds={{
+          minLongitude: 123.5,
+          minLatitude: 47.2,
+          maxLongitude: 124.4,
+          maxLatitude: 48.1,
+        }}
+        repository={repository}
+      />,
+    );
+
+    await waitFor(() => expect(start).toBeDisabled());
+    await userEvent.click(start);
+    expect(
+      screen.queryByRole("dialog", { name: "标注经纬度" }),
+    ).not.toBeInTheDocument();
+
+    precisionMapMock.preparing = false;
+    precisionMapMock.ready = true;
+    rerender(
+      <MapAnnotationOverlay
+        active
+        bounds={{
+          minLongitude: 123.5,
+          minLatitude: 47.2,
+          maxLongitude: 124.4,
+          maxLatitude: 48.1,
+        }}
+        repository={repository}
+      />,
+    );
+    await waitFor(() => expect(start).toBeEnabled());
   });
 
   it("uses precision unprojection for every rectangle corner under a pitched view", async () => {

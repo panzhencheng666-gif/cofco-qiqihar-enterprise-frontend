@@ -12,6 +12,12 @@ import type { MapAnnotation } from "../../application/ports/MapAnnotationReposit
 import type { OverviewRegion } from "../../domain/overview";
 import type { OverviewSamplePointIcon } from "../../domain/overviewSamplePoint";
 import type { MapFeature } from "./boundaryGeometry";
+import {
+  administrativeGeoJson,
+  annotationGeoJson,
+  emptyCollection,
+  samplePointGeoJson,
+} from "./mapAnnotationPrecisionData";
 
 interface PrecisionMapBounds {
   maxLatitude: number;
@@ -200,7 +206,6 @@ const DEFAULT_VECTOR_STYLE: StyleSpecification = {
 
 export interface MapAnnotationPrecisionMapHandle {
   reset: () => void;
-  setViewAngle: (angle: number) => void;
   unproject: (point: { x: number; y: number }) => {
     longitude: number;
     latitude: number;
@@ -249,6 +254,17 @@ export const MapAnnotationPrecisionMap = forwardRef<
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const fittedZoomRef = useRef(0);
+  const mapBounds = useMemo(
+    () => ({
+      maxLatitude: bounds.maxLatitude,
+      maxLongitude: bounds.maxLongitude,
+      minLatitude: bounds.minLatitude,
+      minLongitude: bounds.minLongitude,
+    }),
+    [bounds.maxLatitude, bounds.maxLongitude, bounds.minLatitude, bounds.minLongitude],
+  );
+  const viewAngleRef = useRef(viewAngle);
+  viewAngleRef.current = viewAngle;
   const callbacksRef = useRef({
     onDetailLevelChange,
     onReady,
@@ -300,36 +316,39 @@ export const MapAnnotationPrecisionMap = forwardRef<
       reset: () => {
         const map = mapRef.current;
         if (!map) return;
-        fitMap(map, bounds, 60);
-      },
-      setViewAngle: (angle) => {
-        mapRef.current?.easeTo({ duration: 180, pitch: 90 - clamp(angle, 30, 90) });
+        fitMap(map, mapBounds, 60);
       },
       unproject: ({ x, y }) => {
         const coordinate = mapRef.current?.unproject([x, y]);
         return {
-          longitude: coordinate?.lng ?? bounds.minLongitude,
-          latitude: coordinate?.lat ?? bounds.minLatitude,
+          longitude: coordinate?.lng ?? mapBounds.minLongitude,
+          latitude: coordinate?.lat ?? mapBounds.minLatitude,
         };
       },
       zoomIn: () => mapRef.current?.zoomIn({ duration: 180 }),
       zoomOut: () => mapRef.current?.zoomOut({ duration: 180 }),
     }),
-    [bounds],
+    [mapBounds],
   );
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     let ready = false;
+    let unavailable = false;
+    const reportUnavailable = () => {
+      if (unavailable) return;
+      unavailable = true;
+      callbacksRef.current.onUnavailable?.();
+    };
     let map: MapLibreMap;
     try {
       map = new MapLibreMap({
         attributionControl: { compact: true },
         bearing: 0,
         center: [
-          (bounds.minLongitude + bounds.maxLongitude) / 2,
-          (bounds.minLatitude + bounds.maxLatitude) / 2,
+          (mapBounds.minLongitude + mapBounds.maxLongitude) / 2,
+          (mapBounds.minLatitude + mapBounds.maxLatitude) / 2,
         ],
         container,
         doubleClickZoom: false,
@@ -343,7 +362,7 @@ export const MapAnnotationPrecisionMap = forwardRef<
           DEFAULT_VECTOR_STYLE,
       });
     } catch {
-      callbacksRef.current.onUnavailable?.();
+      reportUnavailable();
       return;
     }
     map.keyboard.disableRotation();
@@ -356,10 +375,11 @@ export const MapAnnotationPrecisionMap = forwardRef<
       );
     };
     map.on("style.load", () => {
+      if (unavailable) return;
       const initialData = dataRef.current;
       ready = true;
       addBusinessLayers(map);
-      fitMap(map, bounds, 60);
+      fitMap(map, mapBounds, viewAngleRef.current);
       fittedZoomRef.current = map.getZoom();
       map.setMinZoom(fittedZoomRef.current);
       updateSource(
@@ -409,19 +429,21 @@ export const MapAnnotationPrecisionMap = forwardRef<
         map.getCanvas().style.cursor = "";
       });
     }
-    map.on("error", () => {
-      if (!ready) callbacksRef.current.onUnavailable?.();
+    map.on("error", (event) => {
+      const sourceId = (event as { sourceId?: unknown }).sourceId;
+      if (!ready || sourceId === "openmaptiles" || sourceId === "natural-earth")
+        reportUnavailable();
     });
     return () => {
       mapRef.current = null;
       map.remove();
     };
-  }, [bounds]);
+  }, [mapBounds]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map?.isStyleLoaded()) return;
-    map.setPitch(90 - clamp(viewAngle, 30, 90));
+    map.easeTo({ duration: 180, pitch: 90 - clamp(viewAngle, 30, 90) });
   }, [viewAngle]);
   useEffect(() => {
     const map = mapRef.current;
@@ -582,85 +604,6 @@ function toMapBounds(bounds: PrecisionMapBounds): [[number, number], [number, nu
     [bounds.minLongitude, bounds.minLatitude],
     [bounds.maxLongitude, bounds.maxLatitude],
   ];
-}
-
-function administrativeGeoJson(
-  backdrop: MapFeature | undefined,
-  features: readonly MapFeature[],
-  selectedRegionCode?: string,
-) {
-  return {
-    type: "FeatureCollection" as const,
-    features: [...(backdrop ? [backdrop] : []), ...features].map(
-      ({ geometry, region }) => ({
-        type: "Feature" as const,
-        geometry,
-        properties: {
-          name: region.name,
-          regionCode: region.code,
-          selected: region.code === selectedRegionCode,
-        },
-      }),
-    ),
-  };
-}
-
-function samplePointGeoJson(
-  icons: readonly OverviewSamplePointIcon[],
-  selectedSamplePointId?: string,
-) {
-  return {
-    type: "FeatureCollection" as const,
-    features: icons.flatMap((icon) =>
-      icon.longitude === null || icon.latitude === null
-        ? []
-        : [
-            {
-              type: "Feature" as const,
-              geometry: {
-                type: "Point" as const,
-                coordinates: [icon.longitude, icon.latitude],
-              },
-              properties: {
-                name: icon.name,
-                role: icon.roles?.[0]?.code ?? "",
-                samplePointId: icon.samplePointId,
-                selected: icon.samplePointId === selectedSamplePointId,
-              },
-            },
-          ],
-    ),
-  };
-}
-
-function annotationGeoJson(annotation?: MapAnnotation) {
-  if (!annotation) return emptyCollection();
-  const geometry =
-    annotation.type === "POINT"
-      ? {
-          type: "Point" as const,
-          coordinates: [annotation.minLongitude, annotation.minLatitude],
-        }
-      : {
-          type: "Polygon" as const,
-          coordinates: [
-            [
-              [annotation.minLongitude, annotation.minLatitude],
-              [annotation.maxLongitude, annotation.minLatitude],
-              [annotation.maxLongitude, annotation.maxLatitude],
-              [annotation.minLongitude, annotation.maxLatitude],
-              [annotation.minLongitude, annotation.minLatitude],
-            ],
-          ],
-        };
-  return {
-    type: "FeatureCollection" as const,
-    features: [{ type: "Feature" as const, geometry, properties: {} }],
-  };
-}
-
-function emptyCollection() {
-  return { type: "FeatureCollection" as const, features: [] };
 }
 
 function updateSource(
