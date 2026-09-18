@@ -74,6 +74,31 @@ describe("ReportingCenterPage", () => {
     );
     expect(screen.getByText("报告已发布并写入审计记录。")).toBeVisible();
   });
+
+  it("shows personal animation and authorized system summary without changing business reports", async () => {
+    const user = userEvent.setup();
+    render(
+      <ReportingCenterPage
+        repository={{
+          options: () => Promise.resolve(options),
+          preview: vi.fn(),
+          export: vi.fn(),
+          download: vi.fn(),
+          publish: vi.fn(),
+          personalActivity: () => Promise.resolve(personalActivity),
+          systemActivity: () => Promise.resolve(systemActivity),
+          exportSystemActivity: vi.fn(),
+          downloadSystemActivity: vi.fn(),
+        }}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "我的周期回顾" }));
+    expect(screen.getByLabelText("个人周期动画回顾")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "全系统周期总结" }));
+    expect(screen.getByRole("heading", { name: "有效用户使用总结" })).toBeVisible();
+    expect(screen.getByText("5", { selector: "b" })).toBeVisible();
+  });
 });
 
 const options = {
@@ -106,4 +131,30 @@ const samplePreview = {
   expiresAt: "2026-08-03T00:30:00Z",
   version: 0,
   legacyReadOnly: false,
+} as const;
+
+const personalActivity = {
+  kind: "PERSONAL",
+  periodDays: 7,
+  periodStart: "2026-09-11T00:00:00Z",
+  periodEnd: "2026-09-18T00:00:00Z",
+  eventCutoff: "2026-09-18T00:00:00Z",
+  subject: { subjectId: "user-1", displayName: "张三", workUnitName: "克山直属库" },
+  effectiveUserCount: 1,
+  totalEvents: 8,
+  samplePointsCreated: 2,
+  samplePointsDeleted: 1,
+  actions: [{ code: "UPDATED", label: "修改", count: 3 }],
+  domains: [{ code: "SAMPLE_NETWORK", label: "样本网络", count: 4 }],
+  workUnits: [{ code: "230229", label: "克山直属库", count: 8 }],
+  scopeNotice: "当前用户实际审计事件。",
+} as const;
+
+const systemActivity = {
+  ...personalActivity,
+  kind: "SYSTEM",
+  subject: null,
+  effectiveUserCount: 5,
+  totalEvents: 26,
+  scopeNotice: "仅统计有效用户实际审计事件。",
 } as const;

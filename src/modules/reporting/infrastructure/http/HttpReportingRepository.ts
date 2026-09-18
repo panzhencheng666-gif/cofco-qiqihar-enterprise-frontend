@@ -17,6 +17,33 @@ const preview = z.object({
   version: z.number().int(),
   legacyReadOnly: z.boolean(),
 });
+const activityCount = z.object({
+  code: z.string(),
+  label: z.string(),
+  count: z.number().int().nonnegative(),
+});
+const activityReport = z.object({
+  kind: z.enum(["PERSONAL", "SYSTEM"]),
+  periodDays: z.union([z.literal(7), z.literal(30)]),
+  periodStart: z.string(),
+  periodEnd: z.string(),
+  eventCutoff: z.string(),
+  subject: z
+    .object({
+      subjectId: z.string(),
+      displayName: z.string(),
+      workUnitName: z.string(),
+    })
+    .nullable(),
+  effectiveUserCount: z.number().int().nonnegative(),
+  totalEvents: z.number().int().nonnegative(),
+  samplePointsCreated: z.number().int().nonnegative(),
+  samplePointsDeleted: z.number().int().nonnegative(),
+  actions: z.array(activityCount),
+  domains: z.array(activityCount),
+  workUnits: z.array(activityCount),
+  scopeNotice: z.string(),
+});
 export class HttpReportingRepository implements ReportingRepository {
   constructor(private readonly http: HttpClient) {}
   async options() {
@@ -105,5 +132,51 @@ export class HttpReportingRepository implements ReportingRepository {
         }),
       )
     ).data;
+  }
+
+  async personalActivity(days: 7 | 30, signal?: AbortSignal) {
+    return (
+      await this.http.get(
+        `/api/v1/activity-reports/personal?days=${days}`,
+        z.object({ data: activityReport }),
+        signal ? { signal } : undefined,
+      )
+    ).data;
+  }
+
+  async systemActivity(days: 7 | 30, signal?: AbortSignal) {
+    return (
+      await this.http.get(
+        `/api/v1/activity-reports/system?days=${days}`,
+        z.object({ data: activityReport }),
+        signal ? { signal } : undefined,
+      )
+    ).data;
+  }
+
+  async exportSystemActivity(days: 7 | 30) {
+    if (!this.http.post) throw new Error("HTTP client does not support writes");
+    return (
+      await this.http.post(
+        `/api/v1/activity-reports/system/exports?days=${days}`,
+        {},
+        z.object({
+          data: z.object({
+            id: z.string(),
+            filename: z.string(),
+            contentType: z.string(),
+            sha256: z.string().length(64),
+            generatedAt: z.string(),
+          }),
+        }),
+      )
+    ).data;
+  }
+
+  async downloadSystemActivity(exportId: string) {
+    if (!this.http.download) throw new Error("HTTP client does not support downloads");
+    return this.http.download(
+      `/api/v1/activity-reports/system/exports/${encodeURIComponent(exportId)}/content`,
+    );
   }
 }
