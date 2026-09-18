@@ -118,7 +118,7 @@ interface WorkLocation {
 interface HashState {
   location?: AppLocation;
   workLocation?: WorkLocation;
-  utilityRoute?: "help" | "settings" | "account" | "notifications";
+  utilityRoute?: "help" | "settings" | "account" | "notifications" | "reporting";
   invalid: boolean;
 }
 
@@ -168,6 +168,9 @@ function locationFromHash(): HashState {
   }
   if (currentHash === "#/notifications") {
     return { invalid: false, utilityRoute: "notifications" };
+  }
+  if (currentHash === "#/报表中心") {
+    return { invalid: false, utilityRoute: "reporting" };
   }
 
   const workMatch = /^#\/work\/(pending|completed)(?:\?(.*))?$/.exec(currentHash);
@@ -292,7 +295,7 @@ export function App({
   const [navigationAttempt, setNavigationAttempt] = useState(0);
   const normalizedHash = safeDecodedHash(window.location.hash);
   const overviewRoute = normalizedHash === "#/overview";
-  const reportingRoute = normalizedHash.startsWith("#/报表中心");
+  const reportingRoute = hashState.utilityRoute === "reporting";
   const { domain: navigationDomain, pageKind: navigationPageKind } =
     supportedPageContext(hashState.location?.key);
   const utilityRoute = hashState.utilityRoute;

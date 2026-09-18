@@ -5,6 +5,37 @@ import type { HttpClient } from "../../../../shared/api/HttpClient";
 import { HttpReportingRepository } from "./HttpReportingRepository";
 
 describe("HttpReportingRepository activity reports", () => {
+  it("reuses successful report parameter reads and retries a failed read", async () => {
+    const payload = {
+      data: {
+        definitions: [],
+        products: [],
+        cultivars: [],
+        regionLevels: [],
+        regions: [],
+        periods: [],
+        formats: [],
+      },
+    };
+    const get = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockImplementation((_path: string, schema: z.ZodType) =>
+        Promise.resolve(parse(schema, payload)),
+      );
+    const repository = new HttpReportingRepository({ get: get as HttpClient["get"] });
+
+    await expect(repository.options()).rejects.toThrow("offline");
+    const first = repository.options();
+    const second = repository.options();
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      payload.data,
+      payload.data,
+    ]);
+    await repository.options();
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
   it("uses the governed personal and system report endpoints", async () => {
     const get = vi.fn((_path: string, schema: z.ZodType) =>
       Promise.resolve(parse(schema, { data: activityReport })),

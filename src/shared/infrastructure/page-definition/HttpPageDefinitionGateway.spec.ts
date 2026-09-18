@@ -2,6 +2,39 @@ import type { HttpClient } from "../../api/HttpClient";
 import { HttpPageDefinitionGateway } from "./HttpPageDefinitionGateway";
 
 describe("HttpPageDefinitionGateway", () => {
+  it("reuses a successful definition request and retries after failure", async () => {
+    const response = {
+      data: {
+        domain: "MARKET",
+        pageKind: "MONITORING",
+        productCode: "CORN",
+        title: "玉米市场采集",
+        breadcrumbs: [],
+        filters: [],
+        defaultContext: {},
+        columnGroups: [],
+        actions: [],
+        pagination: { defaultPageSize: 20, pageSizeOptions: [20] },
+      },
+    };
+    const get = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockImplementation((_path: string, schema: Parameters<HttpClient["get"]>[1]) =>
+        Promise.resolve(schema.parse(response)),
+      );
+    const gateway = new HttpPageDefinitionGateway({ get });
+    const key = { domain: "MARKET", pageKind: "MONITORING", productCode: "CORN" };
+
+    await expect(gateway.getDefinition(key)).rejects.toThrow("offline");
+    const first = gateway.getDefinition(key);
+    const second = gateway.getDefinition(key);
+    await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+    await gateway.getDefinition(key);
+
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
   it("uses the canonical page-definition endpoint", async () => {
     const requestedPaths: string[] = [];
     const http: HttpClient = {

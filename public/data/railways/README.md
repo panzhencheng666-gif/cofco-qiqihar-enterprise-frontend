@@ -6,6 +6,7 @@ Snapshots: 2026-09-15T05:06:23Z–2026-09-15T05:27:51Z (per-feature times retain
 
 One-off extraction endpoints: https://overpass-api.de/api/interpreter and the listed VK Maps public instance https://maps.mail.ru/osm/tools/overpass/api/interpreter. Exact partition queries, timestamps and SHA-256 hashes are embedded in extractionManifest.
 Query:
+
 ```
 [out:json][timeout:60];
 (nwr["railway"~"^(station|halt|yard)$"](45.8,115.2,53.9,130.3);

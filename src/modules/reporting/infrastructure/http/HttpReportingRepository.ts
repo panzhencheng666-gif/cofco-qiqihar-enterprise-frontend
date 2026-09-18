@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { HttpClient } from "../../../../shared/api/HttpClient";
 import type { ReportingRepository } from "../../application/ports/ReportingRepository";
+import { ReadRequestCache } from "../../../../shared/api/ReadRequestCache";
 
 const option = z.object({ code: z.string(), label: z.string() });
 const preview = z.object({
@@ -45,40 +46,47 @@ const activityReport = z.object({
   scopeNotice: z.string(),
 });
 export class HttpReportingRepository implements ReportingRepository {
+  private readonly reads = new ReadRequestCache();
+
   constructor(private readonly http: HttpClient) {}
   async options() {
-    return (
-      await this.http.get(
-        "/api/v1/reports/parameter-options",
-        z.object({
-          data: z.object({
-            definitions: z.array(
-              z.object({
-                code: z.string(),
-                name: z.string(),
-                businessDomain: z.string(),
-                businessSubtype: z.string(),
-                frequencyCode: z.string(),
-                version: z.number().int(),
-                sections: z.array(
+    const path = "/api/v1/reports/parameter-options";
+    return this.reads.get(
+      path,
+      async () =>
+        (
+          await this.http.get(
+            path,
+            z.object({
+              data: z.object({
+                definitions: z.array(
                   z.object({
                     code: z.string(),
-                    title: z.string(),
-                    sortOrder: z.number().int(),
+                    name: z.string(),
+                    businessDomain: z.string(),
+                    businessSubtype: z.string(),
+                    frequencyCode: z.string(),
+                    version: z.number().int(),
+                    sections: z.array(
+                      z.object({
+                        code: z.string(),
+                        title: z.string(),
+                        sortOrder: z.number().int(),
+                      }),
+                    ),
                   }),
                 ),
+                products: z.array(option),
+                cultivars: z.array(option),
+                regionLevels: z.array(option),
+                regions: z.array(option),
+                periods: z.array(option),
+                formats: z.array(option),
               }),
-            ),
-            products: z.array(option),
-            cultivars: z.array(option),
-            regionLevels: z.array(option),
-            regions: z.array(option),
-            periods: z.array(option),
-            formats: z.array(option),
-          }),
-        }),
-      )
-    ).data;
+            }),
+          )
+        ).data,
+    );
   }
   async preview(command: Parameters<ReportingRepository["preview"]>[0]) {
     if (!this.http.post) throw new Error("HTTP client does not support writes");

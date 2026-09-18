@@ -178,6 +178,26 @@ describe("App production composition", () => {
     expect(await screen.findByRole("heading", { name: "平台使用手册" })).toBeVisible();
   });
 
+  it("keeps the reporting route stable without loading product navigation", async () => {
+    window.history.replaceState(null, "", "#/报表中心");
+    const dependencies = dependenciesFixture(() => Promise.resolve(page([], 0, 20, 0)));
+    const getProducts = vi.spyOn(dependencies.masterDataRepository, "getProducts");
+    dependencies.reportingRepository = {
+      options: () => new Promise(() => undefined),
+      preview: () => Promise.reject(new Error("not called")),
+      export: () => Promise.reject(new Error("not called")),
+      download: () => Promise.reject(new Error("not called")),
+      publish: () => Promise.reject(new Error("not called")),
+    };
+
+    render(<App dependencies={dependencies} />);
+
+    expect(await screen.findByText("正在加载报表中心参数")).toBeVisible();
+    await act(async () => Promise.resolve());
+    expect(getProducts).not.toHaveBeenCalled();
+    expect(safeHash()).toBe("#/报表中心");
+  });
+
   it("revalidates filter and page-size state arriving through browser history", async () => {
     const searches: Array<Record<string, unknown>> = [];
     render(
@@ -497,6 +517,10 @@ describe("App production composition", () => {
     },
   );
 });
+
+function safeHash() {
+  return decodeURIComponent(window.location.hash);
+}
 
 function dependenciesFixture(
   search: (criteria: {
