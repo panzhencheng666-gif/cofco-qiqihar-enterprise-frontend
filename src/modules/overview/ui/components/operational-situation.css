@@ -2,6 +2,7 @@
   position: absolute;
   inset: 0;
   z-index: 3;
+  container-type: inline-size;
   overflow: hidden;
   border-radius: inherit;
   background: #071d29;
@@ -372,6 +373,21 @@ button.situation-map-marker {
   .situation-map-caption {
     right: 0.75rem;
     bottom: 3.1rem;
+    left: 0.75rem;
+    max-width: none;
+    transform: none;
+  }
+}
+
+@container (max-width: 70rem) {
+  .situation-map-tools {
+    right: 0.75rem;
+    bottom: 7.2rem;
+  }
+
+  .situation-map-caption {
+    right: 0.75rem;
+    bottom: 4.6rem;
     left: 0.75rem;
     max-width: none;
     transform: none;
