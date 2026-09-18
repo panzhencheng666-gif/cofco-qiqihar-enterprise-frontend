@@ -6,6 +6,7 @@ export function administrativeGeoJson(
   backdrop: MapFeature | undefined,
   features: readonly MapFeature[],
   selectedRegionCode?: string,
+  weatherRiskByRoot: ReadonlyMap<string, string> = new Map(),
 ) {
   return {
     type: "FeatureCollection" as const,
@@ -17,10 +18,22 @@ export function administrativeGeoJson(
           name: region.name,
           regionCode: region.code,
           selected: region.code === selectedRegionCode,
+          weatherRiskLevel: weatherRiskLevel(region.code, weatherRiskByRoot),
         },
       }),
     ),
   };
+}
+
+function weatherRiskLevel(
+  regionCode: string,
+  weatherRiskByRoot: ReadonlyMap<string, string>,
+) {
+  const risk = [...weatherRiskByRoot].find(([rootCode]) =>
+    regionCode.startsWith(rootCode.slice(0, 4)),
+  )?.[1];
+  if (!risk) return 0;
+  return risk.includes("未触发") ? 1 : 2;
 }
 
 export function samplePointGeoJson(

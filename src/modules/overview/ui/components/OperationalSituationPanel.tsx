@@ -8,18 +8,23 @@ import type {
 } from "../../domain/operationalSituation";
 import "./operational-situation.css";
 import { RailwayFacilityCard, StorageFacilityCard } from "./OperationalFacilityPanel";
+import type { SituationTimelineItem } from "./operationalSituationTimeline";
 
 export function OperationalSituationPanel({
   facilities,
   onFacilitySelect,
   selectedFacilityId,
   selectedRegion,
+  selectedTimelineItem,
+  onTimelineItemDismiss,
   situation,
 }: {
   facilities: OperationalFacilityCatalogue;
   onFacilitySelect?: (id: string) => void;
   selectedFacilityId?: string;
   selectedRegion?: OverviewRegion;
+  selectedTimelineItem?: SituationTimelineItem;
+  onTimelineItemDismiss?: () => void;
   situation: OperationalSituationCatalogue;
 }) {
   const selectedStorage = facilities.storageFacilities.find(
@@ -118,6 +123,13 @@ export function OperationalSituationPanel({
             )}
           </div>
         </div>
+        {selectedTimelineItem && (
+          <SituationEvidenceCard
+            item={selectedTimelineItem}
+            {...(onTimelineItemDismiss ? { onDismiss: onTimelineItemDismiss } : {})}
+            {...(onFacilitySelect ? { onFacilitySelect } : {})}
+          />
+        )}
         {detailMode === "WEATHER" && activeWeather && (
           <WeatherDetail
             generatedAt={situation.generatedAt}
@@ -133,28 +145,31 @@ export function OperationalSituationPanel({
           <p>当前范围没有可展示的运营节点。</p>
         )}
       </section>
-      <section className="situation-source-grid" aria-label="公开态势来源状态">
-        {situation.sources.map((source) => (
-          <article key={source.code}>
-            <div>
-              <b>{source.label}</b>
-              <span
-                className={`situation-source-status is-${source.status.toLowerCase()}`}
-              >
-                {source.status === "READY"
-                  ? "来源可用"
-                  : source.status === "STALE"
-                    ? "使用保留快照"
-                    : "来源不可用"}
-              </span>
-            </div>
-            <p>{source.notice}</p>
-            <a href={source.sourceUrl} target="_blank" rel="noreferrer">
-              查看来源
-            </a>
-          </article>
-        ))}
-      </section>
+      <details className="situation-source-catalogue">
+        <summary>来源目录（{situation.sources.length}）</summary>
+        <section className="situation-source-grid" aria-label="公开态势来源状态">
+          {situation.sources.map((source) => (
+            <article key={source.code}>
+              <div>
+                <b>{source.label}</b>
+                <span
+                  className={`situation-source-status is-${source.status.toLowerCase()}`}
+                >
+                  {source.status === "READY"
+                    ? "来源可用"
+                    : source.status === "STALE"
+                      ? "使用保留快照"
+                      : "来源不可用"}
+                </span>
+              </div>
+              <p>{source.notice}</p>
+              <a href={source.sourceUrl} target="_blank" rel="noreferrer">
+                查看来源
+              </a>
+            </article>
+          ))}
+        </section>
+      </details>
       <section className="situation-event-list">
         <h3>NASA EONET 开放事件</h3>
         <p>
@@ -184,6 +199,64 @@ export function OperationalSituationPanel({
       </section>
     </div>
   );
+}
+
+function SituationEvidenceCard({
+  item,
+  onDismiss,
+  onFacilitySelect,
+}: {
+  item: SituationTimelineItem;
+  onDismiss?: () => void;
+  onFacilitySelect?: (id: string) => void;
+}) {
+  return (
+    <article className="situation-evidence-card" aria-label="选中态势事件详情">
+      <header>
+        <div>
+          <span>{timelineCategoryLabel(item.category)}</span>
+          <h3>{item.title}</h3>
+        </div>
+        {onDismiss && (
+          <button type="button" aria-label="关闭态势事件详情" onClick={onDismiss}>
+            ×
+          </button>
+        )}
+      </header>
+      <dl>
+        <div>
+          <dt>发生时间</dt>
+          <dd>{formatTime(item.occurredAt)}</dd>
+        </div>
+        <div>
+          <dt>来源类型</dt>
+          <dd>{item.sourceName}</dd>
+        </div>
+      </dl>
+      <section>
+        <h4>事件与证据说明</h4>
+        <p>{item.description}</p>
+      </section>
+      <footer>
+        <a href={item.sourceUrl} target="_blank" rel="noreferrer">
+          查看原始来源
+        </a>
+        {item.facilityId && onFacilitySelect && (
+          <button type="button" onClick={() => onFacilitySelect(item.facilityId!)}>
+            进入业务明细
+          </button>
+        )}
+      </footer>
+    </article>
+  );
+}
+
+function timelineCategoryLabel(category: SituationTimelineItem["category"]) {
+  if (category === "WEATHER") return "实时天气";
+  if (category === "LOGISTICS") return "物流态势";
+  if (category === "MARKET") return "市场信号";
+  if (category === "POLICY") return "政策事件";
+  return "公开事件";
 }
 
 function WeatherDetail({

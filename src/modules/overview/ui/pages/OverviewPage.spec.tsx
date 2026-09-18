@@ -73,6 +73,7 @@ describe("OverviewPage", () => {
             generatedAt: "2026-09-18T06:00:00Z",
             weather: [],
             publicEvents: [],
+            policyEvents: [],
             sources: [],
           }),
           regionalSummary: vi.fn(),

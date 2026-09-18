@@ -21,7 +21,7 @@ describe("OverviewDataModePanel", () => {
     expect(screen.queryByRole("button", { name: "铁路站点" })).not.toBeInTheDocument();
   });
 
-  it("keeps public events, weather and operational nodes source-labelled", () => {
+  it("keeps public events, weather and operational nodes source-labelled", async () => {
     render(
       <OverviewDataModePanel
         mode="PUBLIC_SITUATION"
@@ -56,6 +56,7 @@ describe("OverviewDataModePanel", () => {
             },
           ],
           publicEvents: [],
+          policyEvents: [],
           sources: [
             {
               code: "NASA_EONET",
@@ -72,6 +73,7 @@ describe("OverviewDataModePanel", () => {
     );
 
     expect(screen.getByRole("heading", { name: "公开运营态势" })).toBeVisible();
+    await userEvent.click(screen.getByText("来源目录（1）"));
     expect(screen.getByText("NASA EONET")).toBeVisible();
     expect(screen.getByRole("heading", { name: "齐齐哈尔市天气与风险" })).toBeVisible();
     expect(screen.getByText(/不会补造事件/)).toBeVisible();
@@ -123,6 +125,7 @@ describe("OverviewDataModePanel", () => {
             },
           ],
           publicEvents: [],
+          policyEvents: [],
           sources: [],
         }}
       />,

@@ -28,6 +28,53 @@
   backdrop-filter: blur(14px);
 }
 
+.situation-intelligence-controls {
+  position: absolute;
+  z-index: 4;
+  top: 6.4rem;
+  left: 1.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  max-width: calc(100% - 2.8rem);
+  padding: 0.65rem 0.8rem;
+  overflow-x: auto;
+  border: 1px solid rgb(118 214 218 / 30%);
+  border-radius: 0.8rem;
+  background: rgb(4 25 37 / 90%);
+  color: #e6fbff;
+  box-shadow: 0 0.8rem 2rem rgb(0 0 0 / 24%);
+  backdrop-filter: blur(14px);
+}
+
+.situation-intelligence-controls > strong {
+  padding-right: 0.75rem;
+  border-right: 1px solid rgb(118 214 218 / 24%);
+  color: #78e6e9;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.situation-intelligence-controls label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.situation-intelligence-controls label:has(input:disabled) {
+  opacity: 0.48;
+}
+
+.situation-intelligence-controls b {
+  min-width: 1.35rem;
+  border-radius: 1rem;
+  background: rgb(92 212 216 / 14%);
+  color: #90f3f5;
+  text-align: center;
+}
+
 .situation-layer-switcher > summary {
   padding: 0.65rem 0.8rem;
   color: #77e4e8;
@@ -67,7 +114,7 @@
   position: absolute;
   z-index: 4;
   right: 1.4rem;
-  bottom: 4.6rem;
+  bottom: 5.8rem;
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -99,7 +146,7 @@
   position: absolute;
   z-index: 4;
   left: 50%;
-  bottom: 4.6rem;
+  bottom: 5.8rem;
   transform: translateX(-50%);
   max-width: 31rem;
   margin: 0;
@@ -109,6 +156,52 @@
   color: #c8e8ea;
   font-size: 0.7rem;
   pointer-events: none;
+}
+
+.situation-timeline {
+  position: absolute;
+  z-index: 4;
+  right: 1.4rem;
+  bottom: 1rem;
+  left: 1.4rem;
+  display: grid;
+  grid-template-columns: auto auto auto minmax(8rem, 1fr) minmax(8rem, auto) auto;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 3.7rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid rgb(118 214 218 / 30%);
+  border-radius: 0.9rem;
+  background: rgb(4 32 48 / 92%);
+  color: #eafcff;
+  box-shadow: 0 1rem 2.4rem rgb(0 0 0 / 30%);
+  backdrop-filter: blur(14px);
+}
+
+.situation-timeline button,
+.situation-timeline select {
+  min-height: 2rem;
+  border: 1px solid rgb(140 231 233 / 28%);
+  border-radius: 0.55rem;
+  background: rgb(28 91 102 / 55%);
+  color: inherit;
+}
+
+.situation-timeline time,
+.situation-timeline span,
+.situation-timeline b {
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.situation-timeline span {
+  overflow: hidden;
+  color: #bfe8eb;
+  text-overflow: ellipsis;
+}
+
+.situation-timeline b {
+  color: #ffe487;
 }
 
 .situation-map-marker {
@@ -262,6 +355,21 @@ button.situation-map-marker {
   display: grid;
   gap: 0.6rem;
 }
+.situation-source-catalogue {
+  border: 1px solid rgb(112 213 226 / 24%);
+  border-radius: 0.75rem;
+  background: rgb(5 48 72 / 44%);
+}
+.situation-source-catalogue > summary {
+  padding: 0.7rem 0.8rem;
+  color: #d7f6fa;
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+.situation-source-catalogue .situation-source-grid {
+  padding: 0 0.65rem 0.65rem;
+}
 .situation-source-grid article,
 .situation-event-list li {
   padding: 0.75rem;
@@ -316,6 +424,69 @@ button.situation-map-marker {
   background: linear-gradient(145deg, rgb(8 73 104 / 96%), rgb(7 54 82 / 96%));
   color: #eefcff;
 }
+.situation-evidence-card {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.9rem;
+  border: 1px solid rgb(86 211 229 / 42%);
+  border-radius: 0.8rem;
+  background: linear-gradient(145deg, rgb(7 58 88 / 98%), rgb(8 42 67 / 98%));
+  color: #eefcff;
+}
+.situation-evidence-card > header,
+.situation-evidence-card > footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.situation-evidence-card h3,
+.situation-evidence-card h4,
+.situation-evidence-card p {
+  margin: 0;
+}
+.situation-evidence-card > header button {
+  border: 0;
+  background: transparent;
+  color: #d9f8ff;
+  font-size: 1.4rem;
+}
+.situation-evidence-card dl {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  margin: 0;
+  border: 1px solid rgb(146 220 232 / 18%);
+  border-radius: 0.55rem;
+}
+.situation-evidence-card dl div {
+  padding: 0.45rem;
+}
+.situation-evidence-card dt {
+  color: #86b7c0;
+  font-size: 0.62rem;
+}
+.situation-evidence-card dd {
+  margin: 0.2rem 0 0;
+  font-size: 0.72rem;
+}
+.situation-evidence-card p {
+  color: #c4e3e8;
+  font-size: 0.74rem;
+  line-height: 1.6;
+}
+.situation-evidence-card > footer {
+  align-items: center;
+}
+.situation-evidence-card > footer button,
+.situation-evidence-card > footer a {
+  padding: 0.45rem 0.65rem;
+  border: 1px solid rgb(116 220 235 / 36%);
+  border-radius: 0.5rem;
+  background: rgb(22 115 153 / 42%);
+  color: #dffaff;
+  font-size: 0.7rem;
+  text-decoration: none;
+}
 .situation-weather-detail > header {
   align-items: flex-start;
 }
@@ -368,8 +539,13 @@ button.situation-map-marker {
 }
 
 @media (max-width: 900px) {
+  .situation-intelligence-controls {
+    top: 5.2rem;
+    right: 0.75rem;
+    left: 0.75rem;
+  }
   .situation-layer-switcher {
-    top: 8.5rem;
+    top: 9rem;
   }
   .situation-map-tools {
     right: 0.75rem;
@@ -381,6 +557,15 @@ button.situation-map-marker {
     left: 0.75rem;
     max-width: none;
     transform: none;
+  }
+  .situation-timeline {
+    right: 0.75rem;
+    left: 0.75rem;
+    grid-template-columns: auto auto auto 1fr;
+  }
+  .situation-timeline span,
+  .situation-timeline b {
+    display: none;
   }
 }
 

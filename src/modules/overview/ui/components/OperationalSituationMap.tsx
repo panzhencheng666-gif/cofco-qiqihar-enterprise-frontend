@@ -19,6 +19,12 @@ import {
   railwayRouteGeoJson,
   type OperationalLayerCode,
 } from "./operationalSituationMapData";
+import {
+  categoryCount,
+  operationalSituationTimeline,
+  type SituationTimelineCategory,
+  type SituationTimelineItem,
+} from "./operationalSituationTimeline";
 import { OVERVIEW_VECTOR_STYLE } from "./overviewVectorStyle";
 import {
   calculateOperationalMapPadding,
@@ -32,17 +38,25 @@ export interface SituationMapBounds {
   minLongitude: number;
 }
 
-type LayerCode = OperationalLayerCode | "ADMINISTRATIVE" | "RAILWAY_ROUTE";
+type LayerCode =
+  OperationalLayerCode | "ADMINISTRATIVE" | "RAILWAY_ROUTE" | "WEATHER_RISK";
 
 const ADMIN_SOURCE = "situation-admin-regions";
 const ROUTE_SOURCE = "situation-railway-routes";
 const LAYER_LABELS: Readonly<Record<LayerCode, string>> = {
   ADMINISTRATIVE: "行政边界",
+  WEATHER_RISK: "气象风险",
   RAILWAY_ROUTE: "铁路线路",
   STORAGE: "库点",
   RAILWAY: "铁路站点",
   PUBLIC_EVENT: "公开事件",
 };
+const INTELLIGENCE_LABELS = {
+  WEATHER: "气象风险",
+  LOGISTICS: "物流态势",
+  MARKET: "市场信号",
+  POLICY: "政策事件",
+} as const;
 const MARKER_LABELS: Readonly<Record<OperationalLayerCode, string>> = {
   STORAGE: "库点",
   RAILWAY: "铁路",
@@ -59,6 +73,7 @@ export function OperationalSituationMap({
   onRegionDrill,
   onRegionSelect,
   onReturnToParent,
+  onTimelineSelect,
   selectedFacilityId,
   selectedRegionCode,
   situation,
@@ -72,6 +87,7 @@ export function OperationalSituationMap({
   onRegionDrill: (region: OverviewRegion) => void;
   onRegionSelect: (region: OverviewRegion) => void;
   onReturnToParent: () => void;
+  onTimelineSelect?: (item: SituationTimelineItem | undefined) => void;
   selectedFacilityId?: string;
   selectedRegionCode?: string;
   situation: OperationalSituationCatalogue;
@@ -93,21 +109,71 @@ export function OperationalSituationMap({
   const [viewAngle, setViewAngle] = useState(60);
   const [layers, setLayers] = useState<Record<LayerCode, boolean>>({
     ADMINISTRATIVE: true,
+    WEATHER_RISK: true,
     RAILWAY_ROUTE: true,
     STORAGE: true,
     RAILWAY: true,
     PUBLIC_EVENT: true,
   });
-  const allMarkers = useMemo(
-    () => operationalMarkers(facilities, situation),
+  const [intelligence, setIntelligence] = useState<
+    Record<Exclude<SituationTimelineCategory, "PUBLIC_EVENT">, boolean>
+  >({ WEATHER: true, LOGISTICS: true, MARKET: true, POLICY: true });
+  const timeline = useMemo(
+    () => operationalSituationTimeline(situation, facilities),
     [facilities, situation],
+  );
+  const [timelineIndex, setTimelineIndex] = useState(() =>
+    Math.max(0, timeline.length - 1),
+  );
+  const [playing, setPlaying] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const boundedTimelineIndex = Math.min(
+    timelineIndex,
+    Math.max(0, timeline.length - 1),
+  );
+  const selectedTimeline = timeline[boundedTimelineIndex];
+  const selectedTime = selectedTimeline?.occurredAt ?? situation.generatedAt;
+  const visibleSituation = useMemo(
+    () => ({
+      ...situation,
+      weather: intelligence.WEATHER
+        ? situation.weather.filter(
+            (item) => Date.parse(item.observedAt) <= Date.parse(selectedTime),
+          )
+        : [],
+      publicEvents: situation.publicEvents.filter(
+        (item) => Date.parse(item.observedAt) <= Date.parse(selectedTime),
+      ),
+      policyEvents: intelligence.POLICY
+        ? situation.policyEvents.filter(
+            (item) =>
+              item.publishedOn === null ||
+              Date.parse(`${item.publishedOn}T00:00:00+08:00`) <=
+                Date.parse(selectedTime),
+          )
+        : [],
+    }),
+    [intelligence.POLICY, intelligence.WEATHER, selectedTime, situation],
+  );
+  const weatherRiskByRoot = useMemo(
+    () =>
+      new Map(visibleSituation.weather.map((item) => [item.rootRegionCode, item.risk])),
+    [visibleSituation.weather],
+  );
+  const allMarkers = useMemo(
+    () => operationalMarkers(facilities, visibleSituation),
+    [facilities, visibleSituation],
   );
   const visibleMarkers = useMemo(
     () =>
       allMarkers.filter(
-        (marker) => layers[marker.kind] && insideBounds(marker, bounds),
+        (marker) =>
+          layers[marker.kind] &&
+          (marker.kind !== "STORAGE" || intelligence.MARKET) &&
+          (marker.kind !== "RAILWAY" || intelligence.LOGISTICS) &&
+          insideBounds(marker, bounds),
       ),
-    [allMarkers, bounds, layers],
+    [allMarkers, bounds, intelligence.LOGISTICS, intelligence.MARKET, layers],
   );
   const regionByCode = useMemo(
     () =>
@@ -125,6 +191,7 @@ export function OperationalSituationMap({
     features,
     routes: facilities.railwayRoutes,
     selectedRegionCode,
+    weatherRiskByRoot,
   });
 
   useEffect(() => {
@@ -151,8 +218,33 @@ export function OperationalSituationMap({
       features,
       routes: facilities.railwayRoutes,
       selectedRegionCode,
+      weatherRiskByRoot,
     };
-  }, [backdrop, facilities.railwayRoutes, features, selectedRegionCode]);
+  }, [
+    backdrop,
+    facilities.railwayRoutes,
+    features,
+    selectedRegionCode,
+    weatherRiskByRoot,
+  ]);
+
+  useEffect(() => {
+    if (!playing || timeline.length < 2) return;
+    const timer = window.setInterval(() => {
+      setTimelineIndex((current) => {
+        if (current >= timeline.length - 1) {
+          setPlaying(false);
+          return current;
+        }
+        return current + 1;
+      });
+    }, 1800 / playbackSpeed);
+    return () => window.clearInterval(timer);
+  }, [playbackSpeed, playing, timeline.length]);
+
+  useEffect(() => {
+    onTimelineSelect?.(selectedTimeline);
+  }, [onTimelineSelect, selectedTimeline]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -188,7 +280,12 @@ export function OperationalSituationMap({
       updateSource(
         map,
         ADMIN_SOURCE,
-        administrativeGeoJson(data.backdrop, data.features, data.selectedRegionCode),
+        administrativeGeoJson(
+          data.backdrop,
+          data.features,
+          data.selectedRegionCode,
+          data.weatherRiskByRoot,
+        ),
       );
       updateSource(map, ROUTE_SOURCE, railwayRouteGeoJson(data.routes));
       fitVisibleBounds();
@@ -266,9 +363,9 @@ export function OperationalSituationMap({
     updateSource(
       map,
       ADMIN_SOURCE,
-      administrativeGeoJson(backdrop, features, selectedRegionCode),
+      administrativeGeoJson(backdrop, features, selectedRegionCode, weatherRiskByRoot),
     );
-  }, [backdrop, features, selectedRegionCode]);
+  }, [backdrop, features, selectedRegionCode, weatherRiskByRoot]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -284,12 +381,18 @@ export function OperationalSituationMap({
       ["situation-admin-fill", "situation-admin-line", "situation-admin-label"],
       layers.ADMINISTRATIVE,
     );
+    setVisibility(map, ["situation-weather-risk"], layers.WEATHER_RISK);
     setVisibility(
       map,
       ["situation-railway-route", "situation-railway-route-label"],
-      layers.RAILWAY_ROUTE,
+      layers.RAILWAY_ROUTE && intelligence.LOGISTICS,
     );
-  }, [layers.ADMINISTRATIVE, layers.RAILWAY_ROUTE]);
+  }, [
+    intelligence.LOGISTICS,
+    layers.ADMINISTRATIVE,
+    layers.RAILWAY_ROUTE,
+    layers.WEATHER_RISK,
+  ]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -389,6 +492,34 @@ export function OperationalSituationMap({
           ))}
         </div>
       </details>
+      <section className="situation-intelligence-controls" aria-label="态势图层">
+        <strong>态势图层</strong>
+        {(
+          Object.keys(INTELLIGENCE_LABELS) as Exclude<
+            SituationTimelineCategory,
+            "PUBLIC_EVENT"
+          >[]
+        ).map((code) => {
+          const count = categoryCount(code, timeline, facilities);
+          return (
+            <label key={code}>
+              <input
+                checked={intelligence[code]}
+                disabled={count === 0}
+                type="checkbox"
+                onChange={(event) =>
+                  setIntelligence((current) => ({
+                    ...current,
+                    [code]: event.target.checked,
+                  }))
+                }
+              />
+              <span>{INTELLIGENCE_LABELS[code]}</span>
+              <b>{count}</b>
+            </label>
+          );
+        })}
+      </section>
       <div className="situation-map-tools" aria-label="态势地图工具">
         <button type="button" aria-label="放大地图" onClick={() => zoom("in")}>
           +
@@ -416,6 +547,44 @@ export function OperationalSituationMap({
         当前为{levelLabel(currentLevel)}
         ；单击区域查看详情，双击或选中后放大进入下一级，缩小返回上一级。
       </p>
+      <section className="situation-timeline" aria-label="真实态势时间轴">
+        <button
+          type="button"
+          disabled={timeline.length < 2}
+          aria-label={playing ? "暂停态势播放" : "播放态势记录"}
+          onClick={() => {
+            if (!playing && boundedTimelineIndex >= timeline.length - 1)
+              setTimelineIndex(0);
+            setPlaying((current) => !current);
+          }}
+        >
+          {playing ? "暂停" : "播放"}
+        </button>
+        <time dateTime={selectedTime}>{formatTimelineTime(selectedTime)}</time>
+        <select
+          aria-label="态势播放速度"
+          value={playbackSpeed}
+          onChange={(event) => setPlaybackSpeed(Number(event.target.value))}
+        >
+          <option value={1}>1×</option>
+          <option value={2}>2×</option>
+          <option value={4}>4×</option>
+        </select>
+        <input
+          aria-label="态势时间点"
+          type="range"
+          min="0"
+          max={Math.max(0, timeline.length - 1)}
+          value={boundedTimelineIndex}
+          disabled={!timeline.length}
+          onChange={(event) => {
+            setPlaying(false);
+            setTimelineIndex(Number(event.target.value));
+          }}
+        />
+        <span>{selectedTimeline?.title ?? "暂无真实事件记录"}</span>
+        <b>真实事件点 · 不插值</b>
+      </section>
     </section>
   );
 }
@@ -451,6 +620,23 @@ function addSituationLayers(map: MapLibreMap) {
     },
   });
   map.addSource(ADMIN_SOURCE, { type: "geojson", data: emptyCollection() });
+  map.addLayer({
+    id: "situation-weather-risk",
+    type: "fill",
+    source: ADMIN_SOURCE,
+    paint: {
+      "fill-color": [
+        "match",
+        ["get", "weatherRiskLevel"],
+        2,
+        "#ff9d2e",
+        1,
+        "#28c98b",
+        "#2ed1dc",
+      ],
+      "fill-opacity": ["match", ["get", "weatherRiskLevel"], 2, 0.28, 1, 0.1, 0],
+    },
+  });
   map.addLayer({
     id: "situation-admin-fill",
     type: "fill",
@@ -562,6 +748,7 @@ function layerCount(
   features: readonly MapFeature[],
 ) {
   if (code === "ADMINISTRATIVE") return features.length;
+  if (code === "WEATHER_RISK") return features.length;
   if (code === "RAILWAY_ROUTE") return facilities.railwayRoutes.length;
   return markers.filter((marker) => marker.kind === code).length;
 }
@@ -571,4 +758,14 @@ function levelLabel(level?: OverviewRegion["level"]) {
   if (level === "TOWNSHIP") return "乡镇级分区";
   if (level === "VILLAGE") return "村级分区";
   return "市级分区";
+}
+
+function formatTimelineTime(value: string) {
+  return new Date(value).toLocaleString("zh-CN", {
+    hour12: false,
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }

@@ -46,6 +46,7 @@ import { visibleSampleNetworkMapIcons } from "../presentation/sampleNetworkLayer
 import { HttpContractError, HttpError } from "../../../../shared/api/HttpClient";
 import { MapAnnotationOverlay } from "../components/MapAnnotationOverlay";
 import { OperationalSituationMap } from "../components/OperationalSituationMap";
+import type { SituationTimelineItem } from "../components/operationalSituationTimeline";
 import { flattenCoordinates, type MapFeature } from "../components/boundaryGeometry";
 
 const OVERALL_SCOPE = "__OVERALL__";
@@ -279,6 +280,8 @@ export function OverviewPage({
   const [operationalSituationIssue, setOperationalSituationIssue] = useState<string>();
   const [selectedOperationalFacilityId, setSelectedOperationalFacilityId] =
     useState<string>();
+  const [selectedOperationalSituationItem, setSelectedOperationalSituationItem] =
+    useState<SituationTimelineItem>();
   const [sampleExportPending, setSampleExportPending] = useState(false);
   const [sampleExportIssue, setSampleExportIssue] = useState<string>();
   const [pendingNavigationLabel, setPendingNavigationLabel] = useState<string>();
@@ -1193,6 +1196,7 @@ export function OverviewPage({
                     setOperationalFacilitiesIssue(undefined);
                     setOperationalSituationIssue(undefined);
                     setSelectedOperationalFacilityId(undefined);
+                    setSelectedOperationalSituationItem(undefined);
                     clearSamplePointSelection();
                   }}
                 />
@@ -1227,7 +1231,16 @@ export function OverviewPage({
                   {...(operationalSelectedRegion
                     ? { selectedRegion: operationalSelectedRegion }
                     : {})}
-                  onOperationalFacilitySelect={setSelectedOperationalFacilityId}
+                  {...(selectedOperationalSituationItem
+                    ? { selectedOperationalSituationItem }
+                    : {})}
+                  onOperationalSituationItemDismiss={() =>
+                    setSelectedOperationalSituationItem(undefined)
+                  }
+                  onOperationalFacilitySelect={(id) => {
+                    setSelectedOperationalSituationItem(undefined);
+                    setSelectedOperationalFacilityId(id);
+                  }}
                   {...(currentRegionalSummary
                     ? { regionalSummary: currentRegionalSummary }
                     : {})}
@@ -1360,10 +1373,14 @@ export function OverviewPage({
                   )}
                   facilities={operationalFacilities}
                   features={mapFeatures}
-                  onFacilitySelect={setSelectedOperationalFacilityId}
+                  onFacilitySelect={(id) => {
+                    setSelectedOperationalSituationItem(undefined);
+                    setSelectedOperationalFacilityId(id);
+                  }}
                   onRegionDrill={drillDown}
                   onRegionSelect={selectRegion}
                   onReturnToParent={returnToParent}
+                  onTimelineSelect={setSelectedOperationalSituationItem}
                   {...(effectiveOperationalFacilityId
                     ? { selectedFacilityId: effectiveOperationalFacilityId }
                     : {})}

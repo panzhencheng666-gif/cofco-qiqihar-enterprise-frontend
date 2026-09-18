@@ -2,6 +2,7 @@ export interface OperationalSituationCatalogue {
   generatedAt: string;
   weather: readonly WeatherObservation[];
   publicEvents: readonly PublicSituationEvent[];
+  policyEvents: readonly PolicySituationEvent[];
   sources: readonly OperationalSituationSource[];
 }
 
@@ -35,6 +36,17 @@ export interface PublicSituationEvent {
   eventUrl: string;
   evidenceUrl: string | null;
   fetchedAt: string;
+}
+
+export interface PolicySituationEvent {
+  sourceId: string;
+  rootRegionCode: string;
+  title: string;
+  summary: string;
+  publishedOn: string | null;
+  sourceName: string;
+  sourceUrl: string;
+  verifiedAt: string | null;
 }
 
 export interface OperationalSituationSource {

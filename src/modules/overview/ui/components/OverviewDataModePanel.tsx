@@ -7,6 +7,7 @@ import type {
 import type { OverviewRegion } from "../../domain/overview";
 import type { OperationalFacilityCatalogue } from "../../domain/operationalFacilities";
 import type { OperationalSituationCatalogue } from "../../domain/operationalSituation";
+import type { SituationTimelineItem } from "./operationalSituationTimeline";
 import "./overview-data-mode.css";
 import { OperationalSituationPanel } from "./OperationalSituationPanel";
 import { RegionalAgricultureProfilePanel } from "./RegionalAgricultureProfilePanel";
@@ -90,6 +91,8 @@ export function OverviewDataModePanel({
   selectedOperationalFacilityId,
   selectedRegion,
   onOperationalFacilitySelect,
+  selectedOperationalSituationItem,
+  onOperationalSituationItemDismiss,
 }: {
   issue?: string;
   loading?: boolean;
@@ -103,6 +106,8 @@ export function OverviewDataModePanel({
   selectedOperationalFacilityId?: string;
   selectedRegion?: OverviewRegion;
   onOperationalFacilitySelect?: (id: string) => void;
+  selectedOperationalSituationItem?: SituationTimelineItem;
+  onOperationalSituationItemDismiss?: () => void;
 }) {
   return (
     <section
@@ -246,6 +251,12 @@ export function OverviewDataModePanel({
             ? { selectedFacilityId: selectedOperationalFacilityId }
             : {})}
           {...(selectedRegion ? { selectedRegion } : {})}
+          {...(selectedOperationalSituationItem
+            ? { selectedTimelineItem: selectedOperationalSituationItem }
+            : {})}
+          {...(onOperationalSituationItemDismiss
+            ? { onTimelineItemDismiss: onOperationalSituationItemDismiss }
+            : {})}
           situation={operationalSituation}
         />
       )}

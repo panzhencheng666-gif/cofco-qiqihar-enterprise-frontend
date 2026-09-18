@@ -44,6 +44,18 @@ describe("HttpOverviewRegionalDataRepository", () => {
                 fetchedAt: "2026-09-18T05:02:00Z",
               },
             ],
+            policyEvents: [
+              {
+                sourceId: "policy-1",
+                rootRegionCode: "*",
+                title: "公开政策",
+                summary: "以原始公开文件为准。",
+                publishedOn: "2026-09-01",
+                sourceName: "公开来源",
+                sourceUrl: "https://example.test/policy",
+                verifiedAt: "2026-09-18T05:00:00Z",
+              },
+            ],
             sources: [
               {
                 code: "NASA_EONET",
@@ -66,6 +78,7 @@ describe("HttpOverviewRegionalDataRepository", () => {
     expect(get.mock.calls[0]?.[0]).toBe("/api/v1/overview/operational-situation");
     expect(result.weather[0]?.meanTemperatureC).toBe(18.2);
     expect(result.publicEvents[0]?.magnitudeValue).toBe(55);
+    expect(result.policyEvents[0]?.title).toBe("公开政策");
   });
 
   it("reads governed storage and railway facilities for the overall map", async () => {

@@ -424,6 +424,20 @@ const operationalSituationSchema = z.object({
         fetchedAt: z.string(),
       }),
     ),
+    policyEvents: z
+      .array(
+        z.object({
+          sourceId: z.string(),
+          rootRegionCode: z.string(),
+          title: z.string(),
+          summary: z.string(),
+          publishedOn: z.string().nullable(),
+          sourceName: z.string(),
+          sourceUrl: z.string(),
+          verifiedAt: z.string().nullable(),
+        }),
+      )
+      .default([]),
     sources: z.array(
       z.object({
         code: z.string(),
