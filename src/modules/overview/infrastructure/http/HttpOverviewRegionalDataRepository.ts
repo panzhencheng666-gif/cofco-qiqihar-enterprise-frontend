@@ -10,6 +10,9 @@ import { queryString } from "../../../../shared/api/HttpClient";
 const decimalValueSchema = z
   .union([z.string(), z.number()])
   .transform((value) => String(value));
+const decimalNumberSchema = z
+  .union([z.string(), z.number()])
+  .transform((value) => Number(value));
 
 const currentEstimateSchema = z.object({
   value: decimalValueSchema,
@@ -276,6 +279,104 @@ const supplyBalanceSchema = z.object({
   }),
 });
 
+const operationalFacilityCatalogueSchema = z.object({
+  data: z.object({
+    regionCode: z.string().nullable(),
+    productCode: z.string().nullable(),
+    asOf: z.string(),
+    storageCategories: z.array(
+      z.object({
+        code: z.enum(["OWNED", "LEASED", "HISTORICAL_LEASED"]),
+        label: z.string(),
+        count: z.number().int(),
+      }),
+    ),
+    storageFacilities: z.array(
+      z.object({
+        code: z.string(),
+        name: z.string(),
+        workUnitCode: z.string(),
+        relationType: z.enum(["OWNED", "LEASED", "HISTORICAL_LEASED"]),
+        relationLabel: z.string(),
+        regionCode: z.string(),
+        regionName: z.string(),
+        address: z.string(),
+        longitude: decimalNumberSchema.nullable(),
+        latitude: decimalNumberSchema.nullable(),
+        coordinatePrecision: z.enum(["EXACT", "STREET", "TOWN", "UNVERIFIED"]),
+        coordinatePrecisionLabel: z.string(),
+        operationalStatus: z.string(),
+        capacityTonnes: decimalNumberSchema.nullable(),
+        capacityAsOf: z.string().nullable(),
+        prices: z.array(
+          z.object({
+            productCode: z.string(),
+            productName: z.string().nullable(),
+            qualityRequirement: z.string(),
+            value: decimalNumberSchema,
+            unit: z.string(),
+            effectiveOn: z.string(),
+            expiresOn: z.string().nullable(),
+            sourceName: z.string(),
+            sourceUrl: z.string(),
+            sourceClassification: z.string(),
+            current: z.boolean(),
+          }),
+        ),
+        evidence: z.array(
+          z.object({
+            kind: z.string(),
+            title: z.string(),
+            sourceName: z.string(),
+            sourceUrl: z.string(),
+            sourceClassification: z.string(),
+            sourceAsOf: z.string().nullable(),
+            note: z.string(),
+          }),
+        ),
+      }),
+    ),
+    railwayFacilities: z.array(
+      z.object({
+        sourceId: z.string(),
+        name: z.string(),
+        kind: z.string(),
+        longitude: decimalNumberSchema,
+        latitude: decimalNumberSchema,
+        operator: z.string(),
+        reference: z.string(),
+        status: z.string(),
+        service: z.string(),
+        locationRelation: z.enum(["WITHIN", "NEARBY"]),
+        distanceKm: decimalNumberSchema,
+        nearbyLines: z.string(),
+        sourceUrl: z.string(),
+      }),
+    ),
+    railwayLines: z.array(
+      z.object({
+        name: z.string(),
+        mappedTrackKm: decimalNumberSchema,
+        usage: z.string(),
+        electrification: z.string(),
+        gauge: z.string(),
+        operator: z.string(),
+        sourceUrl: z.string(),
+      }),
+    ),
+    sources: z.array(
+      z.object({
+        code: z.enum(["STORAGE", "RAILWAY"]),
+        label: z.string(),
+        status: z.enum(["READY", "STALE", "UNAVAILABLE"]),
+        sourceAsOf: z.string().nullable(),
+        sourceUrl: z.string().nullable(),
+        notice: z.string(),
+      }),
+    ),
+  }),
+});
+
 export class HttpOverviewRegionalDataRepository implements OverviewRegionalDataRepository {
   constructor(private readonly http: Pick<HttpClient, "get">) {}
 
@@ -313,6 +414,19 @@ export class HttpOverviewRegionalDataRepository implements OverviewRegionalDataR
           productCode: query.productCode,
         })}`,
         supplyBalanceSchema,
+      )
+    ).data;
+  }
+
+  async operationalFacilities(
+    query: { regionCode?: string; productCode?: string; asOf: string },
+    signal?: AbortSignal,
+  ) {
+    return (
+      await this.http.get(
+        `/api/v1/overview/operational-facilities${queryString(query)}`,
+        operationalFacilityCatalogueSchema,
+        signal ? { signal } : undefined,
       )
     ).data;
   }

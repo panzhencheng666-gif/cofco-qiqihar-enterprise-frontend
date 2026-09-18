@@ -4,6 +4,82 @@ import type { ZodType } from "zod";
 import { HttpOverviewRegionalDataRepository } from "./HttpOverviewRegionalDataRepository";
 
 describe("HttpOverviewRegionalDataRepository", () => {
+  it("reads governed storage and railway facilities for the overall map", async () => {
+    const get = vi.fn().mockImplementation((_path: string, schema: ZodType) =>
+      Promise.resolve(
+        schema.parse({
+          data: {
+            regionCode: null,
+            productCode: "SOYBEAN",
+            asOf: "2026-09-18",
+            storageCategories: [{ code: "OWNED", label: "自有库点", count: 1 }],
+            storageFacilities: [
+              {
+                code: "KESHAN_DEPOT",
+                name: "中粮贸易（克山）粮食储运有限公司",
+                workUnitCode: "KESHAN_DEPOT",
+                relationType: "OWNED",
+                relationLabel: "自有库点",
+                regionCode: "230229",
+                regionName: "克山县",
+                address: "春风大街36号",
+                longitude: "125.8476007",
+                latitude: "48.0252548",
+                coordinatePrecision: "STREET",
+                coordinatePrecisionLabel: "公开地址街道级近似位置",
+                operationalStatus: "ACTIVE",
+                capacityTonnes: null,
+                capacityAsOf: null,
+                prices: [],
+                evidence: [],
+              },
+            ],
+            railwayFacilities: [
+              {
+                sourceId: "node/1",
+                name: "泰来",
+                kind: "STATION",
+                longitude: 123.4,
+                latitude: 46.4,
+                operator: "",
+                reference: "",
+                status: "",
+                service: "",
+                locationRelation: "WITHIN",
+                distanceKm: 0,
+                nearbyLines: "平齐铁路",
+                sourceUrl: "https://www.openstreetmap.org/node/1",
+              },
+            ],
+            railwayLines: [],
+            sources: [
+              {
+                code: "RAILWAY",
+                label: "铁路站点",
+                status: "READY",
+                sourceAsOf: "2026-09-18T00:00:00Z",
+                sourceUrl: "https://www.openstreetmap.org/copyright",
+                notice: "地理参考不等于货运营业资质。",
+              },
+            ],
+          },
+        }),
+      ),
+    );
+    const repository = new HttpOverviewRegionalDataRepository({ get });
+
+    const result = await repository.operationalFacilities({
+      productCode: "SOYBEAN",
+      asOf: "2026-09-18",
+    });
+
+    expect(get.mock.calls[0]?.[0]).toBe(
+      "/api/v1/overview/operational-facilities?productCode=SOYBEAN&asOf=2026-09-18",
+    );
+    expect(result.storageFacilities[0]?.longitude).toBe(125.8476007);
+    expect(result.railwayFacilities[0]?.name).toBe("泰来");
+  });
+
   it("reads regional production and product-specific supply balance from independent endpoints", async () => {
     const get = vi
       .fn()

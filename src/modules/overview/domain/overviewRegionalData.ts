@@ -1,6 +1,11 @@
 import type { RegionalEstimateBatch } from "./regionalEstimates";
 export type OverviewDataMode =
-  "SAMPLE_POINTS" | "REGIONAL_DATA" | "SUPPLY_BALANCE" | "MAP_ANNOTATION";
+  | "SAMPLE_POINTS"
+  | "STORAGE_FACILITIES"
+  | "RAILWAY_FACILITIES"
+  | "REGIONAL_DATA"
+  | "SUPPLY_BALANCE"
+  | "MAP_ANNOTATION";
 
 export interface RegionalCropSummary {
   regionCode: string;

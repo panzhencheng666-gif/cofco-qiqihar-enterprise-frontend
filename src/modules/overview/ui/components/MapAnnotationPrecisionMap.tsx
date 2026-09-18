@@ -29,7 +29,7 @@ interface PrecisionMapBounds {
 const ADMIN_SOURCE = "annotation-admin-regions";
 const SAMPLE_SOURCE = "annotation-sample-points";
 const ANNOTATION_SOURCE = "annotation-user-shape";
-const DEFAULT_VECTOR_STYLE: StyleSpecification = {
+export const OVERVIEW_VECTOR_STYLE: StyleSpecification = {
   version: 8,
   glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
   sources: {
@@ -359,7 +359,7 @@ export const MapAnnotationPrecisionMap = forwardRef<
         renderWorldCopies: false,
         style:
           import.meta.env.VITE_OVERVIEW_VECTOR_STYLE_URL?.trim() ||
-          DEFAULT_VECTOR_STYLE,
+          OVERVIEW_VECTOR_STYLE,
       });
     } catch {
       reportUnavailable();

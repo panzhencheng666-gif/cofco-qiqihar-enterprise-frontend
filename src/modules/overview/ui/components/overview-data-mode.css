@@ -157,6 +157,311 @@
   color: #ffd2cd;
 }
 
+.operational-facility-panel {
+  display: grid;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-color: rgb(124 203 225 / 58%) transparent;
+  scrollbar-width: thin;
+}
+
+.operational-facility-panel > header {
+  align-items: flex-start;
+  justify-content: space-between;
+  margin: 0;
+}
+
+.operational-facility-panel > header small,
+.operational-facility-panel__notice {
+  color: #a9d4e2;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.operational-facility-panel h2 {
+  margin: 2px 0 0;
+  color: #f5fdff;
+  font-size: 20px;
+}
+
+.operational-source-badge {
+  padding: 4px 8px;
+  border: 1px solid rgb(127 255 210 / 35%);
+  border-radius: 999px;
+  color: #a8f4d1;
+  background: rgb(17 135 104 / 25%);
+  font-size: 10px;
+}
+
+.operational-source-badge.is-stale {
+  border-color: rgb(255 213 102 / 45%);
+  color: #ffe8a1;
+  background: rgb(150 102 14 / 30%);
+}
+
+.operational-source-badge.is-unavailable {
+  border-color: rgb(255 151 139 / 38%);
+  color: #ffd1ca;
+  background: rgb(139 52 46 / 30%);
+}
+
+.operational-facility-panel__categories,
+.railway-facility-route {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.operational-facility-panel__categories span,
+.railway-facility-route span {
+  padding: 8px;
+  border: 1px solid rgb(190 231 243 / 18%);
+  border-radius: 7px;
+  color: #b8dfe9;
+  background: rgb(5 61 94 / 42%);
+  font-size: 10px;
+}
+
+.operational-facility-panel__categories b,
+.railway-facility-route b {
+  display: block;
+  margin-top: 3px;
+  color: #fff1b8;
+  font-size: 18px;
+}
+
+.railway-facility-route {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.railway-facility-route b {
+  color: #7ee9ff;
+}
+
+.operational-facility-panel__list {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(160px, 1fr);
+  gap: 7px;
+  overflow-x: auto;
+  padding-bottom: 3px;
+}
+
+.operational-facility-panel__list button {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid rgb(190 231 243 / 20%);
+  border-radius: 7px;
+  color: #d9f4fa;
+  background: rgb(5 61 94 / 42%);
+  text-align: left;
+  cursor: pointer;
+}
+
+.operational-facility-panel__list button[aria-pressed="true"] {
+  border-color: #f6d86c;
+  background: rgb(51 120 139 / 62%);
+  box-shadow: inset 3px 0 #f6d86c;
+}
+
+.operational-facility-panel__list b {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.operational-facility-panel__list span {
+  color: #9fcbd8;
+  font-size: 9px;
+}
+
+.storage-facility-card,
+.railway-facility-card {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgb(255 213 102 / 25%);
+  border-radius: 10px;
+  background: linear-gradient(145deg, rgb(14 78 106 / 84%), rgb(6 51 78 / 76%));
+}
+
+.storage-facility-card__title,
+.storage-facility-card__title > div,
+.storage-facility-card__price > div,
+.railway-facility-card__head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.storage-facility-card__title > div,
+.railway-facility-card__head > div {
+  display: grid;
+  gap: 3px;
+}
+
+.storage-facility-card__title > div span {
+  width: fit-content;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: #473a10;
+  background: #f6d86c;
+  font-size: 9px;
+}
+
+.storage-facility-card__title small,
+.railway-facility-card__head small {
+  color: #a9d4e2;
+  font-size: 9px;
+}
+
+.storage-facility-card dl,
+.railway-facility-card dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  overflow: hidden;
+  border-radius: 7px;
+  background: rgb(190 231 243 / 16%);
+}
+
+.storage-facility-card dl > div,
+.railway-facility-card dl > div {
+  padding: 8px;
+  background: rgb(5 50 76 / 78%);
+}
+
+.storage-facility-card dt,
+.railway-facility-card dt {
+  color: #93c4d2;
+  font-size: 9px;
+}
+
+.storage-facility-card dd,
+.railway-facility-card dd {
+  margin: 3px 0 0;
+  color: #f3fcff;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.storage-facility-card h3,
+.railway-facility-card h3 {
+  margin: 0 0 7px;
+  color: #d9f5ff;
+  font-size: 11px;
+}
+
+.storage-facility-card__price {
+  padding: 8px;
+  border-left: 2px solid #f6d86c;
+  background: rgb(5 50 76 / 56%);
+}
+
+.storage-facility-card__price + .storage-facility-card__price {
+  margin-top: 6px;
+}
+
+.storage-facility-card__price p {
+  margin: 5px 0;
+  color: #cae7ee;
+  font-size: 9px;
+}
+
+.storage-facility-card__price small,
+.storage-facility-card li small {
+  display: block;
+  color: #9fcbd8;
+  font-size: 9px;
+}
+
+.storage-facility-card__price span {
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-size: 8px;
+}
+
+.storage-facility-card__price .is-history {
+  color: #ffe8a1;
+  background: rgb(150 102 14 / 38%);
+}
+
+.storage-facility-card__price .is-current {
+  color: #b9ffdd;
+  background: rgb(17 135 104 / 35%);
+}
+
+.storage-facility-card ul,
+.railway-facility-card ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.storage-facility-card li,
+.railway-facility-card li {
+  display: grid;
+  gap: 3px;
+  padding: 7px;
+  border: 1px solid rgb(190 231 243 / 14%);
+  border-radius: 6px;
+  font-size: 9px;
+}
+
+.storage-facility-card a,
+.railway-facility-card a {
+  color: #7ee9ff;
+}
+
+.railway-facility-card {
+  border-color: rgb(105 234 244 / 25%);
+}
+
+.railway-facility-card__head {
+  justify-content: flex-start;
+}
+
+.railway-facility-card__head > span {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 8px;
+  color: #082f43;
+  background: #62d9f5;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.railway-facility-card__source {
+  width: fit-content;
+  padding: 6px 8px;
+  border: 1px solid rgb(105 234 244 / 35%);
+  border-radius: 5px;
+  font-size: 9px;
+  text-decoration: none;
+}
+
+.railway-facility-card li span {
+  color: #a9d4e2;
+}
+
+.operational-facility-panel__notice {
+  margin: 0;
+  padding: 8px;
+  border-left: 2px solid #f6d86c;
+  background: rgb(5 50 76 / 46%);
+}
+
 .overview-data-mode__profile {
   display: grid;
   gap: 14px;

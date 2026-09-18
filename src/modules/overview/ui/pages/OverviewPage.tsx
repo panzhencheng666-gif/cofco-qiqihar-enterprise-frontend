@@ -24,6 +24,7 @@ import type {
   RegionalCropSummary,
   SupplyBalanceSummary,
 } from "../../domain/overviewRegionalData";
+import type { OperationalFacilityCatalogue } from "../../domain/operationalFacilities";
 import {
   BoundaryMap,
   toMapFeature,
@@ -43,6 +44,7 @@ import { useOverviewSampleNetworkLayers } from "../hooks/useOverviewSampleNetwor
 import { visibleSampleNetworkMapIcons } from "../presentation/sampleNetworkLayers";
 import { HttpContractError, HttpError } from "../../../../shared/api/HttpClient";
 import { MapAnnotationOverlay } from "../components/MapAnnotationOverlay";
+import { OperationalFacilityMap } from "../components/OperationalFacilityMap";
 import { flattenCoordinates, type MapFeature } from "../components/boundaryGeometry";
 
 const OVERALL_SCOPE = "__OVERALL__";
@@ -264,6 +266,14 @@ export function OverviewPage({
   const [supplyBalance, setSupplyBalance] = useState<SupplyBalanceSummary>();
   const [regionalDataLoading, setRegionalDataLoading] = useState(false);
   const [regionalDataIssue, setRegionalDataIssue] = useState<string>();
+  const [operationalFacilities, setOperationalFacilities] =
+    useState<OperationalFacilityCatalogue>();
+  const [operationalFacilitiesLoading, setOperationalFacilitiesLoading] =
+    useState(false);
+  const [operationalFacilitiesIssue, setOperationalFacilitiesIssue] =
+    useState<string>();
+  const [selectedOperationalFacilityId, setSelectedOperationalFacilityId] =
+    useState<string>();
   const [sampleExportPending, setSampleExportPending] = useState(false);
   const [sampleExportIssue, setSampleExportIssue] = useState<string>();
   const [pendingNavigationLabel, setPendingNavigationLabel] = useState<string>();
@@ -740,6 +750,55 @@ export function OverviewPage({
     selectedRegion?.code ||
     mapContextRegion?.code ||
     (scopeRootCode !== OVERALL_SCOPE ? scopeRootCode : "");
+  const operationalFacilityMode =
+    dataMode === "STORAGE_FACILITIES" || dataMode === "RAILWAY_FACILITIES";
+
+  useEffect(() => {
+    if (!operationalFacilityMode || !regionalDataRepository?.operationalFacilities)
+      return;
+    const controller = new AbortController();
+    Promise.resolve()
+      .then(() => {
+        if (controller.signal.aborted) return undefined;
+        setOperationalFacilities(undefined);
+        setOperationalFacilitiesLoading(true);
+        setOperationalFacilitiesIssue(undefined);
+        return regionalDataRepository.operationalFacilities?.(
+          {
+            ...(regionalDataRegionCode ? { regionCode: regionalDataRegionCode } : {}),
+            ...(productCode ? { productCode } : {}),
+            asOf: new Date().toISOString().slice(0, 10),
+          },
+          controller.signal,
+        );
+      })
+      .then((next) => {
+        if (controller.signal.aborted || !next) return;
+        setOperationalFacilities(next);
+        setSelectedOperationalFacilityId((current) => {
+          const ids =
+            dataMode === "STORAGE_FACILITIES"
+              ? next.storageFacilities.map((facility) => facility.code)
+              : next.railwayFacilities.map((facility) => facility.sourceId);
+          return current && ids.includes(current) ? current : ids[0];
+        });
+        setOperationalFacilitiesLoading(false);
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setOperationalFacilities(undefined);
+        setOperationalFacilitiesLoading(false);
+        setOperationalFacilitiesIssue("运营设施加载失败，请稍后重试。");
+      });
+    return () => controller.abort();
+  }, [
+    businessSequence,
+    dataMode,
+    operationalFacilityMode,
+    productCode,
+    regionalDataRegionCode,
+    regionalDataRepository,
+  ]);
 
   useEffect(() => {
     if (
@@ -1083,6 +1142,8 @@ export function OverviewPage({
                     setAnnotationArmed(false);
                     setDataMode(nextMode);
                     setRegionalDataIssue(undefined);
+                    setOperationalFacilitiesIssue(undefined);
+                    setSelectedOperationalFacilityId(undefined);
                     clearSamplePointSelection();
                   }}
                 />
@@ -1093,10 +1154,25 @@ export function OverviewPage({
           ? {
               dataModePanel: (
                 <OverviewDataModePanel
-                  loading={regionalDataLoading}
+                  loading={
+                    operationalFacilityMode
+                      ? operationalFacilitiesLoading
+                      : regionalDataLoading
+                  }
                   mode={dataMode}
                   productLabel={productLabel}
-                  {...(regionalDataIssue ? { issue: regionalDataIssue } : {})}
+                  {...(operationalFacilityMode
+                    ? operationalFacilitiesIssue
+                      ? { issue: operationalFacilitiesIssue }
+                      : {}
+                    : regionalDataIssue
+                      ? { issue: regionalDataIssue }
+                      : {})}
+                  {...(operationalFacilities ? { operationalFacilities } : {})}
+                  {...(selectedOperationalFacilityId
+                    ? { selectedOperationalFacilityId }
+                    : {})}
+                  onOperationalFacilitySelect={setSelectedOperationalFacilityId}
                   {...(currentRegionalSummary
                     ? { regionalSummary: currentRegionalSummary }
                     : {})}
@@ -1109,19 +1185,28 @@ export function OverviewPage({
                 />
               ),
               sideDataPanel:
-                dataMode === "SUPPLY_BALANCE" || dataMode === "REGIONAL_DATA",
+                dataMode === "SUPPLY_BALANCE" ||
+                dataMode === "REGIONAL_DATA" ||
+                operationalFacilityMode,
               scopeLabel: "地区数据范围：齐齐哈尔、黑河、呼伦贝尔、大兴安岭及下级地区",
-              dataSourceLabel:
-                dataMode === "REGIONAL_DATA"
+              dataSourceLabel: operationalFacilityMode
+                ? "库点采用核定记录与保留来源的公开信息；铁路采用 OpenStreetMap 地理参考，货运能力需业务核验"
+                : dataMode === "REGIONAL_DATA"
                   ? "正式地区数据优先；缺项和未来值由系统统计模型自动生成"
                   : "地区与供需数据保存后即为正式数据；历史版本由系统自动留存",
-              dataStatusText: regionalDataLoading
-                ? "正在自动计算地区数据"
-                : currentAgricultureProfile
-                  ? "地区概况已自动生成"
-                  : currentRegionalSummary || currentSupplyBalance
-                    ? "已同步地区正式数据"
-                    : "请选择地图地区",
+              dataStatusText: operationalFacilityMode
+                ? operationalFacilitiesLoading
+                  ? "正在加载运营设施"
+                  : operationalFacilities
+                    ? "运营设施来源状态已同步"
+                    : "暂无可用运营设施"
+                : regionalDataLoading
+                  ? "正在自动计算地区数据"
+                  : currentAgricultureProfile
+                    ? "地区概况已自动生成"
+                    : currentRegionalSummary || currentSupplyBalance
+                      ? "已同步地区正式数据"
+                      : "请选择地图地区",
             }
           : {})}
         filters={
@@ -1199,7 +1284,8 @@ export function OverviewPage({
               reserveRightPanel={
                 annotationArmed ||
                 dataMode === "SUPPLY_BALANCE" ||
-                dataMode === "REGIONAL_DATA"
+                dataMode === "REGIONAL_DATA" ||
+                operationalFacilityMode
               }
               selectedCode={selectedRegionCode}
               {...(selectedSamplePointId ? { selectedSamplePointId } : {})}
@@ -1207,6 +1293,18 @@ export function OverviewPage({
               onSelectionPosition={updateMapSelectionPoint}
               onDrill={drillDown}
             />
+            {operationalFacilityMode && operationalFacilities && annotationBounds && (
+              <OperationalFacilityMap
+                bounds={annotationBounds}
+                mode={dataMode}
+                onSelect={setSelectedOperationalFacilityId}
+                railwayFacilities={operationalFacilities.railwayFacilities}
+                storageFacilities={operationalFacilities.storageFacilities}
+                {...(selectedOperationalFacilityId
+                  ? { selectedId: selectedOperationalFacilityId }
+                  : {})}
+              />
+            )}
             {dataMode === "MAP_ANNOTATION" &&
               mapAnnotationRepository &&
               annotationBounds && (

@@ -84,7 +84,7 @@ describe("Overview command center navigation layout", () => {
     );
   });
 
-  it("opens the relief safe frame whenever a regional data mode owns the right panel", () => {
+  it("opens the relief safe frame whenever data or facility details own the right panel", () => {
     const page = readFileSync(
       resolve("src/modules/overview/ui/pages/OverviewPage.tsx"),
       "utf8",
@@ -99,7 +99,7 @@ describe("Overview command center navigation layout", () => {
     );
 
     expect(page).toMatch(
-      /<BoundaryMap[\s\S]*?reserveRightPanel=\{\s*annotationArmed \|\|\s*dataMode === "SUPPLY_BALANCE" \|\|\s*dataMode === "REGIONAL_DATA"\s*\}/,
+      /<BoundaryMap[\s\S]*?reserveRightPanel=\{\s*annotationArmed \|\|\s*dataMode === "SUPPLY_BALANCE" \|\|\s*dataMode === "REGIONAL_DATA" \|\|\s*operationalFacilityMode\s*\}/,
     );
     expect(boundaryMap).toContain("reserveRightPanel={reserveRightPanel}");
     expect(reliefMap).toMatch(/activeDetailLayout\s*=\s*reserveRightPanel\s*\|\|/);

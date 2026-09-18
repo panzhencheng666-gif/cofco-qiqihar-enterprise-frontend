@@ -4,7 +4,9 @@ import type {
   RegionalCropSummary,
   SupplyBalanceSummary,
 } from "../../domain/overviewRegionalData";
+import type { OperationalFacilityCatalogue } from "../../domain/operationalFacilities";
 import "./overview-data-mode.css";
+import { OperationalFacilityPanel } from "./OperationalFacilityPanel";
 import { RegionalAgricultureProfilePanel } from "./RegionalAgricultureProfilePanel";
 
 function format(value: string | null | undefined, divisor = 1): string {
@@ -20,6 +22,8 @@ function format(value: string | null | undefined, divisor = 1): string {
 
 const DATA_MODES = [
   "SAMPLE_POINTS",
+  "STORAGE_FACILITIES",
+  "RAILWAY_FACILITIES",
   "REGIONAL_DATA",
   "SUPPLY_BALANCE",
   "MAP_ANNOTATION",
@@ -36,6 +40,8 @@ type SupplyBalanceRow = SupplyBalanceSummary["rows"][number];
 
 function modeLabel(mode: OverviewDataMode): string {
   if (mode === "SAMPLE_POINTS") return "样本点";
+  if (mode === "STORAGE_FACILITIES") return "关联库点";
+  if (mode === "RAILWAY_FACILITIES") return "铁路站点";
   if (mode === "REGIONAL_DATA") return "地区数据";
   if (mode === "SUPPLY_BALANCE") return "供需平衡";
   return "地图标注";
@@ -79,6 +85,9 @@ export function OverviewDataModePanel({
   agricultureProfile,
   regionalSummary,
   supplyBalance,
+  operationalFacilities,
+  selectedOperationalFacilityId,
+  onOperationalFacilitySelect,
 }: {
   issue?: string;
   loading?: boolean;
@@ -87,13 +96,21 @@ export function OverviewDataModePanel({
   agricultureProfile?: RegionalAgricultureProfile;
   regionalSummary?: RegionalCropSummary;
   supplyBalance?: SupplyBalanceSummary;
+  operationalFacilities?: OperationalFacilityCatalogue;
+  selectedOperationalFacilityId?: string;
+  onOperationalFacilitySelect?: (id: string) => void;
 }) {
+  const facilityMode = mode === "STORAGE_FACILITIES" || mode === "RAILWAY_FACILITIES";
   return (
     <section
       className={`overview-data-mode is-${mode.toLowerCase()}`}
       aria-label="总揽数据模式"
     >
-      {mode !== "SAMPLE_POINTS" && loading && <p role="status">正在同步地区正式数据</p>}
+      {mode !== "SAMPLE_POINTS" && loading && (
+        <p role="status">
+          {facilityMode ? "正在加载运营设施" : "正在同步地区正式数据"}
+        </p>
+      )}
       {mode !== "SAMPLE_POINTS" && issue && (
         <p className="overview-data-mode__issue" role="alert">
           {issue}
@@ -213,6 +230,19 @@ export function OverviewDataModePanel({
       )}
       {mode === "SUPPLY_BALANCE" && !loading && !issue && !supplyBalance && (
         <p>请在地图上选择要查看的地区。</p>
+      )}
+      {facilityMode && operationalFacilities && onOperationalFacilitySelect && (
+        <OperationalFacilityPanel
+          catalogue={operationalFacilities}
+          mode={mode}
+          onSelect={onOperationalFacilitySelect}
+          {...(selectedOperationalFacilityId
+            ? { selectedId: selectedOperationalFacilityId }
+            : {})}
+        />
+      )}
+      {facilityMode && !loading && !issue && !operationalFacilities && (
+        <p>当前地图范围没有可用的运营设施数据。</p>
       )}
       {mode === "MAP_ANNOTATION" && (
         <p>
