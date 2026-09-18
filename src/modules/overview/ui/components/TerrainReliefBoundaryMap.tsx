@@ -1035,9 +1035,10 @@ export default function TerrainReliefBoundaryMap({
       });
 
     const eventTarget = (event: PointerEvent | MouseEvent) => {
-      const bounds = renderer.domElement.getBoundingClientRect();
-      pointer.x = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
-      pointer.y = -((event.clientY - bounds.top) / bounds.height) * 2 + 1;
+      const width = Math.max(renderer.domElement.clientWidth, 1);
+      const height = Math.max(renderer.domElement.clientHeight, 1);
+      pointer.x = (event.offsetX / width) * 2 - 1;
+      pointer.y = -(event.offsetY / height) * 2 + 1;
       raycaster.setFromCamera(pointer, camera);
       const hit = raycaster.intersectObjects(interactiveMeshes, false)[0];
       return hit ? targetByObject.get(hit.object.uuid) : undefined;
