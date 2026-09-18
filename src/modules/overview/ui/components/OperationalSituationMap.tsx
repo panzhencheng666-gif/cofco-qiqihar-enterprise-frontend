@@ -346,6 +346,15 @@ export function OperationalSituationMap({
   function zoom(direction: "in" | "out") {
     const map = mapRef.current;
     if (!map) return;
+    if (
+      direction === "out" &&
+      callbacksRef.current.canReturnToParent &&
+      map.getZoom() <= fittedZoomRef.current + 0.05
+    ) {
+      navigationLockRef.current = true;
+      callbacksRef.current.onReturnToParent();
+      return;
+    }
     interactiveZoomRef.current = true;
     if (direction === "in") map.zoomIn();
     else map.zoomOut();
