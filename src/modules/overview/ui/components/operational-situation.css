@@ -145,7 +145,12 @@ button.situation-map-marker {
   background: #d19739;
 }
 .situation-map-marker.is-railway {
-  background: #6c76c6;
+  background: #185b86;
+  color: #fff;
+}
+.situation-map-marker.is-railway svg {
+  width: 1.15rem;
+  height: 1.15rem;
 }
 .situation-map-marker.is-public_event {
   background: #d54f55;

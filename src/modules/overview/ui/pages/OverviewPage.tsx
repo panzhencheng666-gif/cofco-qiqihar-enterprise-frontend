@@ -814,12 +814,13 @@ export function OverviewPage({
   useEffect(() => {
     if (!publicSituationMode || !regionalDataRepository?.operationalSituation) return;
     const controller = new AbortController();
-    void Promise.resolve().then(() => {
-      if (controller.signal.aborted) return;
-      setOperationalSituation(undefined);
-      setOperationalSituationLoading(true);
+    let requestInFlight = false;
+    const loadSnapshot = (initial: boolean) => {
+      if (controller.signal.aborted || requestInFlight || document.hidden) return;
+      requestInFlight = true;
+      if (initial) setOperationalSituationLoading(true);
       setOperationalSituationIssue(undefined);
-      regionalDataRepository
+      void regionalDataRepository
         .operationalSituation?.(controller.signal)
         .then((next) => {
           if (!controller.signal.aborted) setOperationalSituation(next);
@@ -829,10 +830,22 @@ export function OverviewPage({
             setOperationalSituationIssue("公开态势快照加载失败，请稍后重试。");
         })
         .finally(() => {
-          if (!controller.signal.aborted) setOperationalSituationLoading(false);
+          requestInFlight = false;
+          if (!controller.signal.aborted && initial)
+            setOperationalSituationLoading(false);
         });
-    });
-    return () => controller.abort();
+    };
+    loadSnapshot(true);
+    const interval = window.setInterval(() => loadSnapshot(false), 60_000);
+    const refreshWhenVisible = () => {
+      if (!document.hidden) loadSnapshot(false);
+    };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      controller.abort();
+    };
   }, [businessSequence, publicSituationMode, regionalDataRepository]);
 
   useEffect(() => {

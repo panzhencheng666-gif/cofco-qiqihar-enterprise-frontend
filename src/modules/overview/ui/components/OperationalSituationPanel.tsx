@@ -120,6 +120,7 @@ export function OperationalSituationPanel({
         </div>
         {detailMode === "WEATHER" && activeWeather && (
           <WeatherDetail
+            generatedAt={situation.generatedAt}
             weather={activeWeather}
             {...(selectedRegion ? { selectedRegion } : {})}
           />
@@ -186,9 +187,11 @@ export function OperationalSituationPanel({
 }
 
 function WeatherDetail({
+  generatedAt,
   weather,
   selectedRegion,
 }: {
+  generatedAt: string;
   weather: WeatherObservation;
   selectedRegion?: OverviewRegion;
 }) {
@@ -226,7 +229,10 @@ function WeatherDetail({
         <p>{weather.assessment}</p>
       </section>
       <footer>
-        <span>观测时间 {formatTime(weather.observedAt)}</span>
+        <span>
+          观测时间 {formatTime(weather.observedAt)} · 最近同步{" "}
+          {formatTime(weather.fetchedAt)}（{freshness(weather.fetchedAt, generatedAt)}）
+        </span>
         <a href={weather.sourceUrl} target="_blank" rel="noreferrer">
           {weather.sourceName} 原始来源
         </a>
@@ -255,4 +261,12 @@ function number(value: number | null, unit: string) {
 
 function formatTime(value: string) {
   return new Date(value).toLocaleString("zh-CN", { hour12: false });
+}
+
+function freshness(fetchedAt: string, generatedAt: string) {
+  const elapsed = Math.max(0, Date.parse(generatedAt) - Date.parse(fetchedAt));
+  const minutes = Math.floor(elapsed / 60_000);
+  if (minutes < 1) return "刚刚同步";
+  if (minutes < 60) return `${minutes}分钟前`;
+  return `${Math.floor(minutes / 60)}小时前`;
 }

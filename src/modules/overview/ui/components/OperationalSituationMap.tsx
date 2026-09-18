@@ -390,18 +390,10 @@ export function OperationalSituationMap({
         </div>
       </details>
       <div className="situation-map-tools" aria-label="态势地图工具">
-        <button
-          type="button"
-          aria-label="放大地图"
-          onClick={() => zoom("in")}
-        >
+        <button type="button" aria-label="放大地图" onClick={() => zoom("in")}>
           +
         </button>
-        <button
-          type="button"
-          aria-label="缩小地图"
-          onClick={() => zoom("out")}
-        >
+        <button type="button" aria-label="缩小地图" onClick={() => zoom("out")}>
           −
         </button>
         <button type="button" onClick={reset}>
@@ -556,7 +548,10 @@ function toMapBounds(bounds: SituationMapBounds): [[number, number], [number, nu
 
 function markerSymbol(kind: OperationalLayerCode) {
   if (kind === "STORAGE") return '<span aria-hidden="true">库</span>';
-  if (kind === "RAILWAY") return '<span aria-hidden="true">铁</span>';
+  if (kind === "RAILWAY")
+    return `<svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+      <path fill="currentColor" d="M7 2h10c2.2 0 4 1.8 4 4v9c0 2-1.5 3.7-3.5 4l1.5 2h-2.5l-1.4-2H8.9l-1.4 2H5l1.5-2A4 4 0 0 1 3 15V6c0-2.2 1.8-4 4-4Zm0 2a2 2 0 0 0-2 2v5h14V6a2 2 0 0 0-2-2H7Zm1 9a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm8 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"/>
+    </svg>`;
   return '<span aria-hidden="true">!</span>';
 }
 
