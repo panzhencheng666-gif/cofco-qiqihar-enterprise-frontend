@@ -1,14 +1,31 @@
 import type { OperationalFacilityCatalogue } from "../../domain/operationalFacilities";
 import type { OperationalSituationCatalogue } from "../../domain/operationalSituation";
 import "./operational-situation.css";
+import { RailwayFacilityCard, StorageFacilityCard } from "./OperationalFacilityPanel";
 
 export function OperationalSituationPanel({
   facilities,
+  onFacilitySelect,
+  selectedFacilityId,
   situation,
 }: {
   facilities: OperationalFacilityCatalogue;
+  onFacilitySelect?: (id: string) => void;
+  selectedFacilityId?: string;
   situation: OperationalSituationCatalogue;
 }) {
+  const selectedStorage = facilities.storageFacilities.find(
+    (facility) => facility.code === selectedFacilityId,
+  );
+  const selectedRailway = facilities.railwayFacilities.find(
+    (facility) => facility.sourceId === selectedFacilityId,
+  );
+  const fallbackStorage = facilities.storageFacilities[0];
+  const fallbackRailway = facilities.railwayFacilities[0];
+  const activeStorage =
+    selectedStorage ?? (!selectedRailway ? fallbackStorage : undefined);
+  const activeRailway =
+    selectedRailway ?? (!activeStorage ? fallbackRailway : undefined);
   return (
     <div className="operational-situation-panel">
       <header>
@@ -39,6 +56,39 @@ export function OperationalSituationPanel({
           <span>全球开放事件</span>
         </article>
       </div>
+      <section className="situation-node-details" aria-label="运营节点详情">
+        <div className="situation-node-details__heading">
+          <div>
+            <h3>运营节点详情</h3>
+            <p>在地图中点击库点或铁路节点，查看各自业务详情。</p>
+          </div>
+          <div className="situation-node-details__quick-picks">
+            {fallbackStorage && (
+              <button
+                aria-pressed={activeStorage?.code === fallbackStorage.code}
+                type="button"
+                onClick={() => onFacilitySelect?.(fallbackStorage.code)}
+              >
+                库点
+              </button>
+            )}
+            {fallbackRailway && (
+              <button
+                aria-pressed={activeRailway?.sourceId === fallbackRailway.sourceId}
+                type="button"
+                onClick={() => onFacilitySelect?.(fallbackRailway.sourceId)}
+              >
+                铁路
+              </button>
+            )}
+          </div>
+        </div>
+        {activeStorage && <StorageFacilityCard facility={activeStorage} />}
+        {activeRailway && (
+          <RailwayFacilityCard catalogue={facilities} facility={activeRailway} />
+        )}
+        {!activeStorage && !activeRailway && <p>当前范围没有可展示的运营节点。</p>}
+      </section>
       <section className="situation-source-grid" aria-label="公开态势来源状态">
         {situation.sources.map((source) => (
           <article key={source.code}>

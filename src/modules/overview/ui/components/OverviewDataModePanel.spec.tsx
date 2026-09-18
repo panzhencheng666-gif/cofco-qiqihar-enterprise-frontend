@@ -17,6 +17,8 @@ describe("OverviewDataModePanel", () => {
     expect(onModeChange).toHaveBeenCalledWith("REGIONAL_DATA");
     await userEvent.click(screen.getByRole("button", { name: "公开态势" }));
     expect(onModeChange).toHaveBeenCalledWith("PUBLIC_SITUATION");
+    expect(screen.queryByRole("button", { name: "关联库点" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "铁路站点" })).not.toBeInTheDocument();
   });
 
   it("keeps public events, weather and operational nodes source-labelled", () => {

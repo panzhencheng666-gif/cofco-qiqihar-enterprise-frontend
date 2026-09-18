@@ -39,3 +39,30 @@ export function calculateOperationalMapPadding(
     top: Math.max(minimumTop, Math.ceil(toolsBottom)),
   };
 }
+
+export function fitOperationalMap(
+  map: Pick<MapLibreMap, "cameraForBounds" | "jumpTo" | "setMaxBounds" | "setMinZoom">,
+  bounds: [[number, number], [number, number]],
+  padding: OperationalMapPadding,
+  pitch: number,
+) {
+  map.setMaxBounds(null);
+  map.setMinZoom(0);
+  const camera = map.cameraForBounds(bounds, { bearing: 0, padding });
+  if (
+    !camera ||
+    camera.center === undefined ||
+    camera.zoom === undefined ||
+    !Number.isFinite(camera.zoom)
+  )
+    return;
+  map.jumpTo({
+    bearing: 0,
+    center: camera.center,
+    pitch,
+    zoom: camera.zoom,
+  });
+  map.setMinZoom(Math.max(0, camera.zoom - 0.25));
+  map.setMaxBounds(bounds);
+}
+import type { Map as MapLibreMap } from "maplibre-gl";

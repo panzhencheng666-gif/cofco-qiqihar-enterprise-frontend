@@ -7,7 +7,10 @@ import { Map as MapLibreMap, Marker } from "maplibre-gl";
 import type { OperationalFacilityCatalogue } from "../../domain/operationalFacilities";
 import type { OperationalSituationCatalogue } from "../../domain/operationalSituation";
 import { OVERVIEW_VECTOR_STYLE } from "./overviewVectorStyle";
-import { calculateOperationalMapPadding } from "./operationalMapViewport";
+import {
+  calculateOperationalMapPadding,
+  fitOperationalMap,
+} from "./operationalMapViewport";
 
 export interface SituationMapBounds {
   maxLatitude: number;
@@ -35,10 +38,14 @@ const LAYER_LABELS: Readonly<Record<LayerCode, string>> = {
 export function OperationalSituationMap({
   bounds,
   facilities,
+  onFacilitySelect,
+  selectedFacilityId,
   situation,
 }: {
   bounds: SituationMapBounds;
   facilities: OperationalFacilityCatalogue;
+  onFacilitySelect: (id: string) => void;
+  selectedFacilityId?: string;
   situation: OperationalSituationCatalogue;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -162,9 +169,20 @@ export function OperationalSituationMap({
     if (!map) return;
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current = visibleMarkers.map((marker) => {
-      const element = document.createElement("div");
+      const isFacility = marker.kind === "STORAGE" || marker.kind === "RAILWAY";
+      const element = document.createElement(isFacility ? "button" : "div");
       element.className = `situation-map-marker is-${marker.kind.toLowerCase()}`;
-      element.setAttribute("role", "img");
+      if (isFacility) {
+        (element as HTMLButtonElement).type = "button";
+        element.classList.toggle("is-selected", marker.id === selectedFacilityId);
+        element.setAttribute("aria-pressed", String(marker.id === selectedFacilityId));
+        element.addEventListener("click", (event) => {
+          event.stopPropagation();
+          onFacilitySelect(marker.id);
+        });
+      } else {
+        element.setAttribute("role", "img");
+      }
       element.setAttribute(
         "aria-label",
         `${LAYER_LABELS[marker.kind]}：${marker.name}`,
@@ -178,7 +196,7 @@ export function OperationalSituationMap({
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
     };
-  }, [visibleMarkers]);
+  }, [onFacilitySelect, selectedFacilityId, visibleMarkers]);
 
   useEffect(() => {
     viewAngleRef.current = viewAngle;
@@ -271,16 +289,13 @@ function fitSituationMap(
   viewAngle: number,
   duration: number,
 ) {
-  map.setMinZoom(-2);
-  map.setMaxBounds(null);
-  map.fitBounds(toMapBounds(bounds), {
-    bearing: 0,
-    duration,
-    padding: calculateOperationalMapPadding(container, 175),
-    pitch: 90 - viewAngle,
-  });
-  map.setMinZoom(map.getZoom());
-  map.setMaxBounds(toMapBounds(bounds));
+  void duration;
+  fitOperationalMap(
+    map,
+    toMapBounds(bounds),
+    calculateOperationalMapPadding(container, 175),
+    90 - viewAngle,
+  );
 }
 
 function insideBounds(marker: SituationMarker, bounds: SituationMapBounds) {

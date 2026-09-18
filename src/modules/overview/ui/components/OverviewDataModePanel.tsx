@@ -7,7 +7,6 @@ import type {
 import type { OperationalFacilityCatalogue } from "../../domain/operationalFacilities";
 import type { OperationalSituationCatalogue } from "../../domain/operationalSituation";
 import "./overview-data-mode.css";
-import { OperationalFacilityPanel } from "./OperationalFacilityPanel";
 import { OperationalSituationPanel } from "./OperationalSituationPanel";
 import { RegionalAgricultureProfilePanel } from "./RegionalAgricultureProfilePanel";
 
@@ -24,8 +23,6 @@ function format(value: string | null | undefined, divisor = 1): string {
 
 const DATA_MODES = [
   "SAMPLE_POINTS",
-  "STORAGE_FACILITIES",
-  "RAILWAY_FACILITIES",
   "PUBLIC_SITUATION",
   "REGIONAL_DATA",
   "SUPPLY_BALANCE",
@@ -43,8 +40,6 @@ type SupplyBalanceRow = SupplyBalanceSummary["rows"][number];
 
 function modeLabel(mode: OverviewDataMode): string {
   if (mode === "SAMPLE_POINTS") return "样本点";
-  if (mode === "STORAGE_FACILITIES") return "关联库点";
-  if (mode === "RAILWAY_FACILITIES") return "铁路站点";
   if (mode === "PUBLIC_SITUATION") return "公开态势";
   if (mode === "REGIONAL_DATA") return "地区数据";
   if (mode === "SUPPLY_BALANCE") return "供需平衡";
@@ -106,7 +101,6 @@ export function OverviewDataModePanel({
   selectedOperationalFacilityId?: string;
   onOperationalFacilitySelect?: (id: string) => void;
 }) {
-  const facilityMode = mode === "STORAGE_FACILITIES" || mode === "RAILWAY_FACILITIES";
   return (
     <section
       className={`overview-data-mode is-${mode.toLowerCase()}`}
@@ -116,9 +110,7 @@ export function OverviewDataModePanel({
         <p role="status">
           {mode === "PUBLIC_SITUATION"
             ? "正在汇总公开态势快照"
-            : facilityMode
-              ? "正在加载运营设施"
-              : "正在同步地区正式数据"}
+            : "正在同步地区正式数据"}
         </p>
       )}
       {mode !== "SAMPLE_POINTS" && issue && (
@@ -241,19 +233,15 @@ export function OverviewDataModePanel({
       {mode === "SUPPLY_BALANCE" && !loading && !issue && !supplyBalance && (
         <p>请在地图上选择要查看的地区。</p>
       )}
-      {facilityMode && operationalFacilities && onOperationalFacilitySelect && (
-        <OperationalFacilityPanel
-          catalogue={operationalFacilities}
-          mode={mode}
-          onSelect={onOperationalFacilitySelect}
-          {...(selectedOperationalFacilityId
-            ? { selectedId: selectedOperationalFacilityId }
-            : {})}
-        />
-      )}
       {mode === "PUBLIC_SITUATION" && operationalFacilities && operationalSituation && (
         <OperationalSituationPanel
           facilities={operationalFacilities}
+          {...(onOperationalFacilitySelect
+            ? { onFacilitySelect: onOperationalFacilitySelect }
+            : {})}
+          {...(selectedOperationalFacilityId
+            ? { selectedFacilityId: selectedOperationalFacilityId }
+            : {})}
           situation={operationalSituation}
         />
       )}
@@ -263,9 +251,6 @@ export function OverviewDataModePanel({
         (!operationalFacilities || !operationalSituation) && (
           <p>当前没有可用的公开态势快照。</p>
         )}
-      {facilityMode && !loading && !issue && !operationalFacilities && (
-        <p>当前地图范围没有可用的运营设施数据。</p>
-      )}
       {mode === "MAP_ANNOTATION" && (
         <p>
           浏览地图时可按住鼠标左键在限定范围内拖动，缩放后会加载道路、河流、地名和环境纹理；进入有精确坐标的乡镇或村级范围后，同时显示样本点位置。可在

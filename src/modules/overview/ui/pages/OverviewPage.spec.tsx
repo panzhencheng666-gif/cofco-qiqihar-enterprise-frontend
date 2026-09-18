@@ -25,12 +25,12 @@ import {
 } from "./OverviewPage";
 import { HttpContractError, HttpError } from "../../../../shared/api/HttpClient";
 
-vi.mock("../components/OperationalFacilityMap", () => ({
-  OperationalFacilityMap: () => <div aria-label="运营设施地理地图" />,
+vi.mock("../components/OperationalSituationMap", () => ({
+  OperationalSituationMap: () => <div aria-label="公开运营态势地图" />,
 }));
 
 describe("OverviewPage", () => {
-  it("reuses one facility catalogue while switching storage and railway tabs", async () => {
+  it("merges storage and railway facilities into one public situation mode", async () => {
     const operationalFacilities = vi
       .fn<NonNullable<OverviewRegionalDataRepository["operationalFacilities"]>>()
       .mockResolvedValue({
@@ -68,6 +68,12 @@ describe("OverviewPage", () => {
       <OverviewPage
         regionalDataRepository={{
           operationalFacilities,
+          operationalSituation: vi.fn().mockResolvedValue({
+            generatedAt: "2026-09-18T06:00:00Z",
+            weather: [],
+            publicEvents: [],
+            sources: [],
+          }),
           regionalSummary: vi.fn(),
           supplyBalance: vi.fn(),
         }}
@@ -82,13 +88,11 @@ describe("OverviewPage", () => {
       />,
     );
 
-    await userEvent.click(await screen.findByRole("button", { name: "关联库点" }));
-    expect(await screen.findByRole("heading", { name: "关联库点" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "关联库点" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "铁路站点" })).not.toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: "公开态势" }));
+    expect(await screen.findByRole("heading", { name: "公开运营态势" })).toBeVisible();
     await waitFor(() => expect(operationalFacilities).toHaveBeenCalledTimes(1));
-
-    await userEvent.click(screen.getByRole("button", { name: "铁路站点" }));
-    expect(await screen.findByRole("heading", { name: "铁路站点" })).toBeVisible();
-    expect(operationalFacilities).toHaveBeenCalledTimes(1);
   });
 
   it("loads the regional profile when the legacy summary is unavailable below county", async () => {

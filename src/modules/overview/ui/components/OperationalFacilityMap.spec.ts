@@ -1,4 +1,9 @@
-import { calculateOperationalMapPadding } from "./operationalMapViewport";
+import { vi } from "vitest";
+
+import {
+  calculateOperationalMapPadding,
+  fitOperationalMap,
+} from "./operationalMapViewport";
 
 describe("calculateOperationalMapPadding", () => {
   it("keeps the complete map bounds inside the unobscured area", () => {
@@ -26,6 +31,38 @@ describe("calculateOperationalMapPadding", () => {
       right: 562,
       top: 160,
     });
+  });
+});
+
+describe("fitOperationalMap", () => {
+  it("applies a finite flat-bounds camera before adding pitch and constraints", () => {
+    const center = { lng: 125.06, lat: 49.89 };
+    const map = {
+      cameraForBounds: vi.fn(() => ({ center, zoom: 5.4 })),
+      jumpTo: vi.fn(),
+      setMaxBounds: vi.fn(),
+      setMinZoom: vi.fn(),
+    };
+    const bounds: [[number, number], [number, number]] = [
+      [120.48, 46.22],
+      [129.65, 53.56],
+    ];
+    const padding = { bottom: 54, left: 54, right: 54, top: 175 };
+
+    fitOperationalMap(map as never, bounds, padding, 30);
+
+    expect(map.cameraForBounds).toHaveBeenCalledWith(bounds, {
+      bearing: 0,
+      padding,
+    });
+    expect(map.jumpTo).toHaveBeenCalledWith({
+      bearing: 0,
+      center,
+      pitch: 30,
+      zoom: 5.4,
+    });
+    expect(map.setMinZoom).toHaveBeenLastCalledWith(5.15);
+    expect(map.setMaxBounds).toHaveBeenLastCalledWith(bounds);
   });
 });
 

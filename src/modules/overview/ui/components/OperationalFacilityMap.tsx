@@ -9,7 +9,10 @@ import type {
   StorageFacility,
 } from "../../domain/operationalFacilities";
 import { OVERVIEW_VECTOR_STYLE } from "./overviewVectorStyle";
-import { calculateOperationalMapPadding } from "./operationalMapViewport";
+import {
+  calculateOperationalMapPadding,
+  fitOperationalMap,
+} from "./operationalMapViewport";
 
 interface FacilityMapBounds {
   maxLatitude: number;
@@ -221,16 +224,13 @@ function fitFacilityMap(
   viewAngle: number,
   duration: number,
 ) {
-  map.setMinZoom(-2);
-  map.setMaxBounds(null);
-  map.fitBounds(toMapBounds(bounds), {
-    bearing: 0,
-    duration,
-    padding: calculateOperationalMapPadding(container),
-    pitch: 90 - viewAngle,
-  });
-  map.setMinZoom(map.getZoom());
-  map.setMaxBounds(toMapBounds(bounds));
+  void duration;
+  fitOperationalMap(
+    map,
+    toMapBounds(bounds),
+    calculateOperationalMapPadding(container),
+    90 - viewAngle,
+  );
 }
 
 function toMapBounds(bounds: FacilityMapBounds): [[number, number], [number, number]] {

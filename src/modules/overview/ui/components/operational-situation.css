@@ -114,6 +114,20 @@
   font-weight: 800;
 }
 
+button.situation-map-marker {
+  padding: 0;
+  cursor: pointer;
+}
+
+.situation-map-marker.is-selected {
+  width: 2.35rem;
+  height: 2.35rem;
+  border-color: #ffe68b;
+  box-shadow:
+    0 0 0 7px rgb(255 213 102 / 24%),
+    0 0.55rem 1.35rem rgb(0 0 0 / 42%);
+}
+
 .situation-map-marker.is-storage {
   background: #d19739;
 }
@@ -189,6 +203,42 @@
 .operational-situation-kpis span {
   color: #5d7275;
   font-size: 0.72rem;
+}
+.situation-node-details {
+  display: grid;
+  gap: 0.65rem;
+}
+.situation-node-details__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.situation-node-details__heading h3 {
+  margin: 0;
+}
+.situation-node-details__heading p {
+  margin: 0.2rem 0 0;
+  color: #bfdde2;
+  font-size: 0.68rem;
+}
+.situation-node-details__quick-picks {
+  display: flex;
+  gap: 0.35rem;
+}
+.situation-node-details__quick-picks button {
+  min-height: 2rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid rgb(190 231 243 / 24%);
+  border-radius: 0.55rem;
+  color: #d9f4fa;
+  background: rgb(5 61 94 / 48%);
+  cursor: pointer;
+}
+.situation-node-details__quick-picks button[aria-pressed="true"] {
+  border-color: #f6d86c;
+  color: #fff4c6;
+  background: rgb(51 120 139 / 68%);
 }
 .situation-source-grid,
 .situation-weather-list,
