@@ -7,7 +7,7 @@
   background: #071d29;
 }
 
-.operational-situation-map {
+.operational-situation-map.maplibregl-map {
   position: absolute;
   inset: 0;
 }
