@@ -26,7 +26,7 @@ describe("calculateOperationalMapPadding", () => {
     tools.getBoundingClientRect = () => domRect(176, 102, 462, 42);
 
     expect(calculateOperationalMapPadding(container)).toEqual({
-      bottom: 54,
+      bottom: 96,
       left: 54,
       right: 562,
       top: 160,

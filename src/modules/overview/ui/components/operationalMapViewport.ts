@@ -10,7 +10,7 @@ export function calculateOperationalMapPadding(
   minimumTop = 160,
 ): OperationalMapPadding {
   const fallback: OperationalMapPadding = {
-    bottom: 54,
+    bottom: 96,
     left: 54,
     right: 54,
     top: minimumTop,
@@ -33,7 +33,7 @@ export function calculateOperationalMapPadding(
     ? Math.max(0, (toolsRect.bottom - containerRect.top) / scaleY + 16)
     : 0;
   return {
-    bottom: 54,
+    bottom: 96,
     left: 54,
     right: Math.max(54, Math.ceil(panelOverlap + (panelOverlap > 0 ? 22 : 0))),
     top: Math.max(minimumTop, Math.ceil(toolsBottom)),
