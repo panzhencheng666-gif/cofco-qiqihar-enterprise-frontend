@@ -1,4 +1,4 @@
-import type { LiveWeatherKind } from "./liveWeatherPresentation";
+import type { WeatherSpriteKind } from "./weatherSpriteKind";
 
 /** Shared small sprite atlas: five textures, not an animation per observation. */
 export function createWeatherSpritePainter() {
@@ -7,9 +7,29 @@ export function createWeatherSpritePainter() {
   canvas.height = 144;
   const ctx = canvas.getContext("2d");
   if (!ctx) return undefined;
-  return (kind: LiveWeatherKind, time: number) => {
+  return (kind: WeatherSpriteKind, time: number) => {
     ctx.clearRect(0, 0, 192, 144);
-    if (kind === "CLEAR") {
+    if (kind === "UNKNOWN") {
+      ctx.strokeStyle = "#bdced9";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(96, 64, 20, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = "#dfeaf0";
+      ctx.font = "bold 26px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("?", 96, 73);
+    } else if (kind === "CLEAR_NIGHT") {
+      ctx.fillStyle = "#dceafa";
+      ctx.beginPath();
+      ctx.arc(96, 60, 25, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.beginPath();
+      ctx.arc(107, 51, 24, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+    } else if (kind === "CLEAR") {
       const glow = ctx.createRadialGradient(96, 65, 12, 96, 65, 47);
       glow.addColorStop(0, "#fff7bf");
       glow.addColorStop(0.5, "#ffd66de0");

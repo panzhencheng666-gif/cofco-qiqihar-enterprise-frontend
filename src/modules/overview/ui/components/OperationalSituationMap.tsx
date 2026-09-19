@@ -22,6 +22,7 @@ import type {
 } from "./FourRegionTerrainAtlas";
 import { focusDepotCategory } from "./realisticSituationModel";
 import { weatherObservationFresh } from "./liveWeatherPresentation";
+import { weatherSpriteKind } from "./weatherSpriteKind";
 import {
   operationalSituationTimeline,
   type SituationTimelineItem,
@@ -357,6 +358,9 @@ export function OperationalSituationMap({
                   )
                 ? " · 部分观测超过90分钟或时间异常，已静态弱化"
                 : " · 随最新观测同步"}
+            {visibleSituation.weather.some(
+              (weather) => weatherSpriteKind(weather) === "UNKNOWN",
+            ) && " · 问号表示云况数据缺失，不推断晴天"}
           </p>
         )}
         {currentLevel === "VILLAGE" && (

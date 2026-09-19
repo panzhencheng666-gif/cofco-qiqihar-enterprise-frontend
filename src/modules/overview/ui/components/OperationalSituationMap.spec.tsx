@@ -106,7 +106,7 @@ describe("four-region terrain public situation scene", () => {
   it("uses animated weather and recognizable railway and grain-depot icons", () => {
     expect(scene).toContain("realisticSituationIcon(");
     expect(scene).toContain("realisticWeatherIcon(");
-    expect(scene).toContain("liveWeatherKind(weather)");
+    expect(scene).toContain("weatherSpriteKind(weather)");
     expect(scene).toContain('id: "atlas-weather-pulse"');
     expect(scene).toContain('"icon-image"');
     expect(scene).toContain("requestAnimationFrame");

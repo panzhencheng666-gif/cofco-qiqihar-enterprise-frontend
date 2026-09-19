@@ -49,6 +49,7 @@ import { useOverviewSampleNetworkLayers } from "../hooks/useOverviewSampleNetwor
 import { visibleSampleNetworkMapIcons } from "../presentation/sampleNetworkLayers";
 import { HttpContractError, HttpError } from "../../../../shared/api/HttpClient";
 import { OperationalSituationMap } from "../components/OperationalSituationMap";
+import { enrichPublicWeather } from "../components/publicWeatherRefresh";
 import type { SituationTimelineItem } from "../components/operationalSituationTimeline";
 import { flattenCoordinates, type MapFeature } from "../components/boundaryGeometry";
 
@@ -831,6 +832,8 @@ export function OverviewPage({
   useEffect(() => {
     if (!publicSituationMode || !regionalDataRepository?.operationalSituation) return;
     const controller = new AbortController();
+    const readSituation =
+      regionalDataRepository.operationalSituation.bind(regionalDataRepository);
     let requestInFlight = false;
     const loadSnapshot = (initial: boolean) => {
       if (controller.signal.aborted || requestInFlight || document.hidden) return;
@@ -846,8 +849,23 @@ export function OverviewPage({
           },
           controller.signal,
         )
-        .then((next) => {
-          if (!controller.signal.aborted) setOperationalSituation(next);
+        .then(async (next) => {
+          if (controller.signal.aborted) return;
+          setOperationalSituation(next);
+          const enriched = await enrichPublicWeather(
+            next,
+            (regionCode) =>
+              readSituation(
+                {
+                  regionCode,
+                  ...(productCode ? { productCode } : {}),
+                  ...(year === undefined ? {} : { surveyYear: year }),
+                },
+                controller.signal,
+              ),
+            controller.signal,
+          );
+          if (!controller.signal.aborted) setOperationalSituation(enriched);
         })
         .catch(() => {
           if (!controller.signal.aborted)

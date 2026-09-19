@@ -41,11 +41,8 @@ import {
   realisticSituationIcon,
   realisticWeatherIcon,
 } from "./realisticSituationIcons";
-import {
-  liveWeatherKind,
-  weatherObservationFresh,
-  type LiveWeatherKind,
-} from "./liveWeatherPresentation";
+import { weatherObservationFresh } from "./liveWeatherPresentation";
+import { weatherSpriteKind, type WeatherSpriteKind } from "./weatherSpriteKind";
 import { createWeatherSpritePainter } from "./animatedWeatherSprite";
 import { publicMapFocus } from "./publicMapFocus";
 
@@ -1148,10 +1145,10 @@ function markerCollection(props: FourRegionTerrainAtlasProps): FeatureCollection
           kind: "WEATHER",
           name: weather.regionName,
           regionCode: weather.regionCode ?? weather.rootRegionCode,
-          weatherKind: liveWeatherKind(weather),
+          weatherKind: weatherSpriteKind(weather),
           weatherFresh:
             !props.weatherHistorical && weatherObservationFresh(weather.observedAt),
-          weatherImage: `atlas-icon-weather-${liveWeatherKind(weather).toLowerCase()}${!props.weatherHistorical && weatherObservationFresh(weather.observedAt) ? "" : "-static"}`,
+          weatherImage: `atlas-icon-weather-${weatherSpriteKind(weather).toLowerCase()}${!props.weatherHistorical && weatherObservationFresh(weather.observedAt) ? "" : "-static"}`,
         }),
       );
     });
@@ -1161,7 +1158,15 @@ function markerCollection(props: FourRegionTerrainAtlasProps): FeatureCollection
 
 function startWeatherAnimation(runtime: AtlasRuntime) {
   const paint = createWeatherSpritePainter();
-  const kinds: LiveWeatherKind[] = ["CLEAR", "CLOUD", "RAIN", "SNOW", "STORM"];
+  const kinds: WeatherSpriteKind[] = [
+    "CLEAR",
+    "CLOUD",
+    "RAIN",
+    "SNOW",
+    "STORM",
+    "CLEAR_NIGHT",
+    "UNKNOWN",
+  ];
   if (paint)
     for (const kind of kinds) {
       const id = `atlas-icon-weather-${kind.toLowerCase()}`;
@@ -1191,7 +1196,7 @@ function startWeatherAnimation(runtime: AtlasRuntime) {
         for (const kind of new Set(
           runtime.props.situation.weather
             .filter((weather) => weatherObservationFresh(weather.observedAt))
-            .map(liveWeatherKind),
+            .map(weatherSpriteKind),
         )) {
           runtime.map.updateImage(
             `atlas-icon-weather-${kind.toLowerCase()}`,
