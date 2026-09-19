@@ -16,11 +16,7 @@ export const REALISTIC_ROOT_BOUNDS: GeographicBounds = Object.freeze({
 });
 
 export type RealisticSituationFeatureKind =
-  | StorageFacilityRelation
-  | "RAILWAY"
-  | "WEATHER"
-  | "INVENTORY"
-  | "LOGISTICS";
+  StorageFacilityRelation | "RAILWAY" | "WEATHER" | "INVENTORY" | "LOGISTICS";
 
 export interface DepotLayerState {
   OWNED: boolean;
@@ -44,9 +40,7 @@ export function focusDepotCategory(category: StorageFacilityRelation): DepotLaye
   };
 }
 
-export function altitudeDetailLevel(
-  heightMetres: number,
-): OverviewRegion["level"] {
+export function altitudeDetailLevel(heightMetres: number): OverviewRegion["level"] {
   if (heightMetres > 850_000) return "PREFECTURE";
   if (heightMetres > 220_000) return "COUNTY";
   if (heightMetres > 55_000) return "TOWNSHIP";
@@ -61,7 +55,7 @@ export function realisticCamera(
   const latitudeSpan = Math.max(0.02, bounds.maxLatitude - bounds.minLatitude);
   const dominantSpan = Math.max(longitudeSpan, latitudeSpan * 1.35);
   const minimumHeight: Readonly<Record<OverviewRegion["level"], number>> = {
-    PREFECTURE: 1_700_000,
+    PREFECTURE: 1_150_000,
     COUNTY: 360_000,
     TOWNSHIP: 110_000,
     VILLAGE: 24_000,
@@ -70,9 +64,9 @@ export function realisticCamera(
   return {
     longitude: (bounds.minLongitude + bounds.maxLongitude) / 2,
     latitude: (bounds.minLatitude + bounds.maxLatitude) / 2,
-    height: Math.max(minimumHeight[targetLevel], dominantSpan * 104_000),
+    height: Math.max(minimumHeight[targetLevel], dominantSpan * 72_000),
     headingDegrees: targetLevel === "PREFECTURE" ? 2 : 0,
-    pitchDegrees: targetLevel === "PREFECTURE" ? -52 : -48,
+    pitchDegrees: targetLevel === "PREFECTURE" ? -64 : -56,
   };
 }
 
@@ -122,4 +116,3 @@ export class SituationViewerLifecycle {
     };
   }
 }
-

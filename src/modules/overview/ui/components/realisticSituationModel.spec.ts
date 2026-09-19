@@ -41,7 +41,7 @@ describe("realistic situation model", () => {
     expect(camera.longitude).toBeLessThan(126);
     expect(camera.latitude).toBeGreaterThan(47);
     expect(camera.latitude).toBeLessThan(51);
-    expect(camera.height).toBeGreaterThanOrEqual(1_700_000);
+    expect(camera.height).toBeGreaterThanOrEqual(1_150_000);
     expect(camera.pitchDegrees).toBeLessThan(0);
   });
 
@@ -63,4 +63,3 @@ describe("realistic situation model", () => {
     });
   });
 });
-

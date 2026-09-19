@@ -199,13 +199,13 @@ describe("Overview command center navigation layout", () => {
     expect(auditRule).toMatch(/overflow-wrap:\s*anywhere/);
   });
 
-  it("keeps the public situation MapLibre container pinned to the map stage", () => {
+  it("keeps the realistic public situation scene pinned to the map stage", () => {
     const css = readFileSync(
-      resolve("src/modules/overview/ui/components/operational-situation.css"),
+      resolve("src/modules/overview/ui/components/realistic-operational-situation.css"),
       "utf8",
     );
     const mapRule = css.match(
-      /\.operational-situation-map\.maplibregl-map\s*\{([^}]*)\}/s,
+      /\.realistic-situation-scene,[\s\S]*?\.realistic-situation-loading\s*\{([^}]*)\}/s,
     )?.[1];
 
     expect(mapRule).toBeDefined();

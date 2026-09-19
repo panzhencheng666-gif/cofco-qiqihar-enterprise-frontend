@@ -1,0 +1,272 @@
+.realistic-situation-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  overflow: hidden;
+  background: #7d8d86;
+  color: #f8f8f4;
+}
+
+.realistic-situation-scene,
+.realistic-situation-loading {
+  position: absolute;
+  inset: 0;
+}
+
+.realistic-situation-scene .cesium-viewer,
+.realistic-situation-scene .cesium-viewer-cesiumWidgetContainer,
+.realistic-situation-scene .cesium-widget,
+.realistic-situation-scene canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.realistic-situation-scene canvas {
+  display: block;
+}
+
+.realistic-situation-loading {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 0.35rem;
+  background: #80958d;
+  color: #fff;
+}
+
+.realistic-situation-loading strong {
+  font-size: 1rem;
+}
+
+.realistic-situation-loading span {
+  max-width: 28rem;
+  color: rgb(255 255 255 / 82%);
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.realistic-situation-credits {
+  position: absolute;
+  z-index: 3;
+  right: 0.4rem;
+  bottom: 0.2rem;
+  max-width: 52%;
+  color: rgb(255 255 255 / 84%);
+  font-size: 9px;
+  pointer-events: auto;
+  text-align: right;
+}
+
+.realistic-situation-credits a {
+  color: inherit;
+}
+
+.realistic-situation-filters,
+.realistic-situation-layer-menu,
+.realistic-situation-tools,
+.realistic-situation-timeline,
+.realistic-situation-caption {
+  position: absolute;
+  z-index: 5;
+  border: 1px solid rgb(255 255 255 / 46%);
+  border-radius: 4px;
+  background: rgb(26 32 29 / 72%);
+  backdrop-filter: blur(12px);
+}
+
+.realistic-situation-filters {
+  top: 5.2rem;
+  left: 1rem;
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.3rem;
+}
+
+.realistic-situation-filters button,
+.realistic-situation-tools button,
+.realistic-situation-layer-menu button,
+.realistic-situation-timeline button,
+.realistic-situation-timeline select {
+  min-height: 2rem;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.realistic-situation-filters button:hover,
+.realistic-situation-tools button:hover,
+.realistic-situation-layer-menu button:hover,
+.realistic-situation-filters button[aria-pressed="true"],
+.realistic-situation-tools button[aria-pressed="true"],
+.realistic-situation-layer-menu button[aria-pressed="true"] {
+  border-color: rgb(255 255 255 / 68%);
+  background: rgb(255 255 255 / 18%);
+}
+
+.realistic-situation-layer-menu {
+  top: 8rem;
+  left: 1rem;
+  display: grid;
+  width: 15.5rem;
+  gap: 0.25rem;
+  padding: 0.55rem;
+}
+
+.realistic-situation-layer-menu header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.2rem 0.25rem 0.45rem;
+  border-bottom: 1px solid rgb(255 255 255 / 26%);
+}
+
+.realistic-situation-layer-menu header button {
+  min-height: 1.7rem;
+  padding: 0.2rem 0.4rem;
+  font-size: 0.7rem;
+}
+
+.realistic-situation-layer-menu > button,
+.realistic-situation-layer-menu > label {
+  display: grid;
+  grid-template-columns: 1.6rem 1fr auto;
+  align-items: center;
+  min-height: 2.25rem;
+  gap: 0.45rem;
+  padding: 0.3rem 0.4rem;
+  font-size: 0.76rem;
+  text-align: left;
+}
+
+.realistic-situation-layer-menu > button > span,
+.realistic-situation-layer-menu > label > span {
+  display: grid;
+  width: 1.45rem;
+  height: 1.45rem;
+  place-items: center;
+  border: 1px solid #fff;
+  border-radius: 3px;
+  color: #fff;
+  font-size: 0.66rem;
+  font-weight: 800;
+}
+
+.realistic-situation-layer-menu > button.is-owned > span {
+  background: #198754;
+}
+
+.realistic-situation-layer-menu > button.is-leased > span {
+  background: #d99a00;
+}
+
+.realistic-situation-layer-menu > button.is-historical_leased > span {
+  background: #747b83;
+}
+
+.realistic-situation-layer-menu .is-locomotive {
+  background: #fff;
+  color: #242b28;
+}
+
+.realistic-situation-layer-menu b {
+  font-size: 0.72rem;
+}
+
+.realistic-situation-tools {
+  right: 1rem;
+  bottom: 5.6rem;
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.3rem;
+}
+
+.overview-command-center.has-side-data-panel .realistic-situation-tools {
+  right: calc(var(--command-details-width) + 1rem);
+}
+
+.realistic-situation-tools label {
+  display: grid;
+  width: 8.5rem;
+  gap: 0.15rem;
+  padding: 0 0.45rem;
+  font-size: 0.65rem;
+}
+
+.realistic-situation-caption {
+  bottom: 5.8rem;
+  left: 50%;
+  max-width: 30rem;
+  margin: 0;
+  padding: 0.45rem 0.65rem;
+  color: rgb(255 255 255 / 88%);
+  font-size: 0.68rem;
+  pointer-events: none;
+  text-align: center;
+  transform: translateX(-50%);
+}
+
+.overview-command-center.has-side-data-panel .realistic-situation-caption {
+  left: calc((100% - var(--command-details-width)) / 2);
+}
+
+.realistic-situation-timeline {
+  right: 1rem;
+  bottom: 1rem;
+  left: 1rem;
+  display: grid;
+  grid-template-columns: auto auto auto minmax(7rem, 1fr) minmax(7rem, auto) auto;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 3.5rem;
+  padding: 0.45rem 0.55rem;
+}
+
+.overview-command-center.has-side-data-panel .realistic-situation-timeline {
+  right: calc(var(--command-details-width) + 1rem);
+}
+
+.realistic-situation-timeline time,
+.realistic-situation-timeline span,
+.realistic-situation-timeline b {
+  overflow: hidden;
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.realistic-situation-timeline b {
+  color: #f1cf77;
+}
+
+.realistic-situation-timeline input[type="range"],
+.realistic-situation-tools input[type="range"] {
+  accent-color: #d8b35e;
+}
+
+@media (max-width: 920px) {
+  .realistic-situation-filters {
+    max-width: calc(100% - 2rem);
+    overflow-x: auto;
+  }
+
+  .realistic-situation-timeline {
+    grid-template-columns: auto auto minmax(5rem, 1fr);
+  }
+
+  .realistic-situation-timeline select,
+  .realistic-situation-timeline span,
+  .realistic-situation-timeline b {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .realistic-situation-layer * {
+    scroll-behavior: auto !important;
+  }
+}
