@@ -1,58 +1,35 @@
-import "maplibre-gl/dist/maplibre-gl.css";
 import "./realistic-operational-situation.css";
 
-import { useEffect, useRef } from "react";
-import type {
-  Feature,
-  FeatureCollection,
-  GeoJsonProperties,
-  Geometry as GeoJsonGeometry,
-  MultiPolygon as GeoJsonMultiPolygon,
-  Point as GeoJsonPoint,
-  Polygon as GeoJsonPolygon,
-  Position as GeoJsonPosition,
-} from "geojson";
-import {
-  Map as MapLibreMap,
-  type GeoJSONSource,
-  type MapLayerMouseEvent,
-  type MapMouseEvent,
-  type SymbolLayerSpecification,
-} from "maplibre-gl";
+import { useEffect, useMemo, useRef } from "react";
+import * as THREE from "three";
 
 import type { MapAnnotation } from "../../application/ports/MapAnnotationRepository";
 import type { OperationalFacilityCatalogue } from "../../domain/operationalFacilities";
 import type { OperationalSituationCatalogue } from "../../domain/operationalSituation";
 import type { OverviewRegion } from "../../domain/overview";
 import type { MapFeature } from "./boundaryGeometry";
+import type { TerrainSurfaceMode } from "./fourRegionTerrainStyle";
 import {
-  atlasLayerVisibilityKey,
-  changedAtlasSources,
-  terrainFocusBounds,
-  type AtlasSourceReferences,
-} from "./fourRegionTerrainModel";
+  projectReliefScene,
+  type ReliefPoint,
+  type ReliefPolygon,
+  type ReliefSceneProjection,
+  type ReliefSurface,
+} from "./terrainReliefGeometry";
 import {
-  FOUR_REGION_BASE_STYLE,
-  FOUR_REGION_DETAIL_LAYERS,
-  FOUR_REGION_REMOTE_SOURCES,
-  surfaceModePaint,
-  type TerrainSurfaceMode,
-} from "./fourRegionTerrainStyle";
-import {
-  loadSvgMarkerImage,
-  realisticSituationIcon,
-  realisticWeatherIcon,
-} from "./realisticSituationIcons";
-import {
-  SituationViewerLifecycle,
-  type DepotLayerState,
-  type GeographicBounds,
-} from "./realisticSituationModel";
+  loadSatelliteSurfaceTexture,
+  type ProjectedSurfaceBounds,
+  type SatelliteSurfaceBounds,
+} from "./satelliteSurfaceTexture";
+import type { GeographicBounds } from "./realisticSituationModel";
 
-export interface RealisticSceneLayers extends DepotLayerState {
+export interface RealisticSceneLayers {
   ADMINISTRATIVE: boolean;
+  HISTORICAL_LEASED: boolean;
   INVENTORY: boolean;
+  LEASED: boolean;
   LOGISTICS: boolean;
+  OWNED: boolean;
   RAILWAY: boolean;
   RAILWAY_ROUTE: boolean;
   WEATHER: boolean;
@@ -60,8 +37,7 @@ export interface RealisticSceneLayers extends DepotLayerState {
 
 export interface RealisticSceneCommand {
   id: number;
-  tiltDegrees?: number;
-  type: "ZOOM_IN" | "ZOOM_OUT" | "RESET" | "SET_TILT";
+  type: "ZOOM_IN" | "ZOOM_OUT" | "RESET";
 }
 
 export type TerrainEnhancementState = "LOADING" | "READY" | "DEGRADED";
@@ -75,6 +51,7 @@ export interface FourRegionTerrainAtlasProps {
   command?: RealisticSceneCommand;
   facilities: OperationalFacilityCatalogue;
   features: readonly MapFeature[];
+  rootFeatures: readonly MapFeature[];
   layers: RealisticSceneLayers;
   onFacilitySelect: (id: string) => void;
   onEnhancementState?: (state: TerrainEnhancementState) => void;
@@ -88,829 +65,1142 @@ export interface FourRegionTerrainAtlasProps {
   surfaceMode?: TerrainSurfaceMode;
 }
 
-interface AtlasRuntime {
-  cancelEnhancementTimeout?: () => void;
-  destroyed: boolean;
-  lastBoundsKey: string;
-  lastLayerVisibilityKey: string;
-  lastSurfaceMode?: TerrainSurfaceMode;
-  lifecycle: SituationViewerLifecycle;
-  map: MapLibreMap;
-  props: FourRegionTerrainAtlasProps;
-  ready: boolean;
-  sourceReferences?: AtlasSourceReferences;
-  syncRevision: number;
+interface RegionVisual {
+  group: THREE.Group;
+  region: OverviewRegion;
+  topMeshes: THREE.Mesh<THREE.ShapeGeometry, THREE.ShaderMaterial>[];
 }
 
-const DEPOT_KINDS = ["OWNED", "LEASED", "HISTORICAL_LEASED"] as const;
+type InteractionTarget =
+  { kind: "FACILITY"; id: string } | { kind: "REGION"; region: OverviewRegion };
+
+interface AtlasRuntime {
+  annotationRoot: THREE.Group;
+  camera: THREE.OrthographicCamera;
+  contentRoot: THREE.Group;
+  destroyed: boolean;
+  host: HTMLDivElement;
+  operationalObjects: THREE.Object3D[];
+  operationalRoot: THREE.Group;
+  operationalTargets: Map<string, InteractionTarget>;
+  projection: ReliefSceneProjection;
+  props: FourRegionTerrainAtlasProps;
+  raycaster: THREE.Raycaster;
+  regionObjects: THREE.Object3D[];
+  regionRoot: THREE.Group;
+  regionTargets: Map<string, InteractionTarget>;
+  regionVisuals: Map<string, RegionVisual>;
+  render: () => void;
+  renderer: THREE.WebGLRenderer;
+  satelliteDetailRevision: number;
+  satelliteRevision: number;
+  surfaceMaterials: {
+    base: THREE.ShaderMaterial;
+    hover: THREE.ShaderMaterial;
+    selected: THREE.ShaderMaterial;
+  };
+  texture: THREE.Texture;
+}
+
+const STAGE_WIDTH = 1920;
+const STAGE_HEIGHT = 1080;
+const GLOBE_RADIUS = 468;
+const GLOBE_SURFACE_LIFT = 7;
+const GLOBE_FRAME = { x: 535, y: 115, width: 850, height: 850 } as const;
+const LABEL_Z = 18;
 
 export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const runtimeRef = useRef<AtlasRuntime | null>(null);
   const propsRef = useRef(props);
+  const geometryKey = useMemo(
+    () =>
+      JSON.stringify({
+        backdrop: props.backdrop,
+        features: props.features,
+        rootFeatures: props.rootFeatures,
+      }),
+    [props.backdrop, props.features, props.rootFeatures],
+  );
+  const projectedFeatures = useMemo(() => {
+    const byCode = new Map<string, MapFeature>();
+    props.rootFeatures.forEach((feature) => byCode.set(feature.region.code, feature));
+    if (props.backdrop && !byCode.has(props.backdrop.region.code))
+      byCode.set(props.backdrop.region.code, props.backdrop);
+    props.features.forEach((feature) => byCode.set(feature.region.code, feature));
+    return [...byCode.values()];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geometryKey]);
+  const projection = useMemo(
+    () =>
+      projectReliefScene({
+        features: projectedFeatures,
+        frame: GLOBE_FRAME,
+        points: [],
+      }),
+    // geometryKey represents the complete governed geometry. Ordinary weather
+    // and timeline updates must not recreate the WebGL context.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [geometryKey, projectedFeatures],
+  );
 
   useEffect(() => {
     propsRef.current = props;
     const runtime = runtimeRef.current;
-    if (runtime) runtime.props = props;
-    if (runtime?.ready) synchronizeChangedSources(runtime, props);
+    if (!runtime) return;
+    const previous = runtime.props;
+    runtime.props = props;
+    if (
+      previous.selectedRegionCode !== props.selectedRegionCode ||
+      previous.surfaceMode !== props.surfaceMode
+    ) {
+      applySelection(runtime);
+      applySurfaceMode(runtime, props.surfaceMode ?? "FUSION");
+    }
+    if (
+      previous.facilities !== props.facilities ||
+      previous.layers !== props.layers ||
+      previous.selectedFacilityId !== props.selectedFacilityId ||
+      previous.situation !== props.situation
+    ) {
+      updateOperationalLayers(runtime);
+    }
+    if (
+      previous.annotation !== props.annotation ||
+      previous.annotationActive !== props.annotationActive ||
+      previous.annotationDraft !== props.annotationDraft
+    ) {
+      buildAnnotationObjects(runtime);
+    }
+    runtime.render();
   }, [props]);
+
+  useEffect(() => {
+    const runtime = runtimeRef.current;
+    if (!runtime || !props.command) return;
+    applyCommand(runtime, props.command);
+  }, [props.command]);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const initialBounds = terrainFocusBounds(
-      propsRef.current.backdrop,
-      propsRef.current.features,
-      propsRef.current.selectedRegionCode,
-      propsRef.current.bounds,
-    );
-    const map = new MapLibreMap({
-      attributionControl: { compact: true },
-      bearing: -8,
-      center: centerOf(initialBounds),
-      container: host,
-      dragRotate: false,
-      fadeDuration: 0,
-      localIdeographFontFamily: "sans-serif",
-      maxPitch: 72,
-      minPitch: 12,
-      pitch: 48,
-      renderWorldCopies: false,
-      style: FOUR_REGION_BASE_STYLE,
+    let disposed = false;
+    const renderer = new THREE.WebGLRenderer({
+      alpha: true,
+      antialias: true,
+      powerPreference: "high-performance",
+      preserveDrawingBuffer: false,
     });
-    map.doubleClickZoom.disable();
-    map.keyboard.disableRotation();
-    map.touchZoomRotate.disableRotation();
-    const lifecycle = new SituationViewerLifecycle();
-    lifecycle.viewerCreated();
+    renderer.setClearColor(0x153338, 0);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.7));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1;
+    renderer.domElement.setAttribute("aria-label", "四区域三维卫星融合沙盘");
+    renderer.domElement.setAttribute("role", "img");
+    renderer.domElement.tabIndex = 0;
+    host.replaceChildren(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = null;
+    scene.fog = new THREE.Fog(0x153338, 1300, 2400);
+    const camera = new THREE.OrthographicCamera(
+      -STAGE_WIDTH / 2,
+      STAGE_WIDTH / 2,
+      STAGE_HEIGHT / 2,
+      -STAGE_HEIGHT / 2,
+      0.1,
+      3200,
+    );
+    camera.position.set(0, 0, 1100);
+    camera.lookAt(0, 0, 0);
+
+    const contentRoot = new THREE.Group();
+    const regionRoot = new THREE.Group();
+    const operationalRoot = new THREE.Group();
+    const annotationRoot = new THREE.Group();
+    contentRoot.add(regionRoot, operationalRoot, annotationRoot);
+    scene.add(createFourRegionGlobeBackdrop(), contentRoot);
+    scene.add(new THREE.HemisphereLight(0xe8f4ea, 0x17261f, 1.2));
+    const keyLight = new THREE.DirectionalLight(0xfff6da, 1.45);
+    keyLight.position.set(-0.4, 0.8, 1.8).normalize();
+    scene.add(keyLight);
+
+    const fallbackTexture = createFallbackTexture(projectedBounds(projection));
+    const surfaceMaterials = {
+      base: createCurvedSatelliteSurfaceMaterial(fallbackTexture, "base"),
+      hover: createCurvedSatelliteSurfaceMaterial(fallbackTexture, "hover"),
+      selected: createCurvedSatelliteSurfaceMaterial(fallbackTexture, "selected"),
+    };
+    const regionObjects: THREE.Object3D[] = [];
+    const regionTargets = new Map<string, InteractionTarget>();
+    const regionVisuals = new Map<string, RegionVisual>();
+    buildReliefGeometry({
+      projection,
+      regionObjects,
+      regionRoot,
+      regionTargets,
+      regionVisuals,
+      surfaceMaterials,
+      rootCodes: new Set(
+        propsRef.current.rootFeatures.map(({ region }) => region.code),
+      ),
+    });
+
     const runtime: AtlasRuntime = {
+      annotationRoot,
+      camera,
+      contentRoot,
       destroyed: false,
-      lastBoundsKey: "",
-      lastLayerVisibilityKey: "",
-      lifecycle,
-      map,
+      host,
+      operationalObjects: [],
+      operationalRoot,
+      operationalTargets: new Map(),
+      projection,
       props: propsRef.current,
-      ready: false,
-      syncRevision: 0,
+      raycaster: new THREE.Raycaster(),
+      regionObjects,
+      regionRoot,
+      regionTargets,
+      regionVisuals,
+      render: () => {
+        if (!disposed) renderer.render(scene, camera);
+      },
+      renderer,
+      satelliteDetailRevision: 0,
+      satelliteRevision: 0,
+      surfaceMaterials,
+      texture: fallbackTexture,
     };
     runtimeRef.current = runtime;
+    host.dataset.sceneState = "local-ready";
+    host.dataset.viewerCount = "1";
+    host.dataset.createdViewerCount = "1";
+    host.dataset.featureCount = String(projection.features.length);
+    host.dataset.rootRegionCount = String(propsRef.current.rootFeatures.length);
+    host.dataset.detailLevel = projection.features[0]?.region.level ?? "PREFECTURE";
+    applySurfaceMode(runtime, propsRef.current.surfaceMode ?? "FUSION");
+    applySelection(runtime);
+    updateOperationalLayers(runtime);
+    buildAnnotationObjects(runtime);
 
-    map.on("load", () => {
-      host.dataset.sceneState = "local-ready";
-      installAtlasLayers(map);
-      runtime.ready = true;
-      synchronizeChangedSources(runtime, propsRef.current);
-      propsRef.current.onReady?.();
-      runtime.cancelEnhancementTimeout = installTerrainEnhancements(
-        map,
-        host,
-        (state) => propsRef.current.onEnhancementState?.(state),
-      );
-      applySurfaceMode(map, propsRef.current.surfaceMode ?? "FUSION");
-    });
-    map.on("error", () => {
-      runtime.cancelEnhancementTimeout?.();
-      setEnhancementState(host, "DEGRADED", (state) =>
-        propsRef.current.onEnhancementState?.(state),
-      );
-      host.setAttribute(
-        "aria-description",
-        "在线影像、地形、地名或图标增强暂不可用，四区域边界与业务图层仍可操作。",
-      );
-    });
-    map.on("click", "atlas-regions-fill", (event) =>
-      selectRegion(runtime, event, false),
-    );
-    map.on("dblclick", "atlas-regions-fill", (event) =>
-      selectRegion(runtime, event, true),
-    );
-    map.on("click", "atlas-operational-markers", (event) =>
-      selectOperationalMarker(runtime, event),
-    );
-    map.on("click", "atlas-railway-markers", (event) =>
-      selectOperationalMarker(runtime, event),
-    );
-    map.on("click", "atlas-weather-markers", (event) =>
-      selectWeatherMarker(runtime, event),
-    );
-    map.on("click", (event) => selectAnnotationPosition(runtime, event));
-    map.on("zoom", () => {
-      host.dataset.detailLevel = detailLevel(map.getZoom());
-    });
-
-    const resizeObserver =
-      typeof ResizeObserver === "undefined"
-        ? undefined
-        : new ResizeObserver(() => map.resize());
-    resizeObserver?.observe(host);
-    return () => {
-      resizeObserver?.disconnect();
-      runtime.cancelEnhancementTimeout?.();
-      runtime.destroyed = true;
-      lifecycle.viewerDestroyed();
-      runtimeRef.current = null;
-      map.remove();
+    const resize = () => {
+      const width = Math.max(host.clientWidth, 1);
+      const height = Math.max(host.clientHeight, 1);
+      renderer.setSize(width, height, false);
+      runtime.render();
     };
-  }, []);
+    const resizeObserver = new ResizeObserver(resize);
+    resizeObserver.observe(host);
+    resize();
 
-  useEffect(() => {
-    const runtime = runtimeRef.current;
-    if (!runtime?.ready || !props.command) return;
-    applyCommand(
-      runtime.map,
-      props.command,
-      terrainFocusBounds(
-        props.backdrop,
-        props.features,
-        props.selectedRegionCode,
-        props.bounds,
-      ),
-    );
-  }, [
-    props.backdrop,
-    props.bounds,
-    props.command,
-    props.features,
-    props.selectedRegionCode,
-  ]);
+    let hoveredCode = "";
+    const pointer = new THREE.Vector2();
+    const interactionTarget = (event: PointerEvent | MouseEvent) => {
+      const bounds = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((event.clientX - bounds.left) / Math.max(bounds.width, 1)) * 2 - 1;
+      pointer.y = -((event.clientY - bounds.top) / Math.max(bounds.height, 1)) * 2 + 1;
+      runtime.raycaster.setFromCamera(pointer, camera);
+      const hits = runtime.raycaster.intersectObjects(
+        [...runtime.operationalObjects, ...runtime.regionObjects],
+        true,
+      );
+      for (const hit of hits) {
+        const operational = runtime.operationalTargets.get(hit.object.uuid);
+        if (operational) return operational;
+        const region = runtime.regionTargets.get(hit.object.uuid);
+        if (region) return region;
+      }
+      return undefined;
+    };
+    const handlePointerMove = (event: PointerEvent) => {
+      if (runtime.props.annotationActive) return;
+      const target = interactionTarget(event);
+      const nextCode = target?.kind === "REGION" ? target.region.code : "";
+      if (nextCode === hoveredCode) return;
+      hoveredCode = nextCode;
+      applySelection(runtime, hoveredCode);
+      renderer.domElement.style.cursor = target ? "pointer" : "default";
+      runtime.render();
+    };
+    const handlePointerLeave = () => {
+      hoveredCode = "";
+      applySelection(runtime);
+      renderer.domElement.style.cursor = "default";
+      runtime.render();
+    };
+    const handleClick = (event: MouseEvent) => {
+      if (runtime.props.annotationActive) {
+        const coordinate = annotationCoordinate(runtime, event);
+        if (coordinate)
+          runtime.props.onAnnotationPosition?.(coordinate[0], coordinate[1]);
+        return;
+      }
+      const target = interactionTarget(event);
+      if (target?.kind === "FACILITY") runtime.props.onFacilitySelect(target.id);
+      if (target?.kind === "REGION") runtime.props.onRegionSelect(target.region);
+    };
+    const handleDoubleClick = (event: MouseEvent) => {
+      if (runtime.props.annotationActive) return;
+      const target = interactionTarget(event);
+      if (target?.kind === "REGION") runtime.props.onRegionDrill(target.region);
+    };
+    renderer.domElement.addEventListener("pointermove", handlePointerMove);
+    renderer.domElement.addEventListener("pointerleave", handlePointerLeave);
+    renderer.domElement.addEventListener("click", handleClick);
+    renderer.domElement.addEventListener("dblclick", handleDoubleClick);
+
+    runtime.render();
+    propsRef.current.onReady?.();
+    void refreshSatelliteTexture(runtime);
+
+    return () => {
+      disposed = true;
+      runtime.destroyed = true;
+      resizeObserver.disconnect();
+      renderer.domElement.removeEventListener("pointermove", handlePointerMove);
+      renderer.domElement.removeEventListener("pointerleave", handlePointerLeave);
+      renderer.domElement.removeEventListener("click", handleClick);
+      renderer.domElement.removeEventListener("dblclick", handleDoubleClick);
+      disposeTree(scene);
+      runtime.texture.dispose();
+      renderer.forceContextLoss();
+      renderer.dispose();
+      runtimeRef.current = null;
+    };
+  }, [geometryKey, projection]);
 
   return (
     <div
-      aria-label="齐齐哈尔、黑河、呼伦贝尔、大兴安岭连续三维地形融合图"
+      aria-label="齐齐哈尔、黑河、呼伦贝尔、大兴安岭四区域三维卫星融合沙盘"
       className="four-region-terrain-atlas"
-      data-detail-level="PREFECTURE"
-      data-dom-markers="0"
       data-annotation-active={String(Boolean(props.annotationActive))}
+      data-dom-markers="0"
+      data-globe-mode="fixed-visible-hemisphere"
+      data-region-visibility="all-four-front-hemisphere"
+      data-renderer="three-fixed-four-region-globe"
+      data-surface-confinement="region-meshes-only"
       ref={hostRef}
       role="img"
     />
   );
 }
 
-function installTerrainEnhancements(
-  map: MapLibreMap,
-  host: HTMLDivElement,
-  onState: (state: TerrainEnhancementState) => void,
-) {
-  setEnhancementState(host, "LOADING", onState);
-  const timeoutId = window.setTimeout(() => {
-    if (host.dataset.enhancementState === "loading")
-      setEnhancementState(host, "DEGRADED", onState);
-  }, 5_000);
-  const cancelTimeout = () => window.clearTimeout(timeoutId);
-  let degraded = false;
-  Object.entries(FOUR_REGION_REMOTE_SOURCES).forEach(([id, source]) => {
-    try {
-      if (!map.getSource(id)) map.addSource(id, source);
-    } catch {
-      degraded = true;
-    }
-  });
-  FOUR_REGION_DETAIL_LAYERS.forEach((layer) => {
-    try {
-      if (!map.getLayer(layer.id)) map.addLayer(layer, "atlas-regions-fill");
-    } catch {
-      degraded = true;
-    }
-  });
-  if (degraded) {
-    cancelTimeout();
-    setEnhancementState(host, "DEGRADED", onState);
-  }
-  map.once("idle", () => {
-    cancelTimeout();
-    if (host.dataset.enhancementState !== "degraded")
-      setEnhancementState(host, "READY", onState);
-  });
-  return cancelTimeout;
-}
-
-function setEnhancementState(
-  host: HTMLDivElement,
-  state: TerrainEnhancementState,
-  onState: (state: TerrainEnhancementState) => void,
-) {
-  host.dataset.enhancementState = state.toLowerCase();
-  onState(state);
-}
-
-function installAtlasLayers(map: MapLibreMap) {
-  map.addSource("atlas-regions", { type: "geojson", data: emptyCollection() });
-  map.addSource("atlas-rail-routes", { type: "geojson", data: emptyCollection() });
-  map.addSource("atlas-logistics", { type: "geojson", data: emptyCollection() });
-  map.addSource("atlas-inventory", { type: "geojson", data: emptyCollection() });
-  map.addSource("atlas-markers", { type: "geojson", data: emptyCollection() });
-  map.addSource("atlas-annotation", { type: "geojson", data: emptyCollection() });
-
-  map.addLayer({
-    id: "atlas-regions-fill",
-    type: "fill",
-    source: "atlas-regions",
-    paint: {
-      "fill-color": ["case", ["==", ["get", "selected"], true], "#f0cc73", "#f5f1df"],
-      "fill-opacity": ["case", ["==", ["get", "selected"], true], 0.07, 0.012],
-    },
-  });
-  map.addLayer({
-    id: "atlas-regions-outline",
-    type: "line",
-    source: "atlas-regions",
-    paint: {
-      "line-blur": 0.05,
-      "line-color": ["case", ["==", ["get", "selected"], true], "#ffe49b", "#f7f3e6"],
-      "line-opacity": ["case", ["==", ["get", "selected"], true], 0.86, 0.58],
-      "line-width": ["case", ["==", ["get", "selected"], true], 2, 0.9],
-    },
-  });
-  map.addLayer({
-    id: "atlas-region-labels",
-    type: "symbol",
-    source: "atlas-regions",
-    layout: {
-      "symbol-placement": "point",
-      "text-allow-overlap": false,
-      "text-field": ["get", "name"],
-      "text-font": ["Noto Sans Regular"],
-      "text-size": ["case", ["==", ["get", "selected"], true], 17, 14],
-    },
-    paint: {
-      "text-color": "#ffffff",
-      "text-halo-color": "#17211d",
-      "text-halo-width": 2,
-    },
-  });
-  map.addLayer({
-    id: "atlas-rail-routes",
-    type: "line",
-    source: "atlas-rail-routes",
-    paint: {
-      "line-color": "#f4f5ef",
-      "line-dasharray": [2, 2],
-      "line-opacity": 0.8,
-      "line-width": 1.8,
-    },
-  });
-  map.addLayer({
-    id: "atlas-logistics",
-    type: "line",
-    source: "atlas-logistics",
-    paint: {
-      "line-color": "#f0ad35",
-      "line-dasharray": [1.5, 1.4],
-      "line-opacity": 0.98,
-      "line-width": 3.2,
-    },
-  });
-  map.addLayer({
-    id: "atlas-inventory",
-    type: "circle",
-    source: "atlas-inventory",
-    paint: {
-      "circle-color": "#4da477",
-      "circle-radius": 6,
-      "circle-stroke-color": "#ffffff",
-      "circle-stroke-width": 2,
-    },
-  });
-  map.addLayer({
-    id: "atlas-operational-markers",
-    type: "symbol",
-    source: "atlas-markers",
-    filter: ["match", ["get", "kind"], [...DEPOT_KINDS], true, false],
-    layout: markerLayout(0.72),
-  });
-  map.addLayer({
-    id: "atlas-railway-markers",
-    type: "symbol",
-    source: "atlas-markers",
-    filter: ["==", ["get", "kind"], "RAILWAY"],
-    minzoom: 5.6,
-    layout: markerLayout(0.68),
-  });
-  map.addLayer({
-    id: "atlas-weather-markers",
-    type: "symbol",
-    source: "atlas-markers",
-    filter: ["==", ["get", "kind"], "WEATHER"],
-    layout: markerLayout(0.82),
-  });
-  map.addLayer({
-    id: "atlas-annotation-fill",
-    type: "fill",
-    source: "atlas-annotation",
-    filter: ["==", ["geometry-type"], "Polygon"],
-    paint: { "fill-color": "#f1c64c", "fill-opacity": 0.2 },
-  });
-  map.addLayer({
-    id: "atlas-annotation-line",
-    type: "line",
-    source: "atlas-annotation",
-    filter: ["==", ["geometry-type"], "Polygon"],
-    paint: { "line-color": "#fff0a3", "line-width": 3 },
-  });
-  map.addLayer({
-    id: "atlas-annotation-point",
-    type: "circle",
-    source: "atlas-annotation",
-    filter: ["==", ["geometry-type"], "Point"],
-    paint: {
-      "circle-color": "#f1c64c",
-      "circle-radius": 8,
-      "circle-stroke-color": "#ffffff",
-      "circle-stroke-width": 3,
-    },
-  });
-}
-
-function markerLayout(
-  iconSize: number,
-): NonNullable<SymbolLayerSpecification["layout"]> {
-  return {
-    "icon-allow-overlap": false,
-    "icon-anchor": "bottom" as const,
-    "icon-image": ["get", "iconId"] as ["get", string],
-    "icon-size": ["case", ["==", ["get", "selected"], true], iconSize * 1.28, iconSize],
-  };
-}
-
-function synchronizeChangedSources(
-  runtime: AtlasRuntime,
-  props: FourRegionTerrainAtlasProps,
-) {
-  runtime.props = props;
-  const references = sourceReferences(props);
-  const changed = new Set(changedAtlasSources(runtime.sourceReferences, references));
-  runtime.sourceReferences = references;
-  const surfaceMode = props.surfaceMode ?? "FUSION";
-  if (runtime.lastSurfaceMode !== surfaceMode) {
-    applySurfaceMode(runtime.map, surfaceMode);
-    runtime.lastSurfaceMode = surfaceMode;
-  }
-
-  if (changed.has("regions"))
-    setSource(runtime.map, "atlas-regions", regionCollection(props));
-  if (changed.has("railRoutes"))
-    setSource(runtime.map, "atlas-rail-routes", railwayCollection(props));
-  if (changed.has("logistics"))
-    setSource(runtime.map, "atlas-logistics", logisticsCollection(props));
-  if (changed.has("inventory"))
-    setSource(runtime.map, "atlas-inventory", inventoryCollection(props));
-  if (changed.has("annotation"))
-    setSource(runtime.map, "atlas-annotation", annotationCollection(props));
-  const layerVisibilityKey = atlasLayerVisibilityKey(props.layers);
-  if (runtime.lastLayerVisibilityKey !== layerVisibilityKey) {
-    setLayerVisibility(runtime.map, "atlas-regions-fill", props.layers.ADMINISTRATIVE);
-    setLayerVisibility(
-      runtime.map,
-      "atlas-regions-outline",
-      props.layers.ADMINISTRATIVE,
-    );
-    setLayerVisibility(runtime.map, "atlas-region-labels", props.layers.ADMINISTRATIVE);
-    setLayerVisibility(runtime.map, "atlas-rail-routes", props.layers.RAILWAY_ROUTE);
-    setLayerVisibility(runtime.map, "atlas-logistics", props.layers.LOGISTICS);
-    setLayerVisibility(runtime.map, "atlas-inventory", props.layers.INVENTORY);
-    setLayerVisibility(
-      runtime.map,
-      "atlas-operational-markers",
-      depotLayerVisible(props),
-    );
-    setLayerVisibility(runtime.map, "atlas-railway-markers", props.layers.RAILWAY);
-    setLayerVisibility(runtime.map, "atlas-weather-markers", props.layers.WEATHER);
-    runtime.lastLayerVisibilityKey = layerVisibilityKey;
-  }
-  if (changed.has("markers")) {
-    const markerData = markerCollection(props);
-    const revision = ++runtime.syncRevision;
-    void ensureMarkerImages(runtime, props).then((failedImages) => {
-      if (runtime.destroyed || revision !== runtime.syncRevision) return;
-      setSource(runtime.map, "atlas-markers", markerData);
-      const host = runtime.map.getContainer();
-      host.dataset.markerState = failedImages ? "degraded" : "ready";
-      if (failedImages) {
-        host.dataset.enhancementState = "degraded";
-        runtime.props.onEnhancementState?.("DEGRADED");
-      }
-      runtime.map.triggerRepaint();
-      runtime.lifecycle.dataSynchronized({
-        billboardCount: markerData.features.length,
-        domMarkerCount: 0,
-      });
-      updateLifecycleDataset(runtime);
-    });
-  }
-
-  const focusBounds = terrainFocusBounds(
-    props.backdrop,
-    props.features,
-    props.selectedRegionCode,
-    props.bounds,
-  );
-  const boundsKey = boundsKeyOf(focusBounds);
-  if (changed.has("regions") || boundsKey !== runtime.lastBoundsKey) {
-    fitAtlas(runtime.map, focusBounds, runtime.lastBoundsKey ? 420 : 0);
-    runtime.lastBoundsKey = boundsKey;
-  }
-  const host = runtime.map.getContainer();
-  host.dataset.annotationActive = String(Boolean(props.annotationActive));
-  updateLifecycleDataset(runtime);
-}
-
-function applySurfaceMode(map: MapLibreMap, mode: TerrainSurfaceMode) {
-  const paint = surfaceModePaint(mode);
-  if (map.getLayer("atlas-satellite")) {
-    map.setPaintProperty("atlas-satellite", "raster-opacity", paint.satelliteOpacity);
-    map.setPaintProperty(
-      "atlas-satellite",
-      "raster-saturation",
-      paint.satelliteSaturation,
-    );
-    map.setPaintProperty("atlas-satellite", "raster-contrast", paint.satelliteContrast);
-  }
-  if (map.getLayer("atlas-terrain-light"))
-    map.setPaintProperty(
-      "atlas-terrain-light",
-      "hillshade-exaggeration",
-      paint.hillshadeOpacity,
-    );
-  if (map.getLayer("atlas-landcover"))
-    map.setPaintProperty("atlas-landcover", "fill-opacity", paint.landcoverOpacity);
-  if (map.getSource("terrain-dem")) {
-    map.setTerrain({
-      source: "terrain-dem",
-      exaggeration: paint.terrainExaggeration,
-    });
-    map.getContainer().dataset.terrainExaggeration = String(paint.terrainExaggeration);
-  }
-  map.getContainer().dataset.surfaceMode = mode.toLowerCase();
-}
-
-async function ensureMarkerImages(
-  runtime: AtlasRuntime,
-  props: FourRegionTerrainAtlasProps,
-) {
-  const specifications = markerImageSpecifications(props);
-  const results = await Promise.allSettled(
-    [...specifications].map(async ([id, source]) => {
-      if (runtime.destroyed || runtime.map.hasImage(id)) return;
-      const image = await loadSvgMarkerImage(source);
-      if (!runtime.destroyed && !runtime.map.hasImage(id))
-        runtime.map.addImage(id, image, { pixelRatio: 2 });
+function createFourRegionGlobeBackdrop() {
+  const globe = new THREE.Group();
+  const sphere = new THREE.Mesh(
+    new THREE.SphereGeometry(GLOBE_RADIUS, 96, 64),
+    new THREE.MeshPhysicalMaterial({
+      clearcoat: 0.28,
+      clearcoatRoughness: 0.78,
+      color: 0x173f4a,
+      metalness: 0.02,
+      roughness: 0.72,
     }),
   );
-  return results.some((result) => result.status === "rejected");
-}
-
-function sourceReferences(props: FourRegionTerrainAtlasProps): AtlasSourceReferences {
-  return {
-    annotation: props.annotation,
-    annotationDraftKey: props.annotationDraft?.join(":") ?? "",
-    backdrop: props.backdrop,
-    features: props.features,
-    inventories: props.situation.inventories,
-    logisticsFlows: props.situation.logisticsFlows,
-    markerLayerKey: [
-      props.layers.OWNED,
-      props.layers.LEASED,
-      props.layers.HISTORICAL_LEASED,
-      props.layers.RAILWAY,
-      props.layers.WEATHER,
-    ].join(":"),
-    railwayFacilities: props.facilities.railwayFacilities,
-    railwayRoutes: props.facilities.railwayRoutes,
-    selectedFacilityId: props.selectedFacilityId,
-    selectedRegionCode: props.selectedRegionCode,
-    storageFacilities: props.facilities.storageFacilities,
-    weather: props.situation.weather,
-  };
-}
-
-function updateLifecycleDataset(runtime: AtlasRuntime) {
-  const snapshot = runtime.lifecycle.snapshot();
-  const host = runtime.map.getContainer();
-  host.dataset.viewerCount = String(snapshot.activeViewerCount);
-  host.dataset.createdViewerCount = String(snapshot.createdViewerCount);
-  host.dataset.billboardCount = String(snapshot.billboardCount);
-  host.dataset.domMarkers = "0";
-}
-
-function markerImageSpecifications(props: FourRegionTerrainAtlasProps) {
-  const images = new Map<string, string>([
-    ["atlas-owned", realisticSituationIcon("OWNED")],
-    ["atlas-leased", realisticSituationIcon("LEASED")],
-    ["atlas-historical-leased", realisticSituationIcon("HISTORICAL_LEASED")],
-    ["atlas-railway", realisticSituationIcon("RAILWAY")],
-  ]);
-  props.situation.weather.forEach((weather) => {
-    images.set(
-      weatherIconId(weather.weatherCode),
-      realisticWeatherIcon(weather.weatherCode),
-    );
-  });
-  return images;
-}
-
-function selectRegion(
-  runtime: AtlasRuntime,
-  event: MapLayerMouseEvent,
-  drill: boolean,
-) {
-  if (runtime.props.annotationActive) return;
-  const code = mapFeatureStringProperty(event, "code");
-  if (!code) return;
-  const region = regionFeatures(runtime.props).find(
-    (feature) => feature.region.code === code,
-  )?.region;
-  if (!region) return;
-  if (drill && region.level !== "VILLAGE") runtime.props.onRegionDrill(region);
-  else runtime.props.onRegionSelect(region);
-}
-
-function selectOperationalMarker(runtime: AtlasRuntime, event: MapLayerMouseEvent) {
-  if (runtime.props.annotationActive) return;
-  const id = mapFeatureStringProperty(event, "id");
-  if (id) runtime.props.onFacilitySelect(id);
-}
-
-function selectWeatherMarker(runtime: AtlasRuntime, event: MapLayerMouseEvent) {
-  if (runtime.props.annotationActive) return;
-  const code = mapFeatureStringProperty(event, "regionCode");
-  if (!code) return;
-  const region = regionFeatures(runtime.props).find(
-    (feature) => feature.region.code === code,
-  )?.region;
-  if (region) runtime.props.onRegionSelect(region);
-}
-
-function selectAnnotationPosition(runtime: AtlasRuntime, event: MapMouseEvent) {
-  const { props } = runtime;
-  if (!props.annotationActive || !props.onAnnotationPosition) return;
-  const { lng, lat } = event.lngLat;
-  if (!insideBounds(lng, lat, props.bounds)) return;
-  props.onAnnotationPosition(lng, lat);
-}
-
-function regionCollection(props: FourRegionTerrainAtlasProps): FeatureCollection {
-  const featuresByCode = new Map<string, MapFeature>();
-  regionFeatures(props).forEach((feature) =>
-    featuresByCode.set(feature.region.code, feature),
+  sphere.position.z = -GLOBE_RADIUS;
+  sphere.renderOrder = 0;
+  globe.add(sphere);
+  const atmosphere = new THREE.Mesh(
+    new THREE.RingGeometry(GLOBE_RADIUS - 3, GLOBE_RADIUS + 22, 128),
+    new THREE.MeshBasicMaterial({
+      blending: THREE.AdditiveBlending,
+      color: 0x8de5e5,
+      depthWrite: false,
+      opacity: 0.28,
+      side: THREE.DoubleSide,
+      transparent: true,
+    }),
   );
-  return {
-    type: "FeatureCollection",
-    features: [...featuresByCode.values()].map((feature) => ({
-      type: "Feature",
-      properties: {
-        code: feature.region.code,
-        level: feature.region.level,
-        name: feature.region.name,
-        selected: feature.region.code === props.selectedRegionCode,
-      },
-      geometry: feature.geometry as unknown as GeoJsonPolygon | GeoJsonMultiPolygon,
-    })),
-  };
+  atmosphere.position.z = -8;
+  atmosphere.renderOrder = 1;
+  globe.add(atmosphere);
+  return globe;
 }
 
-function markerCollection(props: FourRegionTerrainAtlasProps): FeatureCollection {
-  const features: Feature[] = [];
-  props.facilities.storageFacilities.forEach((facility) => {
+function createCurvedSatelliteSurfaceMaterial(
+  texture: THREE.Texture,
+  tone: "base" | "hover" | "selected",
+) {
+  const selected = tone === "selected";
+  const hovered = tone === "hover";
+  return new THREE.ShaderMaterial({
+    depthWrite: true,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
+    toneMapped: false,
+    uniforms: {
+      globeRadius: { value: GLOBE_RADIUS },
+      globeSurfaceLift: { value: GLOBE_SURFACE_LIFT },
+      surfaceBrightness: { value: selected || hovered ? 1.14 : 1.1 },
+      surfaceContrast: { value: 1.06 },
+      surfaceTint: {
+        value: new THREE.Color(selected ? 0xffc84a : hovered ? 0xf2c94c : 0x5b9d91),
+      },
+      surfaceTintStrength: { value: selected ? 0.22 : hovered ? 0.18 : 0.2 },
+      terrainMap: { value: texture },
+    },
+    vertexShader: `
+      uniform float globeRadius;
+      uniform float globeSurfaceLift;
+      varying vec2 terrainUv;
+      varying float globeLight;
+      varying float globeRadiusRatio;
+
+      void main() {
+        terrainUv = uv;
+        globeRadiusRatio = length(position.xy) / globeRadius;
+        float normalizedRadius = clamp(globeRadiusRatio, 0.0, 1.0);
+        float hemisphere = sqrt(max(0.0, 1.0 - normalizedRadius * normalizedRadius));
+        float sphereSurface = hemisphere * globeRadius - globeRadius;
+        vec3 curvedPosition = vec3(
+          position.xy,
+          position.z + sphereSurface + globeSurfaceLift
+        );
+        globeLight = 0.78 + hemisphere * 0.28;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(curvedPosition, 1.0);
+      }
+    `,
+    fragmentShader: `
+      precision highp float;
+
+      uniform sampler2D terrainMap;
+      uniform vec3 surfaceTint;
+      uniform float surfaceTintStrength;
+      uniform float surfaceBrightness;
+      uniform float surfaceContrast;
+      varying vec2 terrainUv;
+      varying float globeLight;
+      varying float globeRadiusRatio;
+
+      void main() {
+        if (globeRadiusRatio > 1.0) discard;
+        vec3 terrain = texture2D(terrainMap, terrainUv).rgb;
+        terrain = (terrain - 0.5) * surfaceContrast + 0.5;
+        terrain *= surfaceBrightness * globeLight;
+        float luminance = dot(terrain, vec3(0.2126, 0.7152, 0.0722));
+        vec3 gradedTint = surfaceTint * (0.36 + luminance * 0.72);
+        terrain = mix(terrain, gradedTint, surfaceTintStrength);
+        gl_FragColor = vec4(clamp(terrain, 0.0, 1.0), 1.0);
+        #include <colorspace_fragment>
+      }
+    `,
+  });
+}
+
+function globeSurfaceHeight({ x, y }: { x: number; y: number }) {
+  const normalizedRadius = Math.min(1, Math.hypot(x, y) / GLOBE_RADIUS);
+  return (
+    Math.sqrt(Math.max(0, 1 - normalizedRadius ** 2)) * GLOBE_RADIUS -
+    GLOBE_RADIUS +
+    GLOBE_SURFACE_LIFT
+  );
+}
+
+function buildReliefGeometry({
+  projection,
+  regionObjects,
+  regionRoot,
+  regionTargets,
+  regionVisuals,
+  rootCodes,
+  surfaceMaterials,
+}: {
+  projection: ReliefSceneProjection;
+  regionObjects: THREE.Object3D[];
+  regionRoot: THREE.Group;
+  regionTargets: Map<string, InteractionTarget>;
+  regionVisuals: Map<string, RegionVisual>;
+  rootCodes: ReadonlySet<string>;
+  surfaceMaterials: AtlasRuntime["surfaceMaterials"];
+}) {
+  const orderedSurfaces = [...projection.features].sort(
+    (left, right) =>
+      Number(rootCodes.has(right.region.code)) -
+      Number(rootCodes.has(left.region.code)),
+  );
+  orderedSurfaces.forEach((surface) =>
+    addCurvedRegionSurface(
+      surface,
+      regionRoot,
+      surfaceMaterials,
+      !surface.region.mapContextOnly,
+      regionObjects,
+      regionTargets,
+      regionVisuals,
+      rootCodes.has(surface.region.code) ? 0 : 2,
+    ),
+  );
+  addRegionOutlines(projection, regionRoot, rootCodes);
+  projection.labels
+    .filter(({ kind, region }) => kind === "region" && !region.mapContextOnly)
+    .forEach(({ point, region }) => {
+      const sprite = createLabelSprite(region.name);
+      const world = screenToWorld(point);
+      sprite.position.set(world.x, world.y, globeSurfaceHeight(world) + LABEL_Z);
+      regionRoot.add(sprite);
+    });
+}
+
+function addCurvedRegionSurface(
+  surface: ReliefSurface,
+  root: THREE.Group,
+  materials: AtlasRuntime["surfaceMaterials"],
+  interactive: boolean,
+  regionObjects: THREE.Object3D[],
+  regionTargets: Map<string, InteractionTarget>,
+  regionVisuals: Map<string, RegionVisual>,
+  topZ: number,
+) {
+  const geometries = createRegionSurfaceGeometries(surface);
+  const group = new THREE.Group();
+  const topMeshes = geometries.map((geometry) => {
+    const top = new THREE.Mesh(geometry, materials.base);
+    top.position.z = topZ;
+    top.renderOrder = 3;
+    group.add(top);
+    if (interactive) {
+      regionObjects.push(top);
+      regionTargets.set(top.uuid, { kind: "REGION", region: surface.region });
+    }
+    return top;
+  });
+  root.add(group);
+  regionVisuals.set(surface.region.code, { group, region: surface.region, topMeshes });
+}
+
+function createRegionSurfaceGeometries(surface: ReliefSurface) {
+  const geometries: THREE.ShapeGeometry[] = [];
+  surface.polygons.forEach((polygon) => {
+    const shape = regionShape(polygon);
+    if (!shape) return;
+    const geometry = new THREE.ShapeGeometry(shape);
+    const positions = geometry.getAttribute("position");
+    const uv: number[] = [];
+    for (let index = 0; index < positions.count; index += 1) {
+      uv.push(
+        (positions.getX(index) + STAGE_WIDTH / 2) / STAGE_WIDTH,
+        (positions.getY(index) + STAGE_HEIGHT / 2) / STAGE_HEIGHT,
+      );
+    }
+    geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+    geometries.push(geometry);
+  });
+  return geometries;
+}
+
+function regionShape(polygon: ReliefPolygon) {
+  const outer = polygon.rings.find(({ isHole }) => !isHole)?.points;
+  if (!outer || outer.length < 3) return undefined;
+  const shape = new THREE.Shape();
+  drawRegionPath(shape, outer);
+  polygon.rings
+    .filter(({ isHole }) => isHole)
+    .forEach(({ points }) => {
+      if (points.length < 3) return;
+      const hole = new THREE.Path();
+      drawRegionPath(hole, points);
+      shape.holes.push(hole);
+    });
+  return shape;
+}
+
+function drawRegionPath(path: THREE.Path, points: readonly ReliefPoint[]) {
+  const first = points[0];
+  if (!first) return;
+  const start = screenToWorld(first);
+  path.moveTo(start.x, start.y);
+  points.slice(1).forEach((point) => {
+    const world = screenToWorld(point);
+    path.lineTo(world.x, world.y);
+  });
+  path.closePath();
+}
+
+function addRegionOutlines(
+  projection: ReliefSceneProjection,
+  root: THREE.Group,
+  rootCodes: ReadonlySet<string>,
+) {
+  const surfaces = projection.features;
+  surfaces.forEach((surface) =>
+    surface.polygons.forEach((polygon) =>
+      polygon.rings.forEach(({ points }) => {
+        if (points.length < 2) return;
+        const rootBoundary = rootCodes.has(surface.region.code);
+        const material = new THREE.LineBasicMaterial({
+          color: rootBoundary ? 0xfff0b8 : 0xf7e6ad,
+          opacity: rootBoundary ? 1 : 0.72,
+          transparent: true,
+        });
+        const closed = [...points, points[0] as ReliefPoint];
+        const geometry = new THREE.BufferGeometry().setFromPoints(
+          closed.map((point) => {
+            const world = screenToWorld(point);
+            return new THREE.Vector3(
+              world.x,
+              world.y,
+              globeSurfaceHeight(world) + (rootBoundary ? 9 : 12),
+            );
+          }),
+        );
+        const line = new THREE.Line(geometry, material);
+        line.renderOrder = 8;
+        root.add(line);
+      }),
+    ),
+  );
+}
+
+function applySelection(runtime: AtlasRuntime, hoveredCode = "") {
+  runtime.regionVisuals.forEach((visual, code) => {
+    const selected = code === runtime.props.selectedRegionCode;
+    const hovered = code === hoveredCode;
+    visual.group.position.z = hovered ? 10 : selected ? 6 : 0;
+    visual.topMeshes.forEach((mesh) => {
+      mesh.material = hovered
+        ? runtime.surfaceMaterials.hover
+        : selected
+          ? runtime.surfaceMaterials.selected
+          : runtime.surfaceMaterials.base;
+    });
+  });
+}
+
+function applySurfaceMode(runtime: AtlasRuntime, mode: TerrainSurfaceMode) {
+  const base = mode === "IMAGERY" ? 0.02 : mode === "SANDBOX" ? 0.48 : 0.2;
+  const brightness = mode === "IMAGERY" ? 1.04 : mode === "SANDBOX" ? 1.14 : 1.1;
+  setMaterialGrade(runtime.surfaceMaterials.base, base, brightness);
+  setMaterialGrade(runtime.surfaceMaterials.hover, Math.min(base + 0.08, 0.56), 1.13);
+  setMaterialGrade(runtime.surfaceMaterials.selected, Math.min(base + 0.1, 0.58), 1.14);
+  runtime.host.dataset.surfaceMode = mode.toLowerCase();
+}
+
+function setMaterialGrade(
+  material: THREE.ShaderMaterial,
+  tintStrength: number,
+  brightness: number,
+) {
+  if (material.uniforms.surfaceTintStrength)
+    material.uniforms.surfaceTintStrength.value = tintStrength;
+  if (material.uniforms.surfaceBrightness)
+    material.uniforms.surfaceBrightness.value = brightness;
+}
+
+function applyCommand(runtime: AtlasRuntime, command: RealisticSceneCommand) {
+  if (command.type === "ZOOM_IN") {
+    runtime.satelliteDetailRevision = Math.min(3, runtime.satelliteDetailRevision + 1);
+  }
+  if (command.type === "ZOOM_OUT") {
+    runtime.satelliteDetailRevision = Math.max(0, runtime.satelliteDetailRevision - 1);
+  }
+  if (command.type === "RESET") {
+    runtime.satelliteDetailRevision = 0;
+  }
+  runtime.host.dataset.imageryDetailRevision = String(runtime.satelliteDetailRevision);
+  runtime.render();
+  if (
+    command.type === "ZOOM_IN" ||
+    command.type === "ZOOM_OUT" ||
+    command.type === "RESET"
+  )
+    void refreshSatelliteTexture(runtime);
+}
+
+async function refreshSatelliteTexture(runtime: AtlasRuntime) {
+  const bounds = runtime.projection.sourceBounds;
+  const stageBounds = projectedBounds(runtime.projection);
+  if (!bounds || !stageBounds) return;
+  const revision = ++runtime.satelliteRevision;
+  runtime.host.dataset.enhancementState = "loading";
+  runtime.props.onEnhancementState?.("LOADING");
+  try {
+    const loaded = await loadSatelliteSurfaceTexture({
+      bounds: sourceBounds(bounds),
+      projectedBounds: stageBounds,
+      requestedZoom:
+        baseSatelliteZoom(runtime.props.features[0]?.region.level) +
+        runtime.satelliteDetailRevision,
+      stageHeight: STAGE_HEIGHT,
+      stageWidth: STAGE_WIDTH,
+    });
+    if (runtime.destroyed || revision !== runtime.satelliteRevision) {
+      loaded.texture.dispose();
+      return;
+    }
+    const previous = runtime.texture;
+    runtime.texture = loaded.texture;
+    Object.values(runtime.surfaceMaterials).forEach((material) => {
+      if (material.uniforms.terrainMap)
+        material.uniforms.terrainMap.value = loaded.texture;
+      material.needsUpdate = true;
+    });
+    previous.dispose();
+    runtime.host.dataset.enhancementState = "ready";
+    runtime.host.dataset.imagerySource = loaded.source;
+    runtime.host.dataset.imageryZoom = String(loaded.zoom);
+    runtime.host.dataset.imageryTileCount = String(loaded.tileCount);
+    runtime.props.onEnhancementState?.("READY");
+    runtime.render();
+  } catch {
+    if (runtime.destroyed || revision !== runtime.satelliteRevision) return;
+    runtime.host.dataset.enhancementState = "degraded";
+    runtime.props.onEnhancementState?.("DEGRADED");
+  }
+}
+
+function baseSatelliteZoom(level: OverviewRegion["level"] | undefined) {
+  if (level === "VILLAGE") return 13;
+  if (level === "TOWNSHIP") return 11;
+  if (level === "COUNTY") return 9;
+  return 7;
+}
+
+function updateOperationalLayers(runtime: AtlasRuntime) {
+  clearGroup(runtime.operationalRoot);
+  runtime.operationalTargets.clear();
+  runtime.operationalObjects = [];
+  buildOperationalLines(runtime);
+  buildOperationalMarkers(runtime);
+  runtime.host.dataset.billboardCount = String(runtime.operationalObjects.length);
+}
+
+function buildOperationalMarkers(runtime: AtlasRuntime) {
+  const { facilities, layers, selectedFacilityId, situation } = runtime.props;
+  facilities.storageFacilities.forEach((facility) => {
     if (
       facility.longitude === null ||
       facility.latitude === null ||
-      !props.layers[facility.relationType]
+      !layers[facility.relationType]
     )
       return;
-    features.push(
-      pointFeature(facility.longitude, facility.latitude, {
-        iconId: depotIconId(facility.relationType),
-        id: facility.code,
-        kind: facility.relationType,
-        name: facility.name,
-        selected: facility.code === props.selectedFacilityId,
-      }),
-    );
+    const point = projectCoordinate(runtime.projection, [
+      facility.longitude,
+      facility.latitude,
+    ]);
+    if (!point) return;
+    const selected = facility.code === selectedFacilityId;
+    const color =
+      facility.relationType === "OWNED"
+        ? 0x37a66f
+        : facility.relationType === "LEASED"
+          ? 0xe1a52b
+          : 0x858d91;
+    addOperationalMarker(runtime, point, color, selected, {
+      kind: "FACILITY",
+      id: facility.code,
+    });
   });
-  if (props.layers.RAILWAY) {
-    props.facilities.railwayFacilities.forEach((facility) => {
-      features.push(
-        pointFeature(facility.longitude, facility.latitude, {
-          iconId: "atlas-railway",
-          id: facility.sourceId,
-          kind: "RAILWAY",
-          name: facility.name,
-          selected: facility.sourceId === props.selectedFacilityId,
-        }),
+  if (layers.RAILWAY) {
+    facilities.railwayFacilities.forEach((facility) => {
+      const point = projectCoordinate(runtime.projection, [
+        facility.longitude,
+        facility.latitude,
+      ]);
+      if (!point) return;
+      addOperationalMarker(
+        runtime,
+        point,
+        0xf5f5ec,
+        facility.sourceId === selectedFacilityId,
+        { kind: "FACILITY", id: facility.sourceId },
+        "铁路",
       );
     });
   }
-  if (props.layers.WEATHER) {
-    props.situation.weather.forEach((weather) => {
-      features.push(
-        pointFeature(weather.longitude, weather.latitude, {
-          iconId: weatherIconId(weather.weatherCode),
-          id: weather.regionCode ?? weather.rootRegionCode,
-          kind: "WEATHER",
-          name: `${weather.regionName}实时天气`,
-          regionCode: weather.regionCode ?? weather.rootRegionCode,
-        }),
+  if (layers.WEATHER) {
+    situation.weather.forEach((weather) => {
+      const point = projectCoordinate(runtime.projection, [
+        weather.longitude,
+        weather.latitude,
+      ]);
+      if (!point) return;
+      const region = findRegion(
+        runtime.projection,
+        weather.regionCode ?? weather.rootRegionCode,
+      );
+      addOperationalMarker(
+        runtime,
+        point,
+        weather.precipitationMm && weather.precipitationMm > 0 ? 0x79d8ff : 0xf3f1df,
+        false,
+        region ? { kind: "REGION", region } : undefined,
+        weather.precipitationMm && weather.precipitationMm > 0 ? "雨" : "云",
       );
     });
   }
-  return { type: "FeatureCollection", features };
-}
-
-function railwayCollection(props: FourRegionTerrainAtlasProps): FeatureCollection {
-  const features: Feature[] = [];
-  props.facilities.railwayRoutes.forEach((route) => {
-    try {
-      const geometry = JSON.parse(route.geometryGeoJson) as GeoJsonGeometry;
-      if (geometry.type === "LineString" || geometry.type === "MultiLineString")
-        features.push({ type: "Feature", properties: { id: route.id }, geometry });
-    } catch {
-      // Invalid public reference geometry stays hidden.
-    }
-  });
-  return { type: "FeatureCollection", features };
-}
-
-function logisticsCollection(props: FourRegionTerrainAtlasProps): FeatureCollection {
-  return {
-    type: "FeatureCollection",
-    features: (props.situation.logisticsFlows ?? []).map((flow) => ({
-      type: "Feature",
-      properties: { id: flow.eventId },
-      geometry: {
-        type: "LineString",
-        coordinates: [
-          [flow.originLongitude, flow.originLatitude],
-          [flow.destinationLongitude, flow.destinationLatitude],
-        ],
-      },
-    })),
-  };
-}
-
-function inventoryCollection(props: FourRegionTerrainAtlasProps): FeatureCollection {
-  return {
-    type: "FeatureCollection",
-    features: (props.situation.inventories ?? []).map((inventory) =>
-      pointFeature(inventory.longitude, inventory.latitude, {
-        regionCode: inventory.regionCode,
-      }),
-    ),
-  };
-}
-
-function annotationCollection(props: FourRegionTerrainAtlasProps): FeatureCollection {
-  const features: Feature[] = [];
-  const annotation = props.annotation;
-  if (annotation?.type === "POINT")
-    features.push(
-      pointFeature(annotation.minLongitude, annotation.minLatitude, {
-        state: "saved",
-      }),
-    );
-  if (annotation?.type === "RECTANGLE") {
-    features.push({
-      type: "Feature",
-      properties: { state: "saved" },
-      geometry: {
-        type: "Polygon",
-        coordinates: [rectangleRing(annotation)],
-      },
+  if (layers.INVENTORY) {
+    situation.inventories.forEach((inventory) => {
+      const point = projectCoordinate(runtime.projection, [
+        inventory.longitude,
+        inventory.latitude,
+      ]);
+      if (!point) return;
+      addOperationalMarker(runtime, point, 0x72c995, false, undefined, "存");
     });
   }
-  if (props.annotationDraft)
-    features.push(
-      pointFeature(props.annotationDraft[0], props.annotationDraft[1], {
-        state: "draft",
-      }),
-    );
-  return { type: "FeatureCollection", features };
 }
 
-function pointFeature(
-  longitude: number,
-  latitude: number,
-  properties: GeoJsonProperties,
-): Feature<GeoJsonPoint> {
-  return {
-    type: "Feature",
-    properties,
-    geometry: { type: "Point", coordinates: [longitude, latitude] },
-  };
-}
-
-function rectangleRing(annotation: MapAnnotation): GeoJsonPosition[] {
-  return [
-    [annotation.minLongitude, annotation.minLatitude],
-    [annotation.maxLongitude, annotation.minLatitude],
-    [annotation.maxLongitude, annotation.maxLatitude],
-    [annotation.minLongitude, annotation.maxLatitude],
-    [annotation.minLongitude, annotation.minLatitude],
-  ];
-}
-
-function setSource(map: MapLibreMap, id: string, data: FeatureCollection) {
-  const source = map.getSource<GeoJSONSource>(id);
-  if (source) void source.setData(data);
-}
-
-function mapFeatureStringProperty(event: MapLayerMouseEvent, key: string) {
-  const properties: unknown = event.features?.[0]?.properties;
-  if (!properties || typeof properties !== "object") return undefined;
-  const value = (properties as Record<string, unknown>)[key];
-  return typeof value === "string" ? value : undefined;
-}
-
-function setLayerVisibility(map: MapLibreMap, id: string, visible: boolean) {
-  map.setLayoutProperty(id, "visibility", visible ? "visible" : "none");
-}
-
-function emptyCollection(): FeatureCollection {
-  return { type: "FeatureCollection", features: [] };
-}
-
-function applyCommand(
-  map: MapLibreMap,
-  command: RealisticSceneCommand,
-  bounds: GeographicBounds,
+function addOperationalMarker(
+  runtime: AtlasRuntime,
+  point: ReliefPoint,
+  color: number,
+  selected: boolean,
+  target?: InteractionTarget,
+  label?: string,
 ) {
-  if (command.type === "ZOOM_IN") map.zoomIn({ duration: 180 });
-  if (command.type === "ZOOM_OUT") map.zoomOut({ duration: 180 });
-  if (command.type === "RESET") fitAtlas(map, bounds, 240);
-  if (command.type === "SET_TILT" && command.tiltDegrees !== undefined)
-    map.easeTo({ duration: 180, pitch: 90 - command.tiltDegrees });
+  const world = screenToWorld(point);
+  const geometry = new THREE.CircleGeometry(selected ? 8.5 : 6.5, 20);
+  const material = new THREE.MeshBasicMaterial({ color, depthTest: false });
+  const marker = new THREE.Mesh(geometry, material);
+  marker.position.set(
+    world.x,
+    world.y,
+    globeSurfaceHeight(world) + (selected ? 25 : 20),
+  );
+  marker.renderOrder = 30;
+  runtime.operationalRoot.add(marker);
+  runtime.operationalObjects.push(marker);
+  if (target) runtime.operationalTargets.set(marker.uuid, target);
+  if (label) {
+    const sprite = createBadgeSprite(label, color);
+    sprite.position.set(
+      world.x,
+      world.y - 15,
+      globeSurfaceHeight({ x: world.x, y: world.y - 15 }) + 22,
+    );
+    runtime.operationalRoot.add(sprite);
+  }
 }
 
-function fitAtlas(map: MapLibreMap, bounds: GeographicBounds, duration: number) {
-  const atlasBounds: [[number, number], [number, number]] = [
-    [bounds.minLongitude, bounds.minLatitude],
-    [bounds.maxLongitude, bounds.maxLatitude],
-  ];
-  map.setMaxBounds(null);
-  map.setMinZoom(1.5);
-  const camera = map.cameraForBounds(atlasBounds, {
-    bearing: -8,
-    padding: { bottom: 110, left: 68, right: 68, top: 150 },
-  });
-  if (!camera?.center || camera.zoom === undefined) return;
-  map.easeTo({
-    bearing: -8,
-    center: camera.center,
-    duration,
-    pitch: map.getPitch(),
-    zoom: camera.zoom + 0.08,
-  });
-  map.setMinZoom(Math.max(1.5, camera.zoom - 0.18));
-  map.setMaxBounds(atlasBounds);
+function buildOperationalLines(runtime: AtlasRuntime) {
+  const { facilities, layers, situation } = runtime.props;
+  if (layers.LOGISTICS) {
+    situation.logisticsFlows.forEach((flow) => {
+      addProjectedLine(
+        runtime,
+        [flow.originLongitude, flow.originLatitude],
+        [flow.destinationLongitude, flow.destinationLatitude],
+        0xf0b647,
+      );
+    });
+  }
+  if (layers.RAILWAY_ROUTE) {
+    facilities.railwayRoutes.forEach((route) => {
+      try {
+        const geometry = JSON.parse(route.geometryGeoJson) as {
+          coordinates?: readonly (readonly [number, number])[];
+          type?: string;
+        };
+        if (geometry.type !== "LineString" || !geometry.coordinates) return;
+        const points = geometry.coordinates
+          .map((coordinate) => projectCoordinate(runtime.projection, coordinate))
+          .filter((point): point is ReliefPoint => Boolean(point))
+          .map((point) => {
+            const world = screenToWorld(point);
+            return new THREE.Vector3(world.x, world.y, globeSurfaceHeight(world) + 14);
+          });
+        if (points.length < 2) return;
+        const line = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints(points),
+          new THREE.LineDashedMaterial({
+            color: 0xf4f4eb,
+            dashSize: 7,
+            gapSize: 5,
+            opacity: 0.85,
+            transparent: true,
+          }),
+        );
+        line.computeLineDistances();
+        runtime.operationalRoot.add(line);
+      } catch {
+        // Invalid public route geometry is omitted without affecting the scene.
+      }
+    });
+  }
 }
 
-function depotLayerVisible(props: FourRegionTerrainAtlasProps) {
-  return DEPOT_KINDS.some((kind) => props.layers[kind]);
+function addProjectedLine(
+  runtime: AtlasRuntime,
+  startCoordinate: readonly [number, number],
+  endCoordinate: readonly [number, number],
+  color: number,
+) {
+  const start = projectCoordinate(runtime.projection, startCoordinate);
+  const end = projectCoordinate(runtime.projection, endCoordinate);
+  if (!start || !end) return;
+  const startWorld = screenToWorld(start);
+  const endWorld = screenToWorld(end);
+  const line = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(
+        startWorld.x,
+        startWorld.y,
+        globeSurfaceHeight(startWorld) + 14,
+      ),
+      new THREE.Vector3(endWorld.x, endWorld.y, globeSurfaceHeight(endWorld) + 14),
+    ]),
+    new THREE.LineDashedMaterial({
+      color,
+      dashSize: 10,
+      gapSize: 6,
+      opacity: 0.94,
+      transparent: true,
+    }),
+  );
+  line.computeLineDistances();
+  runtime.operationalRoot.add(line);
 }
 
-function depotIconId(kind: (typeof DEPOT_KINDS)[number]) {
-  if (kind === "OWNED") return "atlas-owned";
-  if (kind === "LEASED") return "atlas-leased";
-  return "atlas-historical-leased";
+function buildAnnotationObjects(runtime: AtlasRuntime) {
+  clearGroup(runtime.annotationRoot);
+  const annotation = runtime.props.annotation;
+  const draft = runtime.props.annotationDraft;
+  if (annotation?.type === "POINT") {
+    const point = projectCoordinate(runtime.projection, [
+      annotation.minLongitude,
+      annotation.minLatitude,
+    ]);
+    if (point) addAnnotationPoint(runtime.annotationRoot, point);
+  }
+  if (annotation?.type === "RECTANGLE") {
+    addAnnotationRectangle(runtime, [
+      [annotation.minLongitude, annotation.minLatitude],
+      [annotation.maxLongitude ?? annotation.minLongitude, annotation.minLatitude],
+      [
+        annotation.maxLongitude ?? annotation.minLongitude,
+        annotation.maxLatitude ?? annotation.minLatitude,
+      ],
+      [annotation.minLongitude, annotation.maxLatitude ?? annotation.minLatitude],
+    ]);
+  }
+  if (draft) {
+    const point = projectCoordinate(runtime.projection, draft);
+    if (point) addAnnotationPoint(runtime.annotationRoot, point);
+  }
 }
 
-function weatherIconId(weatherCode: number | null | undefined) {
-  return `atlas-weather-${weatherCode ?? "unknown"}`;
+function addAnnotationPoint(root: THREE.Group, point: ReliefPoint) {
+  const world = screenToWorld(point);
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(9, 13, 32),
+    new THREE.MeshBasicMaterial({ color: 0xffd45f, side: THREE.DoubleSide }),
+  );
+  ring.position.set(world.x, world.y, globeSurfaceHeight(world) + 28);
+  root.add(ring);
 }
 
-function regionFeatures(props: FourRegionTerrainAtlasProps) {
-  return [...(props.backdrop ? [props.backdrop] : []), ...props.features];
-}
-
-function centerOf(bounds: GeographicBounds): [number, number] {
-  return [
-    (bounds.minLongitude + bounds.maxLongitude) / 2,
-    (bounds.minLatitude + bounds.maxLatitude) / 2,
-  ];
-}
-
-function boundsKeyOf(bounds: GeographicBounds) {
-  return [
-    bounds.minLongitude,
-    bounds.minLatitude,
-    bounds.maxLongitude,
-    bounds.maxLatitude,
-  ].join(":");
-}
-
-function insideBounds(longitude: number, latitude: number, bounds: GeographicBounds) {
-  return (
-    longitude >= bounds.minLongitude &&
-    longitude <= bounds.maxLongitude &&
-    latitude >= bounds.minLatitude &&
-    latitude <= bounds.maxLatitude
+function addAnnotationRectangle(
+  runtime: AtlasRuntime,
+  coordinates: readonly (readonly [number, number])[],
+) {
+  const points = [...coordinates, coordinates[0]!]
+    .map((coordinate) => projectCoordinate(runtime.projection, coordinate))
+    .filter((point): point is ReliefPoint => Boolean(point))
+    .map((point) => {
+      const world = screenToWorld(point);
+      return new THREE.Vector3(world.x, world.y, globeSurfaceHeight(world) + 28);
+    });
+  if (points.length < 4) return;
+  runtime.annotationRoot.add(
+    new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(points),
+      new THREE.LineBasicMaterial({ color: 0xffd45f }),
+    ),
   );
 }
 
-function detailLevel(zoom: number): OverviewRegion["level"] {
-  if (zoom < 6.1) return "PREFECTURE";
-  if (zoom < 8.2) return "COUNTY";
-  if (zoom < 10.5) return "TOWNSHIP";
-  return "VILLAGE";
+function annotationCoordinate(
+  runtime: AtlasRuntime,
+  event: MouseEvent,
+): readonly [number, number] | undefined {
+  const source = runtime.projection.sourceBounds;
+  if (!source) return undefined;
+  const bounds = runtime.renderer.domElement.getBoundingClientRect();
+  const screenX =
+    ((event.clientX - bounds.left) / Math.max(bounds.width, 1)) * STAGE_WIDTH;
+  const screenY =
+    ((event.clientY - bounds.top) / Math.max(bounds.height, 1)) * STAGE_HEIGHT;
+  const projected = projectedBounds(runtime.projection);
+  if (!projected || screenX < projected.minX || screenX > projected.maxX)
+    return undefined;
+  if (screenY < projected.minY || screenY > projected.maxY) return undefined;
+  const longitude =
+    source.minX +
+    ((screenX - projected.minX) / Math.max(projected.maxX - projected.minX, 1)) *
+      (source.maxX - source.minX);
+  const latitude =
+    source.maxY -
+    ((screenY - projected.minY) / Math.max(projected.maxY - projected.minY, 1)) *
+      (source.maxY - source.minY);
+  return [longitude, latitude];
+}
+
+function projectCoordinate(
+  projection: ReliefSceneProjection,
+  coordinate: readonly [number, number],
+): ReliefPoint | undefined {
+  const bounds = projection.sourceBounds;
+  if (!bounds) return undefined;
+  const [longitude, latitude] = coordinate;
+  if (
+    longitude < bounds.minX ||
+    longitude > bounds.maxX ||
+    latitude < bounds.minY ||
+    latitude > bounds.maxY
+  )
+    return undefined;
+  const target = projectedBounds(projection);
+  if (!target) return undefined;
+  return {
+    x:
+      target.minX +
+      ((longitude - bounds.minX) / Math.max(bounds.maxX - bounds.minX, 0.000001)) *
+        (target.maxX - target.minX),
+    y:
+      target.minY +
+      ((bounds.maxY - latitude) / Math.max(bounds.maxY - bounds.minY, 0.000001)) *
+        (target.maxY - target.minY),
+  };
+}
+
+function findRegion(projection: ReliefSceneProjection, code: string) {
+  return [
+    ...projection.features,
+    ...(projection.backdrop ? [projection.backdrop] : []),
+  ].find(({ region }) => region.code === code)?.region;
+}
+
+function projectedBounds(
+  projection: ReliefSceneProjection,
+): ProjectedSurfaceBounds | undefined {
+  const surfaces = projection.backdrop
+    ? [projection.backdrop]
+    : projection.features.length
+      ? projection.features
+      : [];
+  const points = surfaces.flatMap(({ polygons }) =>
+    polygons.flatMap(({ rings }) => rings.flatMap((ring) => ring.points)),
+  );
+  if (!points.length) return undefined;
+  return {
+    maxX: Math.max(...points.map(({ x }) => x)),
+    maxY: Math.max(...points.map(({ y }) => y)),
+    minX: Math.min(...points.map(({ x }) => x)),
+    minY: Math.min(...points.map(({ y }) => y)),
+  };
+}
+
+function sourceBounds(bounds: NonNullable<ReliefSceneProjection["sourceBounds"]>) {
+  return {
+    maxLatitude: bounds.maxY,
+    maxLongitude: bounds.maxX,
+    minLatitude: bounds.minY,
+    minLongitude: bounds.minX,
+  } satisfies SatelliteSurfaceBounds;
+}
+
+function createFallbackTexture(bounds: ProjectedSurfaceBounds | undefined) {
+  const canvas = document.createElement("canvas");
+  canvas.width = STAGE_WIDTH;
+  canvas.height = STAGE_HEIGHT;
+  const context = canvas.getContext("2d");
+  if (context && bounds) {
+    const gradient = context.createLinearGradient(
+      bounds.minX,
+      bounds.minY,
+      bounds.maxX,
+      bounds.maxY,
+    );
+    gradient.addColorStop(0, "#738b65");
+    gradient.addColorStop(0.5, "#526c4f");
+    gradient.addColorStop(1, "#355547");
+    context.fillStyle = gradient;
+    context.fillRect(
+      bounds.minX,
+      bounds.minY,
+      bounds.maxX - bounds.minX,
+      bounds.maxY - bounds.minY,
+    );
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function createLabelSprite(text: string) {
+  return createTextSprite(text, "#f7f2df", "rgba(18, 28, 23, .82)", 42, 3.3);
+}
+
+function createBadgeSprite(text: string, color: number) {
+  const colour = `#${color.toString(16).padStart(6, "0")}`;
+  return createTextSprite(text, "#ffffff", colour, 34, 1.7);
+}
+
+function createTextSprite(
+  text: string,
+  foreground: string,
+  background: string,
+  fontSize: number,
+  scale: number,
+) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 384;
+  canvas.height = 104;
+  const context = canvas.getContext("2d");
+  if (context) {
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.font = `650 ${fontSize}px PingFang SC, Microsoft YaHei, sans-serif`;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.lineWidth = 14;
+    context.lineJoin = "round";
+    context.strokeStyle = background;
+    context.strokeText(text, canvas.width / 2, canvas.height / 2);
+    context.fillStyle = foreground;
+    context.fillText(text, canvas.width / 2, canvas.height / 2);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({ depthTest: false, map: texture, transparent: true }),
+  );
+  sprite.renderOrder = 40;
+  sprite.scale.set(120 * scale, 32 * scale, 1);
+  return sprite;
+}
+
+function screenToWorld(point: ReliefPoint) {
+  return { x: point.x - STAGE_WIDTH / 2, y: STAGE_HEIGHT / 2 - point.y };
+}
+
+function clearGroup(group: THREE.Group) {
+  [...group.children].forEach((child) => {
+    child.traverse((object) => disposeObject(object));
+    group.remove(child);
+  });
+}
+
+function disposeTree(root: THREE.Object3D) {
+  root.traverse((object) => disposeObject(object));
+}
+
+function disposeObject(object: THREE.Object3D) {
+  const renderable = object as THREE.Object3D & {
+    geometry?: THREE.BufferGeometry;
+    material?: THREE.Material | THREE.Material[];
+  };
+  renderable.geometry?.dispose();
+  const materials = Array.isArray(renderable.material)
+    ? renderable.material
+    : renderable.material
+      ? [renderable.material]
+      : [];
+  materials.forEach((material) => {
+    const map = (material as THREE.SpriteMaterial).map;
+    map?.dispose();
+    material.dispose();
+  });
 }

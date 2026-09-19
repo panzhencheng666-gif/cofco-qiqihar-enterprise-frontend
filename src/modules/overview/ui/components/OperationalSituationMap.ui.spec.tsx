@@ -48,9 +48,7 @@ describe("OperationalSituationMap public-only controls", () => {
     await userEvent.click(await screen.findByRole("button", { name: "模拟增强失败" }));
 
     expect(
-      screen.getByText(
-        "在线影像、高程、地名或图标增强暂不可用，四区域边界与业务图层仍可操作。",
-      ),
+      screen.getByText("在线卫星影像暂不可用，四区域球体、边界与业务图层仍可操作。"),
     ).toBeVisible();
   });
 });
@@ -76,6 +74,7 @@ function renderSituationMap() {
         sources: [],
       }}
       features={[]}
+      rootFeatures={[]}
       onAnnotationToggle={vi.fn()}
       onFacilitySelect={vi.fn()}
       onRegionDrill={vi.fn()}

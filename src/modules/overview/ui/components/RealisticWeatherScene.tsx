@@ -1,8 +1,30 @@
-import type { CSSProperties } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { WeatherObservation } from "../../domain/operationalSituation";
-import { publicAssetUrl } from "../../../../shared/assets/publicAssetUrl";
+import {
+  latestRadarFrame,
+  liveRadarImageUrl,
+  liveSatelliteExportUrl,
+  type LiveRadarFrame,
+  type RadarMapsResponse,
+} from "./liveWeatherImagery";
 import { liveWeatherKind } from "./liveWeatherPresentation";
+
+const RAINVIEWER_MAPS_URL = "https://api.rainviewer.com/public/weather-maps.json";
+
+type RadarState =
+  | { status: "LOADING" }
+  | { status: "READY"; frame: LiveRadarFrame }
+  | { status: "UNAVAILABLE" };
+
+function radarObservedAt(frame: LiveRadarFrame) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Shanghai",
+  }).format(new Date(frame.observedAt * 1_000));
+}
 
 export function RealisticWeatherScene({
   areaName,
@@ -12,29 +34,67 @@ export function RealisticWeatherScene({
   weather: WeatherObservation;
 }) {
   const kind = liveWeatherKind(weather).toLowerCase();
-  const style = {
-    "--weather-wind": `${weather.windDirectionDegrees ?? 0}deg`,
-    backgroundImage: `linear-gradient(180deg, rgba(4, 16, 20, 0.08), rgba(4, 12, 11, 0.42)), url("${publicAssetUrl("overview/command-terrain-v2.webp")}")`,
-  } as CSSProperties;
+  const [radarState, setRadarState] = useState<RadarState>({
+    status: "LOADING",
+  });
+  const satelliteUrl = useMemo(
+    () => liveSatelliteExportUrl(weather.longitude, weather.latitude),
+    [weather.latitude, weather.longitude],
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    void fetch(RAINVIEWER_MAPS_URL, {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error(`RainViewer ${response.status}`);
+        return response.json() as Promise<RadarMapsResponse>;
+      })
+      .then((response) => {
+        const frame = latestRadarFrame(response);
+        setRadarState(frame ? { status: "READY", frame } : { status: "UNAVAILABLE" });
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setRadarState({ status: "UNAVAILABLE" });
+      });
+
+    return () => controller.abort();
+  }, []);
 
   return (
     <figure
       aria-label={`${areaName}实时天气动态场景`}
       className={`realistic-weather-scene is-${kind}`}
       role="img"
-      style={style}
     >
-      <div className="realistic-weather-scene__atmosphere" aria-hidden="true">
-        <i className="realistic-weather-scene__sun" />
-        <i className="realistic-weather-scene__cloud is-back" />
-        <i className="realistic-weather-scene__cloud is-front" />
-        <span className="realistic-weather-scene__precipitation">
-          {Array.from({ length: 18 }, (_, index) => (
-            <i key={index} style={{ "--drop": index } as CSSProperties} />
-          ))}
-        </span>
-        <i className="realistic-weather-scene__lightning" />
-      </div>
+      <img
+        alt=""
+        aria-hidden="true"
+        className="realistic-weather-scene__satellite"
+        src={satelliteUrl}
+      />
+      {radarState.status === "READY" ? (
+        <img
+          alt=""
+          aria-hidden="true"
+          className="realistic-weather-scene__radar"
+          src={liveRadarImageUrl(radarState.frame, weather.longitude, weather.latitude)}
+        />
+      ) : null}
+      <span className="realistic-weather-scene__live-status">
+        {radarState.status === "LOADING" ? "实时雷达同步中" : null}
+        {radarState.status === "READY"
+          ? `雷达观测 ${radarObservedAt(radarState.frame)}`
+          : null}
+        {radarState.status === "UNAVAILABLE" ? "实时雷达不可用" : null}
+      </span>
+      <span className="realistic-weather-scene__source">
+        卫星影像 Esri · 降水雷达 RainViewer
+      </span>
       <figcaption>
         <span>{areaName}</span>
         <strong>

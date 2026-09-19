@@ -64,6 +64,7 @@ export function OperationalSituationMap({
   canReturnToParent = false,
   facilities,
   features,
+  rootFeatures,
   onFacilitySelect,
   annotationActive = false,
   annotationAdministrativeLevel,
@@ -83,6 +84,7 @@ export function OperationalSituationMap({
   canReturnToParent?: boolean;
   facilities: OperationalFacilityCatalogue;
   features: readonly MapFeature[];
+  rootFeatures: readonly MapFeature[];
   onFacilitySelect: (id: string) => void;
   annotationActive?: boolean;
   annotationAdministrativeLevel?: SaveMapAnnotation["administrativeLevel"];
@@ -99,7 +101,6 @@ export function OperationalSituationMap({
 }) {
   const [layers, setLayers] = useState(DEFAULT_LAYERS);
   const [layerMenuOpen, setLayerMenuOpen] = useState(false);
-  const [tiltDegrees, setTiltDegrees] = useState(52);
   const [surfaceMode, setSurfaceMode] = useState<TerrainSurfaceMode>("FUSION");
   const [enhancementState, setEnhancementState] =
     useState<TerrainEnhancementState>("LOADING");
@@ -182,11 +183,10 @@ export function OperationalSituationMap({
     return () => onAnnotationArmedChange?.(false);
   }, [annotationActive, onAnnotationArmedChange]);
 
-  function issueCommand(type: RealisticSceneCommand["type"], tilt?: number) {
+  function issueCommand(type: RealisticSceneCommand["type"]) {
     setCommand({
       id: Date.now(),
       type,
-      ...(tilt === undefined ? {} : { tiltDegrees: tilt }),
     });
   }
 
@@ -273,8 +273,8 @@ export function OperationalSituationMap({
       <Suspense
         fallback={
           <div className="realistic-situation-loading" role="status">
-            <strong>正在建立四区域写实地形图集</strong>
-            <span>正在载入中文行政边界、卫星影像和地形高程。</span>
+            <strong>正在建立四区域固定业务地球</strong>
+            <span>正在载入四区域边界、卫星地表和业务图层。</span>
           </div>
         }
       >
@@ -287,6 +287,7 @@ export function OperationalSituationMap({
           {...(command ? { command } : {})}
           facilities={facilities}
           features={features}
+          rootFeatures={rootFeatures}
           layers={layers}
           onFacilitySelect={onFacilitySelect}
           onEnhancementState={setEnhancementState}
@@ -305,7 +306,7 @@ export function OperationalSituationMap({
       <div className="realistic-situation-control-stack">
         {enhancementState === "DEGRADED" && (
           <p className="realistic-situation-enhancement-notice" role="status">
-            在线影像、高程、地名或图标增强暂不可用，四区域边界与业务图层仍可操作。
+            在线卫星影像暂不可用，四区域球体、边界与业务图层仍可操作。
           </p>
         )}
         <nav className="realistic-situation-filters" aria-label="公开态势筛选">
@@ -435,7 +436,7 @@ export function OperationalSituationMap({
             <header>
               <div>
                 <strong>地图标注</strong>
-                <span>直接在当前三维地形图集上选择位置</span>
+                <span>直接在当前四区域固定球体上选择位置</span>
               </div>
               <button type="button" onClick={toggleAnnotation}>
                 完成
@@ -488,7 +489,7 @@ export function OperationalSituationMap({
       <div className="realistic-situation-lower-rail">
         <p className="realistic-situation-caption">
           {levelLabel(currentLevel)} ·
-          单击查看，双击下钻；缩放将自动切换市、县、乡镇和村级信息。
+          单击查看，双击下钻；四区域始终完整显示，缩放仅提升地表细节。
         </p>
 
         <div className="realistic-situation-tools" aria-label="三维地图工具">
@@ -523,24 +524,13 @@ export function OperationalSituationMap({
           <button type="button" onClick={() => issueCommand("RESET")}>
             复位
           </button>
-          <label>
-            <span>俯视角 {tiltDegrees}°</span>
-            <input
-              aria-label="态势地图俯视角"
-              max="78"
-              min="30"
-              step="4"
-              type="range"
-              value={tiltDegrees}
-              onChange={(event) => {
-                const next = Number(event.target.value);
-                setTiltDegrees(next);
-                issueCommand("SET_TILT", next);
-              }}
-            />
-          </label>
         </div>
       </div>
+
+      <p className="realistic-situation-credits">
+        四区域卫星地表：Esri World Imagery · 降水雷达：RainViewer ·
+        行政边界：平台治理数据
+      </p>
 
       <section className="realistic-situation-timeline" aria-label="真实态势时间轴">
         <button
@@ -635,7 +625,7 @@ function levelLabel(level: OverviewRegion["level"] | undefined) {
   if (level === "VILLAGE") return "行政村级写实视图";
   if (level === "TOWNSHIP") return "乡镇级写实视图";
   if (level === "COUNTY") return "县级写实视图";
-  return "四区域三维地形总览";
+  return "四区域固定球面总览";
 }
 
 function formatTimelineTime(value: string) {

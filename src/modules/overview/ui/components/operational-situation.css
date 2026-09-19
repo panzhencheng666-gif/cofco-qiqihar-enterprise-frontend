@@ -160,8 +160,7 @@
   margin: 0;
   overflow: hidden;
   border-radius: 4px;
-  background-position: center 56%;
-  background-size: cover;
+  background: #233c3d;
   box-shadow: inset 0 -70px 90px rgb(12 22 18 / 36%);
   isolation: isolate;
 }
@@ -169,13 +168,52 @@
 .realistic-weather-scene::after {
   position: absolute;
   inset: 0;
-  z-index: -1;
-  background: linear-gradient(180deg, rgb(5 20 29 / 2%), rgb(2 9 9 / 24%));
+  z-index: 2;
+  background: linear-gradient(180deg, rgb(5 20 29 / 4%), rgb(2 9 9 / 30%));
   content: "";
+  pointer-events: none;
 }
 
 .realistic-weather-scene:is(.is-cloud, .is-rain, .is-snow, .is-storm) {
   filter: saturate(0.74) brightness(0.83);
+}
+
+.realistic-weather-scene__satellite,
+.realistic-weather-scene__radar {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.realistic-weather-scene__radar {
+  z-index: 1;
+  opacity: 0.74;
+  mix-blend-mode: screen;
+}
+
+.realistic-weather-scene__live-status,
+.realistic-weather-scene__source {
+  position: absolute;
+  z-index: 3;
+  padding: 0.28rem 0.42rem;
+  border-radius: 4px;
+  background: rgb(5 24 23 / 72%);
+  color: rgb(255 255 255 / 90%);
+  font-size: 10px;
+  line-height: 1.2;
+  backdrop-filter: blur(5px);
+}
+
+.realistic-weather-scene__live-status {
+  top: 10px;
+  left: 10px;
+}
+
+.realistic-weather-scene__source {
+  right: 10px;
+  bottom: 58px;
 }
 
 .realistic-weather-scene__atmosphere {
@@ -289,6 +327,7 @@
   right: 16px;
   bottom: 15px;
   left: 16px;
+  z-index: 3;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;

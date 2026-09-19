@@ -975,6 +975,11 @@ export function OverviewPage({
     () => interactiveMapRegions.flatMap(toMapFeature),
     [interactiveMapRegions],
   );
+  const rootMapFeatures = useMemo(
+    () =>
+      rootRegions.filter(({ mapContextOnly }) => !mapContextOnly).flatMap(toMapFeature),
+    [rootRegions],
+  );
   const mapPoints = useMemo(() => {
     const byCode = new Map<string, ReturnType<typeof toMapPointFeature>[number]>();
     interactiveMapRegions.forEach((region) => {
@@ -1435,6 +1440,7 @@ export function OverviewPage({
                 canReturnToParent={Boolean(parentCode && parentCode !== scopeRootCode)}
                 facilities={operationalFacilities ?? EMPTY_OPERATIONAL_FACILITIES}
                 features={mapFeatures}
+                rootFeatures={rootMapFeatures}
                 onFacilitySelect={(id) => {
                   setSelectedOperationalSituationItem(undefined);
                   setSelectedOperationalFacilityId(id);
