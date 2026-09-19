@@ -40,6 +40,7 @@ import {
   type TerrainSurfaceMode,
 } from "./fourRegionTerrainStyle";
 import {
+  loadSvgMarkerImage,
   realisticSituationIcon,
   realisticWeatherIcon,
 } from "./realisticSituationIcons";
@@ -545,9 +546,9 @@ async function ensureMarkerImages(
   const results = await Promise.allSettled(
     [...specifications].map(async ([id, source]) => {
       if (runtime.destroyed || runtime.map.hasImage(id)) return;
-      const image = await runtime.map.loadImage(source);
+      const image = await loadSvgMarkerImage(source);
       if (!runtime.destroyed && !runtime.map.hasImage(id))
-        runtime.map.addImage(id, image.data, { pixelRatio: 2 });
+        runtime.map.addImage(id, image, { pixelRatio: 2 });
     }),
   );
   return results.some((result) => result.status === "rejected");

@@ -2,6 +2,15 @@ import type { StorageFacilityRelation } from "../../domain/operationalFacilities
 
 export type RealisticSituationIconKind = StorageFacilityRelation | "RAILWAY";
 
+export function loadSvgMarkerImage(source: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Unable to decode map marker SVG"));
+    image.src = source;
+  });
+}
+
 const DEPOT_COLORS: Readonly<Record<StorageFacilityRelation, string>> = {
   OWNED: "#198754",
   LEASED: "#d99a00",

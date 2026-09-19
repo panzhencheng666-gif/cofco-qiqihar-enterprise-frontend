@@ -66,6 +66,8 @@ describe("four-region terrain public situation scene", () => {
     expect(scene).not.toMatch(/new\s+Marker\s*\(/);
     expect(scene).toContain('data-dom-markers="0"');
     expect(scene).toContain('["get", "selected"]');
+    expect(scene).toContain("loadSvgMarkerImage(source)");
+    expect(scene).not.toContain("runtime.map.loadImage(source)");
   });
 
   it("updates only changed public-situation sources during parent rerenders", () => {

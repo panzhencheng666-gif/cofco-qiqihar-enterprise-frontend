@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  loadSvgMarkerImage,
   realisticSituationIcon,
   realisticWeatherIcon,
 } from "./realisticSituationIcons";
@@ -10,6 +11,8 @@ function decodeDataUrl(value: string) {
 }
 
 describe("realistic situation icons", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   it.each([
     ["OWNED", "#198754", "自有库"],
     ["LEASED", "#d99a00", "租赁库"],
@@ -31,5 +34,24 @@ describe("realistic situation icons", () => {
     expect(decodeDataUrl(realisticWeatherIcon(63))).toContain("降雨");
     expect(decodeDataUrl(realisticWeatherIcon(73))).toContain("降雪");
     expect(decodeDataUrl(realisticWeatherIcon(1))).toContain("晴间多云");
+  });
+
+  it("decodes generated SVG markers through the browser image pipeline", async () => {
+    let loadedSource = "";
+    class LoadableImage {
+      onerror: (() => void) | null = null;
+      onload: (() => void) | null = null;
+
+      set src(value: string) {
+        loadedSource = value;
+        this.onload?.();
+      }
+    }
+    vi.stubGlobal("Image", LoadableImage);
+
+    const image = await loadSvgMarkerImage(realisticSituationIcon("RAILWAY"));
+
+    expect(image).toBeInstanceOf(LoadableImage);
+    expect(loadedSource).toMatch(/^data:image\/svg\+xml/);
   });
 });
