@@ -39,6 +39,9 @@ describe("four-region terrain public situation scene", () => {
     expect(scene).not.toContain("new THREE.WebGLRenderer");
     expect(scene).not.toContain("TerrainReliefBoundaryMap");
     expect(wrapper).not.toContain("态势地图俯视角");
+    expect(wrapper).not.toContain("球体");
+    expect(wrapper).not.toContain("球面");
+    expect(wrapper).not.toContain("双击下钻");
     expect(overviewPage).toContain("{!publicSituationMode && (");
     expect(overviewPage).toContain("rootFeatures={rootMapFeatures}");
   });

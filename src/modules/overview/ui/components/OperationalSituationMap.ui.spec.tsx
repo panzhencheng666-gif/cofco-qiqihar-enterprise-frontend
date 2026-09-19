@@ -48,7 +48,9 @@ describe("OperationalSituationMap public-only controls", () => {
     await userEvent.click(await screen.findByRole("button", { name: "模拟增强失败" }));
 
     expect(
-      screen.getByText("在线卫星影像暂不可用，四区域球体、边界与业务图层仍可操作。"),
+      screen.getByText(
+        "在线卫星影像暂不可用，已切换连续地形底图；行政边界与业务图层仍可操作。",
+      ),
     ).toBeVisible();
   });
 });

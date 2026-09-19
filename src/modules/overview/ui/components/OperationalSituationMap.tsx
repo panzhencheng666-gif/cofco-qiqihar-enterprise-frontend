@@ -306,7 +306,7 @@ export function OperationalSituationMap({
       <div className="realistic-situation-control-stack">
         {enhancementState === "DEGRADED" && (
           <p className="realistic-situation-enhancement-notice" role="status">
-            在线卫星影像暂不可用，四区域球体、边界与业务图层仍可操作。
+            在线卫星影像暂不可用，已切换连续地形底图；行政边界与业务图层仍可操作。
           </p>
         )}
         <nav className="realistic-situation-filters" aria-label="公开态势筛选">
@@ -436,7 +436,7 @@ export function OperationalSituationMap({
             <header>
               <div>
                 <strong>地图标注</strong>
-                <span>直接在当前四区域固定球体上选择位置</span>
+                <span>直接在当前四区域地形图上选择位置</span>
               </div>
               <button type="button" onClick={toggleAnnotation}>
                 完成
@@ -489,7 +489,7 @@ export function OperationalSituationMap({
       <div className="realistic-situation-lower-rail">
         <p className="realistic-situation-caption">
           {levelLabel(currentLevel)} ·
-          单击查看，双击下钻；四区域始终完整显示，缩放仅提升地表细节。
+          单击地区逐层下钻；四区域总览按可视区完整适配，滚轮缩放查看地表细节。
         </p>
 
         <div className="realistic-situation-tools" aria-label="三维地图工具">
@@ -625,7 +625,7 @@ function levelLabel(level: OverviewRegion["level"] | undefined) {
   if (level === "VILLAGE") return "行政村级写实视图";
   if (level === "TOWNSHIP") return "乡镇级写实视图";
   if (level === "COUNTY") return "县级写实视图";
-  return "四区域固定球面总览";
+  return "四区域地形总览";
 }
 
 function formatTimelineTime(value: string) {
