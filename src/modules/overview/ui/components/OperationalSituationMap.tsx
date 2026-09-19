@@ -30,6 +30,11 @@ import {
   calculateOperationalMapPadding,
   fitOperationalMap,
 } from "./operationalMapViewport";
+import {
+  publicSituationAtmosphere,
+  publicSituationPitch,
+  publicSituationProjection,
+} from "./publicSituationViewport";
 
 export interface SituationMapBounds {
   maxLatitude: number;
@@ -94,6 +99,7 @@ export function OperationalSituationMap({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
+  const boundsRef = useRef(bounds);
   const markersRef = useRef<Marker[]>([]);
   const fittedZoomRef = useRef(0);
   const interactiveZoomRef = useRef(false);
@@ -185,6 +191,7 @@ export function OperationalSituationMap({
       ),
     [backdrop, features],
   );
+  const currentLevel = features[0]?.region.level ?? backdrop?.region.level;
   const regionByCodeRef = useRef(regionByCode);
   const mapDataRef = useRef({
     backdrop,
@@ -194,6 +201,9 @@ export function OperationalSituationMap({
     weatherRiskByRoot,
   });
 
+  useEffect(() => {
+    boundsRef.current = bounds;
+  }, [bounds]);
   useEffect(() => {
     callbacksRef.current = {
       canReturnToParent,
@@ -255,8 +265,8 @@ export function OperationalSituationMap({
       attributionControl: { compact: true },
       bearing: 0,
       center: [
-        (bounds.minLongitude + bounds.maxLongitude) / 2,
-        (bounds.minLatitude + bounds.maxLatitude) / 2,
+        (boundsRef.current.minLongitude + boundsRef.current.maxLongitude) / 2,
+        (boundsRef.current.minLatitude + boundsRef.current.maxLatitude) / 2,
       ],
       container,
       doubleClickZoom: false,
@@ -271,12 +281,22 @@ export function OperationalSituationMap({
     map.keyboard.disableRotation();
     map.touchZoomRotate.disableRotation();
     const fitVisibleBounds = () => {
-      fitSituationMap(map, bounds, container, viewAngleRef.current);
+      fitSituationMap(
+        map,
+        boundsRef.current,
+        container,
+        viewAngleRef.current,
+        mapDataRef.current.features[0]?.region.level ??
+          mapDataRef.current.backdrop?.region.level,
+      );
       fittedZoomRef.current = map.getZoom();
     };
     map.on("style.load", () => {
-      addSituationLayers(map);
       const data = mapDataRef.current;
+      const level = data.features[0]?.region.level ?? data.backdrop?.region.level;
+      map.setProjection({ type: publicSituationProjection(level) });
+      map.setSky({ "atmosphere-blend": publicSituationAtmosphere(level) });
+      addSituationLayers(map);
       updateSource(
         map,
         ADMIN_SOURCE,
@@ -355,7 +375,7 @@ export function OperationalSituationMap({
       mapRef.current = null;
       map.remove();
     };
-  }, [bounds]);
+  }, []);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -372,6 +392,13 @@ export function OperationalSituationMap({
     if (!map?.isStyleLoaded()) return;
     updateSource(map, ROUTE_SOURCE, railwayRouteGeoJson(facilities.railwayRoutes));
   }, [facilities.railwayRoutes]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map?.isStyleLoaded()) return;
+    map.setProjection({ type: publicSituationProjection(currentLevel) });
+    map.setSky({ "atmosphere-blend": publicSituationAtmosphere(currentLevel) });
+  }, [currentLevel]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -433,15 +460,16 @@ export function OperationalSituationMap({
     const map = mapRef.current;
     const container = containerRef.current;
     if (!map || !container || !map.isStyleLoaded()) return;
-    fitSituationMap(map, bounds, container, viewAngle);
+    navigationLockRef.current = false;
+    fitSituationMap(map, bounds, container, viewAngle, currentLevel);
     fittedZoomRef.current = map.getZoom();
-  }, [bounds, viewAngle]);
+  }, [bounds, currentLevel, viewAngle]);
 
   function reset() {
     const map = mapRef.current;
     const container = containerRef.current;
     if (!map || !container) return;
-    fitSituationMap(map, bounds, container, viewAngle);
+    fitSituationMap(map, bounds, container, viewAngle, currentLevel);
     fittedZoomRef.current = map.getZoom();
     navigationLockRef.current = false;
   }
@@ -463,7 +491,6 @@ export function OperationalSituationMap({
     else map.zoomOut();
   }
 
-  const currentLevel = features[0]?.region.level ?? backdrop?.region.level;
   return (
     <section className="operational-situation-map-layer" aria-label="公开运营态势地图">
       <div
@@ -678,12 +705,13 @@ function fitSituationMap(
   bounds: SituationMapBounds,
   container: HTMLElement,
   viewAngle: number,
+  level?: OverviewRegion["level"],
 ) {
   fitOperationalMap(
     map,
     toMapBounds(bounds),
     calculateOperationalMapPadding(container, 150),
-    90 - viewAngle,
+    publicSituationPitch(level, viewAngle),
   );
 }
 

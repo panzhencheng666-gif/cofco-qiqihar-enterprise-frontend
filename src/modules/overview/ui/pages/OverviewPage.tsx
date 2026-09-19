@@ -57,6 +57,24 @@ const ANNUAL_SAMPLE_NETWORK_START_YEAR = 2026;
 const NOOP_REALTIME_STREAM: OverviewRealtimeStream = {
   subscribe: () => () => undefined,
 };
+const EMPTY_OPERATIONAL_FACILITIES: OperationalFacilityCatalogue = {
+  regionCode: null,
+  productCode: null,
+  asOf: "",
+  storageCategories: [],
+  storageFacilities: [],
+  railwayFacilities: [],
+  railwayLines: [],
+  railwayRoutes: [],
+  sources: [],
+};
+const EMPTY_OPERATIONAL_SITUATION: OperationalSituationCatalogue = {
+  generatedAt: "1970-01-01T00:00:00Z",
+  weather: [],
+  publicEvents: [],
+  policyEvents: [],
+  sources: [],
+};
 
 function mapAnnotationBounds(features: readonly MapFeature[], backdrop?: MapFeature) {
   const positions = [...(backdrop ? [backdrop] : []), ...features].flatMap(
@@ -782,7 +800,6 @@ export function OverviewPage({
     Promise.resolve()
       .then(() => {
         if (controller.signal.aborted) return undefined;
-        setOperationalFacilities(undefined);
         setOperationalFacilitiesLoading(true);
         setOperationalFacilitiesIssue(undefined);
         return regionalDataRepository.operationalFacilities?.(
@@ -801,7 +818,6 @@ export function OverviewPage({
       })
       .catch(() => {
         if (controller.signal.aborted) return;
-        setOperationalFacilities(undefined);
         setOperationalFacilitiesLoading(false);
         setOperationalFacilitiesIssue("运营设施加载失败，请稍后重试。");
       });
@@ -1361,17 +1377,14 @@ export function OverviewPage({
               onSelectionPosition={updateMapSelectionPoint}
               onDrill={drillDown}
             />
-            {publicSituationMode &&
-              operationalFacilities &&
-              operationalSituation &&
-              annotationBounds && (
+            {publicSituationMode && annotationBounds && (
                 <OperationalSituationMap
                   {...(mapBackdrop ? { backdrop: mapBackdrop } : {})}
                   bounds={annotationBounds}
                   canReturnToParent={Boolean(
                     parentCode && parentCode !== scopeRootCode,
                   )}
-                  facilities={operationalFacilities}
+                  facilities={operationalFacilities ?? EMPTY_OPERATIONAL_FACILITIES}
                   features={mapFeatures}
                   onFacilitySelect={(id) => {
                     setSelectedOperationalSituationItem(undefined);
@@ -1385,7 +1398,7 @@ export function OverviewPage({
                     ? { selectedFacilityId: effectiveOperationalFacilityId }
                     : {})}
                   {...(selectedRegionCode ? { selectedRegionCode } : {})}
-                  situation={operationalSituation}
+                  situation={operationalSituation ?? EMPTY_OPERATIONAL_SITUATION}
                 />
               )}
             {dataMode === "MAP_ANNOTATION" &&

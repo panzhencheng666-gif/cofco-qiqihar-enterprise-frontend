@@ -117,7 +117,7 @@ export function OverviewDataModePanel({
       {mode !== "SAMPLE_POINTS" && loading && (
         <p role="status">
           {mode === "PUBLIC_SITUATION"
-            ? "正在汇总公开态势快照"
+            ? "正在同步实时态势，地图可立即操作"
             : "正在同步地区正式数据"}
         </p>
       )}
@@ -260,6 +260,19 @@ export function OverviewDataModePanel({
           situation={operationalSituation}
         />
       )}
+      {mode === "PUBLIC_SITUATION" &&
+        loading &&
+        (!operationalFacilities || !operationalSituation) && (
+          <div className="operational-situation-panel is-syncing">
+            <header>
+              <div>
+                <span>PUBLIC OPERATIONAL PICTURE</span>
+                <h2>公开运营态势</h2>
+                <p>地图已可操作，天气、库点、铁路与事件正在并行同步。</p>
+              </div>
+            </header>
+          </div>
+        )}
       {mode === "PUBLIC_SITUATION" &&
         !loading &&
         !issue &&

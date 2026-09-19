@@ -30,6 +30,33 @@ vi.mock("../components/OperationalSituationMap", () => ({
 }));
 
 describe("OverviewPage", () => {
+  it("shows the public situation map while operational feeds are still loading", async () => {
+    const never = new Promise<never>(() => undefined);
+    render(
+      <OverviewPage
+        regionalDataRepository={{
+          operationalFacilities: vi.fn(() => never),
+          operationalSituation: vi.fn(() => never),
+          regionalSummary: vi.fn(),
+          supplyBalance: vi.fn(),
+        }}
+        repository={{
+          mapScope: () => Promise.resolve(sampleMapScope),
+          options: () => Promise.resolve(options),
+          regions: () => Promise.resolve([sampleRegion]),
+          locations: () => Promise.resolve([]),
+          indicators: () => Promise.resolve([]),
+          dashboard: () => Promise.resolve(emptyDashboard),
+        }}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "公开态势" }));
+
+    expect(await screen.findByLabelText("公开运营态势地图")).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent("正在同步实时态势");
+  });
+
   it("merges storage and railway facilities into one public situation mode", async () => {
     const operationalFacilities = vi
       .fn<NonNullable<OverviewRegionalDataRepository["operationalFacilities"]>>()
