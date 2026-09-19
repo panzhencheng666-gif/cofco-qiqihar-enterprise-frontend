@@ -97,6 +97,29 @@ describe("four-region terrain public situation scene", () => {
     expect(scene).toContain('data-dom-markers="0"');
   });
 
+  it("uses animated weather and recognizable railway and grain-depot icons", () => {
+    expect(scene).toContain("realisticSituationIcon(");
+    expect(scene).toContain("realisticWeatherIcon(");
+    expect(scene).toContain("liveWeatherKind(weather)");
+    expect(scene).toContain('id: "atlas-weather-pulse"');
+    expect(scene).toContain('"icon-image"');
+    expect(scene).toContain("requestAnimationFrame");
+    expect(scene).toContain('"atlas-icon-railway"');
+    expect(scene).toContain('"atlas-icon-depot-owned"');
+    expect(scene).toContain('id: "atlas-inventory"');
+    expect(scene).toContain('type: "symbol"');
+  });
+
+  it("refits only when the map viewport changes and keeps a continuous terrain backdrop", () => {
+    expect(scene).toContain("scheduleAtlasResize(runtime)");
+    expect(scene).toContain("resizeAnimationFrameId");
+    expect(scene).toContain("viewportWidth");
+    expect(scene).toContain("viewportHeight");
+    expect(scene).not.toContain('"fill-opacity": 0.96');
+    expect(terrainStyle).toContain('"background-color": "#223b38"');
+    expect(sceneStyles).toContain("linear-gradient");
+  });
+
   it("single-clicks the visible administrative polygon into the next level", () => {
     expect(scene).toContain("queryRenderedFeatures");
     expect(scene).toContain("onRegionSelect");
@@ -130,6 +153,7 @@ describe("four-region terrain public situation scene", () => {
     expect(overviewPage).toContain(
       "!publicSituationMode || operationalSelectedRegion ? (",
     );
+    expect(overviewPage).toContain("showBusinessMetrics={!publicSituationMode}");
   });
 
   it("removes the legacy root minimum width only for public-situation narrow desktops", () => {

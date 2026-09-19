@@ -1206,6 +1206,7 @@ export function OverviewPage({
   return (
     <>
       <OverviewCommandCenter
+        showBusinessMetrics={!publicSituationMode}
         sampleNetworkMode={
           activeSamplePointRepository ? sampleNetworkModel.mode : "actual"
         }

@@ -19,7 +19,7 @@ export const FOUR_REGION_BASE_STYLE: StyleSpecification = {
     {
       id: "atlas-empty-world",
       type: "background",
-      paint: { "background-color": "#8e9d94" },
+      paint: { "background-color": "#223b38" },
     },
   ],
 };

@@ -36,6 +36,12 @@ import {
   fitOperationalMap,
 } from "./operationalMapViewport";
 import type { GeographicBounds } from "./realisticSituationModel";
+import {
+  loadSvgMarkerImage,
+  realisticSituationIcon,
+  realisticWeatherIcon,
+} from "./realisticSituationIcons";
+import { liveWeatherKind } from "./liveWeatherPresentation";
 
 export interface RealisticSceneLayers {
   ADMINISTRATIVE: boolean;
@@ -86,7 +92,12 @@ interface AtlasRuntime {
   map: MapLibreMap;
   props: FourRegionTerrainAtlasProps;
   ready: boolean;
+  resizeAnimationFrameId?: number;
   syncedProps?: FourRegionTerrainAtlasProps;
+  viewportHeight: number;
+  viewportWidth: number;
+  weatherAnimationFrameId?: number;
+  weatherAnimationUpdatedAt: number;
 }
 
 const ROOT_SOURCE = "atlas-root-regions";
@@ -154,6 +165,9 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
       map,
       props: propsRef.current,
       ready: false,
+      viewportHeight: 0,
+      viewportWidth: 0,
+      weatherAnimationUpdatedAt: 0,
     };
     runtimeRef.current = runtime;
     host.dataset.sceneState = "loading";
@@ -162,20 +176,7 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
     host.dataset.imageryMode = "multiresolution-tile-pyramid";
     propsRef.current.onEnhancementState?.("LOADING");
 
-    map.on("load", () => {
-      if (runtime.destroyed) return;
-      installRemoteTerrain(map);
-      installAtlasLayers(map);
-      runtime.ready = true;
-      host.dataset.sceneState = "local-ready";
-      synchronizeAtlas(runtime, propsRef.current);
-      propsRef.current.onReady?.();
-      map.once("idle", () => {
-        if (runtime.destroyed) return;
-        host.dataset.enhancementState = "ready";
-        propsRef.current.onEnhancementState?.("READY");
-      });
-    });
+    map.on("load", () => void initializeAtlas(runtime));
     map.on("error", (event) => {
       const sourceId = (event as { sourceId?: string }).sourceId;
       if (!sourceId || !Object.hasOwn(FOUR_REGION_REMOTE_SOURCES, sourceId)) return;
@@ -199,10 +200,14 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
       host.dataset.detailLevel = detailLevel(map.getZoom());
     });
 
-    const resizeObserver = new ResizeObserver(() => map.resize());
+    const resizeObserver = new ResizeObserver(() => scheduleAtlasResize(runtime));
     resizeObserver.observe(host);
     return () => {
       runtime.destroyed = true;
+      if (runtime.resizeAnimationFrameId !== undefined)
+        cancelAnimationFrame(runtime.resizeAnimationFrameId);
+      if (runtime.weatherAnimationFrameId !== undefined)
+        cancelAnimationFrame(runtime.weatherAnimationFrameId);
       resizeObserver.disconnect();
       runtimeRef.current = null;
       map.remove();
@@ -222,6 +227,54 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
       role="img"
     />
   );
+}
+
+async function initializeAtlas(runtime: AtlasRuntime) {
+  if (runtime.destroyed) return;
+  const { host, map } = runtime;
+  installRemoteTerrain(map);
+  try {
+    await installAtlasMarkerImages(map);
+  } catch {
+    if (runtime.destroyed) return;
+    host.dataset.enhancementState = "degraded-icons";
+    runtime.props.onEnhancementState?.("DEGRADED");
+  }
+  if (runtime.destroyed) return;
+  installAtlasLayers(map);
+  runtime.ready = true;
+  host.dataset.sceneState = "local-ready";
+  synchronizeAtlas(runtime, runtime.props);
+  startWeatherAnimation(runtime);
+  runtime.props.onReady?.();
+  map.once("idle", () => {
+    if (runtime.destroyed) return;
+    host.dataset.enhancementState = "ready";
+    runtime.props.onEnhancementState?.("READY");
+  });
+}
+
+async function installAtlasMarkerImages(map: MapLibreMap) {
+  const sources = [
+    ["atlas-icon-depot-owned", realisticSituationIcon("OWNED")],
+    ["atlas-icon-inventory", realisticSituationIcon("OWNED")],
+    ["atlas-icon-depot-leased", realisticSituationIcon("LEASED")],
+    ["atlas-icon-depot-historical", realisticSituationIcon("HISTORICAL_LEASED")],
+    ["atlas-icon-railway", realisticSituationIcon("RAILWAY")],
+    ["atlas-icon-weather-clear", realisticWeatherIcon(0)],
+    ["atlas-icon-weather-cloud", realisticWeatherIcon(2)],
+    ["atlas-icon-weather-rain", realisticWeatherIcon(63)],
+    ["atlas-icon-weather-snow", realisticWeatherIcon(73)],
+    ["atlas-icon-weather-storm", realisticWeatherIcon(95)],
+  ] as const;
+  const images = await Promise.all(
+    sources.map(
+      async ([id, source]) => [id, await loadSvgMarkerImage(source)] as const,
+    ),
+  );
+  images.forEach(([id, image]) => {
+    if (!map.hasImage(id)) map.addImage(id, image, { pixelRatio: 2 });
+  });
 }
 
 function installRemoteTerrain(map: MapLibreMap) {
@@ -252,7 +305,7 @@ function installAtlasLayers(map: MapLibreMap) {
     paint: {
       "fill-antialias": false,
       "fill-color": "#173a3c",
-      "fill-opacity": 0.96,
+      "fill-opacity": 0.48,
     },
   });
   map.addLayer({
@@ -273,8 +326,8 @@ function installAtlasLayers(map: MapLibreMap) {
         "#e7c76d",
         "#4c8376",
       ],
-      "fill-extrusion-height": ["case", ["==", ["get", "selected"], true], 2200, 1100],
-      "fill-extrusion-opacity": 0.12,
+      "fill-extrusion-height": ["case", ["==", ["get", "selected"], true], 260, 140],
+      "fill-extrusion-opacity": 0.08,
       "fill-extrusion-vertical-gradient": true,
     },
   });
@@ -340,20 +393,10 @@ function installAtlasLayers(map: MapLibreMap) {
       "fill-extrusion-height": [
         "case",
         ["==", ["get", "selected"], true],
-        1800,
-        [
-          "match",
-          ["get", "level"],
-          "COUNTY",
-          1300,
-          "TOWNSHIP",
-          950,
-          "VILLAGE",
-          650,
-          850,
-        ],
+        220,
+        ["match", ["get", "level"], "COUNTY", 180, "TOWNSHIP", 140, "VILLAGE", 90, 120],
       ],
-      "fill-extrusion-opacity": 0.13,
+      "fill-extrusion-opacity": 0.09,
       "fill-extrusion-vertical-gradient": true,
     },
   });
@@ -407,57 +450,97 @@ function installAtlasLayers(map: MapLibreMap) {
   });
   map.addLayer({
     id: "atlas-inventory",
-    type: "circle",
+    type: "symbol",
     source: INVENTORY_SOURCE,
+    layout: {
+      "icon-allow-overlap": false,
+      "icon-image": "atlas-icon-inventory",
+      "icon-size": ["interpolate", ["linear"], ["zoom"], 5, 0.32, 12, 0.52],
+    },
     paint: {
-      "circle-color": "#54b984",
-      "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 4, 12, 7],
-      "circle-stroke-color": "#f7fff8",
-      "circle-stroke-width": 1.8,
+      "icon-opacity": 0.86,
     },
   });
   map.addLayer({
     id: "atlas-operational-markers",
-    type: "circle",
+    type: "symbol",
     source: MARKER_SOURCE,
     filter: ["in", ["get", "kind"], ["literal", FACILITY_KINDS]],
-    paint: {
-      "circle-color": [
+    layout: {
+      "icon-allow-overlap": false,
+      "icon-image": [
         "match",
         ["get", "kind"],
         "OWNED",
-        "#45c987",
+        "atlas-icon-depot-owned",
         "LEASED",
-        "#f0b949",
+        "atlas-icon-depot-leased",
         "HISTORICAL_LEASED",
-        "#929c9c",
-        "#f5f3e9",
+        "atlas-icon-depot-historical",
+        "atlas-icon-railway",
       ],
-      "circle-radius": [
+      "icon-size": [
         "case",
         ["==", ["get", "selected"], true],
-        8,
-        ["interpolate", ["linear"], ["zoom"], 5, 4.5, 12, 7],
+        0.68,
+        ["interpolate", ["linear"], ["zoom"], 5, 0.42, 12, 0.62],
       ],
-      "circle-stroke-color": [
-        "case",
-        ["==", ["get", "selected"], true],
-        "#ffd65e",
-        "#ffffff",
+    },
+    paint: {
+      "icon-opacity": 0.98,
+    },
+  });
+  map.addLayer({
+    id: "atlas-weather-pulse",
+    type: "circle",
+    source: MARKER_SOURCE,
+    filter: [
+      "all",
+      ["==", ["get", "kind"], "WEATHER"],
+      ["in", ["get", "weatherKind"], ["literal", ["CLOUD", "RAIN", "STORM"]]],
+    ],
+    paint: {
+      "circle-blur": 0.5,
+      "circle-color": [
+        "match",
+        ["get", "weatherKind"],
+        "STORM",
+        "#d7a7ff",
+        "RAIN",
+        "#7ed8ff",
+        "#dce9ef",
       ],
-      "circle-stroke-width": ["case", ["==", ["get", "selected"], true], 3, 1.6],
+      "circle-opacity": 0.3,
+      "circle-radius": 14,
+      "circle-stroke-color": "#ffffff",
+      "circle-stroke-opacity": 0.34,
+      "circle-stroke-width": 1.5,
     },
   });
   map.addLayer({
     id: "atlas-weather-markers",
-    type: "circle",
+    type: "symbol",
     source: MARKER_SOURCE,
     filter: ["==", ["get", "kind"], "WEATHER"],
+    layout: {
+      "icon-allow-overlap": true,
+      "icon-image": [
+        "match",
+        ["get", "weatherKind"],
+        "CLOUD",
+        "atlas-icon-weather-cloud",
+        "RAIN",
+        "atlas-icon-weather-rain",
+        "SNOW",
+        "atlas-icon-weather-snow",
+        "STORM",
+        "atlas-icon-weather-storm",
+        "atlas-icon-weather-clear",
+      ],
+      "icon-size": ["interpolate", ["linear"], ["zoom"], 5, 0.48, 12, 0.72],
+    },
     paint: {
-      "circle-color": ["case", ["==", ["get", "wet"], true], "#72d7ff", "#f5f4e8"],
-      "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 5, 12, 8],
-      "circle-stroke-color": "#173b42",
-      "circle-stroke-width": 2,
+      "icon-opacity": 0.98,
     },
   });
   map.addLayer({
@@ -566,6 +649,13 @@ function synchronizeAtlas(runtime: AtlasRuntime, props: FourRegionTerrainAtlasPr
   runtime.host.dataset.featureCount = String(props.rootFeatures.length + active.length);
   runtime.host.dataset.detailLevel = active[0]?.region.level ?? "PREFECTURE";
   runtime.host.dataset.billboardCount = String(markerCollection(props).features.length);
+  runtime.host.dataset.facilityIconCount = String(
+    props.facilities.storageFacilities.length +
+      props.facilities.railwayFacilities.length,
+  );
+  runtime.host.dataset.weatherIconCount = String(
+    props.layers.WEATHER ? props.situation.weather.length : 0,
+  );
   runtime.syncedProps = props;
 }
 
@@ -592,9 +682,35 @@ function fitCurrentHierarchy(
       : active
     : props.rootFeatures;
   const bounds = featureBounds(focusFeatures) ?? props.bounds;
-  const padding = calculateOperationalMapPadding(runtime.host, 150);
-  fitOperationalMap(runtime.map, toMapBounds(bounds), padding, 52, 0.1);
+  const rootView = active.length === 0;
+  const padding = calculateOperationalMapPadding(runtime.host, rootView ? 104 : 116);
+  fitOperationalMap(runtime.map, toMapBounds(bounds), padding, rootView ? 45 : 50, 0);
   runtime.host.dataset.imageryZoom = runtime.map.getZoom().toFixed(2);
+}
+
+function scheduleAtlasResize(runtime: AtlasRuntime) {
+  if (runtime.resizeAnimationFrameId !== undefined)
+    cancelAnimationFrame(runtime.resizeAnimationFrameId);
+  runtime.resizeAnimationFrameId = requestAnimationFrame(() => {
+    delete runtime.resizeAnimationFrameId;
+    if (runtime.destroyed) return;
+    const viewportWidth = runtime.host.clientWidth;
+    const viewportHeight = runtime.host.clientHeight;
+    const viewportChanged =
+      Math.abs(viewportWidth - runtime.viewportWidth) > 1 ||
+      Math.abs(viewportHeight - runtime.viewportHeight) > 1;
+    runtime.viewportWidth = viewportWidth;
+    runtime.viewportHeight = viewportHeight;
+    runtime.host.dataset.viewportWidth = String(viewportWidth);
+    runtime.host.dataset.viewportHeight = String(viewportHeight);
+    runtime.map.resize();
+    if (runtime.ready && viewportChanged)
+      fitCurrentHierarchy(
+        runtime,
+        runtime.props,
+        activeHierarchyFeatures(runtime.props),
+      );
+  });
 }
 
 function handleMapClick(runtime: AtlasRuntime, event: MapMouseEvent) {
@@ -885,12 +1001,38 @@ function markerCollection(props: FourRegionTerrainAtlasProps): FeatureCollection
           kind: "WEATHER",
           name: weather.regionName,
           regionCode: weather.regionCode ?? weather.rootRegionCode,
-          wet: Boolean(weather.precipitationMm && weather.precipitationMm > 0),
+          weatherKind: liveWeatherKind(weather),
         }),
       );
     });
   }
   return { type: "FeatureCollection", features };
+}
+
+function startWeatherAnimation(runtime: AtlasRuntime) {
+  const animate = (timestamp: number) => {
+    if (runtime.destroyed) return;
+    if (
+      timestamp - runtime.weatherAnimationUpdatedAt >= 90 &&
+      runtime.map.getLayer("atlas-weather-pulse")
+    ) {
+      const phase = (Math.sin(timestamp / 520) + 1) / 2;
+      runtime.map.setPaintProperty(
+        "atlas-weather-pulse",
+        "circle-radius",
+        12 + phase * 8,
+      );
+      runtime.map.setPaintProperty(
+        "atlas-weather-pulse",
+        "circle-opacity",
+        0.12 + phase * 0.24,
+      );
+      runtime.weatherAnimationUpdatedAt = timestamp;
+      runtime.host.dataset.weatherAnimation = "active";
+    }
+    runtime.weatherAnimationFrameId = requestAnimationFrame(animate);
+  };
+  runtime.weatherAnimationFrameId = requestAnimationFrame(animate);
 }
 
 function annotationCollection(props: FourRegionTerrainAtlasProps): FeatureCollection {

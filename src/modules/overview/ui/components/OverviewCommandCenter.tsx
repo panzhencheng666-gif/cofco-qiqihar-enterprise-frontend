@@ -30,6 +30,7 @@ export function OverviewCommandCenter({
   sampleNetworkControls,
   sampleMode = true,
   sampleNetworkMode = "actual",
+  showBusinessMetrics,
   showLegend = true,
   scopeLabel,
   samplePoints,
@@ -60,6 +61,7 @@ export function OverviewCommandCenter({
   sampleNetworkControls?: ReactNode;
   sampleMode?: boolean;
   sampleNetworkMode?: SampleNetworkLayerMode;
+  showBusinessMetrics?: boolean;
   showLegend?: boolean;
   scopeLabel?: string;
   samplePoints?: ReactNode;
@@ -88,7 +90,8 @@ export function OverviewCommandCenter({
     width: compactViewport ? viewport.width : viewport.width / stageScale,
     height: compactViewport ? viewport.height : viewport.height / stageScale,
   } as CSSProperties;
-  const showBusinessMetrics = !sampleMode || sampleNetworkMode === "actual";
+  const businessMetricsVisible =
+    showBusinessMetrics ?? (!sampleMode || sampleNetworkMode === "actual");
   const metricByCode = new Map(dashboard?.metrics.map((item) => [item.code, item]));
   const overtureBoundary = boundarySource?.name.includes("Overture") ?? false;
   const selectedPath = selectedRegion?.name;
@@ -130,7 +133,7 @@ export function OverviewCommandCenter({
   return (
     <main
       style={stageStyle}
-      className={`overview-command-center${selectedRegion || selectedSamplePoint ? " has-details" : ""}${sideDataPanel ? " has-side-data-panel" : ""}${!showBusinessMetrics ? " without-business-kpis" : ""}`}
+      className={`overview-command-center${selectedRegion || selectedSamplePoint ? " has-details" : ""}${sideDataPanel ? " has-side-data-panel" : ""}${!businessMetricsVisible ? " without-business-kpis" : ""}`}
     >
       <h2 className="overview-sr-only">粮食商情总览</h2>
 
@@ -166,7 +169,7 @@ export function OverviewCommandCenter({
       </header>
 
       {dataModePanel ??
-        (showBusinessMetrics && (
+        (businessMetricsVisible && (
           <section aria-label="总揽关键指标" className="overview-command-kpis">
             {metrics.map((item) => (
               <article
