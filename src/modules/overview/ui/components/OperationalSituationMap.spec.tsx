@@ -34,6 +34,8 @@ describe("four-region terrain public situation scene", () => {
     expect(scene.match(/new THREE\.WebGLRenderer/g)).toHaveLength(1);
     expect(scene).toContain("projectReliefScene(");
     expect(scene).toContain("createFourRegionGlobeBackdrop(");
+    expect(scene).toContain("fitFixedGlobeCamera(");
+    expect(scene).toContain("createGlobeSurfaceMaterial(");
     expect(scene).toContain("createCurvedSatelliteSurfaceMaterial(");
     expect(scene).toContain('data-globe-mode="fixed-visible-hemisphere"');
     expect(scene).toContain('data-region-visibility="all-four-front-hemisphere"');
@@ -61,6 +63,7 @@ describe("four-region terrain public situation scene", () => {
     expect(scene).toContain("props.rootFeatures");
     expect(scene).not.toContain("props.backdrop");
     expect(scene).toContain("projection.labels");
+    expect(scene).toContain("rootCodes.has(region.code)");
     expect(scene).not.toContain("OpenFreeMap");
     expect(scene).not.toContain("World_Boundaries_and_Places");
     expect(scene).not.toContain('"source-layer": "place"');
@@ -79,6 +82,8 @@ describe("four-region terrain public situation scene", () => {
   it("renders operational nodes inside the same WebGL scene without DOM markers", () => {
     expect(scene).toContain("buildOperationalMarkers(");
     expect(scene).toContain("buildOperationalLines(");
+    expect(scene).not.toContain('undefined, "存"');
+    expect(scene).not.toContain('}, "铁路"');
     expect(scene).not.toMatch(/new\s+Marker\s*\(/);
     expect(scene).toContain('data-dom-markers="0"');
   });

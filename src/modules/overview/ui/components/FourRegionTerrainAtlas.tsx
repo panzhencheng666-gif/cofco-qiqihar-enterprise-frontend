@@ -65,9 +65,10 @@ export interface FourRegionTerrainAtlasProps {
 }
 
 interface RegionVisual {
+  baseMaterial: THREE.Material;
   group: THREE.Group;
   region: OverviewRegion;
-  topMeshes: THREE.Mesh<THREE.ShapeGeometry, THREE.ShaderMaterial>[];
+  topMeshes: THREE.Mesh<THREE.ShapeGeometry, THREE.Material>[];
 }
 
 type InteractionTarget =
@@ -95,6 +96,7 @@ interface AtlasRuntime {
   satelliteRevision: number;
   surfaceMaterials: {
     base: THREE.ShaderMaterial;
+    hidden: THREE.MeshBasicMaterial;
     hover: THREE.ShaderMaterial;
     selected: THREE.ShaderMaterial;
   };
@@ -105,7 +107,7 @@ const STAGE_WIDTH = 1920;
 const STAGE_HEIGHT = 1080;
 const GLOBE_RADIUS = 468;
 const GLOBE_SURFACE_LIFT = 7;
-const GLOBE_FRAME = { x: 535, y: 115, width: 850, height: 850 } as const;
+const GLOBE_FRAME = { x: 510, y: 80, width: 900, height: 920 } as const;
 const LABEL_Z = 18;
 
 export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProps) {
@@ -129,11 +131,13 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
   }, [geometryKey]);
   const projection = useMemo(
     () =>
-      projectReliefScene({
-        features: projectedFeatures,
-        frame: GLOBE_FRAME,
-        points: [],
-      }),
+      stretchGlobeProjection(
+        projectReliefScene({
+          features: projectedFeatures,
+          frame: GLOBE_FRAME,
+          points: [],
+        }),
+      ),
     // geometryKey represents the complete governed geometry. Ordinary weather
     // and timeline updates must not recreate the WebGL context.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -225,6 +229,13 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
     const fallbackTexture = createFallbackTexture(projectedBounds(projection));
     const surfaceMaterials = {
       base: createCurvedSatelliteSurfaceMaterial(fallbackTexture, "base"),
+      hidden: new THREE.MeshBasicMaterial({
+        colorWrite: false,
+        depthTest: false,
+        depthWrite: false,
+        opacity: 0,
+        transparent: true,
+      }),
       hover: createCurvedSatelliteSurfaceMaterial(fallbackTexture, "hover"),
       selected: createCurvedSatelliteSurfaceMaterial(fallbackTexture, "selected"),
     };
@@ -283,6 +294,7 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
     const resize = () => {
       const width = Math.max(host.clientWidth, 1);
       const height = Math.max(host.clientHeight, 1);
+      fitFixedGlobeCamera(camera, width, height);
       renderer.setSize(width, height, false);
       runtime.render();
     };
@@ -386,24 +398,18 @@ function createFourRegionGlobeBackdrop() {
   const globe = new THREE.Group();
   const sphere = new THREE.Mesh(
     new THREE.SphereGeometry(GLOBE_RADIUS, 96, 64),
-    new THREE.MeshPhysicalMaterial({
-      clearcoat: 0.28,
-      clearcoatRoughness: 0.78,
-      color: 0x173f4a,
-      metalness: 0.02,
-      roughness: 0.72,
-    }),
+    createGlobeSurfaceMaterial(),
   );
   sphere.position.z = -GLOBE_RADIUS;
   sphere.renderOrder = 0;
   globe.add(sphere);
   const atmosphere = new THREE.Mesh(
-    new THREE.RingGeometry(GLOBE_RADIUS - 3, GLOBE_RADIUS + 22, 128),
+    new THREE.RingGeometry(GLOBE_RADIUS - 2, GLOBE_RADIUS + 8, 128),
     new THREE.MeshBasicMaterial({
       blending: THREE.AdditiveBlending,
       color: 0x8de5e5,
       depthWrite: false,
-      opacity: 0.28,
+      opacity: 0.2,
       side: THREE.DoubleSide,
       transparent: true,
     }),
@@ -414,6 +420,56 @@ function createFourRegionGlobeBackdrop() {
   return globe;
 }
 
+function createGlobeSurfaceMaterial() {
+  return new THREE.ShaderMaterial({
+    depthWrite: true,
+    fragmentShader: `
+      precision highp float;
+      varying vec3 globeNormal;
+
+      void main() {
+        float facing = smoothstep(0.0, 0.96, max(globeNormal.z, 0.0));
+        vec3 edge = vec3(0.035, 0.15, 0.17);
+        vec3 centre = vec3(0.09, 0.29, 0.29);
+        vec3 colour = mix(edge, centre, facing);
+        float latitude = asin(clamp(globeNormal.y, -1.0, 1.0));
+        float longitude = atan(globeNormal.x, max(globeNormal.z, 0.0001));
+        float latGrid = 1.0 - smoothstep(0.0, 0.035, abs(sin(latitude * 9.0)));
+        float lonGrid = 1.0 - smoothstep(0.0, 0.035, abs(sin(longitude * 12.0)));
+        float grid = max(latGrid, lonGrid) * facing * 0.13;
+        colour += vec3(0.18, 0.46, 0.43) * grid;
+        gl_FragColor = vec4(colour, 1.0);
+        #include <colorspace_fragment>
+      }
+    `,
+    toneMapped: false,
+    vertexShader: `
+      varying vec3 globeNormal;
+
+      void main() {
+        globeNormal = normalize(normal);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+  });
+}
+
+function fitFixedGlobeCamera(
+  camera: THREE.OrthographicCamera,
+  width: number,
+  height: number,
+) {
+  const aspect = width / Math.max(height, 1);
+  const fittedDiameter = GLOBE_RADIUS * 2 + 64;
+  const viewWidth = aspect >= 1 ? fittedDiameter * aspect : fittedDiameter;
+  const viewHeight = aspect >= 1 ? fittedDiameter : fittedDiameter / aspect;
+  camera.left = -viewWidth / 2;
+  camera.right = viewWidth / 2;
+  camera.top = viewHeight / 2;
+  camera.bottom = -viewHeight / 2;
+  camera.updateProjectionMatrix();
+}
+
 function createCurvedSatelliteSurfaceMaterial(
   texture: THREE.Texture,
   tone: "base" | "hover" | "selected",
@@ -421,7 +477,8 @@ function createCurvedSatelliteSurfaceMaterial(
   const selected = tone === "selected";
   const hovered = tone === "hover";
   return new THREE.ShaderMaterial({
-    depthWrite: true,
+    depthTest: false,
+    depthWrite: false,
     polygonOffset: true,
     polygonOffsetFactor: -1,
     polygonOffsetUnits: -1,
@@ -494,6 +551,40 @@ function globeSurfaceHeight({ x, y }: { x: number; y: number }) {
   );
 }
 
+function stretchGlobeProjection(
+  projection: ReliefSceneProjection,
+): ReliefSceneProjection {
+  const stretchPoint = ({ x, y }: ReliefPoint): ReliefPoint => ({
+    x,
+    y: STAGE_HEIGHT / 2 + (y - STAGE_HEIGHT / 2) * 1.55,
+  });
+  const stretchPolygon = (polygon: ReliefPolygon): ReliefPolygon => ({
+    rings: polygon.rings.map((ring) => ({
+      ...ring,
+      points: ring.points.map(stretchPoint),
+    })),
+  });
+  const stretchSurface = (surface: ReliefSurface): ReliefSurface => ({
+    ...surface,
+    anchor: stretchPoint(surface.anchor),
+    hitPolygons: surface.hitPolygons.map(stretchPolygon),
+    polygons: surface.polygons.map(stretchPolygon),
+    wallPolygons: surface.wallPolygons.map(stretchPolygon),
+  });
+  return {
+    ...projection,
+    features: projection.features.map(stretchSurface),
+    labels: projection.labels.map((label) => ({
+      ...label,
+      point: stretchPoint(label.point),
+    })),
+    points: projection.points.map((location) => ({
+      ...location,
+      point: stretchPoint(location.point),
+    })),
+  };
+}
+
 function buildReliefGeometry({
   projection,
   regionObjects,
@@ -526,11 +617,15 @@ function buildReliefGeometry({
       regionTargets,
       regionVisuals,
       rootCodes.has(surface.region.code) ? 0 : 2,
+      rootCodes.has(surface.region.code),
     ),
   );
   addRegionOutlines(projection, regionRoot, rootCodes);
   projection.labels
-    .filter(({ kind, region }) => kind === "region" && !region.mapContextOnly)
+    .filter(
+      ({ kind, region }) =>
+        kind === "region" && rootCodes.has(region.code) && !region.mapContextOnly,
+    )
     .forEach(({ point, region }) => {
       const sprite = createLabelSprite(region.name);
       const world = screenToWorld(point);
@@ -548,11 +643,15 @@ function addCurvedRegionSurface(
   regionTargets: Map<string, InteractionTarget>,
   regionVisuals: Map<string, RegionVisual>,
   topZ: number,
+  rootRegion: boolean,
 ) {
   const geometries = createRegionSurfaceGeometries(surface);
   const group = new THREE.Group();
   const topMeshes = geometries.map((geometry) => {
-    const top = new THREE.Mesh(geometry, materials.base);
+    const top = new THREE.Mesh(
+      geometry,
+      rootRegion ? materials.base : materials.hidden,
+    );
     top.position.z = topZ;
     top.renderOrder = 3;
     group.add(top);
@@ -563,7 +662,12 @@ function addCurvedRegionSurface(
     return top;
   });
   root.add(group);
-  regionVisuals.set(surface.region.code, { group, region: surface.region, topMeshes });
+  regionVisuals.set(surface.region.code, {
+    baseMaterial: rootRegion ? materials.base : materials.hidden,
+    group,
+    region: surface.region,
+    topMeshes,
+  });
 }
 
 function createRegionSurfaceGeometries(surface: ReliefSurface) {
@@ -627,7 +731,9 @@ function addRegionOutlines(
         const rootBoundary = rootCodes.has(surface.region.code);
         const material = new THREE.LineBasicMaterial({
           color: rootBoundary ? 0xfff0b8 : 0xf7e6ad,
-          opacity: rootBoundary ? 1 : 0.72,
+          depthTest: false,
+          depthWrite: false,
+          opacity: rootBoundary ? 0.92 : 0.46,
           transparent: true,
         });
         const closed = [...points, points[0] as ReliefPoint];
@@ -659,7 +765,7 @@ function applySelection(runtime: AtlasRuntime, hoveredCode = "") {
         ? runtime.surfaceMaterials.hover
         : selected
           ? runtime.surfaceMaterials.selected
-          : runtime.surfaceMaterials.base;
+          : visual.baseMaterial;
     });
   });
 }
@@ -728,7 +834,7 @@ async function refreshSatelliteTexture(runtime: AtlasRuntime) {
     const previous = runtime.texture;
     runtime.texture = loaded.texture;
     Object.values(runtime.surfaceMaterials).forEach((material) => {
-      if (material.uniforms.terrainMap)
+      if (material instanceof THREE.ShaderMaterial && material.uniforms.terrainMap)
         material.uniforms.terrainMap.value = loaded.texture;
       material.needsUpdate = true;
     });
@@ -801,7 +907,6 @@ function buildOperationalMarkers(runtime: AtlasRuntime) {
         0xf5f5ec,
         facility.sourceId === selectedFacilityId,
         { kind: "FACILITY", id: facility.sourceId },
-        "铁路",
       );
     });
   }
@@ -833,7 +938,7 @@ function buildOperationalMarkers(runtime: AtlasRuntime) {
         inventory.latitude,
       ]);
       if (!point) return;
-      addOperationalMarker(runtime, point, 0x72c995, false, undefined, "存");
+      addOperationalMarker(runtime, point, 0x72c995, false);
     });
   }
 }
@@ -1014,10 +1119,13 @@ function annotationCoordinate(
   const source = runtime.projection.sourceBounds;
   if (!source) return undefined;
   const bounds = runtime.renderer.domElement.getBoundingClientRect();
-  const screenX =
-    ((event.clientX - bounds.left) / Math.max(bounds.width, 1)) * STAGE_WIDTH;
-  const screenY =
-    ((event.clientY - bounds.top) / Math.max(bounds.height, 1)) * STAGE_HEIGHT;
+  const pointer = new THREE.Vector3(
+    ((event.clientX - bounds.left) / Math.max(bounds.width, 1)) * 2 - 1,
+    -((event.clientY - bounds.top) / Math.max(bounds.height, 1)) * 2 + 1,
+    0,
+  ).unproject(runtime.camera);
+  const screenX = pointer.x + STAGE_WIDTH / 2;
+  const screenY = STAGE_HEIGHT / 2 - pointer.y;
   const projected = projectedBounds(runtime.projection);
   if (!projected || screenX < projected.minX || screenX > projected.maxX)
     return undefined;
@@ -1127,12 +1235,12 @@ function createFallbackTexture(bounds: ProjectedSurfaceBounds | undefined) {
 }
 
 function createLabelSprite(text: string) {
-  return createTextSprite(text, "#f7f2df", "rgba(18, 28, 23, .82)", 42, 3.3);
+  return createTextSprite(text, "#f7f2df", "rgba(12, 34, 29, .88)", 28, 1.22);
 }
 
 function createBadgeSprite(text: string, color: number) {
   const colour = `#${color.toString(16).padStart(6, "0")}`;
-  return createTextSprite(text, "#ffffff", colour, 34, 1.7);
+  return createTextSprite(text, "#ffffff", colour, 22, 0.6);
 }
 
 function createTextSprite(
@@ -1151,7 +1259,7 @@ function createTextSprite(
     context.font = `650 ${fontSize}px PingFang SC, Microsoft YaHei, sans-serif`;
     context.textAlign = "center";
     context.textBaseline = "middle";
-    context.lineWidth = 14;
+    context.lineWidth = Math.max(6, fontSize * 0.24);
     context.lineJoin = "round";
     context.strokeStyle = background;
     context.strokeText(text, canvas.width / 2, canvas.height / 2);
