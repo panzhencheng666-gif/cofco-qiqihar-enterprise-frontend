@@ -27,13 +27,29 @@ export interface StorageFacility {
   address: string;
   longitude: number | null;
   latitude: number | null;
-  coordinatePrecision: "EXACT" | "STREET" | "TOWN" | "UNVERIFIED";
+  coordinatePrecision: "EXACT" | "STREET" | "TOWN" | "UNKNOWN";
   coordinatePrecisionLabel: string;
   operationalStatus: string;
   capacityTonnes: number | null;
   capacityAsOf: string | null;
+  version: number;
   prices: readonly StorageFacilityPrice[];
   evidence: readonly StorageFacilityEvidence[];
+}
+
+export interface StorageFacilityDraft {
+  name: string;
+  relationType: StorageFacilityRelation;
+  regionCode: string;
+  address: string;
+  longitude: number | null;
+  latitude: number | null;
+  operationalStatus: "ACTIVE" | "INACTIVE" | "UNKNOWN";
+  capacityTonnes: number | null;
+  capacityAsOf: string | null;
+  validFrom: string | null;
+  validTo: string | null;
+  expectedVersion: number;
 }
 
 export interface StorageFacilityPrice {

@@ -23,12 +23,14 @@
 ### Task 1: Persistent first paint and region transitions
 
 **Files:**
+
 - Modify: `src/modules/overview/ui/pages/OverviewPage.tsx`
 - Modify: `src/modules/overview/ui/components/OperationalSituationMap.tsx`
 - Modify: `src/modules/overview/ui/components/OverviewDataModePanel.tsx`
 - Test: `src/modules/overview/ui/pages/OverviewPage.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: existing `OperationalFacilityCatalogue`, `OperationalSituationCatalogue`, `MapFeature[]`, and hierarchy callbacks.
 - Produces: a mounted public map with optional operational datasets and an in-place `syncing` state.
 
@@ -41,12 +43,14 @@
 ### Task 2: Four-region globe and automatic hierarchy camera
 
 **Files:**
+
 - Create: `src/modules/overview/ui/components/publicSituationViewport.ts`
 - Test: `src/modules/overview/ui/components/publicSituationViewport.spec.ts`
 - Modify: `src/modules/overview/ui/components/OperationalSituationMap.tsx`
 - Modify: `src/modules/overview/ui/components/operational-situation.css`
 
 **Interfaces:**
+
 - Consumes: root bounds and the current administrative level.
 - Produces: `publicSituationCamera(level, bounds)` and `publicSituationProjection(level)`.
 
@@ -59,6 +63,7 @@
 ### Task 3: Live weather effects and alert detail
 
 **Files:**
+
 - Modify: `src/modules/overview/domain/operationalSituation.ts`
 - Modify: `src/modules/overview/infrastructure/http/HttpOverviewRegionalDataRepository.ts`
 - Create: `src/modules/overview/ui/components/LiveWeatherEffect.tsx`
@@ -70,6 +75,7 @@
 - Modify backend: `src/main/java/com/cofco/qiqihar/graintrade/regionalproduction/application/RegionalPublicDataRefreshWorker.java`
 
 **Interfaces:**
+
 - Consumes: cached Open-Meteo observations and selected hierarchy region.
 - Produces: observation weather code, wind, cloud cover, source time, alert narrative, and a map effect derived only from those values.
 
@@ -82,12 +88,14 @@
 ### Task 4: Persisted facilities, inventory, logistics, and annotations
 
 **Files:**
+
 - Modify the existing operational facility backend aggregate and controller instead of adding a second catalogue.
 - Add a forward-only Flyway migration for facility submission metadata, inventory snapshots, and logistics movements.
 - Modify the public map and panel to use those persisted records and existing realtime refresh events.
 - Reuse the existing map annotation overlay in public-situation mode and remove its duplicate top-level mode button.
 
 **Interfaces:**
+
 - Consumes: authenticated work unit, current region permission, facility form values, inventory snapshots, logistics movements, and existing annotation repository.
 - Produces: auditable facility CRUD, live inventory deltas, directional logistics flows, and annotations on the public map.
 
@@ -100,9 +108,11 @@
 ### Task 5: Local acceptance and packaging
 
 **Files:**
+
 - Update only the managed local runtime after source verification passes.
 
 **Interfaces:**
+
 - Consumes: committed source artifacts.
 - Produces: local browser acceptance evidence with no public deployment.
 

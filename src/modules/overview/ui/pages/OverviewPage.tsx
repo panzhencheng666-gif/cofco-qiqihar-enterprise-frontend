@@ -24,7 +24,11 @@ import type {
   RegionalCropSummary,
   SupplyBalanceSummary,
 } from "../../domain/overviewRegionalData";
-import type { OperationalFacilityCatalogue } from "../../domain/operationalFacilities";
+import type {
+  OperationalFacilityCatalogue,
+  StorageFacility,
+  StorageFacilityDraft,
+} from "../../domain/operationalFacilities";
 import type { OperationalSituationCatalogue } from "../../domain/operationalSituation";
 import {
   BoundaryMap,
@@ -73,6 +77,8 @@ const EMPTY_OPERATIONAL_SITUATION: OperationalSituationCatalogue = {
   weather: [],
   publicEvents: [],
   policyEvents: [],
+  logisticsFlows: [],
+  inventories: [],
   sources: [],
 };
 
@@ -280,6 +286,7 @@ export function OverviewPage({
   const [selectedSamplePointId, setSelectedSamplePointId] = useState<string>();
   const [dataMode, setDataMode] = useState<OverviewDataMode>("SAMPLE_POINTS");
   const [annotationArmed, setAnnotationArmed] = useState(false);
+  const [annotationOpen, setAnnotationOpen] = useState(false);
   const [regionalSummary, setRegionalSummary] = useState<RegionalCropSummary>();
   const [agricultureProfile, setAgricultureProfile] =
     useState<RegionalAgricultureProfile>();
@@ -292,6 +299,7 @@ export function OverviewPage({
     useState(false);
   const [operationalFacilitiesIssue, setOperationalFacilitiesIssue] =
     useState<string>();
+  const [operationalFacilityRevision, setOperationalFacilityRevision] = useState(0);
   const [operationalSituation, setOperationalSituation] =
     useState<OperationalSituationCatalogue>();
   const [operationalSituationLoading, setOperationalSituationLoading] = useState(false);
@@ -825,6 +833,7 @@ export function OverviewPage({
   }, [
     businessSequence,
     operationalMapMode,
+    operationalFacilityRevision,
     productCode,
     regionalDataRegionCode,
     regionalDataRepository,
@@ -840,7 +849,14 @@ export function OverviewPage({
       if (initial) setOperationalSituationLoading(true);
       setOperationalSituationIssue(undefined);
       void regionalDataRepository
-        .operationalSituation?.(selectedRegionCode, controller.signal)
+        .operationalSituation?.(
+          {
+            ...(selectedRegionCode ? { regionCode: selectedRegionCode } : {}),
+            ...(productCode ? { productCode } : {}),
+            ...(year === undefined ? {} : { surveyYear: year }),
+          },
+          controller.signal,
+        )
         .then((next) => {
           if (!controller.signal.aborted) setOperationalSituation(next);
         })
@@ -868,8 +884,10 @@ export function OverviewPage({
   }, [
     businessSequence,
     publicSituationMode,
+    productCode,
     regionalDataRepository,
     selectedRegionCode,
+    year,
   ]);
 
   useEffect(() => {
@@ -1212,6 +1230,7 @@ export function OverviewPage({
                   mode={dataMode}
                   onModeChange={(nextMode) => {
                     setAnnotationArmed(false);
+                    setAnnotationOpen(false);
                     setDataMode(nextMode);
                     setRegionalDataIssue(undefined);
                     setOperationalFacilitiesIssue(undefined);
@@ -1262,6 +1281,40 @@ export function OverviewPage({
                     setSelectedOperationalSituationItem(undefined);
                     setSelectedOperationalFacilityId(id);
                   }}
+                  {...(regionalDataRepository?.createOperationalFacility
+                    ? {
+                        onOperationalFacilitySave: async (
+                          draft: StorageFacilityDraft,
+                          facilityCode?: string,
+                        ) => {
+                          const saved = facilityCode
+                            ? await regionalDataRepository.updateOperationalFacility?.(
+                                facilityCode,
+                                draft,
+                              )
+                            : await regionalDataRepository.createOperationalFacility?.(
+                                draft,
+                              );
+                          if (!saved) throw new Error("库点保存接口不可用");
+                          setSelectedOperationalFacilityId(saved.code);
+                          setOperationalFacilityRevision((value) => value + 1);
+                        },
+                      }
+                    : {})}
+                  {...(regionalDataRepository?.archiveOperationalFacility
+                    ? {
+                        onOperationalFacilityArchive: async (
+                          facility: StorageFacility,
+                        ) => {
+                          await regionalDataRepository.archiveOperationalFacility?.(
+                            facility.code,
+                            facility.version,
+                          );
+                          setSelectedOperationalFacilityId(undefined);
+                          setOperationalFacilityRevision((value) => value + 1);
+                        },
+                      }
+                    : {})}
                   {...(currentRegionalSummary
                     ? { regionalSummary: currentRegionalSummary }
                     : {})}
@@ -1360,7 +1413,7 @@ export function OverviewPage({
         map={
           <div className="overview-map-annotation-stage">
             <BoundaryMap
-              annotationMode={dataMode === "MAP_ANNOTATION"}
+              annotationMode={annotationOpen}
               {...(mapBackdrop ? { backdrop: mapBackdrop } : {})}
               features={mapFeatures}
               points={mapPoints}
@@ -1383,30 +1436,38 @@ export function OverviewPage({
               onDrill={drillDown}
             />
             {publicSituationMode && annotationBounds && (
-                <OperationalSituationMap
-                  {...(mapBackdrop ? { backdrop: mapBackdrop } : {})}
-                  bounds={annotationBounds}
-                  canReturnToParent={Boolean(
-                    parentCode && parentCode !== scopeRootCode,
-                  )}
-                  facilities={operationalFacilities ?? EMPTY_OPERATIONAL_FACILITIES}
-                  features={mapFeatures}
-                  onFacilitySelect={(id) => {
-                    setSelectedOperationalSituationItem(undefined);
-                    setSelectedOperationalFacilityId(id);
-                  }}
-                  onRegionDrill={drillDown}
-                  onRegionSelect={selectRegion}
-                  onReturnToParent={returnToParent}
-                  onTimelineSelect={setSelectedOperationalSituationItem}
-                  {...(effectiveOperationalFacilityId
-                    ? { selectedFacilityId: effectiveOperationalFacilityId }
-                    : {})}
-                  {...(selectedRegionCode ? { selectedRegionCode } : {})}
-                  situation={operationalSituation ?? EMPTY_OPERATIONAL_SITUATION}
-                />
-              )}
-            {dataMode === "MAP_ANNOTATION" &&
+              <OperationalSituationMap
+                annotationActive={annotationOpen}
+                {...(mapBackdrop ? { backdrop: mapBackdrop } : {})}
+                bounds={annotationBounds}
+                canReturnToParent={Boolean(parentCode && parentCode !== scopeRootCode)}
+                facilities={operationalFacilities ?? EMPTY_OPERATIONAL_FACILITIES}
+                features={mapFeatures}
+                onFacilitySelect={(id) => {
+                  setSelectedOperationalSituationItem(undefined);
+                  setSelectedOperationalFacilityId(id);
+                }}
+                {...(mapAnnotationRepository
+                  ? {
+                      onAnnotationToggle: () => {
+                        setAnnotationArmed(false);
+                        setAnnotationOpen((current) => !current);
+                      },
+                    }
+                  : {})}
+                onRegionDrill={drillDown}
+                onRegionSelect={selectRegion}
+                onReturnToParent={returnToParent}
+                onTimelineSelect={setSelectedOperationalSituationItem}
+                {...(effectiveOperationalFacilityId
+                  ? { selectedFacilityId: effectiveOperationalFacilityId }
+                  : {})}
+                {...(selectedRegionCode ? { selectedRegionCode } : {})}
+                situation={operationalSituation ?? EMPTY_OPERATIONAL_SITUATION}
+              />
+            )}
+            {publicSituationMode &&
+              annotationOpen &&
               mapAnnotationRepository &&
               annotationBounds && (
                 <MapAnnotationOverlay
@@ -1419,6 +1480,10 @@ export function OverviewPage({
                   repository={mapAnnotationRepository}
                   samplePointIcons={annotationSampleNetworkIcons}
                   onArmedChange={setAnnotationArmed}
+                  onClose={() => {
+                    setAnnotationArmed(false);
+                    setAnnotationOpen(false);
+                  }}
                   {...(mapBackdrop ? { backdrop: mapBackdrop } : {})}
                   {...(selectedRegionCode ? { regionCode: selectedRegionCode } : {})}
                   {...(selectedRegionCode ? { selectedRegionCode } : {})}

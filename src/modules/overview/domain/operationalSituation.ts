@@ -3,7 +3,37 @@ export interface OperationalSituationCatalogue {
   weather: readonly WeatherObservation[];
   publicEvents: readonly PublicSituationEvent[];
   policyEvents: readonly PolicySituationEvent[];
+  logisticsFlows: readonly LogisticsFlow[];
+  inventories: readonly InventorySnapshot[];
   sources: readonly OperationalSituationSource[];
+}
+
+export interface LogisticsFlow {
+  eventId: string;
+  productCode: string;
+  direction: string;
+  originRegionCode: string;
+  originRegionName: string;
+  originLongitude: number;
+  originLatitude: number;
+  destinationRegionCode: string;
+  destinationRegionName: string;
+  destinationLongitude: number;
+  destinationLatitude: number;
+  volumeTonnes: number | null;
+  occurredAt: string;
+  transportMode: string;
+}
+
+export interface InventorySnapshot {
+  regionCode: string;
+  regionName: string;
+  productCode: string;
+  longitude: number;
+  latitude: number;
+  inventoryTonnes: number;
+  sourceCount: number;
+  observedAt: string;
 }
 
 export interface WeatherObservation {

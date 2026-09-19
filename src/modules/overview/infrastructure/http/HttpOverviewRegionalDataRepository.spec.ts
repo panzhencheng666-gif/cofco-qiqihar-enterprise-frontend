@@ -83,14 +83,24 @@ describe("HttpOverviewRegionalDataRepository", () => {
 
   it("requests cached live weather for the selected administrative region", async () => {
     const get = vi.fn().mockResolvedValue({
-      data: { generatedAt: "2026-09-19T02:00:00Z", weather: [], publicEvents: [], policyEvents: [], sources: [] },
+      data: {
+        generatedAt: "2026-09-19T02:00:00Z",
+        weather: [],
+        publicEvents: [],
+        policyEvents: [],
+        sources: [],
+      },
     });
     const repository = new HttpOverviewRegionalDataRepository({ get });
 
-    await repository.operationalSituation("230229101");
+    await repository.operationalSituation({
+      regionCode: "230229101",
+      productCode: "CORN",
+      surveyYear: 2026,
+    });
 
     expect(get.mock.calls[0]?.[0]).toBe(
-      "/api/v1/overview/operational-situation?regionCode=230229101",
+      "/api/v1/overview/operational-situation?regionCode=230229101&productCode=CORN&surveyYear=2026",
     );
   });
 
@@ -120,6 +130,7 @@ describe("HttpOverviewRegionalDataRepository", () => {
                 operationalStatus: "ACTIVE",
                 capacityTonnes: null,
                 capacityAsOf: null,
+                version: 0,
                 prices: [],
                 evidence: [],
               },

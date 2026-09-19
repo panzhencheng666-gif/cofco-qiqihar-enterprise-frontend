@@ -6,6 +6,7 @@ import type {
 } from "../../application/ports/OverviewRegionalDataRepository";
 import type { HttpClient } from "../../../../shared/api/HttpClient";
 import { queryString } from "../../../../shared/api/HttpClient";
+import type { StorageFacilityDraft } from "../../domain/operationalFacilities";
 
 const decimalValueSchema = z
   .union([z.string(), z.number()])
@@ -279,6 +280,51 @@ const supplyBalanceSchema = z.object({
   }),
 });
 
+const storageFacilitySchema = z.object({
+  code: z.string(),
+  name: z.string(),
+  workUnitCode: z.string(),
+  relationType: z.enum(["OWNED", "LEASED", "HISTORICAL_LEASED"]),
+  relationLabel: z.string(),
+  regionCode: z.string(),
+  regionName: z.string(),
+  address: z.string(),
+  longitude: decimalNumberSchema.nullable(),
+  latitude: decimalNumberSchema.nullable(),
+  coordinatePrecision: z.enum(["EXACT", "STREET", "TOWN", "UNKNOWN"]),
+  coordinatePrecisionLabel: z.string(),
+  operationalStatus: z.string(),
+  capacityTonnes: decimalNumberSchema.nullable(),
+  capacityAsOf: z.string().nullable(),
+  version: z.number().int().nonnegative(),
+  prices: z.array(
+    z.object({
+      productCode: z.string(),
+      productName: z.string().nullable(),
+      qualityRequirement: z.string(),
+      value: decimalNumberSchema,
+      unit: z.string(),
+      effectiveOn: z.string(),
+      expiresOn: z.string().nullable(),
+      sourceName: z.string(),
+      sourceUrl: z.string(),
+      sourceClassification: z.string(),
+      current: z.boolean(),
+    }),
+  ),
+  evidence: z.array(
+    z.object({
+      kind: z.string(),
+      title: z.string(),
+      sourceName: z.string(),
+      sourceUrl: z.string(),
+      sourceClassification: z.string(),
+      sourceAsOf: z.string().nullable(),
+      note: z.string(),
+    }),
+  ),
+});
+
 const operationalFacilityCatalogueSchema = z.object({
   data: z.object({
     regionCode: z.string().nullable(),
@@ -291,51 +337,7 @@ const operationalFacilityCatalogueSchema = z.object({
         count: z.number().int(),
       }),
     ),
-    storageFacilities: z.array(
-      z.object({
-        code: z.string(),
-        name: z.string(),
-        workUnitCode: z.string(),
-        relationType: z.enum(["OWNED", "LEASED", "HISTORICAL_LEASED"]),
-        relationLabel: z.string(),
-        regionCode: z.string(),
-        regionName: z.string(),
-        address: z.string(),
-        longitude: decimalNumberSchema.nullable(),
-        latitude: decimalNumberSchema.nullable(),
-        coordinatePrecision: z.enum(["EXACT", "STREET", "TOWN", "UNVERIFIED"]),
-        coordinatePrecisionLabel: z.string(),
-        operationalStatus: z.string(),
-        capacityTonnes: decimalNumberSchema.nullable(),
-        capacityAsOf: z.string().nullable(),
-        prices: z.array(
-          z.object({
-            productCode: z.string(),
-            productName: z.string().nullable(),
-            qualityRequirement: z.string(),
-            value: decimalNumberSchema,
-            unit: z.string(),
-            effectiveOn: z.string(),
-            expiresOn: z.string().nullable(),
-            sourceName: z.string(),
-            sourceUrl: z.string(),
-            sourceClassification: z.string(),
-            current: z.boolean(),
-          }),
-        ),
-        evidence: z.array(
-          z.object({
-            kind: z.string(),
-            title: z.string(),
-            sourceName: z.string(),
-            sourceUrl: z.string(),
-            sourceClassification: z.string(),
-            sourceAsOf: z.string().nullable(),
-            note: z.string(),
-          }),
-        ),
-      }),
-    ),
+    storageFacilities: z.array(storageFacilitySchema),
     railwayFacilities: z.array(
       z.object({
         sourceId: z.string(),
@@ -393,7 +395,10 @@ const operationalSituationSchema = z.object({
     weather: z.array(
       z.object({
         rootRegionCode: z.string(),
-        regionCode: z.string().nullish().transform((value) => value ?? ""),
+        regionCode: z
+          .string()
+          .nullish()
+          .transform((value) => value ?? ""),
         regionName: z.string(),
         longitude: decimalNumberSchema,
         latitude: decimalNumberSchema,
@@ -450,6 +455,40 @@ const operationalSituationSchema = z.object({
         }),
       )
       .default([]),
+    logisticsFlows: z
+      .array(
+        z.object({
+          eventId: z.string(),
+          productCode: z.string(),
+          direction: z.string(),
+          originRegionCode: z.string(),
+          originRegionName: z.string(),
+          originLongitude: decimalNumberSchema,
+          originLatitude: decimalNumberSchema,
+          destinationRegionCode: z.string(),
+          destinationRegionName: z.string(),
+          destinationLongitude: decimalNumberSchema,
+          destinationLatitude: decimalNumberSchema,
+          volumeTonnes: decimalNumberSchema.nullable(),
+          occurredAt: z.string(),
+          transportMode: z.string(),
+        }),
+      )
+      .default([]),
+    inventories: z
+      .array(
+        z.object({
+          regionCode: z.string(),
+          regionName: z.string(),
+          productCode: z.string(),
+          longitude: decimalNumberSchema,
+          latitude: decimalNumberSchema,
+          inventoryTonnes: decimalNumberSchema,
+          sourceCount: z.number().int().nonnegative(),
+          observedAt: z.string(),
+        }),
+      )
+      .default([]),
     sources: z.array(
       z.object({
         code: z.string(),
@@ -465,7 +504,7 @@ const operationalSituationSchema = z.object({
 });
 
 export class HttpOverviewRegionalDataRepository implements OverviewRegionalDataRepository {
-  constructor(private readonly http: Pick<HttpClient, "get">) {}
+  constructor(private readonly http: HttpClient) {}
 
   async agricultureProfile(query: OverviewRegionalDataQuery) {
     return (
@@ -518,10 +557,43 @@ export class HttpOverviewRegionalDataRepository implements OverviewRegionalDataR
     ).data;
   }
 
-  async operationalSituation(regionCode?: string, signal?: AbortSignal) {
+  async createOperationalFacility(draft: StorageFacilityDraft) {
+    if (!this.http.post) throw new Error("当前连接不支持库点填报");
+    return (
+      await this.http.post(
+        "/api/v1/overview/operational-facilities",
+        draft,
+        z.object({ data: storageFacilitySchema }),
+      )
+    ).data;
+  }
+
+  async updateOperationalFacility(facilityCode: string, draft: StorageFacilityDraft) {
+    if (!this.http.put) throw new Error("当前连接不支持库点更新");
+    return (
+      await this.http.put(
+        `/api/v1/overview/operational-facilities/${encodeURIComponent(facilityCode)}`,
+        draft,
+        z.object({ data: storageFacilitySchema }),
+      )
+    ).data;
+  }
+
+  async archiveOperationalFacility(facilityCode: string, expectedVersion: number) {
+    if (!this.http.delete) throw new Error("当前连接不支持库点归档");
+    await this.http.delete(
+      `/api/v1/overview/operational-facilities/${encodeURIComponent(facilityCode)}${queryString({ expectedVersion })}`,
+      z.object({ data: z.boolean() }),
+    );
+  }
+
+  async operationalSituation(
+    query?: { regionCode?: string; productCode?: string; surveyYear?: number },
+    signal?: AbortSignal,
+  ) {
     return (
       await this.http.get(
-        `/api/v1/overview/operational-situation${queryString({ regionCode })}`,
+        `/api/v1/overview/operational-situation${queryString(query ?? {})}`,
         operationalSituationSchema,
         signal ? { signal } : undefined,
       )

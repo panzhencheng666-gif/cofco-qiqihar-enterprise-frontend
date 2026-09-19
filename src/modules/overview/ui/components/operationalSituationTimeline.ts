@@ -58,6 +58,20 @@ export function operationalSituationTimeline(
           ]
         : [],
     ),
+    ...(situation.logisticsFlows ?? []).map((flow) => ({
+      id: `logistics:${flow.eventId}`,
+      category: "LOGISTICS" as const,
+      occurredAt: flow.occurredAt,
+      title: `${flow.originRegionName} → ${flow.destinationRegionName}`,
+      description: `${flow.transportMode}${
+        flow.volumeTonnes === null
+          ? ""
+          : `，审核运量 ${flow.volumeTonnes.toLocaleString("zh-CN")} 吨`
+      }`,
+      sourceName: "系统物流监测",
+      sourceUrl: "/#物流监测",
+      regionCode: flow.originRegionCode,
+    })),
     ...facilities.storageFacilities.flatMap((facility) =>
       facility.prices.map((price) => ({
         id: `market:${facility.code}:${price.productCode}:${price.effectiveOn}`,
@@ -83,6 +97,10 @@ export function categoryCount(
   facilities: OperationalFacilityCatalogue,
 ) {
   if (category === "LOGISTICS")
-    return facilities.railwayFacilities.length + facilities.railwayRoutes.length;
+    return (
+      items.filter((item) => item.category === "LOGISTICS").length +
+      facilities.railwayFacilities.length +
+      facilities.railwayRoutes.length
+    );
   return items.filter((item) => item.category === category).length;
 }

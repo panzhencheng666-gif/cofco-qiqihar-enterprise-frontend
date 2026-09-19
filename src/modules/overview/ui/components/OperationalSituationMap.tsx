@@ -17,6 +17,7 @@ import type { MapFeature } from "./boundaryGeometry";
 import { administrativeGeoJson, emptyCollection } from "./mapAnnotationPrecisionData";
 import {
   operationalMarkers,
+  logisticsFlowGeoJson,
   railwayRouteGeoJson,
   type OperationalLayerCode,
 } from "./operationalSituationMapData";
@@ -46,16 +47,23 @@ export interface SituationMapBounds {
 }
 
 type LayerCode =
-  OperationalLayerCode | "ADMINISTRATIVE" | "RAILWAY_ROUTE" | "WEATHER_RISK";
+  | OperationalLayerCode
+  | "ADMINISTRATIVE"
+  | "RAILWAY_ROUTE"
+  | "LOGISTICS_FLOW"
+  | "WEATHER_RISK";
 
 const ADMIN_SOURCE = "situation-admin-regions";
 const ROUTE_SOURCE = "situation-railway-routes";
+const LOGISTICS_SOURCE = "situation-logistics-flows";
 const LAYER_LABELS: Readonly<Record<LayerCode, string>> = {
   ADMINISTRATIVE: "行政边界",
   WEATHER_RISK: "气象风险",
   RAILWAY_ROUTE: "铁路线路",
+  LOGISTICS_FLOW: "实时物流",
   STORAGE: "库点",
   RAILWAY: "铁路站点",
+  INVENTORY: "实时库存",
   PUBLIC_EVENT: "公开事件",
 };
 const INTELLIGENCE_LABELS = {
@@ -67,6 +75,7 @@ const INTELLIGENCE_LABELS = {
 const MARKER_LABELS: Readonly<Record<OperationalLayerCode, string>> = {
   STORAGE: "库点",
   RAILWAY: "铁路",
+  INVENTORY: "库存",
   PUBLIC_EVENT: "公开事件",
 };
 
@@ -77,6 +86,8 @@ export function OperationalSituationMap({
   facilities,
   features,
   onFacilitySelect,
+  annotationActive = false,
+  onAnnotationToggle,
   onRegionDrill,
   onRegionSelect,
   onReturnToParent,
@@ -91,6 +102,8 @@ export function OperationalSituationMap({
   facilities: OperationalFacilityCatalogue;
   features: readonly MapFeature[];
   onFacilitySelect: (id: string) => void;
+  annotationActive?: boolean;
+  onAnnotationToggle?: () => void;
   onRegionDrill: (region: OverviewRegion) => void;
   onRegionSelect: (region: OverviewRegion) => void;
   onReturnToParent: () => void;
@@ -120,8 +133,10 @@ export function OperationalSituationMap({
     ADMINISTRATIVE: true,
     WEATHER_RISK: true,
     RAILWAY_ROUTE: true,
+    LOGISTICS_FLOW: true,
     STORAGE: true,
     RAILWAY: true,
+    INVENTORY: true,
     PUBLIC_EVENT: true,
   });
   const [intelligence, setIntelligence] = useState<
@@ -161,8 +176,25 @@ export function OperationalSituationMap({
                 Date.parse(selectedTime),
           )
         : [],
+      logisticsFlows: intelligence.LOGISTICS
+        ? (situation.logisticsFlows ?? []).filter(
+            (item) => Date.parse(item.occurredAt) <= Date.parse(selectedTime),
+          )
+        : [],
+      inventories: intelligence.MARKET
+        ? (situation.inventories ?? []).filter(
+            (item) => Date.parse(item.observedAt) <= Date.parse(selectedTime),
+          )
+        : [],
     }),
-    [intelligence.POLICY, intelligence.WEATHER, selectedTime, situation],
+    [
+      intelligence.LOGISTICS,
+      intelligence.MARKET,
+      intelligence.POLICY,
+      intelligence.WEATHER,
+      selectedTime,
+      situation,
+    ],
   );
   const weatherRiskByRoot = useMemo(
     () =>
@@ -180,6 +212,7 @@ export function OperationalSituationMap({
           layers[marker.kind] &&
           (marker.kind !== "STORAGE" || intelligence.MARKET) &&
           (marker.kind !== "RAILWAY" || intelligence.LOGISTICS) &&
+          (marker.kind !== "INVENTORY" || intelligence.MARKET) &&
           insideBounds(marker, bounds),
       ),
     [allMarkers, bounds, intelligence.LOGISTICS, intelligence.MARKET, layers],
@@ -234,6 +267,7 @@ export function OperationalSituationMap({
     backdrop,
     features,
     routes: facilities.railwayRoutes,
+    logisticsFlows: visibleSituation.logisticsFlows,
     selectedRegionCode,
     weatherRiskByRoot,
   });
@@ -264,6 +298,7 @@ export function OperationalSituationMap({
       backdrop,
       features,
       routes: facilities.railwayRoutes,
+      logisticsFlows: visibleSituation.logisticsFlows,
       selectedRegionCode,
       weatherRiskByRoot,
     };
@@ -273,6 +308,7 @@ export function OperationalSituationMap({
     features,
     selectedRegionCode,
     weatherRiskByRoot,
+    visibleSituation.logisticsFlows,
   ]);
 
   useEffect(() => {
@@ -345,6 +381,7 @@ export function OperationalSituationMap({
         ),
       );
       updateSource(map, ROUTE_SOURCE, railwayRouteGeoJson(data.routes));
+      updateSource(map, LOGISTICS_SOURCE, logisticsFlowGeoJson(data.logisticsFlows));
       fitVisibleBounds();
     });
     map.on("click", "situation-admin-fill", (event) => {
@@ -401,6 +438,12 @@ export function OperationalSituationMap({
         "line-gradient",
         routeFlowGradient((time / 2_600) % 1),
       );
+      if (map.getLayer("situation-logistics-flow-pulse"))
+        map.setPaintProperty(
+          "situation-logistics-flow-pulse",
+          "line-gradient",
+          routeFlowGradient((time / 1_900) % 1),
+        );
     };
     routeFrame = requestAnimationFrame(animateRouteFlow);
     const scheduleFit = () => {
@@ -450,6 +493,16 @@ export function OperationalSituationMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map?.isStyleLoaded()) return;
+    updateSource(
+      map,
+      LOGISTICS_SOURCE,
+      logisticsFlowGeoJson(visibleSituation.logisticsFlows),
+    );
+  }, [visibleSituation.logisticsFlows]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map?.isStyleLoaded()) return;
     map.setProjection({ type: publicSituationProjection(currentLevel) });
     map.setSky({ "atmosphere-blend": publicSituationAtmosphere(currentLevel) });
   }, [currentLevel]);
@@ -472,10 +525,16 @@ export function OperationalSituationMap({
       ],
       layers.RAILWAY_ROUTE && intelligence.LOGISTICS,
     );
+    setVisibility(
+      map,
+      ["situation-logistics-flow", "situation-logistics-flow-pulse"],
+      layers.LOGISTICS_FLOW && intelligence.LOGISTICS,
+    );
   }, [
     intelligence.LOGISTICS,
     layers.ADMINISTRATIVE,
     layers.RAILWAY_ROUTE,
+    layers.LOGISTICS_FLOW,
     layers.WEATHER_RISK,
   ]);
 
@@ -529,12 +588,9 @@ export function OperationalSituationMap({
       element.innerHTML =
         '<i class="situation-live-weather__radar"></i>' +
         '<i class="situation-live-weather__cloud"></i>' +
-        '<span><i></i><i></i><i></i><i></i></span>';
+        "<span><i></i><i></i><i></i><i></i></span>";
       return new Marker({ anchor: "center", element })
-        .setLngLat([
-          item.longitude,
-          item.latitude,
-        ])
+        .setLngLat([item.longitude, item.latitude])
         .addTo(map);
     });
     return () => {
@@ -602,7 +658,9 @@ export function OperationalSituationMap({
                 }
               />
               <span>{LAYER_LABELS[code]}</span>
-              <b>{layerCount(code, allMarkers, facilities, features)}</b>
+              <b>
+                {layerCount(code, allMarkers, facilities, features, visibleSituation)}
+              </b>
             </label>
           ))}
         </div>
@@ -636,6 +694,16 @@ export function OperationalSituationMap({
         })}
       </section>
       <div className="situation-map-tools" aria-label="态势地图工具">
+        {onAnnotationToggle && (
+          <button
+            aria-pressed={annotationActive}
+            className={annotationActive ? "is-active" : undefined}
+            type="button"
+            onClick={onAnnotationToggle}
+          >
+            地图标注
+          </button>
+        )}
         <button type="button" aria-label="放大地图" onClick={() => zoom("in")}>
           +
         </button>
@@ -705,6 +773,32 @@ export function OperationalSituationMap({
 }
 
 function addSituationLayers(map: MapLibreMap) {
+  map.addSource(LOGISTICS_SOURCE, {
+    type: "geojson",
+    data: emptyCollection(),
+    lineMetrics: true,
+  });
+  map.addLayer({
+    id: "situation-logistics-flow",
+    type: "line",
+    source: LOGISTICS_SOURCE,
+    paint: {
+      "line-color": "#39e6ff",
+      "line-opacity": 0.42,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 4, 2, 10, 5],
+    },
+  });
+  map.addLayer({
+    id: "situation-logistics-flow-pulse",
+    type: "line",
+    source: LOGISTICS_SOURCE,
+    paint: {
+      "line-gradient": routeFlowGradient(0),
+      "line-opacity": 1,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 4, 3, 10, 7],
+      "line-blur": 1,
+    },
+  });
   map.addSource(ROUTE_SOURCE, {
     type: "geojson",
     data: emptyCollection(),
@@ -885,6 +979,7 @@ function toMapBounds(bounds: SituationMapBounds): [[number, number], [number, nu
 
 function markerSymbol(kind: OperationalLayerCode) {
   if (kind === "STORAGE") return '<span aria-hidden="true">库</span>';
+  if (kind === "INVENTORY") return '<span aria-hidden="true">存</span>';
   if (kind === "RAILWAY")
     return `<svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
       <path fill="currentColor" d="M7 2h10c2.2 0 4 1.8 4 4v9c0 2-1.5 3.7-3.5 4l1.5 2h-2.5l-1.4-2H8.9l-1.4 2H5l1.5-2A4 4 0 0 1 3 15V6c0-2.2 1.8-4 4-4Zm0 2a2 2 0 0 0-2 2v5h14V6a2 2 0 0 0-2-2H7Zm1 9a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm8 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z"/>
@@ -897,10 +992,12 @@ function layerCount(
   markers: ReturnType<typeof operationalMarkers>,
   facilities: OperationalFacilityCatalogue,
   features: readonly MapFeature[],
+  situation: OperationalSituationCatalogue,
 ) {
   if (code === "ADMINISTRATIVE") return features.length;
   if (code === "WEATHER_RISK") return features.length;
   if (code === "RAILWAY_ROUTE") return facilities.railwayRoutes.length;
+  if (code === "LOGISTICS_FLOW") return situation.logisticsFlows.length;
   return markers.filter((marker) => marker.kind === code).length;
 }
 

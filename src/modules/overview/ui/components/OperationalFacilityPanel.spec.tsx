@@ -31,6 +31,7 @@ const catalogue: OperationalFacilityCatalogue = {
       operationalStatus: "ACTIVE",
       capacityTonnes: null,
       capacityAsOf: null,
+      version: 0,
       prices: [
         {
           productCode: "SOYBEAN",

@@ -18,8 +18,6 @@ export function publicSituationPitch(
     : requestedPitch;
 }
 
-export function publicSituationAtmosphere(
-  level: OverviewRegion["level"] | undefined,
-) {
+export function publicSituationAtmosphere(level: OverviewRegion["level"] | undefined) {
   return publicSituationProjection(level) === "globe" ? 0.82 : 0.18;
 }

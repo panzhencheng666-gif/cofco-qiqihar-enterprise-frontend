@@ -75,6 +75,7 @@ export function MapAnnotationOverlay({
   regionCode,
   administrativeLevel,
   onArmedChange,
+  onClose,
   backdrop,
   features,
   onRegionDrill,
@@ -90,6 +91,7 @@ export function MapAnnotationOverlay({
   regionCode?: string;
   administrativeLevel?: SaveMapAnnotation["administrativeLevel"];
   onArmedChange?: (armed: boolean) => void;
+  onClose?: () => void;
   backdrop?: MapFeature;
   features?: readonly MapFeature[];
   onRegionDrill?: (region: OverviewRegion) => void;
@@ -420,6 +422,17 @@ export function MapAnnotationOverlay({
   const controls = (
     <>
       <div className="overview-map-annotation-actions">
+        {onClose && (
+          <button
+            type="button"
+            onClick={() => {
+              changeArmed(false);
+              onClose();
+            }}
+          >
+            返回公开态势
+          </button>
+        )}
         <button
           disabled={precisionMapPreparing}
           type="button"

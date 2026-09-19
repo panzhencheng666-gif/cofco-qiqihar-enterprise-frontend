@@ -3,7 +3,11 @@ import type {
   RegionalCropSummary,
   SupplyBalanceSummary,
 } from "../../domain/overviewRegionalData";
-import type { OperationalFacilityCatalogue } from "../../domain/operationalFacilities";
+import type {
+  OperationalFacilityCatalogue,
+  StorageFacility,
+  StorageFacilityDraft,
+} from "../../domain/operationalFacilities";
 import type { OperationalSituationCatalogue } from "../../domain/operationalSituation";
 
 export interface OverviewRegionalDataQuery {
@@ -26,8 +30,17 @@ export interface OverviewRegionalDataRepository {
     },
     signal?: AbortSignal,
   ): Promise<OperationalFacilityCatalogue>;
+  createOperationalFacility?(draft: StorageFacilityDraft): Promise<StorageFacility>;
+  updateOperationalFacility?(
+    facilityCode: string,
+    draft: StorageFacilityDraft,
+  ): Promise<StorageFacility>;
+  archiveOperationalFacility?(
+    facilityCode: string,
+    expectedVersion: number,
+  ): Promise<void>;
   operationalSituation?(
-    regionCode?: string,
+    query?: { regionCode?: string; productCode?: string; surveyYear?: number },
     signal?: AbortSignal,
   ): Promise<OperationalSituationCatalogue>;
 }

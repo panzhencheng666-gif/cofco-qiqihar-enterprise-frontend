@@ -3,6 +3,10 @@ import { useState } from "react";
 import type { OverviewRegion } from "../../domain/overview";
 import type { OperationalFacilityCatalogue } from "../../domain/operationalFacilities";
 import type {
+  StorageFacility,
+  StorageFacilityDraft,
+} from "../../domain/operationalFacilities";
+import type {
   OperationalSituationCatalogue,
   WeatherObservation,
 } from "../../domain/operationalSituation";
@@ -10,6 +14,7 @@ import "./operational-situation.css";
 import { RailwayFacilityCard, StorageFacilityCard } from "./OperationalFacilityPanel";
 import type { SituationTimelineItem } from "./operationalSituationTimeline";
 import { LiveWeatherVisual } from "./LiveWeatherVisual";
+import { StorageFacilityEditor } from "./StorageFacilityEditor";
 import {
   liveWeatherEvidence,
   liveWeatherHeadline,
@@ -25,6 +30,8 @@ export function OperationalSituationPanel({
   onTimelineItemDismiss,
   productLabel,
   situation,
+  onFacilitySave,
+  onFacilityArchive,
 }: {
   facilities: OperationalFacilityCatalogue;
   onFacilitySelect?: (id: string) => void;
@@ -34,6 +41,11 @@ export function OperationalSituationPanel({
   onTimelineItemDismiss?: () => void;
   productLabel?: string;
   situation: OperationalSituationCatalogue;
+  onFacilitySave?: (
+    draft: StorageFacilityDraft,
+    facilityCode?: string,
+  ) => Promise<void>;
+  onFacilityArchive?: (facility: StorageFacility) => Promise<void>;
 }) {
   const selectedStorage = facilities.storageFacilities.find(
     (facility) => facility.code === selectedFacilityId,
@@ -46,6 +58,9 @@ export function OperationalSituationPanel({
   const [requestedDetailMode, setRequestedDetailMode] = useState<
     "WEATHER" | "STORAGE" | "RAILWAY"
   >(situation.weather.length ? "WEATHER" : fallbackStorage ? "STORAGE" : "RAILWAY");
+  const [facilityEditor, setFacilityEditor] = useState<"CREATE" | "EDIT">();
+  const inventories = situation.inventories ?? [];
+  const logisticsFlows = situation.logisticsFlows ?? [];
   const detailMode = selectedStorage
     ? "STORAGE"
     : selectedRailway
@@ -86,6 +101,47 @@ export function OperationalSituationPanel({
           <span>全球开放事件</span>
         </article>
       </div>
+      <section className="live-operations-monitor" aria-label="实时库存与物流监控">
+        <header>
+          <div>
+            <span>LIVE BUSINESS MONITOR</span>
+            <h3>库存与物流实时监控</h3>
+          </div>
+          <b>正式填报自动同步</b>
+        </header>
+        <div className="live-operations-monitor__metrics">
+          <article>
+            <span>期末库存</span>
+            <strong>{totalInventory(situation).toLocaleString("zh-CN")}</strong>
+            <small>吨 · {inventories.length} 个地区</small>
+          </article>
+          <article>
+            <span>跨区物流事件</span>
+            <strong>{logisticsFlows.length}</strong>
+            <small>条审核通过记录</small>
+          </article>
+        </div>
+        {logisticsFlows.length > 0 ? (
+          <ol>
+            {logisticsFlows.slice(0, 5).map((flow) => (
+              <li key={flow.eventId}>
+                <b>
+                  {flow.originRegionName} → {flow.destinationRegionName}
+                </b>
+                <span>
+                  {flow.transportMode}
+                  {flow.volumeTonnes === null
+                    ? ""
+                    : ` · ${flow.volumeTonnes.toLocaleString("zh-CN")} 吨`}
+                </span>
+                <time dateTime={flow.occurredAt}>{formatTime(flow.occurredAt)}</time>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p>当前筛选范围暂无审核通过的跨区物流记录。</p>
+        )}
+      </section>
       <section className="situation-node-details" aria-label="态势详情">
         <div className="situation-node-details__heading">
           <div>
@@ -93,6 +149,11 @@ export function OperationalSituationPanel({
             <p>天气随行政区层级联动；地图节点分别打开库点或铁路详情。</p>
           </div>
           <div className="situation-node-details__quick-picks">
+            {onFacilitySave && (
+              <button type="button" onClick={() => setFacilityEditor("CREATE")}>
+                新增库点
+              </button>
+            )}
             {activeWeather && (
               <button
                 aria-pressed={detailMode === "WEATHER"}
@@ -131,6 +192,18 @@ export function OperationalSituationPanel({
             )}
           </div>
         </div>
+        {facilityEditor && onFacilitySave && (
+          <StorageFacilityEditor
+            key={facilityEditor === "EDIT" ? activeStorage?.code : "new-facility"}
+            {...(facilityEditor === "EDIT" && activeStorage
+              ? { facility: activeStorage }
+              : {})}
+            {...(selectedRegion ? { selectedRegion } : {})}
+            onCancel={() => setFacilityEditor(undefined)}
+            onSave={onFacilitySave}
+            {...(onFacilityArchive ? { onArchive: onFacilityArchive } : {})}
+          />
+        )}
         {selectedTimelineItem && (
           <SituationEvidenceCard
             item={selectedTimelineItem}
@@ -146,7 +219,20 @@ export function OperationalSituationPanel({
             {...(selectedRegion ? { selectedRegion } : {})}
           />
         )}
-        {activeStorage && <StorageFacilityCard facility={activeStorage} />}
+        {activeStorage && (
+          <>
+            <StorageFacilityCard facility={activeStorage} />
+            {onFacilitySave && (
+              <button
+                className="storage-facility-edit-trigger"
+                type="button"
+                onClick={() => setFacilityEditor("EDIT")}
+              >
+                维护此库点
+              </button>
+            )}
+          </>
+        )}
         {activeRailway && (
           <RailwayFacilityCard catalogue={facilities} facility={activeRailway} />
         )}
@@ -207,6 +293,13 @@ export function OperationalSituationPanel({
         )}
       </section>
     </div>
+  );
+}
+
+function totalInventory(situation: OperationalSituationCatalogue) {
+  return (situation.inventories ?? []).reduce(
+    (total, item) => total + item.inventoryTonnes,
+    0,
   );
 }
 
@@ -282,8 +375,8 @@ function WeatherDetail({
   const areaName = selectedRegion?.name ?? weather.regionName;
   const inherited = Boolean(
     selectedRegion &&
-      (weather.observationPrecision === "INHERITED_TOWNSHIP" ||
-        selectedRegion.code !== (weather.regionCode || weather.rootRegionCode)),
+    (weather.observationPrecision === "INHERITED_TOWNSHIP" ||
+      selectedRegion.code !== (weather.regionCode || weather.rootRegionCode)),
   );
   const kind = liveWeatherKind(weather).toLowerCase();
   return (
@@ -314,13 +407,21 @@ function WeatherDetail({
         </div>
       </dl>
       <section className="situation-weather-detail__metrics" aria-label="实时气象指标">
-        <span>气温 <b>{number(weather.meanTemperatureC, "℃")}</b></span>
-        <span>降水 <b>{number(weather.precipitationMm, "毫米")}</b></span>
-        <span>土壤墒情 <b>{number(weather.soilMoisturePercent, "%")}</b></span>
+        <span>
+          气温 <b>{number(weather.meanTemperatureC, "℃")}</b>
+        </span>
+        <span>
+          降水 <b>{number(weather.precipitationMm, "毫米")}</b>
+        </span>
+        <span>
+          土壤墒情 <b>{number(weather.soilMoisturePercent, "%")}</b>
+        </span>
       </section>
       <section className="situation-weather-detail__description">
         <h4>事件描述</h4>
-        <p><b>{weather.risk}</b></p>
+        <p>
+          <b>{weather.risk}</b>
+        </p>
         <p>{weather.assessment}</p>
         {inherited && (
           <small>
@@ -329,7 +430,10 @@ function WeatherDetail({
         )}
       </section>
       <footer>
-        <span>最近同步 {formatTime(weather.fetchedAt)}（{freshness(weather.fetchedAt, generatedAt)}）</span>
+        <span>
+          最近同步 {formatTime(weather.fetchedAt)}（
+          {freshness(weather.fetchedAt, generatedAt)}）
+        </span>
         <a href={weather.sourceUrl} target="_blank" rel="noreferrer">
           来源：{weather.sourceName}
         </a>

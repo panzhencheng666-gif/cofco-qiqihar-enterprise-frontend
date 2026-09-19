@@ -5,7 +5,11 @@ import type {
   SupplyBalanceSummary,
 } from "../../domain/overviewRegionalData";
 import type { OverviewRegion } from "../../domain/overview";
-import type { OperationalFacilityCatalogue } from "../../domain/operationalFacilities";
+import type {
+  OperationalFacilityCatalogue,
+  StorageFacility,
+  StorageFacilityDraft,
+} from "../../domain/operationalFacilities";
 import type { OperationalSituationCatalogue } from "../../domain/operationalSituation";
 import type { SituationTimelineItem } from "./operationalSituationTimeline";
 import "./overview-data-mode.css";
@@ -28,7 +32,6 @@ const DATA_MODES = [
   "PUBLIC_SITUATION",
   "REGIONAL_DATA",
   "SUPPLY_BALANCE",
-  "MAP_ANNOTATION",
 ] as const;
 const CORE_BALANCE_CODES = [
   "OUTPUT",
@@ -93,6 +96,8 @@ export function OverviewDataModePanel({
   onOperationalFacilitySelect,
   selectedOperationalSituationItem,
   onOperationalSituationItemDismiss,
+  onOperationalFacilitySave,
+  onOperationalFacilityArchive,
 }: {
   issue?: string;
   loading?: boolean;
@@ -108,6 +113,11 @@ export function OverviewDataModePanel({
   onOperationalFacilitySelect?: (id: string) => void;
   selectedOperationalSituationItem?: SituationTimelineItem;
   onOperationalSituationItemDismiss?: () => void;
+  onOperationalFacilitySave?: (
+    draft: StorageFacilityDraft,
+    facilityCode?: string,
+  ) => Promise<void>;
+  onOperationalFacilityArchive?: (facility: StorageFacility) => Promise<void>;
 }) {
   return (
     <section
@@ -258,6 +268,12 @@ export function OverviewDataModePanel({
           {...(onOperationalSituationItemDismiss
             ? { onTimelineItemDismiss: onOperationalSituationItemDismiss }
             : {})}
+          {...(onOperationalFacilitySave
+            ? { onFacilitySave: onOperationalFacilitySave }
+            : {})}
+          {...(onOperationalFacilityArchive
+            ? { onFacilityArchive: onOperationalFacilityArchive }
+            : {})}
           situation={operationalSituation}
         />
       )}
@@ -280,13 +296,6 @@ export function OverviewDataModePanel({
         (!operationalFacilities || !operationalSituation) && (
           <p>当前没有可用的公开态势快照。</p>
         )}
-      {mode === "MAP_ANNOTATION" && (
-        <p>
-          浏览地图时可按住鼠标左键在限定范围内拖动，缩放后会加载道路、河流、地名和环境纹理；进入有精确坐标的乡镇或村级范围后，同时显示样本点位置。可在
-          90° 到 30°
-          之间手动调整视角。单击“开始标注”后，可单击地图保存一个点，或按住鼠标拖拽保存一个矩形范围。
-        </p>
-      )}
     </section>
   );
 }

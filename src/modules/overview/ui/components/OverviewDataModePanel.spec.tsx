@@ -19,6 +19,7 @@ describe("OverviewDataModePanel", () => {
     expect(onModeChange).toHaveBeenCalledWith("PUBLIC_SITUATION");
     expect(screen.queryByRole("button", { name: "关联库点" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "铁路站点" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "地图标注" })).not.toBeInTheDocument();
   });
 
   it("keeps public events, weather and operational nodes source-labelled", async () => {
@@ -57,6 +58,8 @@ describe("OverviewDataModePanel", () => {
           ],
           publicEvents: [],
           policyEvents: [],
+          logisticsFlows: [],
+          inventories: [],
           sources: [
             {
               code: "NASA_EONET",
@@ -75,7 +78,9 @@ describe("OverviewDataModePanel", () => {
     expect(screen.getByRole("heading", { name: "公开运营态势" })).toBeVisible();
     await userEvent.click(screen.getByText("来源目录（1）"));
     expect(screen.getByText("NASA EONET")).toBeVisible();
-    expect(screen.getByRole("heading", { name: "齐齐哈尔市实时天气态势" })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "齐齐哈尔市实时天气态势" }),
+    ).toBeVisible();
     expect(screen.getByRole("img", { name: "动态天气：齐齐哈尔市" })).toBeVisible();
     expect(screen.getByText(/不会补造事件/)).toBeVisible();
     expect(screen.getByRole("button", { name: "天气" })).toHaveAttribute(
@@ -127,6 +132,8 @@ describe("OverviewDataModePanel", () => {
           ],
           publicEvents: [],
           policyEvents: [],
+          logisticsFlows: [],
+          inventories: [],
           sources: [],
         }}
       />,
