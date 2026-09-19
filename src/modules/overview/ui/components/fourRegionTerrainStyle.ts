@@ -7,6 +7,18 @@ import type {
 
 export type TerrainSurfaceMode = "SANDBOX" | "FUSION" | "IMAGERY";
 
+// Camera expressions must be at the top level; nesting zoom inside a case
+// causes MapLibre to reject the entire facility layer.
+export const FACILITY_ICON_SIZE: ExpressionSpecification = [
+  "interpolate",
+  ["linear"],
+  ["zoom"],
+  5,
+  ["case", ["==", ["get", "selected"], true], 0.88, 0.72],
+  12,
+  ["case", ["==", ["get", "selected"], true], 1.05, 0.9],
+];
+
 const TERRAIN_TILES = [
   "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
 ];

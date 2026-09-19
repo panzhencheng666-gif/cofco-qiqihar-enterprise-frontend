@@ -25,6 +25,7 @@ import type { OperationalSituationCatalogue } from "../../domain/operationalSitu
 import type { OverviewRegion } from "../../domain/overview";
 import { flattenCoordinates, type MapFeature } from "./boundaryGeometry";
 import {
+  FACILITY_ICON_SIZE,
   FOUR_REGION_BASE_STYLE,
   FOUR_REGION_DETAIL_LAYERS,
   FOUR_REGION_REMOTE_SOURCES,
@@ -440,12 +441,7 @@ function installAtlasLayers(map: MapLibreMap) {
         "atlas-icon-depot-historical",
         "atlas-icon-railway",
       ],
-      "icon-size": [
-        "case",
-        ["==", ["get", "selected"], true],
-        0.68,
-        ["interpolate", ["linear"], ["zoom"], 5, 0.58, 12, 0.74],
-      ],
+      "icon-size": FACILITY_ICON_SIZE,
     },
     paint: {
       "icon-opacity": 0.98,
