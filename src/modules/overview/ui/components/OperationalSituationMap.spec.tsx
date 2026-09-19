@@ -114,6 +114,12 @@ describe("four-region terrain public situation scene", () => {
     expect(panelStyles).toContain("--command-details-width: clamp(390px, 27vw, 460px)");
   });
 
+  it("removes the legacy root minimum width only for public-situation narrow desktops", () => {
+    expect(panelStyles).toContain("@media (max-width: 1180px)");
+    expect(panelStyles).toContain("html:has(.overview-data-mode.is-public_situation)");
+    expect(panelStyles).toContain("overflow-x: clip");
+  });
+
   it("edits account annotations inside the same earth scene", () => {
     expect(wrapper).toContain("地图标注");
     expect(wrapper).toContain("annotationRepository.save(command)");

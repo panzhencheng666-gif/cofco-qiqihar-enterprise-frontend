@@ -698,6 +698,16 @@
   }
 }
 
+@media (max-width: 1180px) {
+  html:has(.overview-data-mode.is-public_situation),
+  body:has(.overview-data-mode.is-public_situation),
+  #root:has(.overview-data-mode.is-public_situation) {
+    width: 100%;
+    min-width: 0;
+    overflow-x: clip;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .realistic-weather-scene * {
     animation: none !important;
