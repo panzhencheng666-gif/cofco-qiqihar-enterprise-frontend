@@ -65,6 +65,18 @@ export function fitOperationalMap(
     zoom,
   });
   map.setMinZoom(Math.max(0, zoom - 0.25));
-  map.setMaxBounds(bounds);
+  map.setMaxBounds(zoomInset > 0 ? expandBounds(bounds, 0.22) : bounds);
+}
+
+function expandBounds(
+  bounds: [[number, number], [number, number]],
+  ratio: number,
+): [[number, number], [number, number]] {
+  const longitudeMargin = (bounds[1][0] - bounds[0][0]) * ratio;
+  const latitudeMargin = (bounds[1][1] - bounds[0][1]) * ratio;
+  return [
+    [bounds[0][0] - longitudeMargin, bounds[0][1] - latitudeMargin],
+    [bounds[1][0] + longitudeMargin, bounds[1][1] + latitudeMargin],
+  ];
 }
 import type { Map as MapLibreMap } from "maplibre-gl";
