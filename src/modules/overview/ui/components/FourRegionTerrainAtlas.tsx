@@ -134,7 +134,6 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
       renderWorldCopies: false,
       style: FOUR_REGION_BASE_STYLE,
     });
-    map.setProjection({ type: "globe" });
     map.doubleClickZoom.disable();
     map.keyboard.disableRotation();
     map.touchZoomRotate.disableRotation();
@@ -153,6 +152,7 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
     runtimeRef.current = runtime;
 
     map.on("load", () => {
+      map.setProjection({ type: "globe" });
       host.dataset.sceneState = "local-ready";
       installAtlasLayers(map);
       runtime.ready = true;

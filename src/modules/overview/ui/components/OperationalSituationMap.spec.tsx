@@ -40,6 +40,14 @@ describe("four-region terrain public situation scene", () => {
     expect(overviewPage).toContain("{!publicSituationMode && (");
   });
 
+  it("waits for the MapLibre style before enabling globe projection", () => {
+    const loadHandler = scene.indexOf('map.on("load", () => {');
+    const projection = scene.indexOf('map.setProjection({ type: "globe" })');
+
+    expect(loadHandler).toBeGreaterThanOrEqual(0);
+    expect(projection).toBeGreaterThan(loadHandler);
+  });
+
   it("hides every non-governed place and labels only system Chinese regions", () => {
     expect(scene).toContain('map.addSource("atlas-world-mask"');
     expect(scene).toContain("createTerrainSurfaceMask(");
