@@ -840,7 +840,7 @@ export function OverviewPage({
       if (initial) setOperationalSituationLoading(true);
       setOperationalSituationIssue(undefined);
       void regionalDataRepository
-        .operationalSituation?.(controller.signal)
+        .operationalSituation?.(selectedRegionCode, controller.signal)
         .then((next) => {
           if (!controller.signal.aborted) setOperationalSituation(next);
         })
@@ -865,7 +865,12 @@ export function OverviewPage({
       document.removeEventListener("visibilitychange", refreshWhenVisible);
       controller.abort();
     };
-  }, [businessSequence, publicSituationMode, regionalDataRepository]);
+  }, [
+    businessSequence,
+    publicSituationMode,
+    regionalDataRepository,
+    selectedRegionCode,
+  ]);
 
   useEffect(() => {
     if (

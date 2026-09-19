@@ -393,6 +393,7 @@ const operationalSituationSchema = z.object({
     weather: z.array(
       z.object({
         rootRegionCode: z.string(),
+        regionCode: z.string().nullish().transform((value) => value ?? ""),
         regionName: z.string(),
         longitude: decimalNumberSchema,
         latitude: decimalNumberSchema,
@@ -400,6 +401,17 @@ const operationalSituationSchema = z.object({
         meanTemperatureC: decimalNumberSchema.nullable(),
         precipitationMm: decimalNumberSchema.nullable(),
         soilMoisturePercent: decimalNumberSchema.nullable(),
+        weatherCode: decimalNumberSchema.nullish().transform((value) => value ?? null),
+        windSpeedKph: decimalNumberSchema.nullish().transform((value) => value ?? null),
+        windDirectionDegrees: decimalNumberSchema
+          .nullish()
+          .transform((value) => value ?? null),
+        cloudCoverPercent: decimalNumberSchema
+          .nullish()
+          .transform((value) => value ?? null),
+        observationPrecision: z
+          .enum(["PREFECTURE", "COUNTY", "TOWNSHIP", "INHERITED_TOWNSHIP"])
+          .default("PREFECTURE"),
         risk: z.string(),
         assessment: z.string(),
         sourceName: z.string(),
@@ -506,10 +518,10 @@ export class HttpOverviewRegionalDataRepository implements OverviewRegionalDataR
     ).data;
   }
 
-  async operationalSituation(signal?: AbortSignal) {
+  async operationalSituation(regionCode?: string, signal?: AbortSignal) {
     return (
       await this.http.get(
-        "/api/v1/overview/operational-situation",
+        `/api/v1/overview/operational-situation${queryString({ regionCode })}`,
         operationalSituationSchema,
         signal ? { signal } : undefined,
       )

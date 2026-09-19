@@ -26,5 +26,8 @@ export interface OverviewRegionalDataRepository {
     },
     signal?: AbortSignal,
   ): Promise<OperationalFacilityCatalogue>;
-  operationalSituation?(signal?: AbortSignal): Promise<OperationalSituationCatalogue>;
+  operationalSituation?(
+    regionCode?: string,
+    signal?: AbortSignal,
+  ): Promise<OperationalSituationCatalogue>;
 }

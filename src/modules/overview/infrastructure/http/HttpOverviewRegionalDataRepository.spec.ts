@@ -81,6 +81,19 @@ describe("HttpOverviewRegionalDataRepository", () => {
     expect(result.policyEvents[0]?.title).toBe("公开政策");
   });
 
+  it("requests cached live weather for the selected administrative region", async () => {
+    const get = vi.fn().mockResolvedValue({
+      data: { generatedAt: "2026-09-19T02:00:00Z", weather: [], publicEvents: [], policyEvents: [], sources: [] },
+    });
+    const repository = new HttpOverviewRegionalDataRepository({ get });
+
+    await repository.operationalSituation("230229101");
+
+    expect(get.mock.calls[0]?.[0]).toBe(
+      "/api/v1/overview/operational-situation?regionCode=230229101",
+    );
+  });
+
   it("reads governed storage and railway facilities for the overall map", async () => {
     const get = vi.fn().mockImplementation((_path: string, schema: ZodType) =>
       Promise.resolve(

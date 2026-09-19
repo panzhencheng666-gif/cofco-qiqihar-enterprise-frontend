@@ -36,6 +36,8 @@
   padding: 16px;
   overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-gutter: stable;
+  touch-action: pan-y;
   overscroll-behavior: contain;
   scrollbar-color: rgb(124 203 225 / 58%) transparent;
   scrollbar-width: thin;

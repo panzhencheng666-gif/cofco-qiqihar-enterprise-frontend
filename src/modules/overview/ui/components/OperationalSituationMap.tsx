@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Map as MapLibreMap,
   Marker,
+  type ExpressionSpecification,
   type GeoJSONSource,
   type MapLayerMouseEvent,
 } from "maplibre-gl";
@@ -35,6 +36,7 @@ import {
   publicSituationPitch,
   publicSituationProjection,
 } from "./publicSituationViewport";
+import { liveWeatherKind } from "./liveWeatherPresentation";
 
 export interface SituationMapBounds {
   maxLatitude: number;
@@ -101,6 +103,7 @@ export function OperationalSituationMap({
   const mapRef = useRef<MapLibreMap | null>(null);
   const boundsRef = useRef(bounds);
   const markersRef = useRef<Marker[]>([]);
+  const weatherMarkersRef = useRef<Marker[]>([]);
   const fittedZoomRef = useRef(0);
   const interactiveZoomRef = useRef(false);
   const navigationLockRef = useRef(false);
@@ -180,6 +183,40 @@ export function OperationalSituationMap({
           insideBounds(marker, bounds),
       ),
     [allMarkers, bounds, intelligence.LOGISTICS, intelligence.MARKET, layers],
+  );
+  const visibleWeather = useMemo(
+    () =>
+      layers.WEATHER_RISK && intelligence.WEATHER
+        ? visibleSituation.weather.flatMap((weather) => {
+            if (insideBounds(weather, bounds))
+              return [
+                {
+                  weather,
+                  longitude: weather.longitude,
+                  latitude: weather.latitude,
+                },
+              ];
+            if (
+              selectedRegionCode &&
+              selectedRegionCode.startsWith(weather.rootRegionCode.slice(0, 4))
+            )
+              return [
+                {
+                  weather,
+                  longitude: (bounds.minLongitude + bounds.maxLongitude) / 2,
+                  latitude: (bounds.minLatitude + bounds.maxLatitude) / 2,
+                },
+              ];
+            return [];
+          })
+        : [],
+    [
+      bounds,
+      intelligence.WEATHER,
+      layers.WEATHER_RISK,
+      selectedRegionCode,
+      visibleSituation.weather,
+    ],
   );
   const regionByCode = useMemo(
     () =>
@@ -352,6 +389,20 @@ export function OperationalSituationMap({
       commandCenter?.querySelector<HTMLElement>(".overview-command-tools"),
     ].filter((element): element is HTMLElement => element instanceof HTMLElement);
     let resizeFrame = 0;
+    let routeFrame = 0;
+    let lastRouteUpdate = 0;
+    const animateRouteFlow = (time: number) => {
+      routeFrame = requestAnimationFrame(animateRouteFlow);
+      if (time - lastRouteUpdate < 100 || !map.getLayer("situation-railway-route-flow"))
+        return;
+      lastRouteUpdate = time;
+      map.setPaintProperty(
+        "situation-railway-route-flow",
+        "line-gradient",
+        routeFlowGradient((time / 2_600) % 1),
+      );
+    };
+    routeFrame = requestAnimationFrame(animateRouteFlow);
     const scheduleFit = () => {
       cancelAnimationFrame(resizeFrame);
       resizeFrame = requestAnimationFrame(() => {
@@ -368,10 +419,13 @@ export function OperationalSituationMap({
     mapRef.current = map;
     return () => {
       cancelAnimationFrame(resizeFrame);
+      cancelAnimationFrame(routeFrame);
       resizeObserver?.disconnect();
       window.removeEventListener("resize", scheduleFit);
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
+      weatherMarkersRef.current.forEach((marker) => marker.remove());
+      weatherMarkersRef.current = [];
       mapRef.current = null;
       map.remove();
     };
@@ -411,7 +465,11 @@ export function OperationalSituationMap({
     setVisibility(map, ["situation-weather-risk"], layers.WEATHER_RISK);
     setVisibility(
       map,
-      ["situation-railway-route", "situation-railway-route-label"],
+      [
+        "situation-railway-route",
+        "situation-railway-route-flow",
+        "situation-railway-route-label",
+      ],
       layers.RAILWAY_ROUTE && intelligence.LOGISTICS,
     );
   }, [
@@ -454,6 +512,36 @@ export function OperationalSituationMap({
       markersRef.current = [];
     };
   }, [onFacilitySelect, selectedFacilityId, visibleMarkers]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    weatherMarkersRef.current.forEach((marker) => marker.remove());
+    weatherMarkersRef.current = visibleWeather.map((item) => {
+      const element = document.createElement("div");
+      const kind = liveWeatherKind(item.weather).toLowerCase();
+      element.className = `situation-live-weather is-${kind}`;
+      element.setAttribute("role", "img");
+      element.setAttribute(
+        "aria-label",
+        `动态天气：${item.weather.regionName}，${item.weather.risk}`,
+      );
+      element.innerHTML =
+        '<i class="situation-live-weather__radar"></i>' +
+        '<i class="situation-live-weather__cloud"></i>' +
+        '<span><i></i><i></i><i></i><i></i></span>';
+      return new Marker({ anchor: "center", element })
+        .setLngLat([
+          item.longitude,
+          item.latitude,
+        ])
+        .addTo(map);
+    });
+    return () => {
+      weatherMarkersRef.current.forEach((marker) => marker.remove());
+      weatherMarkersRef.current = [];
+    };
+  }, [visibleWeather]);
 
   useEffect(() => {
     viewAngleRef.current = viewAngle;
@@ -617,7 +705,11 @@ export function OperationalSituationMap({
 }
 
 function addSituationLayers(map: MapLibreMap) {
-  map.addSource(ROUTE_SOURCE, { type: "geojson", data: emptyCollection() });
+  map.addSource(ROUTE_SOURCE, {
+    type: "geojson",
+    data: emptyCollection(),
+    lineMetrics: true,
+  });
   map.addLayer({
     id: "situation-railway-route",
     type: "line",
@@ -627,6 +719,17 @@ function addSituationLayers(map: MapLibreMap) {
       "line-opacity": 0.82,
       "line-width": ["interpolate", ["linear"], ["zoom"], 4, 1.2, 10, 3.2],
       "line-dasharray": [1.5, 1],
+    },
+  });
+  map.addLayer({
+    id: "situation-railway-route-flow",
+    type: "line",
+    source: ROUTE_SOURCE,
+    paint: {
+      "line-gradient": routeFlowGradient(0),
+      "line-opacity": 0.96,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 4, 2.2, 10, 5],
+      "line-blur": 0.9,
     },
   });
   map.addLayer({
@@ -713,6 +816,26 @@ function fitSituationMap(
     calculateOperationalMapPadding(container, 150),
     publicSituationPitch(level, viewAngle),
   );
+}
+
+function routeFlowGradient(progress: number): ExpressionSpecification {
+  const tail = Math.max(0, progress - 0.075);
+  const head = Math.min(1, progress + 0.075);
+  return [
+    "interpolate",
+    ["linear"],
+    ["line-progress"],
+    0,
+    "rgba(91,221,255,0)",
+    tail,
+    "rgba(91,221,255,0)",
+    progress,
+    "rgba(255,255,255,1)",
+    head,
+    "rgba(91,221,255,0)",
+    1,
+    "rgba(91,221,255,0)",
+  ] as ExpressionSpecification;
 }
 
 function updateSource(

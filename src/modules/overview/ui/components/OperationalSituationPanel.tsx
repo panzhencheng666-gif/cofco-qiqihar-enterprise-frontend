@@ -9,6 +9,12 @@ import type {
 import "./operational-situation.css";
 import { RailwayFacilityCard, StorageFacilityCard } from "./OperationalFacilityPanel";
 import type { SituationTimelineItem } from "./operationalSituationTimeline";
+import { LiveWeatherVisual } from "./LiveWeatherVisual";
+import {
+  liveWeatherEvidence,
+  liveWeatherHeadline,
+  liveWeatherKind,
+} from "./liveWeatherPresentation";
 
 export function OperationalSituationPanel({
   facilities,
@@ -17,6 +23,7 @@ export function OperationalSituationPanel({
   selectedRegion,
   selectedTimelineItem,
   onTimelineItemDismiss,
+  productLabel,
   situation,
 }: {
   facilities: OperationalFacilityCatalogue;
@@ -25,6 +32,7 @@ export function OperationalSituationPanel({
   selectedRegion?: OverviewRegion;
   selectedTimelineItem?: SituationTimelineItem;
   onTimelineItemDismiss?: () => void;
+  productLabel?: string;
   situation: OperationalSituationCatalogue;
 }) {
   const selectedStorage = facilities.storageFacilities.find(
@@ -133,6 +141,7 @@ export function OperationalSituationPanel({
         {detailMode === "WEATHER" && activeWeather && (
           <WeatherDetail
             generatedAt={situation.generatedAt}
+            {...(productLabel ? { productLabel } : {})}
             weather={activeWeather}
             {...(selectedRegion ? { selectedRegion } : {})}
           />
@@ -261,53 +270,68 @@ function timelineCategoryLabel(category: SituationTimelineItem["category"]) {
 
 function WeatherDetail({
   generatedAt,
+  productLabel,
   weather,
   selectedRegion,
 }: {
   generatedAt: string;
+  productLabel?: string;
   weather: WeatherObservation;
   selectedRegion?: OverviewRegion;
 }) {
   const areaName = selectedRegion?.name ?? weather.regionName;
-  const inherited = selectedRegion && selectedRegion.code !== weather.rootRegionCode;
+  const inherited = Boolean(
+    selectedRegion &&
+      (weather.observationPrecision === "INHERITED_TOWNSHIP" ||
+        selectedRegion.code !== (weather.regionCode || weather.rootRegionCode)),
+  );
+  const kind = liveWeatherKind(weather).toLowerCase();
   return (
-    <article className="situation-weather-detail" aria-label={`${areaName}天气详情`}>
+    <article
+      className={`situation-weather-detail is-${kind}`}
+      aria-label={`${areaName}天气详情`}
+    >
       <header>
         <div>
-          <h3>{areaName}天气与风险</h3>
-          <p>
-            {inherited
-              ? `所属${weather.regionName}代表性公开观测，不等同于${areaName}本地站点实测。`
-              : "公开多模型区域代表观测，不等同于业务站点实测。"}
-          </p>
+          <span>实时天气</span>
+          <h3>{liveWeatherHeadline(areaName, weather)}</h3>
         </div>
-        <strong>{weather.risk}</strong>
+        <strong>{kind === "clear" ? "正常" : "需关注"}</strong>
       </header>
+      <LiveWeatherVisual weather={weather} />
       <dl>
         <div>
-          <dt>气温</dt>
-          <dd>{number(weather.meanTemperatureC, "℃")}</dd>
+          <dt>观测时间</dt>
+          <dd>{formatTime(weather.observedAt)}</dd>
         </div>
         <div>
-          <dt>降水</dt>
-          <dd>{number(weather.precipitationMm, "毫米")}</dd>
+          <dt>影响品种</dt>
+          <dd>{productLabel ?? "当前筛选品种"}</dd>
         </div>
         <div>
-          <dt>土壤含水率</dt>
-          <dd>{number(weather.soilMoisturePercent, "%")}</dd>
+          <dt>证据链</dt>
+          <dd>{liveWeatherEvidence(weather)}</dd>
         </div>
       </dl>
-      <section>
-        <h4>事件说明</h4>
+      <section className="situation-weather-detail__metrics" aria-label="实时气象指标">
+        <span>气温 <b>{number(weather.meanTemperatureC, "℃")}</b></span>
+        <span>降水 <b>{number(weather.precipitationMm, "毫米")}</b></span>
+        <span>土壤墒情 <b>{number(weather.soilMoisturePercent, "%")}</b></span>
+      </section>
+      <section className="situation-weather-detail__description">
+        <h4>事件描述</h4>
+        <p><b>{weather.risk}</b></p>
         <p>{weather.assessment}</p>
+        {inherited && (
+          <small>
+            当前沿用所属{weather.regionName}公开观测；系统取得乡镇观测后会自动替换。
+          </small>
+        )}
       </section>
       <footer>
-        <span>
-          观测时间 {formatTime(weather.observedAt)} · 最近同步{" "}
-          {formatTime(weather.fetchedAt)}（{freshness(weather.fetchedAt, generatedAt)}）
-        </span>
+        <span>最近同步 {formatTime(weather.fetchedAt)}（{freshness(weather.fetchedAt, generatedAt)}）</span>
         <a href={weather.sourceUrl} target="_blank" rel="noreferrer">
-          {weather.sourceName} 原始来源
+          来源：{weather.sourceName}
         </a>
       </footer>
     </article>
@@ -320,6 +344,7 @@ function weatherForRegion(
 ) {
   if (!region) return weather[0];
   return (
+    weather.find(({ regionCode }) => region.code === regionCode) ??
     weather.find(({ rootRegionCode }) => region.code === rootRegionCode) ??
     weather.find(({ rootRegionCode }) =>
       region.code.startsWith(rootRegionCode.slice(0, 4)),

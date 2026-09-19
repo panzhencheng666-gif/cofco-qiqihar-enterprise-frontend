@@ -244,6 +244,7 @@ export function OverviewDataModePanel({
       {mode === "PUBLIC_SITUATION" && operationalFacilities && operationalSituation && (
         <OperationalSituationPanel
           facilities={operationalFacilities}
+          {...(productLabel ? { productLabel } : {})}
           {...(onOperationalFacilitySelect
             ? { onFacilitySelect: onOperationalFacilitySelect }
             : {})}

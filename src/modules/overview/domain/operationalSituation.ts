@@ -8,6 +8,7 @@ export interface OperationalSituationCatalogue {
 
 export interface WeatherObservation {
   rootRegionCode: string;
+  regionCode?: string;
   regionName: string;
   longitude: number;
   latitude: number;
@@ -15,6 +16,11 @@ export interface WeatherObservation {
   meanTemperatureC: number | null;
   precipitationMm: number | null;
   soilMoisturePercent: number | null;
+  weatherCode?: number | null;
+  windSpeedKph?: number | null;
+  windDirectionDegrees?: number | null;
+  cloudCoverPercent?: number | null;
+  observationPrecision?: "PREFECTURE" | "COUNTY" | "TOWNSHIP" | "INHERITED_TOWNSHIP";
   risk: string;
   assessment: string;
   sourceName: string;
