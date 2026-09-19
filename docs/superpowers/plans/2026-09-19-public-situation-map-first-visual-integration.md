@@ -22,10 +22,12 @@
 ### Task 1: Integrate the Four-Region Surface
 
 **Files:**
+
 - Modify: `src/modules/overview/ui/components/FourRegionTerrainAtlas.tsx`
 - Test: `src/modules/overview/ui/components/OperationalSituationMap.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: existing `atlas-world-mask` and `atlas-regions` GeoJSON sources.
 - Produces: an `atlas-regions-halo` MapLibre line layer and a lighter contextual mask; no public component signature changes.
 
@@ -104,11 +106,13 @@ git commit -m "feat: integrate public situation terrain surface"
 ### Task 2: Make the Map the Primary Layout
 
 **Files:**
+
 - Modify: `src/modules/overview/ui/components/realistic-operational-situation.css`
 - Modify: `src/modules/overview/ui/components/operational-situation.css`
 - Test: `src/modules/overview/ui/components/OperationalSituationMap.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: existing `.realistic-situation-control-stack`, `.realistic-situation-lower-rail`, and `.overview-data-mode.is-public_situation` DOM classes.
 - Produces: a two-group desktop command strip, a narrower inspector variable, and the existing one-column responsive fallback.
 
@@ -165,8 +169,7 @@ In `operational-situation.css`, add:
   --command-details-width: clamp(390px, 27vw, 460px);
 }
 
-.overview-command-center.has-side-data-panel
-  .overview-data-mode.is-public_situation {
+.overview-command-center.has-side-data-panel .overview-data-mode.is-public_situation {
   padding: 0;
   border-radius: 14px;
   background: rgb(238 241 234 / 93%);
@@ -195,10 +198,12 @@ git commit -m "feat: make public situation map first"
 ### Task 3: Verify, Deploy, and Accept the Managed Runtime
 
 **Files:**
+
 - Verify: all changed Public Situation source and test files.
 - Deploy to: `/Users/federal/Library/Application Support/COFCO Qiqihar Enterprise/runtime/cofco-qiqihar-enterprise-frontend`
 
 **Interfaces:**
+
 - Consumes: commits from Tasks 1 and 2.
 - Produces: a clean source checkpoint, synchronized central checkout and managed runtime, health readback, and browser acceptance evidence.
 
@@ -251,4 +256,3 @@ Use the actual zoom controls to reach county, township, and village detail, then
 - [ ] **Step 6: Record final evidence**
 
 Capture the final browser screenshot, recheck all three working trees, commit any evidence-only documentation if needed, and report the exact commit and the known polygon tile-network limitation without overstating it.
-

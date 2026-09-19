@@ -317,12 +317,7 @@ function installAtlasLayers(map: MapLibreMap) {
     source: "atlas-regions",
     paint: {
       "line-blur": 3,
-      "line-color": [
-        "case",
-        ["==", ["get", "selected"], true],
-        "#d8b861",
-        "#f3f1e7",
-      ],
+      "line-color": ["case", ["==", ["get", "selected"], true], "#d8b861", "#f3f1e7"],
       "line-opacity": ["case", ["==", ["get", "selected"], true], 0.42, 0.2],
       "line-width": ["case", ["==", ["get", "selected"], true], 9, 6],
     },

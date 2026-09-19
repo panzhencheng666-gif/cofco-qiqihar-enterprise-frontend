@@ -17,6 +17,14 @@ describe("four-region terrain public situation scene", () => {
     resolve("src/modules/overview/ui/components/OperationalSituationMap.tsx"),
     "utf8",
   );
+  const sceneStyles = readFileSync(
+    resolve("src/modules/overview/ui/components/realistic-operational-situation.css"),
+    "utf8",
+  );
+  const panelStyles = readFileSync(
+    resolve("src/modules/overview/ui/components/operational-situation.css"),
+    "utf8",
+  );
   const overviewPage = readFileSync(
     resolve("src/modules/overview/ui/pages/OverviewPage.tsx"),
     "utf8",
@@ -97,6 +105,13 @@ describe("four-region terrain public situation scene", () => {
     expect(wrapper).toContain('code: "HISTORICAL_LEASED"');
     expect(wrapper).toContain("focusDepotCategory(category)");
     expect(wrapper).toContain("白色内燃机车站点");
+  });
+
+  it("keeps the map primary with one compact command strip and inspector", () => {
+    expect(sceneStyles).toContain("grid-template-columns: auto auto");
+    expect(sceneStyles).toContain("--situation-timeline-height: 3.2rem");
+    expect(sceneStyles).toContain("border-radius: 10px");
+    expect(panelStyles).toContain("--command-details-width: clamp(390px, 27vw, 460px)");
   });
 
   it("edits account annotations inside the same earth scene", () => {

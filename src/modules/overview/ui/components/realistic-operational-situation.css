@@ -1,6 +1,6 @@
 .realistic-situation-layer {
   --situation-edge: clamp(0.65rem, 1.2vw, 1rem);
-  --situation-timeline-height: 3.7rem;
+  --situation-timeline-height: 3.2rem;
   position: absolute;
   inset: 0;
   z-index: 3;
@@ -84,10 +84,13 @@
 .realistic-situation-caption {
   position: absolute;
   z-index: 5;
-  border: 1px solid rgb(255 255 255 / 46%);
-  border-radius: 4px;
-  background: rgb(26 32 29 / 72%);
-  backdrop-filter: blur(12px);
+  border: 1px solid rgb(243 241 231 / 28%);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgb(7 19 15 / 88%), rgb(17 31 25 / 74%));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 8%),
+    0 10px 30px rgb(0 8 6 / 22%);
+  backdrop-filter: blur(14px) saturate(0.92);
 }
 
 .realistic-situation-control-stack {
@@ -96,7 +99,10 @@
   top: clamp(8.9rem, 15vh, 10.2rem);
   left: var(--situation-edge);
   display: grid;
-  width: min(31rem, calc(100% - var(--situation-edge) * 2));
+  grid-template-columns: auto auto;
+  align-items: start;
+  width: fit-content;
+  max-width: calc(100% - var(--situation-edge) * 2);
   gap: 0.4rem;
   pointer-events: none;
 }
@@ -111,12 +117,13 @@
 }
 
 .realistic-situation-enhancement-notice {
+  grid-column: 1 / -1;
   width: fit-content;
   max-width: 28rem;
   margin: 0;
   padding: 0.45rem 0.6rem;
   border: 1px solid rgb(246 201 96 / 62%);
-  border-radius: 4px;
+  border-radius: 8px;
   background: rgb(55 43 25 / 88%);
   color: #fff0bd;
   font-size: 0.7rem;
@@ -141,6 +148,11 @@
   padding: 0.25rem;
 }
 
+.realistic-situation-layer-menu,
+.regional-earth-annotation {
+  grid-column: 1 / -1;
+}
+
 .realistic-situation-filters button,
 .realistic-situation-surface-modes button,
 .realistic-situation-tools button,
@@ -150,7 +162,7 @@
   min-height: 2rem;
   padding: 0.35rem 0.65rem;
   border: 1px solid transparent;
-  border-radius: 3px;
+  border-radius: 7px;
   background: transparent;
   color: inherit;
   cursor: pointer;
@@ -166,7 +178,9 @@
 .realistic-situation-tools button[aria-pressed="true"],
 .realistic-situation-layer-menu button[aria-pressed="true"] {
   border-color: rgb(255 255 255 / 68%);
-  background: rgb(255 255 255 / 18%);
+  color: #fff4cf;
+  background: rgb(216 184 97 / 18%);
+  box-shadow: inset 0 -2px 0 rgb(216 184 97 / 86%);
 }
 
 .realistic-situation-layer-menu {
@@ -380,6 +394,7 @@
 @media (max-width: 920px) {
   .realistic-situation-control-stack {
     right: var(--situation-edge);
+    grid-template-columns: minmax(0, 1fr);
     width: auto;
   }
 

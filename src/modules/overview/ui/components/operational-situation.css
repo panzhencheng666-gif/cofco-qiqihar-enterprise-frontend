@@ -1,3 +1,7 @@
+.overview-command-center:has(.overview-data-mode.is-public_situation) {
+  --command-details-width: clamp(390px, 27vw, 460px);
+}
+
 .overview-command-center.has-side-data-panel .situation-intelligence-controls {
   top: calc(var(--command-kpi-top) + var(--command-map-tools-gap) + 48px);
 }
@@ -12,6 +16,12 @@
   background: rgb(242 242 234 / 94%);
   box-shadow: 0 18px 44px rgb(16 27 25 / 28%);
   backdrop-filter: blur(18px) saturate(0.9);
+}
+
+.overview-command-center.has-side-data-panel .overview-data-mode.is-public_situation {
+  padding: 0;
+  border-radius: 14px;
+  background: rgb(238 241 234 / 93%);
 }
 
 .overview-data-mode.is-public_situation > :is([role="status"], [role="alert"]) {
