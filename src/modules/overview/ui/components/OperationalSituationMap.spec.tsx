@@ -30,12 +30,11 @@ describe("four-region terrain public situation scene", () => {
     "utf8",
   );
 
-  it("creates one globe-projected terrain map constrained to the four-region extent", () => {
+  it("creates one continuous terrain map with real elevation", () => {
     expect(scene.match(/new MapLibreMap/g)).toHaveLength(1);
-    expect(scene).toContain('type: "globe"');
     expect(scene).toContain("map.setTerrain");
-    expect(terrainStyle).toContain("REALISTIC_ROOT_BOUNDS.minLongitude");
-    expect(terrainStyle).toContain("REALISTIC_ROOT_BOUNDS.maxLatitude");
+    expect(scene).not.toContain('type: "globe"');
+    expect(terrainStyle).not.toContain("REALISTIC_ROOT_BOUNDS");
     expect(scene).toContain("renderWorldCopies: false");
     expect(scene).toContain('localIdeographFontFamily: "sans-serif"');
     expect(scene).toContain("FOUR_REGION_BASE_STYLE");
@@ -48,31 +47,28 @@ describe("four-region terrain public situation scene", () => {
     expect(overviewPage).toContain("{!publicSituationMode && (");
   });
 
-  it("integrates the governed regions into one restrained terrain surface", () => {
-    expect(scene).toContain('id: "atlas-regions-halo"');
-    expect(scene).toContain('"fill-color": "#07130f"');
-    expect(scene).toContain('"fill-opacity": 0.68');
-    expect(scene).toContain("pitch: 30");
+  it("uses terrain-first perspective without a dark administrative cutout", () => {
+    expect(scene).not.toContain('id: "atlas-regions-halo"');
+    expect(scene).not.toContain('id: "atlas-world-mask"');
+    expect(scene).not.toContain('"fill-color": "#07130f"');
+    expect(scene).toContain("pitch: 48");
+    expect(scene).toContain("terrainExaggeration");
   });
 
-  it("waits for the MapLibre style before enabling globe projection", () => {
-    const loadHandler = scene.indexOf('map.on("load", () => {');
-    const projection = scene.indexOf('map.setProjection({ type: "globe" })');
-
-    expect(loadHandler).toBeGreaterThanOrEqual(0);
-    expect(projection).toBeGreaterThan(loadHandler);
-  });
-
-  it("hides every non-governed place and labels only system Chinese regions", () => {
-    expect(scene).toContain('map.addSource("atlas-world-mask"');
-    expect(scene).toContain("createTerrainSurfaceMask(");
-    expect(scene).toContain("terrainFootprint(");
-    expect(scene).toContain('id: "atlas-world-mask"');
+  it("keeps geography continuous and labels only system Chinese regions", () => {
+    expect(scene).not.toContain('map.addSource("atlas-world-mask"');
+    expect(scene).not.toContain("createTerrainSurfaceMask(");
+    expect(scene).not.toContain("terrainFootprint(");
     expect(scene).toContain('"text-field": ["get", "name"]');
     expect(scene).not.toContain("World_Boundaries_and_Places");
     expect(terrainStyle).toContain('"source-layer": "transportation"');
     expect(terrainStyle).toContain('"source-layer": "building"');
     expect(terrainStyle).toContain('"source-layer": "poi"');
+  });
+
+  it("focuses the chosen region geometry instead of drifting outside it", () => {
+    expect(scene).toContain("terrainFocusBounds(");
+    expect(scene).toContain("props.selectedRegionCode");
   });
 
   it("renders operational nodes as WebGL symbols without DOM map markers", () => {

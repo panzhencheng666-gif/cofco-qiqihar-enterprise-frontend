@@ -5,8 +5,6 @@ import type {
   StyleSpecification,
 } from "maplibre-gl";
 
-import { REALISTIC_ROOT_BOUNDS } from "./realisticSituationModel";
-
 export type TerrainSurfaceMode = "SANDBOX" | "FUSION" | "IMAGERY";
 
 export const FOUR_REGION_BASE_STYLE: StyleSpecification = {
@@ -17,17 +15,10 @@ export const FOUR_REGION_BASE_STYLE: StyleSpecification = {
     {
       id: "atlas-empty-world",
       type: "background",
-      paint: { "background-color": "#101714" },
+      paint: { "background-color": "#8e9d94" },
     },
   ],
 };
-
-const ROOT_TILE_BOUNDS: [number, number, number, number] = [
-  REALISTIC_ROOT_BOUNDS.minLongitude,
-  REALISTIC_ROOT_BOUNDS.minLatitude,
-  REALISTIC_ROOT_BOUNDS.maxLongitude,
-  REALISTIC_ROOT_BOUNDS.maxLatitude,
-];
 
 export const FOUR_REGION_REMOTE_SOURCES: Record<string, SourceSpecification> = {
   satellite: {
@@ -37,7 +28,6 @@ export const FOUR_REGION_REMOTE_SOURCES: Record<string, SourceSpecification> = {
     ],
     tileSize: 256,
     maxzoom: 18,
-    bounds: ROOT_TILE_BOUNDS,
     attribution:
       '<a href="https://www.esri.com/en-us/legal/terms/full-master-agreement">Esri World Imagery</a>',
   },
@@ -46,7 +36,6 @@ export const FOUR_REGION_REMOTE_SOURCES: Record<string, SourceSpecification> = {
     tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
     tileSize: 256,
     maxzoom: 15,
-    bounds: ROOT_TILE_BOUNDS,
     encoding: "terrarium",
     attribution:
       '<a href="https://registry.opendata.aws/terrain-tiles/">Mapzen Terrain Tiles on AWS</a>',
@@ -54,7 +43,6 @@ export const FOUR_REGION_REMOTE_SOURCES: Record<string, SourceSpecification> = {
   openmaptiles: {
     type: "vector",
     url: "https://tiles.openfreemap.org/planet",
-    bounds: ROOT_TILE_BOUNDS,
     attribution:
       '<a href="https://openfreemap.org/">OpenFreeMap</a> © OpenMapTiles · <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
   },
@@ -73,11 +61,11 @@ export const FOUR_REGION_DETAIL_LAYERS: LayerSpecification[] = [
     type: "raster",
     source: "satellite",
     paint: {
-      "raster-opacity": 0.76,
-      "raster-brightness-min": 0.06,
-      "raster-brightness-max": 0.92,
-      "raster-contrast": 0.12,
-      "raster-saturation": -0.18,
+      "raster-opacity": zoomOpacity(0.34, 0.54, 0.78, 0.92),
+      "raster-brightness-min": 0.1,
+      "raster-brightness-max": 0.9,
+      "raster-contrast": 0.2,
+      "raster-saturation": -0.32,
       "raster-fade-duration": 120,
     },
   },
@@ -87,9 +75,9 @@ export const FOUR_REGION_DETAIL_LAYERS: LayerSpecification[] = [
     source: "terrain-dem",
     paint: {
       "hillshade-accent-color": "#cdb478",
-      "hillshade-exaggeration": 0.42,
-      "hillshade-highlight-color": "#f4ead3",
-      "hillshade-shadow-color": "#173126",
+      "hillshade-exaggeration": 0.78,
+      "hillshade-highlight-color": "#fff3d5",
+      "hillshade-shadow-color": "#153229",
     },
   },
   {
@@ -110,7 +98,17 @@ export const FOUR_REGION_DETAIL_LAYERS: LayerSpecification[] = [
         "#9a8454",
         "#6e7657",
       ],
-      "fill-opacity": ["interpolate", ["linear"], ["zoom"], 5, 0.08, 11, 0.24],
+      "fill-opacity": [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        5,
+        0.24,
+        10,
+        0.17,
+        14,
+        0.06,
+      ],
     },
   },
   {
@@ -245,22 +243,49 @@ export const FOUR_REGION_DETAIL_LAYERS: LayerSpecification[] = [
 export function surfaceModePaint(mode: TerrainSurfaceMode) {
   if (mode === "SANDBOX")
     return {
-      satelliteOpacity: 0.38,
+      satelliteOpacity: zoomOpacity(0.2, 0.34, 0.62, 0.8),
       satelliteSaturation: -0.48,
-      satelliteContrast: 0.2,
-      hillshadeOpacity: 0.82,
+      satelliteContrast: 0.26,
+      hillshadeOpacity: 0.9,
+      landcoverOpacity: 0.31,
+      terrainExaggeration: 2.6,
     };
   if (mode === "IMAGERY")
     return {
-      satelliteOpacity: 0.96,
+      satelliteOpacity: zoomOpacity(0.78, 0.88, 0.96, 0.98),
       satelliteSaturation: -0.04,
       satelliteContrast: 0.08,
-      hillshadeOpacity: 0.32,
+      hillshadeOpacity: 0.38,
+      landcoverOpacity: 0.04,
+      terrainExaggeration: 1.55,
     };
   return {
-    satelliteOpacity: 0.76,
-    satelliteSaturation: -0.18,
-    satelliteContrast: 0.12,
-    hillshadeOpacity: 0.58,
+    satelliteOpacity: zoomOpacity(0.34, 0.54, 0.78, 0.92),
+    satelliteSaturation: -0.32,
+    satelliteContrast: 0.2,
+    hillshadeOpacity: 0.78,
+    landcoverOpacity: 0.2,
+    terrainExaggeration: 2.25,
   };
+}
+
+function zoomOpacity(
+  prefecture: number,
+  county: number,
+  township: number,
+  village: number,
+): ExpressionSpecification {
+  return [
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    4,
+    prefecture,
+    8,
+    county,
+    12,
+    township,
+    16,
+    village,
+  ];
 }

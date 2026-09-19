@@ -1,9 +1,6 @@
-import type { FeatureCollection } from "geojson";
-
-import type { MapFeature, Position } from "./boundaryGeometry";
+import { flattenCoordinates, type MapFeature } from "./boundaryGeometry";
 
 export const ALL_ATLAS_SOURCE_IDS = [
-  "mask",
   "regions",
   "railRoutes",
   "logistics",
@@ -62,9 +59,8 @@ export function changedAtlasSources(
 ): AtlasSourceId[] {
   if (!previous) return [...ALL_ATLAS_SOURCE_IDS];
   const changed: AtlasSourceId[] = [];
-  if (previous.backdrop !== next.backdrop || previous.features !== next.features)
-    changed.push("mask");
   if (
+    previous.backdrop !== next.backdrop ||
     previous.features !== next.features ||
     previous.selectedRegionCode !== next.selectedRegionCode
   )
@@ -88,11 +84,29 @@ export function changedAtlasSources(
   return changed;
 }
 
-export function terrainFootprint(
+export function terrainFocusBounds(
   backdrop: MapFeature | undefined,
   features: readonly MapFeature[],
-): readonly MapFeature[] {
-  return backdrop ? [backdrop] : features;
+  selectedRegionCode: string | undefined,
+  fallback: MapSurfaceBounds,
+): MapSurfaceBounds {
+  const selected = selectedRegionCode
+    ? [backdrop, ...features].find(
+        (feature) => feature?.region.code === selectedRegionCode,
+      )
+    : undefined;
+  const focus = selected ?? backdrop;
+  if (!focus) return fallback;
+  const coordinates = flattenCoordinates(focus.geometry);
+  if (!coordinates.length) return fallback;
+  const longitudes = coordinates.map(([longitude]) => longitude);
+  const latitudes = coordinates.map(([, latitude]) => latitude);
+  return {
+    minLongitude: Math.min(...longitudes),
+    minLatitude: Math.min(...latitudes),
+    maxLongitude: Math.max(...longitudes),
+    maxLatitude: Math.max(...latitudes),
+  };
 }
 
 export interface MapSurfaceBounds {
@@ -100,47 +114,4 @@ export interface MapSurfaceBounds {
   minLatitude: number;
   maxLongitude: number;
   maxLatitude: number;
-}
-
-export function createTerrainSurfaceMask(
-  features: readonly MapFeature[],
-  bounds: MapSurfaceBounds,
-): FeatureCollection {
-  const surfaceBoundary: [number, number][] = [
-    [bounds.minLongitude, bounds.minLatitude],
-    [bounds.maxLongitude, bounds.minLatitude],
-    [bounds.maxLongitude, bounds.maxLatitude],
-    [bounds.minLongitude, bounds.maxLatitude],
-    [bounds.minLongitude, bounds.minLatitude],
-  ];
-  return {
-    type: "FeatureCollection",
-    features: [
-      {
-        type: "Feature",
-        properties: { purpose: "hide-everything-outside-governed-regions" },
-        geometry: {
-          type: "Polygon",
-          coordinates: [surfaceBoundary, ...features.flatMap(exteriorRings)],
-        },
-      },
-    ],
-  };
-}
-
-function exteriorRings(feature: MapFeature): [number, number][][] {
-  const polygons =
-    feature.geometry.type === "Polygon"
-      ? [feature.geometry.coordinates as Position[][]]
-      : (feature.geometry.coordinates as Position[][][]);
-  return polygons.flatMap((polygon) => {
-    const exterior = polygon[0];
-    return exterior && exterior.length >= 4
-      ? [
-          exterior.map(
-            ([longitude, latitude]) => [longitude, latitude] as [number, number],
-          ),
-        ]
-      : [];
-  });
 }

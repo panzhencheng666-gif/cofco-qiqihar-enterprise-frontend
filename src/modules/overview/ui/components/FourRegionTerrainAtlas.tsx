@@ -28,8 +28,7 @@ import type { MapFeature } from "./boundaryGeometry";
 import {
   atlasLayerVisibilityKey,
   changedAtlasSources,
-  createTerrainSurfaceMask,
-  terrainFootprint,
+  terrainFocusBounds,
   type AtlasSourceReferences,
 } from "./fourRegionTerrainModel";
 import {
@@ -45,7 +44,6 @@ import {
   realisticWeatherIcon,
 } from "./realisticSituationIcons";
 import {
-  REALISTIC_ROOT_BOUNDS,
   SituationViewerLifecycle,
   type DepotLayerState,
   type GeographicBounds,
@@ -121,17 +119,23 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
+    const initialBounds = terrainFocusBounds(
+      propsRef.current.backdrop,
+      propsRef.current.features,
+      propsRef.current.selectedRegionCode,
+      propsRef.current.bounds,
+    );
     const map = new MapLibreMap({
       attributionControl: { compact: true },
-      bearing: 0,
-      center: centerOf(propsRef.current.bounds),
+      bearing: -8,
+      center: centerOf(initialBounds),
       container: host,
       dragRotate: false,
       fadeDuration: 0,
       localIdeographFontFamily: "sans-serif",
-      maxPitch: 68,
+      maxPitch: 72,
       minPitch: 12,
-      pitch: 30,
+      pitch: 48,
       renderWorldCopies: false,
       style: FOUR_REGION_BASE_STYLE,
     });
@@ -153,7 +157,6 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
     runtimeRef.current = runtime;
 
     map.on("load", () => {
-      map.setProjection({ type: "globe" });
       host.dataset.sceneState = "local-ready";
       installAtlasLayers(map);
       runtime.ready = true;
@@ -214,12 +217,27 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
   useEffect(() => {
     const runtime = runtimeRef.current;
     if (!runtime?.ready || !props.command) return;
-    applyCommand(runtime.map, props.command, props.bounds);
-  }, [props.bounds, props.command]);
+    applyCommand(
+      runtime.map,
+      props.command,
+      terrainFocusBounds(
+        props.backdrop,
+        props.features,
+        props.selectedRegionCode,
+        props.bounds,
+      ),
+    );
+  }, [
+    props.backdrop,
+    props.bounds,
+    props.command,
+    props.features,
+    props.selectedRegionCode,
+  ]);
 
   return (
     <div
-      aria-label="仅含齐齐哈尔、黑河、呼伦贝尔、大兴安岭的写实三维地形图"
+      aria-label="齐齐哈尔、黑河、呼伦贝尔、大兴安岭连续三维地形融合图"
       className="four-region-terrain-atlas"
       data-detail-level="PREFECTURE"
       data-dom-markers="0"
@@ -251,17 +269,11 @@ function installTerrainEnhancements(
   });
   FOUR_REGION_DETAIL_LAYERS.forEach((layer) => {
     try {
-      if (!map.getLayer(layer.id)) map.addLayer(layer, "atlas-world-mask");
+      if (!map.getLayer(layer.id)) map.addLayer(layer, "atlas-regions-fill");
     } catch {
       degraded = true;
     }
   });
-  try {
-    if (map.getSource("terrain-dem"))
-      map.setTerrain({ source: "terrain-dem", exaggeration: 1.38 });
-  } catch {
-    degraded = true;
-  }
   if (degraded) {
     cancelTimeout();
     setEnhancementState(host, "DEGRADED", onState);
@@ -284,7 +296,6 @@ function setEnhancementState(
 }
 
 function installAtlasLayers(map: MapLibreMap) {
-  map.addSource("atlas-world-mask", { type: "geojson", data: emptyCollection() });
   map.addSource("atlas-regions", { type: "geojson", data: emptyCollection() });
   map.addSource("atlas-rail-routes", { type: "geojson", data: emptyCollection() });
   map.addSource("atlas-logistics", { type: "geojson", data: emptyCollection() });
@@ -293,33 +304,12 @@ function installAtlasLayers(map: MapLibreMap) {
   map.addSource("atlas-annotation", { type: "geojson", data: emptyCollection() });
 
   map.addLayer({
-    id: "atlas-world-mask",
-    type: "fill",
-    source: "atlas-world-mask",
-    paint: {
-      "fill-antialias": false,
-      "fill-color": "#07130f",
-      "fill-opacity": 0.68,
-    },
-  });
-  map.addLayer({
     id: "atlas-regions-fill",
     type: "fill",
     source: "atlas-regions",
     paint: {
-      "fill-color": ["case", ["==", ["get", "selected"], true], "#d8b862", "#8ba37f"],
-      "fill-opacity": ["case", ["==", ["get", "selected"], true], 0.24, 0.12],
-    },
-  });
-  map.addLayer({
-    id: "atlas-regions-halo",
-    type: "line",
-    source: "atlas-regions",
-    paint: {
-      "line-blur": 3,
-      "line-color": ["case", ["==", ["get", "selected"], true], "#d8b861", "#f3f1e7"],
-      "line-opacity": ["case", ["==", ["get", "selected"], true], 0.42, 0.2],
-      "line-width": ["case", ["==", ["get", "selected"], true], 9, 6],
+      "fill-color": ["case", ["==", ["get", "selected"], true], "#f0cc73", "#f5f1df"],
+      "fill-opacity": ["case", ["==", ["get", "selected"], true], 0.07, 0.012],
     },
   });
   map.addLayer({
@@ -327,10 +317,10 @@ function installAtlasLayers(map: MapLibreMap) {
     type: "line",
     source: "atlas-regions",
     paint: {
-      "line-blur": 0.15,
-      "line-color": ["case", ["==", ["get", "selected"], true], "#ffe7a1", "#fffdf2"],
-      "line-opacity": 0.96,
-      "line-width": ["case", ["==", ["get", "selected"], true], 3.2, 1.65],
+      "line-blur": 0.05,
+      "line-color": ["case", ["==", ["get", "selected"], true], "#ffe49b", "#f7f3e6"],
+      "line-opacity": ["case", ["==", ["get", "selected"], true], 0.86, 0.58],
+      "line-width": ["case", ["==", ["get", "selected"], true], 2, 0.9],
     },
   });
   map.addLayer({
@@ -458,15 +448,6 @@ function synchronizeChangedSources(
     runtime.lastSurfaceMode = surfaceMode;
   }
 
-  if (changed.has("mask"))
-    setSource(
-      runtime.map,
-      "atlas-world-mask",
-      createTerrainSurfaceMask(
-        terrainFootprint(props.backdrop, props.features),
-        REALISTIC_ROOT_BOUNDS,
-      ),
-    );
   if (changed.has("regions"))
     setSource(runtime.map, "atlas-regions", regionCollection(props));
   if (changed.has("railRoutes"))
@@ -480,7 +461,6 @@ function synchronizeChangedSources(
   const layerVisibilityKey = atlasLayerVisibilityKey(props.layers);
   if (runtime.lastLayerVisibilityKey !== layerVisibilityKey) {
     setLayerVisibility(runtime.map, "atlas-regions-fill", props.layers.ADMINISTRATIVE);
-    setLayerVisibility(runtime.map, "atlas-regions-halo", props.layers.ADMINISTRATIVE);
     setLayerVisibility(
       runtime.map,
       "atlas-regions-outline",
@@ -520,9 +500,15 @@ function synchronizeChangedSources(
     });
   }
 
-  const boundsKey = boundsKeyOf(props.bounds);
+  const focusBounds = terrainFocusBounds(
+    props.backdrop,
+    props.features,
+    props.selectedRegionCode,
+    props.bounds,
+  );
+  const boundsKey = boundsKeyOf(focusBounds);
   if (boundsKey !== runtime.lastBoundsKey) {
-    fitAtlas(runtime.map, props.bounds, runtime.lastBoundsKey ? 420 : 0);
+    fitAtlas(runtime.map, focusBounds, runtime.lastBoundsKey ? 420 : 0);
     runtime.lastBoundsKey = boundsKey;
   }
   const host = runtime.map.getContainer();
@@ -545,8 +531,17 @@ function applySurfaceMode(map: MapLibreMap, mode: TerrainSurfaceMode) {
     map.setPaintProperty(
       "atlas-terrain-light",
       "hillshade-exaggeration",
-      0.12 + paint.hillshadeOpacity * 0.5,
+      paint.hillshadeOpacity,
     );
+  if (map.getLayer("atlas-landcover"))
+    map.setPaintProperty("atlas-landcover", "fill-opacity", paint.landcoverOpacity);
+  if (map.getSource("terrain-dem")) {
+    map.setTerrain({
+      source: "terrain-dem",
+      exaggeration: paint.terrainExaggeration,
+    });
+    map.getContainer().dataset.terrainExaggeration = String(paint.terrainExaggeration);
+  }
   map.getContainer().dataset.surfaceMode = mode.toLowerCase();
 }
 
@@ -656,9 +651,13 @@ function selectAnnotationPosition(runtime: AtlasRuntime, event: MapMouseEvent) {
 }
 
 function regionCollection(props: FourRegionTerrainAtlasProps): FeatureCollection {
+  const featuresByCode = new Map<string, MapFeature>();
+  regionFeatures(props).forEach((feature) =>
+    featuresByCode.set(feature.region.code, feature),
+  );
   return {
     type: "FeatureCollection",
-    features: props.features.map((feature) => ({
+    features: [...featuresByCode.values()].map((feature) => ({
       type: "Feature",
       properties: {
         code: feature.region.code,
@@ -850,16 +849,16 @@ function fitAtlas(map: MapLibreMap, bounds: GeographicBounds, duration: number) 
   ];
   map.setMaxBounds(null);
   const camera = map.cameraForBounds(atlasBounds, {
-    bearing: 0,
+    bearing: -8,
     padding: { bottom: 110, left: 68, right: 68, top: 150 },
   });
   if (!camera?.center || camera.zoom === undefined) return;
   map.easeTo({
-    bearing: 0,
+    bearing: -8,
     center: camera.center,
     duration,
     pitch: map.getPitch(),
-    zoom: camera.zoom + 0.12,
+    zoom: camera.zoom + 0.08,
   });
   map.setMinZoom(Math.max(1.5, camera.zoom - 0.18));
   map.setMaxBounds(atlasBounds);

@@ -6,8 +6,7 @@ import {
   ALL_ATLAS_SOURCE_IDS,
   atlasLayerVisibilityKey,
   changedAtlasSources,
-  createTerrainSurfaceMask,
-  terrainFootprint,
+  terrainFocusBounds,
   type AtlasSourceReferences,
 } from "./fourRegionTerrainModel";
 
@@ -71,7 +70,7 @@ describe("four-region terrain source synchronization", () => {
   });
 });
 
-describe("four-region terrain surface mask", () => {
+describe("four-region continuous terrain focus", () => {
   const qiqihar = feature("230200", "齐齐哈尔市", [
     [123, 46],
     [124, 46],
@@ -85,33 +84,39 @@ describe("four-region terrain surface mask", () => {
     [126, 49],
   ]);
 
-  it("cuts only governed region shapes out of the blank surrounding world", () => {
-    const mask = createTerrainSurfaceMask([qiqihar, heihe], {
-      minLongitude: 120,
-      minLatitude: 44,
-      maxLongitude: 130,
-      maxLatitude: 54,
-    });
+  const fallback = {
+    minLongitude: 120,
+    minLatitude: 44,
+    maxLongitude: 130,
+    maxLatitude: 54,
+  };
 
-    expect(mask.features[0]?.geometry).toEqual({
-      type: "Polygon",
-      coordinates: [
-        [
-          [120, 44],
-          [130, 44],
-          [130, 54],
-          [120, 54],
-          [120, 44],
-        ],
-        qiqihar.geometry.coordinates[0],
-        heihe.geometry.coordinates[0],
-      ],
+  it("focuses an explicitly selected region without clipping the terrain", () => {
+    expect(terrainFocusBounds(undefined, [qiqihar, heihe], "230200", fallback)).toEqual(
+      {
+        minLongitude: 123,
+        minLatitude: 46,
+        maxLongitude: 124,
+        maxLatitude: 47,
+      },
+    );
+  });
+
+  it("focuses the current administrative backdrop after drilldown", () => {
+    expect(terrainFocusBounds(qiqihar, [heihe], undefined, fallback)).toEqual({
+      minLongitude: 123,
+      minLatitude: 46,
+      maxLongitude: 124,
+      maxLatitude: 47,
     });
   });
 
-  it("uses the selected parent as the sole terrain footprint after drilldown", () => {
-    expect(terrainFootprint(undefined, [qiqihar, heihe])).toEqual([qiqihar, heihe]);
-    expect(terrainFootprint(qiqihar, [heihe])).toEqual([qiqihar]);
+  it("uses the supplied extent when no focused geometry is available", () => {
+    expect(terrainFocusBounds(undefined, [], undefined, fallback)).toEqual(fallback);
+  });
+
+  it("does not retain a mask source that can darken or cut out the map", () => {
+    expect(ALL_ATLAS_SOURCE_IDS).not.toContain("mask");
   });
 });
 

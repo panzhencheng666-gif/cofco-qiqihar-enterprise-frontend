@@ -22,13 +22,18 @@ describe("four-region satellite and terrain style", () => {
       "openmaptiles",
     ]);
     expect(FOUR_REGION_REMOTE_SOURCES.satellite?.type).toBe("raster");
-    expect(JSON.stringify(FOUR_REGION_REMOTE_SOURCES.satellite)).toContain("bounds");
+    expect(JSON.stringify(FOUR_REGION_REMOTE_SOURCES.satellite)).not.toContain(
+      "bounds",
+    );
     expect(FOUR_REGION_REMOTE_SOURCES["terrain-dem"]?.type).toBe("raster-dem");
-    expect(JSON.stringify(FOUR_REGION_REMOTE_SOURCES["terrain-dem"])).toContain(
+    expect(JSON.stringify(FOUR_REGION_REMOTE_SOURCES["terrain-dem"])).not.toContain(
       "bounds",
     );
     expect(FOUR_REGION_REMOTE_SOURCES.openmaptiles).toEqual(
-      expect.objectContaining({ type: "vector", bounds: ROOT_BOUNDS }),
+      expect.objectContaining({ type: "vector" }),
+    );
+    expect(JSON.stringify(FOUR_REGION_REMOTE_SOURCES.openmaptiles)).not.toContain(
+      "bounds",
     );
   });
 
@@ -54,18 +59,29 @@ describe("four-region satellite and terrain style", () => {
 
   it("changes material weight without replacing the scene", () => {
     expect(surfaceModePaint("SANDBOX")).toMatchObject({
-      satelliteOpacity: 0.38,
-      hillshadeOpacity: 0.82,
+      terrainExaggeration: 2.6,
+      hillshadeOpacity: 0.9,
     });
     expect(surfaceModePaint("FUSION")).toMatchObject({
-      satelliteOpacity: 0.76,
-      hillshadeOpacity: 0.58,
+      terrainExaggeration: 2.25,
+      hillshadeOpacity: 0.78,
     });
     expect(surfaceModePaint("IMAGERY")).toMatchObject({
-      satelliteOpacity: 0.96,
-      hillshadeOpacity: 0.32,
+      terrainExaggeration: 1.55,
+      hillshadeOpacity: 0.38,
     });
+    expect(surfaceModePaint("FUSION").satelliteOpacity).toEqual([
+      "interpolate",
+      ["linear"],
+      ["zoom"],
+      4,
+      0.34,
+      8,
+      0.54,
+      12,
+      0.78,
+      16,
+      0.92,
+    ]);
   });
 });
-
-const ROOT_BOUNDS = [115.3, 45.7, 131.7, 53.6];
