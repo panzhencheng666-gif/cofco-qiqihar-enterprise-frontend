@@ -34,7 +34,7 @@ describe("four-region terrain public situation scene", () => {
     expect(scene).toContain("MapLibreMap");
     expect(scene).toContain('data-renderer="maplibre-four-region-terrain"');
     expect(scene).toContain('data-region-visibility="governed-four-region-mask"');
-    expect(scene).toContain("fitOperationalMap(");
+    expect(scene).toContain("fitCurrentHierarchy(");
     expect(scene).not.toContain("createFourRegionGlobeBackdrop(");
     expect(scene).not.toContain("new THREE.WebGLRenderer");
     expect(scene).not.toContain("TerrainReliefBoundaryMap");
@@ -89,7 +89,8 @@ describe("four-region terrain public situation scene", () => {
     expect(scene).toContain("map.zoomIn");
     expect(scene).toContain("map.zoomOut");
     expect(scene).toContain("dragRotate: false");
-    expect(scene).toContain("map.keyboard.disableRotation");
+    expect(scene).toContain("map.keyboard.disable()");
+    expect(scene).toContain("dragPan: false");
     expect(scene).toContain("map.touchZoomRotate.disableRotation");
     expect(scene).toContain("renderWorldCopies: false");
   });

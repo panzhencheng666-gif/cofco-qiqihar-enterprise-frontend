@@ -1,3 +1,113 @@
+.overview-command-center.is-dedicated-situation {
+  min-width: 0;
+  min-height: 0;
+  transform: none;
+  --command-details-width: clamp(300px, 29vw, 410px);
+  --command-details-offset: calc(var(--command-details-width) + 20px);
+  background: #142527;
+}
+
+.is-dedicated-situation > .overview-command-header,
+.is-dedicated-situation > .overview-command-atmosphere {
+  display: none;
+}
+
+.overview-command-center.is-dedicated-situation > .overview-command-tools {
+  top: 16px;
+  left: 16px;
+  right: auto;
+  transform: none;
+}
+
+.situation-return-overview {
+  padding: 10px 16px;
+  color: #effaff;
+  border: 1px solid #688991;
+  border-radius: 8px;
+  background: #18353bee;
+  cursor: pointer;
+}
+
+.situation-close-details {
+  position: absolute;
+  z-index: 20;
+  right: 20px;
+  top: 18px;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #91a6a2;
+  border-radius: 50%;
+  background: #f1f5ef;
+  color: #28463e;
+  cursor: pointer;
+}
+
+.is-dedicated-situation .realistic-situation-control-stack {
+  top: 68px;
+  left: 16px;
+  grid-template-columns: auto;
+}
+
+.overview-command-center.is-dedicated-situation.has-side-data-panel
+  .overview-data-mode.is-public_situation {
+  top: 12px;
+  right: 12px;
+  bottom: 28px;
+  left: auto;
+  width: var(--command-details-width);
+  max-width: none;
+  min-width: 0;
+  height: auto;
+  overflow: auto;
+}
+
+.situation-boundary-key {
+  display: flex;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #152b30e8;
+  border-radius: 6px;
+  font-size: 11px;
+  pointer-events: none;
+}
+.situation-boundary-key span::before {
+  content: "";
+  display: inline-block;
+  width: 14px;
+  margin-right: 5px;
+  vertical-align: middle;
+  border-top: 1px solid #9ef6ff;
+}
+.situation-boundary-key span:nth-child(2)::before {
+  border-color: #b7a5ff;
+}
+.situation-boundary-key span:nth-child(3)::before {
+  border-color: #f4a9e2;
+}
+.situation-boundary-key span:nth-child(4)::before {
+  border-color: #80f7ce;
+  border-top-style: dashed;
+}
+
+@media (max-width: 680px) {
+  .is-dedicated-situation .situation-close-details {
+    top: calc(60% + 6px);
+  }
+  .overview-command-center.is-dedicated-situation.has-side-data-panel
+    .overview-command-map {
+    right: 0;
+    bottom: 42%;
+  }
+  .overview-command-center.is-dedicated-situation.has-side-data-panel
+    .overview-data-mode.is-public_situation {
+    top: 60%;
+    left: 8px;
+    right: 8px;
+    bottom: 20px;
+    width: auto;
+  }
+}
+
 .realistic-situation-layer {
   --situation-edge: clamp(0.65rem, 1.2vw, 1rem);
   --situation-timeline-height: 3.2rem;

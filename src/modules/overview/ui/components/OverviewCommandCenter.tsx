@@ -31,6 +31,8 @@ export function OverviewCommandCenter({
   sampleMode = true,
   sampleNetworkMode = "actual",
   showBusinessMetrics,
+  publicSituation = false,
+  onReturnToOverview,
   showLegend = true,
   scopeLabel,
   samplePoints,
@@ -62,6 +64,8 @@ export function OverviewCommandCenter({
   sampleMode?: boolean;
   sampleNetworkMode?: SampleNetworkLayerMode;
   showBusinessMetrics?: boolean;
+  publicSituation?: boolean;
+  onReturnToOverview?: () => void;
   showLegend?: boolean;
   scopeLabel?: string;
   samplePoints?: ReactNode;
@@ -81,7 +85,7 @@ export function OverviewCommandCenter({
     resize();
     return () => window.removeEventListener("resize", resize);
   }, []);
-  const compactViewport = viewport.width <= 800;
+  const compactViewport = publicSituation || viewport.width <= 800;
   const stageScale = compactViewport
     ? 1
     : Math.min(1, viewport.height / 1080, viewport.width / 1280);
@@ -133,7 +137,7 @@ export function OverviewCommandCenter({
   return (
     <main
       style={stageStyle}
-      className={`overview-command-center${selectedRegion || selectedSamplePoint ? " has-details" : ""}${sideDataPanel ? " has-side-data-panel" : ""}${!businessMetricsVisible ? " without-business-kpis" : ""}`}
+      className={`overview-command-center${publicSituation ? " is-dedicated-situation" : ""}${selectedRegion || selectedSamplePoint ? " has-details" : ""}${sideDataPanel ? " has-side-data-panel" : ""}${!businessMetricsVisible ? " without-business-kpis" : ""}`}
     >
       <h2 className="overview-sr-only">粮食商情总览</h2>
 
@@ -250,10 +254,32 @@ export function OverviewCommandCenter({
         </aside>
       )}
       <div className="overview-command-tools">
-        {dataModeControls}
-        {navigation}
-        {sampleNetworkControls}
+        {publicSituation ? (
+          <button
+            className="situation-return-overview"
+            type="button"
+            onClick={onReturnToOverview}
+          >
+            ← 返回总揽监测
+          </button>
+        ) : (
+          <>
+            {dataModeControls}
+            {navigation}
+            {sampleNetworkControls}
+          </>
+        )}
       </div>
+      {publicSituation && sideDataPanel && (
+        <button
+          className="situation-close-details"
+          type="button"
+          onClick={onCloseDetails}
+          aria-label="关闭地区详情"
+        >
+          ×
+        </button>
+      )}
 
       {selectedRegion && selectionPoint && <SelectionLink point={selectionPoint} />}
 

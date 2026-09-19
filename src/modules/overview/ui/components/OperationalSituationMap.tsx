@@ -1,6 +1,6 @@
 import "./realistic-operational-situation.css";
 
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useEffectEvent, useMemo, useState } from "react";
 
 import type {
   MapAnnotation,
@@ -20,7 +20,6 @@ import type {
   RealisticSceneLayers,
   TerrainEnhancementState,
 } from "./FourRegionTerrainAtlas";
-import type { TerrainSurfaceMode } from "./fourRegionTerrainStyle";
 import { focusDepotCategory } from "./realisticSituationModel";
 import {
   operationalSituationTimeline,
@@ -101,7 +100,6 @@ export function OperationalSituationMap({
 }) {
   const [layers, setLayers] = useState(DEFAULT_LAYERS);
   const [layerMenuOpen, setLayerMenuOpen] = useState(false);
-  const [surfaceMode, setSurfaceMode] = useState<TerrainSurfaceMode>("FUSION");
   const [enhancementState, setEnhancementState] =
     useState<TerrainEnhancementState>("LOADING");
   const [command, setCommand] = useState<RealisticSceneCommand>();
@@ -158,9 +156,12 @@ export function OperationalSituationMap({
     timelineLength: timeline.length,
   });
 
+  const notifyTimeline = useEffectEvent((item: SituationTimelineItem | undefined) =>
+    onTimelineSelect?.(item),
+  );
   useEffect(() => {
-    onTimelineSelect?.(timelineTouched ? selectedTimeline : undefined);
-  }, [onTimelineSelect, selectedTimeline, timelineTouched]);
+    if (timelineTouched) notifyTimeline(selectedTimeline);
+  }, [selectedTimeline, timelineTouched]);
 
   useEffect(() => {
     if (!annotationRepository) return;
@@ -295,15 +296,30 @@ export function OperationalSituationMap({
             void persistAnnotation(longitude, latitude);
           }}
           onRegionDrill={onRegionDrill}
-          onRegionSelect={onRegionSelect}
+          onRegionSelect={(region) => {
+            setPlaying(false);
+            setTimelineTouched(false);
+            onRegionSelect(region);
+          }}
+          onWeatherSelect={(code) => {
+            const item = timeline.findLast(
+              (entry) => entry.category === "WEATHER" && entry.regionCode === code,
+            );
+            onTimelineSelect?.(item);
+          }}
           {...(selectedFacilityId ? { selectedFacilityId } : {})}
           {...(selectedRegionCode ? { selectedRegionCode } : {})}
           situation={visibleSituation}
-          surfaceMode={surfaceMode}
+          surfaceMode="FUSION"
         />
       </Suspense>
 
       <div className="realistic-situation-control-stack">
+        {currentLevel === "VILLAGE" && (
+          <p className="realistic-situation-enhancement-notice" role="status">
+            真实村界尚未核验，已停用系统生成的村级展示分区。村名位置仍待空间核验，可点击名称查看该村资料。
+          </p>
+        )}
         {enhancementState === "DEGRADED" && (
           <p className="realistic-situation-enhancement-notice" role="status">
             在线卫星影像暂不可用，已切换连续地形底图；行政边界与业务图层仍可操作。
@@ -346,27 +362,11 @@ export function OperationalSituationMap({
           </button>
         </nav>
 
-        <div
-          className="realistic-situation-surface-modes"
-          role="group"
-          aria-label="地表显示"
-        >
-          {(
-            [
-              ["SANDBOX", "沙盘"],
-              ["FUSION", "融合"],
-              ["IMAGERY", "实景"],
-            ] as const
-          ).map(([mode, label]) => (
-            <button
-              aria-pressed={surfaceMode === mode}
-              key={mode}
-              type="button"
-              onClick={() => setSurfaceMode(mode)}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="situation-boundary-key" aria-label="行政边界图例">
+          <span>市界</span>
+          <span>县界</span>
+          <span>乡镇界</span>
+          <span>村界待核验</span>
         </div>
 
         {layerMenuOpen && !annotationActive && (

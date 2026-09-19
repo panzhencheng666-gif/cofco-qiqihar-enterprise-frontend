@@ -1,5 +1,8 @@
 import type { OperationalFacilityCatalogue } from "../../domain/operationalFacilities";
-import type { OperationalSituationCatalogue } from "../../domain/operationalSituation";
+import type {
+  OperationalSituationCatalogue,
+  WeatherObservation,
+} from "../../domain/operationalSituation";
 
 export type SituationTimelineCategory =
   "WEATHER" | "LOGISTICS" | "MARKET" | "POLICY" | "PUBLIC_EVENT";
@@ -14,6 +17,7 @@ export interface SituationTimelineItem {
   sourceUrl: string;
   regionCode?: string;
   facilityId?: string;
+  weatherObservation?: WeatherObservation;
 }
 
 export function operationalSituationTimeline(
@@ -29,7 +33,8 @@ export function operationalSituationTimeline(
       description: weather.assessment,
       sourceName: weather.sourceName,
       sourceUrl: weather.sourceUrl,
-      regionCode: weather.rootRegionCode,
+      regionCode: weather.regionCode ?? weather.rootRegionCode,
+      weatherObservation: weather,
     })),
     ...situation.publicEvents.map((event) => ({
       id: `public:${event.eventId}`,

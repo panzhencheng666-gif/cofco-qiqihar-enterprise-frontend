@@ -2,6 +2,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import "./realistic-operational-situation.css";
 
 import { useEffect, useRef } from "react";
+import { union } from "@turf/union";
 import type {
   Feature,
   FeatureCollection,
@@ -32,17 +33,15 @@ import {
   surfaceModePaint,
   type TerrainSurfaceMode,
 } from "./fourRegionTerrainStyle";
-import {
-  calculateOperationalMapPadding,
-  fitOperationalMap,
-} from "./operationalMapViewport";
+import { calculateOperationalMapPadding } from "./operationalMapViewport";
 import type { GeographicBounds } from "./realisticSituationModel";
 import {
   loadSvgMarkerImage,
   realisticSituationIcon,
   realisticWeatherIcon,
 } from "./realisticSituationIcons";
-import { liveWeatherKind } from "./liveWeatherPresentation";
+import { liveWeatherKind, type LiveWeatherKind } from "./liveWeatherPresentation";
+import { createWeatherSpritePainter } from "./animatedWeatherSprite";
 
 export interface RealisticSceneLayers {
   ADMINISTRATIVE: boolean;
@@ -80,6 +79,7 @@ export interface FourRegionTerrainAtlasProps {
   onReady?: () => void;
   onRegionDrill: (region: OverviewRegion) => void;
   onRegionSelect: (region: OverviewRegion) => void;
+  onWeatherSelect?: (regionCode: string) => void;
   selectedFacilityId?: string;
   selectedRegionCode?: string;
   situation: OperationalSituationCatalogue;
@@ -93,6 +93,7 @@ interface AtlasRuntime {
   map: MapLibreMap;
   props: FourRegionTerrainAtlasProps;
   ready: boolean;
+  fittedCenter?: [number, number];
   resizeAnimationFrameId?: number;
   syncedProps?: FourRegionTerrainAtlasProps;
   viewportHeight: number;
@@ -144,6 +145,7 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
         center: centerOf(propsRef.current.bounds),
         container: host,
         dragRotate: false,
+        dragPan: false,
         fadeDuration: 120,
         localIdeographFontFamily: "PingFang SC, Microsoft YaHei, sans-serif",
         maxPitch: 68,
@@ -157,7 +159,10 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
       return;
     }
     map.doubleClickZoom.disable();
-    map.keyboard.disableRotation();
+    map.keyboard.disable();
+    map.touchPitch.disable();
+    map.scrollZoom.enable({ around: "center" });
+    map.touchZoomRotate.enable({ around: "center" });
     map.touchZoomRotate.disableRotation();
     const runtime: AtlasRuntime = {
       destroyed: false,
@@ -189,6 +194,8 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
       if (!runtime.ready) return;
       const interactive = map.queryRenderedFeatures(event.point, {
         layers: [
+          "atlas-active-labels",
+          "atlas-root-labels",
           "atlas-operational-markers",
           "atlas-weather-markers",
           ...REGION_LAYER_IDS,
@@ -199,6 +206,16 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
     map.on("zoom", () => {
       host.dataset.imageryZoom = map.getZoom().toFixed(2);
       host.dataset.detailLevel = detailLevel(map.getZoom());
+    });
+    map.on("zoomend", () => {
+      if (!runtime.fittedCenter || map.getZoom() > map.getMinZoom() + 0.01) return;
+      const center = map.getCenter();
+      if (
+        Math.abs(center.lng - runtime.fittedCenter[0]) +
+          Math.abs(center.lat - runtime.fittedCenter[1]) >
+        0.00001
+      )
+        map.jumpTo({ center: runtime.fittedCenter });
     });
 
     const resizeObserver = new ResizeObserver(() => scheduleAtlasResize(runtime));
@@ -288,6 +305,26 @@ function installRemoteTerrain(map: MapLibreMap) {
 }
 
 function installAtlasLayers(map: MapLibreMap) {
+  const background = document.createElement("canvas");
+  background.width = background.height = 128;
+  const context = background.getContext("2d");
+  if (context) {
+    context.fillStyle = "#142527";
+    context.fillRect(0, 0, 128, 128);
+    context.strokeStyle = "#203739";
+    context.lineWidth = 0.5;
+    for (let n = 0; n < 128; n += 32) {
+      context.beginPath();
+      context.moveTo(n, 0);
+      context.lineTo(n, 128);
+      context.moveTo(0, n);
+      context.lineTo(128, n);
+      context.stroke();
+    }
+    context.fillStyle = "#405756";
+    context.fillRect(63, 63, 2, 2);
+    map.addImage("atlas-survey-background", context.getImageData(0, 0, 128, 128));
+  }
   map.addSource(ROOT_SOURCE, { type: "geojson", data: emptyCollection() });
   map.addSource(ACTIVE_SOURCE, { type: "geojson", data: emptyCollection() });
   map.addSource(ROOT_LABEL_SOURCE, { type: "geojson", data: emptyCollection() });
@@ -305,8 +342,9 @@ function installAtlasLayers(map: MapLibreMap) {
     source: MASK_SOURCE,
     paint: {
       "fill-antialias": false,
-      "fill-color": "#173a3c",
-      "fill-opacity": 0.64,
+      "fill-color": "#142527",
+      "fill-opacity": 1,
+      ...(context ? { "fill-pattern": "atlas-survey-background" } : {}),
     },
   });
   map.addLayer({
@@ -320,10 +358,10 @@ function installAtlasLayers(map: MapLibreMap) {
     type: "line",
     source: ROOT_SOURCE,
     paint: {
-      "line-blur": 4,
+      "line-blur": 2,
       "line-color": "#9be3d9",
       "line-opacity": 0.55,
-      "line-width": 8,
+      "line-width": 3,
     },
   });
   map.addLayer({
@@ -331,9 +369,9 @@ function installAtlasLayers(map: MapLibreMap) {
     type: "line",
     source: ROOT_SOURCE,
     paint: {
-      "line-color": "#fff1b8",
+      "line-color": "#9ef6ff",
       "line-opacity": 0.98,
-      "line-width": ["interpolate", ["linear"], ["zoom"], 4, 1.8, 10, 4.2],
+      "line-width": ["interpolate", ["linear"], ["zoom"], 4, 1.2, 10, 1.6],
     },
   });
   map.addLayer({
@@ -356,6 +394,7 @@ function installAtlasLayers(map: MapLibreMap) {
     id: "atlas-active-fill",
     type: "fill",
     source: ACTIVE_SOURCE,
+    filter: ["!=", ["get", "level"], "VILLAGE"],
     layout: { "fill-sort-key": ["get", "levelRank"] },
     paint: {
       "fill-color": ["case", ["==", ["get", "selected"], true], "#f6ca5c", "#8ed4bf"],
@@ -366,10 +405,21 @@ function installAtlasLayers(map: MapLibreMap) {
     id: "atlas-active-outline",
     type: "line",
     source: ACTIVE_SOURCE,
+    filter: ["!=", ["get", "level"], "VILLAGE"],
     paint: {
-      "line-color": ["case", ["==", ["get", "selected"], true], "#ffcf55", "#f7efd0"],
+      "line-color": [
+        "match",
+        ["get", "level"],
+        "COUNTY",
+        "#b7a5ff",
+        "TOWNSHIP",
+        "#f4a9e2",
+        "VILLAGE",
+        "#80f7ce",
+        "#9ef6ff",
+      ],
       "line-opacity": 0.96,
-      "line-width": ["interpolate", ["linear"], ["zoom"], 6, 1.3, 13, 3.8],
+      "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.9, 13, 1.4],
     },
   });
   map.addLayer({
@@ -494,7 +544,7 @@ function installAtlasLayers(map: MapLibreMap) {
         "atlas-icon-weather-storm",
         "atlas-icon-weather-clear",
       ],
-      "icon-size": ["interpolate", ["linear"], ["zoom"], 5, 0.58, 12, 0.76],
+      "icon-size": ["interpolate", ["linear"], ["zoom"], 5, 0.85, 12, 1.1],
     },
     paint: {
       "icon-opacity": 0.98,
@@ -640,14 +690,64 @@ function fitCurrentHierarchy(
     : props.rootFeatures;
   const bounds = featureBounds(focusFeatures) ?? props.bounds;
   const rootView = active.length === 0;
-  const padding = calculateOperationalMapPadding(runtime.host, rootView ? 104 : 116);
-  fitOperationalMap(
-    runtime.map,
-    toMapBounds(bounds),
-    padding,
-    rootView ? 45 : 50,
-    rootView ? 0.12 : 0,
-  );
+  const padding = calculateOperationalMapPadding(runtime.host, 125);
+  const map = runtime.map;
+  delete runtime.fittedCenter;
+  map.setMaxBounds(null);
+  map.setMinZoom(0);
+  const camera = map.cameraForBounds(toMapBounds(bounds), { bearing: 0, padding });
+  if (!camera || camera.zoom === undefined) return;
+  map.jumpTo({ ...camera, bearing: 0, pitch: rootView ? 40 : 48 });
+  // Fit the actual projected outline at the chosen pitch, not a flat bounding
+  // box followed by a tilt. Bound the search; it runs only on hierarchy/resize.
+  const coordinates: [number, number][] = [
+    [bounds.minLongitude, bounds.minLatitude],
+    [bounds.minLongitude, bounds.maxLatitude],
+    [bounds.maxLongitude, bounds.minLatitude],
+    [bounds.maxLongitude, bounds.maxLatitude],
+  ];
+  let low = Math.max(0, camera.zoom - 2);
+  let high = Math.min(18, camera.zoom + 2);
+  const recenterOutline = () => {
+    if (!coordinates.length) return;
+    for (let pass = 0; pass < 2; pass += 1) {
+      const points = coordinates.map(([lng, lat]) => map.project([lng, lat]));
+      const minX = Math.min(...points.map((point) => point.x));
+      const maxX = Math.max(...points.map((point) => point.x));
+      const minY = Math.min(...points.map((point) => point.y));
+      const maxY = Math.max(...points.map((point) => point.y));
+      map.panBy(
+        [
+          (minX + maxX - runtime.host.clientWidth - padding.left + padding.right) / 2,
+          (minY + maxY - runtime.host.clientHeight - padding.top + padding.bottom) / 2,
+        ],
+        { duration: 0 },
+      );
+    }
+  };
+  for (let i = 0; i < 8; i += 1) {
+    const zoom = (low + high) / 2;
+    map.jumpTo({ zoom });
+    recenterOutline();
+    const fits = coordinates.every(([lng, lat]) => {
+      const p = map.project([lng, lat]);
+      return (
+        p.x >= padding.left &&
+        p.x <= runtime.host.clientWidth - padding.right &&
+        p.y >= padding.top &&
+        p.y <= runtime.host.clientHeight - padding.bottom
+      );
+    });
+    if (fits) low = zoom;
+    else high = zoom;
+  }
+  map.jumpTo({ zoom: low });
+  recenterOutline();
+  map.setMinZoom(low);
+  runtime.fittedCenter = [map.getCenter().lng, map.getCenter().lat];
+  // maxBounds also raises zoom to fill the viewport; that crops a fitted
+  // four-region outline on wide screens. User panning is disabled instead.
+  runtime.host.dataset.minimumZoom = low.toFixed(2);
   runtime.host.dataset.imageryZoom = runtime.map.getZoom().toFixed(2);
 }
 
@@ -688,6 +788,12 @@ function handleMapClick(runtime: AtlasRuntime, event: MapMouseEvent) {
     .find((feature) => featureStringProperty(feature, "id"));
   const facilityId = facility ? featureStringProperty(facility, "id") : undefined;
   if (facilityId) {
+    const area = map.queryRenderedFeatures(event.point, {
+      layers: [...REGION_LAYER_IDS],
+    })[0];
+    const code = area ? featureStringProperty(area, "code") : undefined;
+    const region = code ? regionByCode(props).get(code) : undefined;
+    if (region) props.onRegionSelect(region);
     props.onFacilitySelect(facilityId);
     return;
   }
@@ -700,8 +806,21 @@ function handleMapClick(runtime: AtlasRuntime, event: MapMouseEvent) {
   if (weatherRegionCode) {
     const region = regionByCode(props).get(weatherRegionCode);
     if (region) props.onRegionSelect(region);
+    props.onWeatherSelect?.(weatherRegionCode);
     return;
   }
+  // A name's identifier wins over a different partition beneath its location.
+  const label = map.queryRenderedFeatures(event.point, {
+    layers: ["atlas-active-labels", "atlas-root-labels"],
+  })[0];
+  const labelCode = label ? featureStringProperty(label, "code") : undefined;
+  const labelRegion = labelCode ? regionByCode(props).get(labelCode) : undefined;
+  if (labelRegion) {
+    props.onRegionSelect(labelRegion);
+    if (labelRegion.level !== "VILLAGE") props.onRegionDrill(labelRegion);
+    return;
+  }
+  if (activeHierarchyFeatures(props)[0]?.region.level === "VILLAGE") return;
   const rendered = map.queryRenderedFeatures(event.point, {
     layers: [...REGION_LAYER_IDS],
   });
@@ -817,9 +936,10 @@ function regionLabelPosition(
       )
         return [location.coordinates[0], location.coordinates[1]];
     } catch {
-      // Fall back to the governed boundary centre when a location is malformed.
+      // Only non-village regions may fall back to their boundary centre.
     }
   }
+  if (feature.region.level === "VILLAGE") return undefined;
   const bounds = featureBounds([feature]);
   return bounds ? centerOf(bounds) : undefined;
 }
@@ -827,9 +947,24 @@ function regionLabelPosition(
 function fourRegionMaskCollection(
   rootFeatures: readonly MapFeature[],
 ): FeatureCollection {
-  const holes = rootFeatures.flatMap((feature) =>
-    outerRings(feature).map(clockwiseRing),
+  const polygons = rootFeatures.map(
+    (feature): Feature<GeoJsonPolygon | GeoJsonMultiPolygon> => ({
+      type: "Feature",
+      properties: {},
+      geometry: feature.geometry as unknown as GeoJsonPolygon | GeoJsonMultiPolygon,
+    }),
   );
+  // Adjacent/overlapping holes are invalid GeoJSON and create triangular gaps.
+  const merged =
+    polygons.length > 1
+      ? union({ type: "FeatureCollection", features: polygons })
+      : polygons[0];
+  const rings = !merged
+    ? []
+    : merged.geometry.type === "Polygon"
+      ? [merged.geometry.coordinates[0]!]
+      : merged.geometry.coordinates.map((polygon) => polygon[0]!);
+  const holes = rings.map(clockwiseRing);
   const world: GeoJsonPosition[] = [
     [-179.9, -84.9],
     [179.9, -84.9],
@@ -847,21 +982,6 @@ function fourRegionMaskCollection(
       },
     ],
   };
-}
-
-function outerRings(feature: MapFeature): GeoJsonPosition[][] {
-  const mutableRing = (ring: readonly (readonly [number, number])[]) =>
-    ring.map(([longitude, latitude]) => [longitude, latitude]);
-  if (feature.geometry.type === "Polygon") {
-    const polygon = feature.geometry.coordinates as readonly (readonly (readonly [
-      number,
-      number,
-    ])[])[];
-    return [mutableRing(polygon[0] ?? [])];
-  }
-  const polygons = feature.geometry
-    .coordinates as readonly (readonly (readonly (readonly [number, number])[])[])[];
-  return polygons.map((polygon) => mutableRing(polygon[0] ?? []));
 }
 
 function clockwiseRing(ring: GeoJsonPosition[]) {
@@ -971,12 +1091,34 @@ function markerCollection(props: FourRegionTerrainAtlasProps): FeatureCollection
 }
 
 function startWeatherAnimation(runtime: AtlasRuntime) {
+  const paint = createWeatherSpritePainter();
+  const kinds: LiveWeatherKind[] = ["CLEAR", "CLOUD", "RAIN", "SNOW", "STORM"];
+  if (paint)
+    for (const kind of kinds) {
+      const id = `atlas-icon-weather-${kind.toLowerCase()}`;
+      if (runtime.map.hasImage(id)) runtime.map.removeImage(id);
+      runtime.map.addImage(id, paint(kind, 0), { pixelRatio: 2 });
+    }
   const animate = (timestamp: number) => {
     if (runtime.destroyed) return;
     if (
+      !document.hidden &&
+      runtime.props.layers.WEATHER &&
       timestamp - runtime.weatherAnimationUpdatedAt >= 90 &&
       runtime.map.getLayer("atlas-weather-pulse")
     ) {
+      const motionTime = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? 0
+        : timestamp;
+      if (paint)
+        for (const kind of new Set(
+          runtime.props.situation.weather.map(liveWeatherKind),
+        )) {
+          runtime.map.updateImage(
+            `atlas-icon-weather-${kind.toLowerCase()}`,
+            paint(kind, motionTime),
+          );
+        }
       const phase = (Math.sin(timestamp / 520) + 1) / 2;
       runtime.map.setPaintProperty(
         "atlas-weather-pulse",

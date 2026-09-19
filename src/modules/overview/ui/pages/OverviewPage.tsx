@@ -1207,6 +1207,23 @@ export function OverviewPage({
     <>
       <OverviewCommandCenter
         showBusinessMetrics={!publicSituationMode}
+        publicSituation={publicSituationMode}
+        onReturnToOverview={() => {
+          navigationRequestRef.current += 1;
+          setPendingNavigationLabel(undefined);
+          setScopeRootCode(OVERALL_SCOPE);
+          setParentCode(undefined);
+          setParentTrail([]);
+          setMapContextRegion(undefined);
+          setMapContextTrail([]);
+          setSelectedRegionCode("");
+          setSelectedRegionSnapshot(undefined);
+          setSelectedOperationalFacilityId(undefined);
+          setSelectedOperationalSituationItem(undefined);
+          setAnnotationArmed(false);
+          setAnnotationOpen(false);
+          setDataMode("SAMPLE_POINTS");
+        }}
         sampleNetworkMode={
           activeSamplePointRepository ? sampleNetworkModel.mode : "actual"
         }
@@ -1481,9 +1498,22 @@ export function OverviewPage({
                 onRegionDrill={(region) =>
                   drillDown(region, { preserveSelection: true })
                 }
-                onRegionSelect={selectRegion}
+                onRegionSelect={(region) => {
+                  setSelectedOperationalFacilityId(undefined);
+                  setSelectedOperationalSituationItem(undefined);
+                  selectRegion(region);
+                }}
                 onReturnToParent={returnToParent}
-                onTimelineSelect={setSelectedOperationalSituationItem}
+                onTimelineSelect={(item) => {
+                  setSelectedOperationalSituationItem(item);
+                  if (item?.category === "WEATHER") {
+                    setSelectedOperationalFacilityId(undefined);
+                    const region = [...visibleRegions, ...rootRegions].find(
+                      (candidate) => candidate.code === item.regionCode,
+                    );
+                    if (region) selectRegion(region);
+                  }
+                }}
                 {...(effectiveOperationalFacilityId
                   ? { selectedFacilityId: effectiveOperationalFacilityId }
                   : {})}

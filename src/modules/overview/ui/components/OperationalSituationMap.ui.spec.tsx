@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -21,18 +21,14 @@ vi.mock("./FourRegionTerrainAtlas", () => ({
 import { OperationalSituationMap } from "./OperationalSituationMap";
 
 describe("OperationalSituationMap public-only controls", () => {
-  it("switches material modes inside the same map without duplicate controls", async () => {
+  it("keeps one fusion renderer without redundant material controls", async () => {
     const { container } = renderSituationMap();
 
     const atlas = await screen.findByTestId("four-region-atlas");
     expect(atlas).toHaveAttribute("data-surface-mode", "FUSION");
     expect(screen.getAllByRole("button", { name: "地图标注" })).toHaveLength(1);
-    expect(screen.getByRole("group", { name: "地表显示" })).toBeVisible();
-
-    await userEvent.click(screen.getByRole("button", { name: "沙盘" }));
-    await waitFor(() => expect(atlas).toHaveAttribute("data-surface-mode", "SANDBOX"));
-    await userEvent.click(screen.getByRole("button", { name: "实景" }));
-    await waitFor(() => expect(atlas).toHaveAttribute("data-surface-mode", "IMAGERY"));
+    expect(screen.queryByRole("group", { name: "地表显示" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "沙盘" })).not.toBeInTheDocument();
 
     expect(
       container.querySelectorAll(".realistic-situation-control-stack"),

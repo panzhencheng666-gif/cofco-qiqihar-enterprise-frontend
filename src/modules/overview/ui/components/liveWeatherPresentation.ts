@@ -5,10 +5,11 @@ export type LiveWeatherKind = "CLEAR" | "CLOUD" | "RAIN" | "SNOW" | "STORM";
 export function liveWeatherKind(weather: WeatherObservation): LiveWeatherKind {
   const code = weather.weatherCode;
   if (code !== undefined && code !== null) {
+    if (code === 0) return "CLEAR";
     if (code >= 95) return "STORM";
-    if (code >= 71 && code <= 86) return "SNOW";
+    if ((code >= 71 && code <= 77) || code === 85 || code === 86) return "SNOW";
     if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return "RAIN";
-    if (code >= 1 && code <= 3) return "CLOUD";
+    if ((code >= 1 && code <= 3) || code === 45 || code === 48) return "CLOUD";
   }
   if (weather.risk.includes("暴雨") || weather.risk.includes("雷")) return "STORM";
   if (weather.risk.includes("降雨") || weather.risk.includes("降水")) return "RAIN";

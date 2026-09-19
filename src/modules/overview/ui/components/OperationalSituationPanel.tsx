@@ -57,16 +57,21 @@ export function OperationalSituationPanel({
   );
   const fallbackStorage = facilities.storageFacilities[0];
   const fallbackRailway = facilities.railwayFacilities[0];
-  const activeWeather = weatherForRegion(situation.weather, selectedRegion);
+  const activeWeather =
+    selectedTimelineItem?.weatherObservation ??
+    weatherForRegion(situation.weather, selectedRegion);
   const [requestedMode, setRequestedMode] = useState<DetailMode>(
     activeWeather ? "WEATHER" : fallbackStorage ? "STORAGE" : "RAILWAY",
   );
   const [facilityEditor, setFacilityEditor] = useState<"CREATE" | "EDIT">();
-  const detailMode: DetailMode = selectedStorage
-    ? "STORAGE"
-    : selectedRailway
-      ? "RAILWAY"
-      : requestedMode;
+  const detailMode: DetailMode =
+    selectedTimelineItem?.category === "WEATHER"
+      ? "WEATHER"
+      : selectedStorage
+        ? "STORAGE"
+        : selectedRailway
+          ? "RAILWAY"
+          : requestedMode;
   const activeStorage =
     detailMode === "STORAGE" ? (selectedStorage ?? fallbackStorage) : undefined;
   const activeRailway =

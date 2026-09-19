@@ -33,5 +33,7 @@ describe("live weather presentation", () => {
   it("prefers WMO weather codes when the backend supplies one", () => {
     expect(liveWeatherKind({ ...observation, weatherCode: 95 })).toBe("STORM");
     expect(liveWeatherKind({ ...observation, weatherCode: 75 })).toBe("SNOW");
+    expect(liveWeatherKind({ ...observation, weatherCode: 80 })).toBe("RAIN");
+    expect(liveWeatherKind({ ...observation, weatherCode: 82 })).toBe("RAIN");
   });
 });
