@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { satelliteTilePlan, tileCoordinate } from "./satelliteSurfaceTexture";
+import {
+  satelliteExportUrl,
+  satelliteTextureResolution,
+  satelliteTilePlan,
+  tileCoordinate,
+} from "./satelliteSurfaceTexture";
 
 describe("satellite relief surface texture", () => {
   it("chooses a bounded tile grid for the four-region overview", () => {
@@ -54,5 +59,21 @@ describe("satellite relief surface texture", () => {
     expect(north.y).toBeGreaterThanOrEqual(0);
     expect(south.x).toBe(0);
     expect(south.y).toBeLessThanOrEqual(16);
+  });
+
+  it("raises one export image resolution instead of multiplying tile requests", () => {
+    expect(satelliteTextureResolution(7)).toBe(1024);
+    expect(satelliteTextureResolution(10)).toBeGreaterThan(2000);
+    expect(
+      satelliteExportUrl(
+        {
+          minLongitude: 117.15,
+          minLatitude: 43.4,
+          maxLongitude: 127.8,
+          maxLatitude: 53.6,
+        },
+        2048,
+      ),
+    ).toContain("World_Imagery/MapServer/export");
   });
 });

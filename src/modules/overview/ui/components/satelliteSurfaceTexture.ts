@@ -65,20 +65,19 @@ export function satelliteTilePlan(
 
 export async function loadSatelliteSurfaceTexture({
   bounds,
-  maxTiles = 24,
   projectedBounds,
   requestedZoom,
   stageHeight,
   stageWidth,
 }: {
   bounds: SatelliteSurfaceBounds;
-  maxTiles?: number;
   projectedBounds: ProjectedSurfaceBounds;
   requestedZoom: number;
   stageHeight: number;
   stageWidth: number;
 }): Promise<LoadedSatelliteSurface> {
-  const plan = satelliteTilePlan(bounds, requestedZoom, maxTiles);
+  const zoom = Math.max(1, Math.floor(requestedZoom));
+  const resolution = satelliteTextureResolution(zoom);
   const key = [
     bounds.minLongitude,
     bounds.minLatitude,
@@ -90,16 +89,16 @@ export async function loadSatelliteSurfaceTexture({
     projectedBounds.maxY,
     stageWidth,
     stageHeight,
-    plan.zoom,
+    resolution,
   ].join(":");
   let canvasPromise = canvasCache.get(key);
   if (!canvasPromise) {
-    canvasPromise = composeSatelliteCanvas(
+    canvasPromise = composeSatelliteExport(
       bounds,
       projectedBounds,
       stageWidth,
       stageHeight,
-      plan,
+      resolution,
     ).catch((error: unknown) => {
       canvasCache.delete(key);
       throw error;
@@ -116,9 +115,30 @@ export async function loadSatelliteSurfaceTexture({
   return {
     source: "ESRI_WORLD_IMAGERY",
     texture,
-    tileCount: plan.tileCount,
-    zoom: plan.zoom,
+    tileCount: 1,
+    zoom,
   };
+}
+
+export function satelliteTextureResolution(requestedZoom: number) {
+  return Math.min(2560, Math.max(1024, 1024 + (requestedZoom - 7) * 384));
+}
+
+export function satelliteExportUrl(bounds: SatelliteSurfaceBounds, resolution: number) {
+  const parameters = new URLSearchParams({
+    bbox: [
+      bounds.minLongitude,
+      bounds.minLatitude,
+      bounds.maxLongitude,
+      bounds.maxLatitude,
+    ].join(","),
+    bboxSR: "4326",
+    f: "image",
+    format: "jpg",
+    imageSR: "4326",
+    size: `${resolution},${resolution}`,
+  });
+  return `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?${parameters}`;
 }
 
 function tilePlanAtZoom(
@@ -146,43 +166,28 @@ function clampTile(value: number, maximum: number) {
   return Math.max(0, Math.min(maximum, value));
 }
 
-async function composeSatelliteCanvas(
+async function composeSatelliteExport(
   bounds: SatelliteSurfaceBounds,
   projectedBounds: ProjectedSurfaceBounds,
   stageWidth: number,
   stageHeight: number,
-  plan: SatelliteTilePlan,
+  resolution: number,
 ) {
   const canvas = document.createElement("canvas");
   canvas.width = stageWidth;
   canvas.height = stageHeight;
   const context = canvas.getContext("2d");
   if (!context) throw new Error("satellite texture canvas is unavailable");
-  const northWest = tileCoordinate(bounds.minLongitude, bounds.maxLatitude, plan.zoom);
-  const southEast = tileCoordinate(bounds.maxLongitude, bounds.minLatitude, plan.zoom);
-  const tileSpanX = Math.max(southEast.x - northWest.x, 0.000001);
-  const tileSpanY = Math.max(southEast.y - northWest.y, 0.000001);
   const targetWidth = projectedBounds.maxX - projectedBounds.minX;
   const targetHeight = projectedBounds.maxY - projectedBounds.minY;
-  const tiles: Promise<void>[] = [];
-  for (let y = plan.minY; y <= plan.maxY; y += 1) {
-    for (let x = plan.minX; x <= plan.maxX; x += 1) {
-      tiles.push(
-        loadImage(
-          `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${plan.zoom}/${y}/${x}`,
-        ).then((image) => {
-          const drawX =
-            projectedBounds.minX + ((x - northWest.x) / tileSpanX) * targetWidth;
-          const drawY =
-            projectedBounds.minY + ((y - northWest.y) / tileSpanY) * targetHeight;
-          const drawWidth = (targetWidth / tileSpanX) * 1.002;
-          const drawHeight = (targetHeight / tileSpanY) * 1.002;
-          context.drawImage(image, drawX, drawY, drawWidth, drawHeight);
-        }),
-      );
-    }
-  }
-  await Promise.all(tiles);
+  const image = await loadImage(satelliteExportUrl(bounds, resolution));
+  context.drawImage(
+    image,
+    projectedBounds.minX,
+    projectedBounds.minY,
+    targetWidth,
+    targetHeight,
+  );
   return canvas;
 }
 
@@ -190,8 +195,8 @@ function loadImage(source: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
     const timeoutId = window.setTimeout(
-      () => reject(new Error(`satellite tile timed out: ${source}`)),
-      5_000,
+      () => reject(new Error(`satellite export timed out: ${source}`)),
+      8_000,
     );
     image.crossOrigin = "anonymous";
     image.onload = () => {
@@ -200,7 +205,7 @@ function loadImage(source: string) {
     };
     image.onerror = () => {
       window.clearTimeout(timeoutId);
-      reject(new Error(`satellite tile failed: ${source}`));
+      reject(new Error(`satellite export failed: ${source}`));
     };
     image.src = source;
   });

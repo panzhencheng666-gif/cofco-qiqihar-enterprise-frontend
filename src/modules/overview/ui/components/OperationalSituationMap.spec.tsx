@@ -55,7 +55,7 @@ describe("four-region terrain public situation scene", () => {
     expect(scene).toContain('data-surface-confinement="region-meshes-only"');
     expect(scene).not.toContain("new THREE.PlaneGeometry");
     expect(terrainStyle).toContain("satelliteTilePlan");
-    expect(terrainStyle).toContain("World_Imagery/MapServer/tile");
+    expect(terrainStyle).toContain("World_Imagery/MapServer/export");
   });
 
   it("uses only platform-supplied hierarchy features and labels", () => {
