@@ -789,7 +789,7 @@ export function OverviewPage({
     operationalFacilityIds.includes(selectedOperationalFacilityId)
       ? selectedOperationalFacilityId
       : undefined;
-  const operationalSelectedRegion = selectedRegionSnapshot ?? mapContextRegion;
+  const operationalSelectedRegion = selectedRegionSnapshot;
 
   useEffect(() => {
     if (!operationalMapMode || !regionalDataRepository?.operationalFacilities) return;
@@ -1079,7 +1079,10 @@ export function OverviewPage({
       .catch(() => undefined);
   }
 
-  function drillDown(region: OverviewRegion) {
+  function drillDown(
+    region: OverviewRegion,
+    options: { preserveSelection?: boolean } = {},
+  ) {
     if (annotationArmed) return;
     if (
       region.mapContextOnly ||
@@ -1112,8 +1115,13 @@ export function OverviewPage({
         setMapContextRegion(region);
         setParentTrail((trail) => [...trail, parentCode ?? ""]);
         setParentCode(region.code);
-        setSelectedRegionCode("");
-        setSelectedRegionSnapshot(undefined);
+        if (options.preserveSelection) {
+          setSelectedRegionCode(region.code);
+          setSelectedRegionSnapshot(region);
+        } else {
+          setSelectedRegionCode("");
+          setSelectedRegionSnapshot(undefined);
+        }
         setDashboard(undefined);
         setDashboardIssue(undefined);
       })
@@ -1240,91 +1248,94 @@ export function OverviewPage({
           : {})}
         {...((regionalDataRepository || mapAnnotationRepository) && !sampleMode
           ? {
-              dataModePanel: (
-                <OverviewDataModePanel
-                  loading={
-                    operationalMapMode
-                      ? operationalFacilitiesLoading || operationalSituationLoading
-                      : regionalDataLoading
-                  }
-                  mode={dataMode}
-                  productLabel={productLabel}
-                  {...(operationalMapMode
-                    ? operationalFacilitiesIssue
-                      ? { issue: operationalFacilitiesIssue }
-                      : operationalSituationIssue
-                        ? { issue: operationalSituationIssue }
-                        : {}
-                    : regionalDataIssue
-                      ? { issue: regionalDataIssue }
+              dataModePanel:
+                !publicSituationMode || operationalSelectedRegion ? (
+                  <OverviewDataModePanel
+                    loading={
+                      operationalMapMode
+                        ? operationalFacilitiesLoading || operationalSituationLoading
+                        : regionalDataLoading
+                    }
+                    mode={dataMode}
+                    productLabel={productLabel}
+                    {...(operationalMapMode
+                      ? operationalFacilitiesIssue
+                        ? { issue: operationalFacilitiesIssue }
+                        : operationalSituationIssue
+                          ? { issue: operationalSituationIssue }
+                          : {}
+                      : regionalDataIssue
+                        ? { issue: regionalDataIssue }
+                        : {})}
+                    {...(operationalFacilities ? { operationalFacilities } : {})}
+                    {...(operationalSituation ? { operationalSituation } : {})}
+                    {...(effectiveOperationalFacilityId
+                      ? {
+                          selectedOperationalFacilityId: effectiveOperationalFacilityId,
+                        }
                       : {})}
-                  {...(operationalFacilities ? { operationalFacilities } : {})}
-                  {...(operationalSituation ? { operationalSituation } : {})}
-                  {...(effectiveOperationalFacilityId
-                    ? { selectedOperationalFacilityId: effectiveOperationalFacilityId }
-                    : {})}
-                  {...(operationalSelectedRegion
-                    ? { selectedRegion: operationalSelectedRegion }
-                    : {})}
-                  {...(selectedOperationalSituationItem
-                    ? { selectedOperationalSituationItem }
-                    : {})}
-                  onOperationalSituationItemDismiss={() =>
-                    setSelectedOperationalSituationItem(undefined)
-                  }
-                  onOperationalFacilitySelect={(id) => {
-                    setSelectedOperationalSituationItem(undefined);
-                    setSelectedOperationalFacilityId(id);
-                  }}
-                  {...(regionalDataRepository?.createOperationalFacility
-                    ? {
-                        onOperationalFacilitySave: async (
-                          draft: StorageFacilityDraft,
-                          facilityCode?: string,
-                        ) => {
-                          const saved = facilityCode
-                            ? await regionalDataRepository.updateOperationalFacility?.(
-                                facilityCode,
-                                draft,
-                              )
-                            : await regionalDataRepository.createOperationalFacility?.(
-                                draft,
-                              );
-                          if (!saved) throw new Error("库点保存接口不可用");
-                          setSelectedOperationalFacilityId(saved.code);
-                          setOperationalFacilityRevision((value) => value + 1);
-                        },
-                      }
-                    : {})}
-                  {...(regionalDataRepository?.archiveOperationalFacility
-                    ? {
-                        onOperationalFacilityArchive: async (
-                          facility: StorageFacility,
-                        ) => {
-                          await regionalDataRepository.archiveOperationalFacility?.(
-                            facility.code,
-                            facility.version,
-                          );
-                          setSelectedOperationalFacilityId(undefined);
-                          setOperationalFacilityRevision((value) => value + 1);
-                        },
-                      }
-                    : {})}
-                  {...(currentRegionalSummary
-                    ? { regionalSummary: currentRegionalSummary }
-                    : {})}
-                  {...(currentAgricultureProfile
-                    ? { agricultureProfile: currentAgricultureProfile }
-                    : {})}
-                  {...(currentSupplyBalance
-                    ? { supplyBalance: currentSupplyBalance }
-                    : {})}
-                />
-              ),
+                    {...(operationalSelectedRegion
+                      ? { selectedRegion: operationalSelectedRegion }
+                      : {})}
+                    {...(selectedOperationalSituationItem
+                      ? { selectedOperationalSituationItem }
+                      : {})}
+                    onOperationalSituationItemDismiss={() =>
+                      setSelectedOperationalSituationItem(undefined)
+                    }
+                    onOperationalFacilitySelect={(id) => {
+                      setSelectedOperationalSituationItem(undefined);
+                      setSelectedOperationalFacilityId(id);
+                    }}
+                    {...(regionalDataRepository?.createOperationalFacility
+                      ? {
+                          onOperationalFacilitySave: async (
+                            draft: StorageFacilityDraft,
+                            facilityCode?: string,
+                          ) => {
+                            const saved = facilityCode
+                              ? await regionalDataRepository.updateOperationalFacility?.(
+                                  facilityCode,
+                                  draft,
+                                )
+                              : await regionalDataRepository.createOperationalFacility?.(
+                                  draft,
+                                );
+                            if (!saved) throw new Error("库点保存接口不可用");
+                            setSelectedOperationalFacilityId(saved.code);
+                            setOperationalFacilityRevision((value) => value + 1);
+                          },
+                        }
+                      : {})}
+                    {...(regionalDataRepository?.archiveOperationalFacility
+                      ? {
+                          onOperationalFacilityArchive: async (
+                            facility: StorageFacility,
+                          ) => {
+                            await regionalDataRepository.archiveOperationalFacility?.(
+                              facility.code,
+                              facility.version,
+                            );
+                            setSelectedOperationalFacilityId(undefined);
+                            setOperationalFacilityRevision((value) => value + 1);
+                          },
+                        }
+                      : {})}
+                    {...(currentRegionalSummary
+                      ? { regionalSummary: currentRegionalSummary }
+                      : {})}
+                    {...(currentAgricultureProfile
+                      ? { agricultureProfile: currentAgricultureProfile }
+                      : {})}
+                    {...(currentSupplyBalance
+                      ? { supplyBalance: currentSupplyBalance }
+                      : {})}
+                  />
+                ) : undefined,
               sideDataPanel:
                 dataMode === "SUPPLY_BALANCE" ||
                 dataMode === "REGIONAL_DATA" ||
-                operationalMapMode,
+                (operationalMapMode && Boolean(operationalSelectedRegion)),
               scopeLabel: "地区数据范围：齐齐哈尔、黑河、呼伦贝尔、大兴安岭及下级地区",
               dataSourceLabel: publicSituationMode
                 ? "来源：公开地理服务、Open-Meteo 与正式业务数据"
@@ -1455,7 +1466,9 @@ export function OverviewPage({
                       },
                     }
                   : {})}
-                onRegionDrill={drillDown}
+                onRegionDrill={(region) =>
+                  drillDown(region, { preserveSelection: true })
+                }
                 onRegionSelect={selectRegion}
                 onReturnToParent={returnToParent}
                 onTimelineSelect={setSelectedOperationalSituationItem}

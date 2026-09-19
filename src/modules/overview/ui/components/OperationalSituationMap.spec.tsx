@@ -10,7 +10,7 @@ describe("four-region terrain public situation scene", () => {
   );
   const scene = existsSync(scenePath) ? readFileSync(scenePath, "utf8") : "";
   const terrainStyle = readFileSync(
-    resolve("src/modules/overview/ui/components/satelliteSurfaceTexture.ts"),
+    resolve("src/modules/overview/ui/components/fourRegionTerrainStyle.ts"),
     "utf8",
   );
   const wrapper = readFileSync(
@@ -30,70 +30,70 @@ describe("four-region terrain public situation scene", () => {
     "utf8",
   );
 
-  it("renders the governed four regions across one fixed visible globe", () => {
-    expect(scene.match(/new THREE\.WebGLRenderer/g)).toHaveLength(1);
-    expect(scene).toContain("projectReliefScene(");
-    expect(scene).toContain("createFourRegionGlobeBackdrop(");
-    expect(scene).toContain("fitFixedGlobeCamera(");
-    expect(scene).toContain("createGlobeSurfaceMaterial(");
-    expect(scene).toContain("createCurvedSatelliteSurfaceMaterial(");
-    expect(scene).toContain('data-globe-mode="fixed-visible-hemisphere"');
-    expect(scene).toContain('data-region-visibility="all-four-front-hemisphere"');
-    expect(scene).toContain('data-renderer="three-fixed-four-region-globe"');
-    expect(scene).not.toContain("OrbitControls");
-    expect(scene).not.toContain("MapLibreMap");
-    expect(scene).not.toContain("maplibre-gl");
+  it("renders a full-bleed four-region terrain atlas without the empty globe shell", () => {
+    expect(scene).toContain("MapLibreMap");
+    expect(scene).toContain('data-renderer="maplibre-four-region-terrain"');
+    expect(scene).toContain('data-region-visibility="governed-four-region-mask"');
+    expect(scene).toContain("fitOperationalMap(");
+    expect(scene).not.toContain("createFourRegionGlobeBackdrop(");
+    expect(scene).not.toContain("new THREE.WebGLRenderer");
     expect(scene).not.toContain("TerrainReliefBoundaryMap");
     expect(wrapper).not.toContain("态势地图俯视角");
     expect(overviewPage).toContain("{!publicSituationMode && (");
     expect(overviewPage).toContain("rootFeatures={rootMapFeatures}");
   });
 
-  it("maps satellite detail onto raised region caps instead of a satellite ground plane", () => {
-    expect(scene).toContain("loadSatelliteSurfaceTexture(");
-    expect(scene).toContain("createCurvedSatelliteSurfaceMaterial(");
-    expect(scene).toContain('data-surface-confinement="region-meshes-only"');
-    expect(scene).not.toContain("new THREE.PlaneGeometry");
-    expect(terrainStyle).toContain("satelliteTilePlan");
-    expect(terrainStyle).toContain("World_Imagery/MapServer/export");
+  it("streams multiresolution satellite tiles, terrain, roads and buildings while zooming", () => {
+    expect(scene).toContain("FOUR_REGION_REMOTE_SOURCES");
+    expect(scene).toContain("FOUR_REGION_DETAIL_LAYERS");
+    expect(scene).toContain("map.setTerrain");
+    expect(scene).toContain('map.on("zoom"');
+    expect(terrainStyle).toContain("World_Imagery/MapServer/tile/{z}/{y}/{x}");
+    expect(terrainStyle).toContain('id: "atlas-buildings"');
+    expect(terrainStyle).toContain('id: "atlas-road-labels"');
+    expect(terrainStyle).not.toContain("World_Imagery/MapServer/export");
   });
 
-  it("uses only platform-supplied hierarchy features and labels", () => {
-    expect(scene).toContain("props.features");
-    expect(scene).toContain("props.rootFeatures");
-    expect(scene).not.toContain("props.backdrop");
-    expect(scene).toContain("projection.labels");
-    expect(scene).toContain("rootCodes.has(region.code)");
-    expect(scene).not.toContain("OpenFreeMap");
-    expect(scene).not.toContain("World_Boundaries_and_Places");
-    expect(scene).not.toContain('"source-layer": "place"');
+  it("raises the four roots and the active child hierarchy above the terrain", () => {
+    expect(scene).toContain('id: "atlas-root-plinth"');
+    expect(scene).toContain('id: "atlas-active-plinth"');
+    expect(scene).toContain('"fill-extrusion-height"');
+    expect(sceneStyles).toContain("cosmic-noise");
+    expect(sceneStyles).toContain("clip-path: ellipse");
   });
 
-  it("changes satellite detail without cropping or rotating the four regions", () => {
-    expect(scene).toContain("runtimeRef.current");
-    expect(scene).toContain("updateOperationalLayers(");
-    expect(scene).toContain("applyCommand(");
-    expect(scene).toContain("satelliteDetailRevision");
-    expect(scene).not.toContain("contentRoot.rotation");
-    expect(scene).not.toContain("contentRoot.scale.setScalar");
-    expect(scene).not.toContain("changedAtlasSources(");
+  it("keeps the four root boundaries separate from only the current parent's children", () => {
+    expect(scene).toContain('"atlas-root-regions"');
+    expect(scene).toContain('"atlas-active-regions"');
+    expect(scene).toContain('"atlas-region-mask"');
+    expect(scene).toContain("activeHierarchyFeatures(");
+    expect(scene).toContain("feature.region.parentCode === contextCode");
+    expect(scene).not.toContain("projection.labels");
+  });
+
+  it("supports Google-style continuous zoom and pan without map rotation", () => {
+    expect(scene).toContain("map.zoomIn");
+    expect(scene).toContain("map.zoomOut");
+    expect(scene).toContain("dragRotate: false");
+    expect(scene).toContain("map.keyboard.disableRotation");
+    expect(scene).toContain("map.touchZoomRotate.disableRotation");
+    expect(scene).toContain("renderWorldCopies: false");
   });
 
   it("renders operational nodes inside the same WebGL scene without DOM markers", () => {
-    expect(scene).toContain("buildOperationalMarkers(");
-    expect(scene).toContain("buildOperationalLines(");
-    expect(scene).toContain("acceptProjectedMarker(");
-    expect(scene).not.toContain('undefined, "存"');
-    expect(scene).not.toContain('}, "铁路"');
+    expect(scene).toContain("markerCollection(");
+    expect(scene).toContain("railwayCollection(");
+    expect(scene).toContain("logisticsCollection(");
     expect(scene).not.toMatch(/new\s+Marker\s*\(/);
     expect(scene).toContain('data-dom-markers="0"');
   });
 
-  it("selects and drills through the actual administrative polygon", () => {
-    expect(scene).toContain("raycaster.intersectObjects");
+  it("single-clicks the visible administrative polygon into the next level", () => {
+    expect(scene).toContain("queryRenderedFeatures");
     expect(scene).toContain("onRegionSelect");
     expect(scene).toContain("onRegionDrill");
-    expect(scene).not.toContain("nearest");
+    expect(scene).toContain('region.level !== "VILLAGE"');
+    expect(scene).not.toContain('addEventListener("dblclick"');
   });
 
   it("keeps depot categories independently focusable", () => {
@@ -111,6 +111,18 @@ describe("four-region terrain public situation scene", () => {
     expect(panelStyles).toContain("--command-details-width: clamp(390px, 27vw, 460px)");
   });
 
+  it("mounts the public inspector only after a region is selected", () => {
+    expect(overviewPage).toContain(
+      "const operationalSelectedRegion = selectedRegionSnapshot;",
+    );
+    expect(overviewPage).toContain(
+      "(operationalMapMode && Boolean(operationalSelectedRegion))",
+    );
+    expect(overviewPage).toContain(
+      "!publicSituationMode || operationalSelectedRegion ? (",
+    );
+  });
+
   it("removes the legacy root minimum width only for public-situation narrow desktops", () => {
     expect(panelStyles).toContain("@media (max-width: 1180px)");
     expect(panelStyles).toContain("html:has(.overview-data-mode.is-public_situation)");
@@ -122,7 +134,8 @@ describe("four-region terrain public situation scene", () => {
     expect(wrapper).toContain("annotationRepository.save(command)");
     expect(wrapper).toContain("annotationRepository.delete()");
     expect(scene).toContain("onAnnotationPosition");
-    expect(scene).toContain("buildAnnotationObjects(");
+    expect(scene).toContain("annotationCollection(");
+    expect(scene).toContain("props.annotationActive");
   });
 
   it("pauses timeline animation while the page is hidden", () => {

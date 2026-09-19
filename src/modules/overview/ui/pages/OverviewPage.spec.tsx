@@ -54,7 +54,9 @@ describe("OverviewPage", () => {
     await userEvent.click(await screen.findByRole("button", { name: "公开态势" }));
 
     expect(await screen.findByLabelText("公开运营态势地图")).toBeVisible();
-    expect(screen.getByRole("status")).toHaveTextContent("正在同步实时态势");
+    expect(
+      screen.queryByRole("heading", { name: "四区域总览" }),
+    ).not.toBeInTheDocument();
   });
 
   it("merges storage and railway facilities into one public situation mode", async () => {
@@ -120,7 +122,10 @@ describe("OverviewPage", () => {
     expect(screen.queryByRole("button", { name: "关联库点" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "铁路站点" })).not.toBeInTheDocument();
     await userEvent.click(await screen.findByRole("button", { name: "公开态势" }));
-    expect(await screen.findByRole("heading", { name: "四区域总览" })).toBeVisible();
+    expect(await screen.findByLabelText("公开运营态势地图")).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "四区域总览" }),
+    ).not.toBeInTheDocument();
     await waitFor(() => expect(operationalFacilities).toHaveBeenCalledTimes(1));
   });
 
