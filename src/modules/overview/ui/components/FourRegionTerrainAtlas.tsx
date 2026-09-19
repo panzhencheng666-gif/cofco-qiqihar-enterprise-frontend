@@ -99,6 +99,7 @@ interface AtlasRuntime {
     hidden: THREE.MeshBasicMaterial;
     hover: THREE.ShaderMaterial;
     selected: THREE.ShaderMaterial;
+    shadow: THREE.MeshBasicMaterial;
   };
   texture: THREE.Texture;
 }
@@ -238,6 +239,13 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
       }),
       hover: createCurvedSatelliteSurfaceMaterial(fallbackTexture, "hover"),
       selected: createCurvedSatelliteSurfaceMaterial(fallbackTexture, "selected"),
+      shadow: new THREE.MeshBasicMaterial({
+        color: 0x031a17,
+        depthTest: false,
+        depthWrite: false,
+        opacity: 0.48,
+        transparent: true,
+      }),
     };
     const regionObjects: THREE.Object3D[] = [];
     const regionTargets = new Map<string, InteractionTarget>();
@@ -647,6 +655,14 @@ function addCurvedRegionSurface(
 ) {
   const geometries = createRegionSurfaceGeometries(surface);
   const group = new THREE.Group();
+  if (rootRegion) {
+    geometries.forEach((geometry) => {
+      const contactShadow = new THREE.Mesh(geometry.clone(), materials.shadow);
+      contactShadow.position.set(9, -12, topZ - 2);
+      contactShadow.renderOrder = 2;
+      group.add(contactShadow);
+    });
+  }
   const topMeshes = geometries.map((geometry) => {
     const top = new THREE.Mesh(
       geometry,
@@ -952,16 +968,30 @@ function addOperationalMarker(
   label?: string,
 ) {
   const world = screenToWorld(point);
-  const geometry = new THREE.CircleGeometry(selected ? 8.5 : 6.5, 20);
-  const material = new THREE.MeshBasicMaterial({ color, depthTest: false });
-  const marker = new THREE.Mesh(geometry, material);
-  marker.position.set(
+  const markerGroup = new THREE.Group();
+  const marker = new THREE.Mesh(
+    new THREE.CircleGeometry(selected ? 6.4 : 5.1, 20),
+    new THREE.MeshBasicMaterial({ color, depthTest: false, depthWrite: false }),
+  );
+  const markerRing = new THREE.Mesh(
+    new THREE.RingGeometry(selected ? 7.1 : 5.8, selected ? 9.2 : 7.5, 24),
+    new THREE.MeshBasicMaterial({
+      color: selected ? 0xffd766 : 0xf3f2e8,
+      depthTest: false,
+      depthWrite: false,
+      opacity: 0.92,
+      side: THREE.DoubleSide,
+      transparent: true,
+    }),
+  );
+  markerGroup.add(markerRing, marker);
+  markerGroup.position.set(
     world.x,
     world.y,
     globeSurfaceHeight(world) + (selected ? 25 : 20),
   );
-  marker.renderOrder = 30;
-  runtime.operationalRoot.add(marker);
+  markerGroup.renderOrder = 30;
+  runtime.operationalRoot.add(markerGroup);
   runtime.operationalObjects.push(marker);
   if (target) runtime.operationalTargets.set(marker.uuid, target);
   if (label) {
@@ -1235,7 +1265,7 @@ function createFallbackTexture(bounds: ProjectedSurfaceBounds | undefined) {
 }
 
 function createLabelSprite(text: string) {
-  return createTextSprite(text, "#f7f2df", "rgba(12, 34, 29, .88)", 28, 1.22);
+  return createTextSprite(text, "#f7f2df", "rgba(12, 34, 29, .88)", 32, 1.9);
 }
 
 function createBadgeSprite(text: string, color: number) {
