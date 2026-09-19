@@ -41,6 +41,7 @@ describe("four-region terrain public situation scene", () => {
     expect(wrapper).not.toContain("态势地图俯视角");
     expect(wrapper).not.toContain("球体");
     expect(wrapper).not.toContain("球面");
+    expect(wrapper).not.toContain("业务地球");
     expect(wrapper).not.toContain("双击下钻");
     expect(overviewPage).toContain("{!publicSituationMode && (");
     expect(overviewPage).toContain("rootFeatures={rootMapFeatures}");
@@ -157,6 +158,8 @@ describe("four-region terrain public situation scene", () => {
       "!publicSituationMode || operationalSelectedRegion ? (",
     );
     expect(overviewPage).toContain("showBusinessMetrics={!publicSituationMode}");
+    expect(overviewPage).toContain('if (nextMode === "PUBLIC_SITUATION")');
+    expect(overviewPage).toContain("setSelectedRegionSnapshot(undefined)");
   });
 
   it("removes the legacy root minimum width only for public-situation narrow desktops", () => {

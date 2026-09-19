@@ -65,7 +65,7 @@ export function fitOperationalMap(
     zoom,
   });
   map.setMinZoom(Math.max(0, zoom - 0.25));
-  map.setMaxBounds(zoomInset > 0 ? expandBounds(bounds, 0.22) : bounds);
+  map.setMaxBounds(expandBounds(bounds, 2));
 }
 
 function expandBounds(

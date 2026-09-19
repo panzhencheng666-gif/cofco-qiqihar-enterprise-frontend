@@ -1235,6 +1235,15 @@ export function OverviewPage({
                   onModeChange={(nextMode) => {
                     setAnnotationArmed(false);
                     setAnnotationOpen(false);
+                    if (nextMode === "PUBLIC_SITUATION") {
+                      setScopeRootCode(OVERALL_SCOPE);
+                      setParentCode(undefined);
+                      setParentTrail([]);
+                      setMapContextRegion(undefined);
+                      setMapContextTrail([]);
+                      setSelectedRegionCode("");
+                      setSelectedRegionSnapshot(undefined);
+                    }
                     setDataMode(nextMode);
                     setRegionalDataIssue(undefined);
                     setOperationalFacilitiesIssue(undefined);

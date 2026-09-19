@@ -273,7 +273,7 @@ export function OperationalSituationMap({
       <Suspense
         fallback={
           <div className="realistic-situation-loading" role="status">
-            <strong>正在建立四区域固定业务地球</strong>
+            <strong>正在建立四区域地形态势图</strong>
             <span>正在载入四区域边界、卫星地表和业务图层。</span>
           </div>
         }
