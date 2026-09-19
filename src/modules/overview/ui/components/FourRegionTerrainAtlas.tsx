@@ -315,23 +315,6 @@ function installAtlasLayers(map: MapLibreMap) {
     paint: { "fill-color": "#8ed0bd", "fill-opacity": 0.015 },
   });
   map.addLayer({
-    id: "atlas-root-plinth",
-    type: "fill-extrusion",
-    source: ROOT_SOURCE,
-    paint: {
-      "fill-extrusion-base": 0,
-      "fill-extrusion-color": [
-        "case",
-        ["==", ["get", "selected"], true],
-        "#e7c76d",
-        "#4c8376",
-      ],
-      "fill-extrusion-height": ["case", ["==", ["get", "selected"], true], 260, 140],
-      "fill-extrusion-opacity": 0.08,
-      "fill-extrusion-vertical-gradient": true,
-    },
-  });
-  map.addLayer({
     id: "atlas-root-glow",
     type: "line",
     source: ROOT_SOURCE,
@@ -376,28 +359,6 @@ function installAtlasLayers(map: MapLibreMap) {
     paint: {
       "fill-color": ["case", ["==", ["get", "selected"], true], "#f6ca5c", "#8ed4bf"],
       "fill-opacity": ["case", ["==", ["get", "selected"], true], 0.2, 0.06],
-    },
-  });
-  map.addLayer({
-    id: "atlas-active-plinth",
-    type: "fill-extrusion",
-    source: ACTIVE_SOURCE,
-    paint: {
-      "fill-extrusion-base": 0,
-      "fill-extrusion-color": [
-        "case",
-        ["==", ["get", "selected"], true],
-        "#f0ce70",
-        "#6da596",
-      ],
-      "fill-extrusion-height": [
-        "case",
-        ["==", ["get", "selected"], true],
-        220,
-        ["match", ["get", "level"], "COUNTY", 180, "TOWNSHIP", 140, "VILLAGE", 90, 120],
-      ],
-      "fill-extrusion-opacity": 0.09,
-      "fill-extrusion-vertical-gradient": true,
     },
   });
   map.addLayer({
@@ -689,7 +650,7 @@ function fitCurrentHierarchy(
     toMapBounds(bounds),
     padding,
     rootView ? 45 : 50,
-    rootView ? -0.25 : 0,
+    rootView ? 0.12 : 0,
   );
   runtime.host.dataset.imageryZoom = runtime.map.getZoom().toFixed(2);
 }
@@ -795,12 +756,10 @@ function applySurfaceMode(map: MapLibreMap, mode: TerrainSurfaceMode) {
 
 function setAdministrativeVisibility(map: MapLibreMap, visible: boolean) {
   [
-    "atlas-root-plinth",
     "atlas-root-glow",
     "atlas-root-outline",
     "atlas-root-labels",
     "atlas-active-fill",
-    "atlas-active-plinth",
     "atlas-active-outline",
     "atlas-active-labels",
   ].forEach((id) =>

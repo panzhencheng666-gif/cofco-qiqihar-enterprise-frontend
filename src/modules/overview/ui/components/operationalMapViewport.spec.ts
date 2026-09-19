@@ -24,13 +24,13 @@ describe("fitOperationalMap", () => {
       ],
       { bottom: 96, left: 54, right: 54, top: 104 },
       45,
-      -0.25,
+      0.12,
     );
 
     expect(jumpTo).toHaveBeenCalledWith(
       expect.objectContaining({ center: [125, 50], pitch: 45 }),
     );
-    expect(jumpTo.mock.calls[0]?.[0]?.zoom).toBeCloseTo(5.65);
+    expect(jumpTo.mock.calls[0]?.[0]?.zoom).toBeCloseTo(5.28);
     expect(setMaxBounds).toHaveBeenLastCalledWith([
       [100, 30],
       [150, 70],

@@ -58,10 +58,11 @@ describe("four-region terrain public situation scene", () => {
     expect(terrainStyle).not.toContain("World_Imagery/MapServer/export");
   });
 
-  it("raises the four roots and active hierarchy without an artificial earth shell", () => {
-    expect(scene).toContain('id: "atlas-root-plinth"');
-    expect(scene).toContain('id: "atlas-active-plinth"');
-    expect(scene).toContain('"fill-extrusion-height"');
+  it("uses real terrain relief without artificial administrative extrusion walls", () => {
+    expect(scene).not.toContain('id: "atlas-root-plinth"');
+    expect(scene).not.toContain('id: "atlas-active-plinth"');
+    expect(scene).toContain("map.setTerrain");
+    expect(terrainStyle).toContain('id: "atlas-terrain-light"');
     expect(sceneStyles).not.toContain("cosmic-noise");
     expect(sceneStyles).not.toContain("clip-path: ellipse");
     expect(sceneStyles).not.toContain(".realistic-situation-layer::after");
