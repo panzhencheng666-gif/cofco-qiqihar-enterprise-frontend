@@ -131,7 +131,7 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
       localIdeographFontFamily: "sans-serif",
       maxPitch: 68,
       minPitch: 12,
-      pitch: 38,
+      pitch: 30,
       renderWorldCopies: false,
       style: FOUR_REGION_BASE_STYLE,
     });
@@ -298,8 +298,8 @@ function installAtlasLayers(map: MapLibreMap) {
     source: "atlas-world-mask",
     paint: {
       "fill-antialias": false,
-      "fill-color": "#101714",
-      "fill-opacity": 1,
+      "fill-color": "#07130f",
+      "fill-opacity": 0.68,
     },
   });
   map.addLayer({
@@ -309,6 +309,22 @@ function installAtlasLayers(map: MapLibreMap) {
     paint: {
       "fill-color": ["case", ["==", ["get", "selected"], true], "#d8b862", "#8ba37f"],
       "fill-opacity": ["case", ["==", ["get", "selected"], true], 0.24, 0.12],
+    },
+  });
+  map.addLayer({
+    id: "atlas-regions-halo",
+    type: "line",
+    source: "atlas-regions",
+    paint: {
+      "line-blur": 3,
+      "line-color": [
+        "case",
+        ["==", ["get", "selected"], true],
+        "#d8b861",
+        "#f3f1e7",
+      ],
+      "line-opacity": ["case", ["==", ["get", "selected"], true], 0.42, 0.2],
+      "line-width": ["case", ["==", ["get", "selected"], true], 9, 6],
     },
   });
   map.addLayer({
@@ -469,6 +485,7 @@ function synchronizeChangedSources(
   const layerVisibilityKey = atlasLayerVisibilityKey(props.layers);
   if (runtime.lastLayerVisibilityKey !== layerVisibilityKey) {
     setLayerVisibility(runtime.map, "atlas-regions-fill", props.layers.ADMINISTRATIVE);
+    setLayerVisibility(runtime.map, "atlas-regions-halo", props.layers.ADMINISTRATIVE);
     setLayerVisibility(
       runtime.map,
       "atlas-regions-outline",

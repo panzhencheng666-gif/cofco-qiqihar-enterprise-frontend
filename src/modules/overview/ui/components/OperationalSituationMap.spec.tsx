@@ -40,6 +40,13 @@ describe("four-region terrain public situation scene", () => {
     expect(overviewPage).toContain("{!publicSituationMode && (");
   });
 
+  it("integrates the governed regions into one restrained terrain surface", () => {
+    expect(scene).toContain('id: "atlas-regions-halo"');
+    expect(scene).toContain('"fill-color": "#07130f"');
+    expect(scene).toContain('"fill-opacity": 0.68');
+    expect(scene).toContain("pitch: 30");
+  });
+
   it("waits for the MapLibre style before enabling globe projection", () => {
     const loadHandler = scene.indexOf('map.on("load", () => {');
     const projection = scene.indexOf('map.setProjection({ type: "globe" })');
