@@ -30,6 +30,7 @@ import {
   FOUR_REGION_BASE_STYLE,
   FOUR_REGION_DETAIL_LAYERS,
   FOUR_REGION_REMOTE_SOURCES,
+  publicBoundaryHierarchy,
   surfaceModePaint,
   type TerrainSurfaceMode,
 } from "./fourRegionTerrainStyle";
@@ -360,7 +361,7 @@ function installAtlasLayers(map: MapLibreMap) {
     paint: {
       "line-blur": 2,
       "line-color": "#9be3d9",
-      "line-opacity": 0.55,
+      "line-opacity": 0,
       "line-width": 3,
     },
   });
@@ -398,7 +399,7 @@ function installAtlasLayers(map: MapLibreMap) {
     layout: { "fill-sort-key": ["get", "levelRank"] },
     paint: {
       "fill-color": ["case", ["==", ["get", "selected"], true], "#f6ca5c", "#8ed4bf"],
-      "fill-opacity": ["case", ["==", ["get", "selected"], true], 0.2, 0.06],
+      "fill-opacity": ["case", ["==", ["get", "selected"], true], 0.035, 0.015],
     },
   });
   map.addLayer({
@@ -419,7 +420,7 @@ function installAtlasLayers(map: MapLibreMap) {
         "#9ef6ff",
       ],
       "line-opacity": 0.96,
-      "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.9, 13, 1.4],
+      "line-width": ["case", ["==", ["get", "selected"], true], 1.5, 0.85],
     },
   });
   map.addLayer({
@@ -443,10 +444,10 @@ function installAtlasLayers(map: MapLibreMap) {
     type: "line",
     source: RAIL_SOURCE,
     paint: {
-      "line-color": "#ffffff",
-      "line-dasharray": [2, 2],
-      "line-opacity": 0.88,
-      "line-width": 1.8,
+      "line-color": "#d9e4df",
+      "line-dasharray": [3, 3],
+      "line-opacity": 0.68,
+      "line-width": 1,
     },
   });
   map.addLayer({
@@ -456,8 +457,8 @@ function installAtlasLayers(map: MapLibreMap) {
     paint: {
       "line-color": "#f4b43f",
       "line-dasharray": [1.5, 1.3],
-      "line-opacity": 0.96,
-      "line-width": 3.2,
+      "line-opacity": 0.7,
+      "line-width": 1.4,
     },
   });
   map.addLayer({
@@ -619,7 +620,10 @@ function synchronizeAtlas(runtime: AtlasRuntime, props: FourRegionTerrainAtlasPr
   }
   const active = activeHierarchyFeatures(props);
   if (hierarchyChanged || selectionChanged) {
-    setSource(runtime.map, ACTIVE_SOURCE, regionCollection(active, props));
+    // Keep only the current children plus the selected parent outline, never
+    // accumulate earlier levels or use unverified village display partitions.
+    const outlined = active.length && props.backdrop ? [props.backdrop, ...active] : active;
+    setSource(runtime.map, ACTIVE_SOURCE, regionCollection(outlined, props));
     setSource(runtime.map, ACTIVE_LABEL_SOURCE, regionLabelCollection(active));
   }
   if (
@@ -642,8 +646,20 @@ function synchronizeAtlas(runtime: AtlasRuntime, props: FourRegionTerrainAtlasPr
     setSource(runtime.map, ANNOTATION_SOURCE, annotationCollection(props));
   if (!previous || previous.surfaceMode !== props.surfaceMode)
     applySurfaceMode(runtime.map, props.surfaceMode ?? "FUSION");
-  if (!previous || previous.layers.ADMINISTRATIVE !== props.layers.ADMINISTRATIVE)
+  if (!previous || hierarchyChanged || selectionChanged || previous.layers.ADMINISTRATIVE !== props.layers.ADMINISTRATIVE) {
     setAdministrativeVisibility(runtime.map, props.layers.ADMINISTRATIVE);
+    const emphasis = publicBoundaryHierarchy(active.length > 0, Boolean(props.selectedRegionCode));
+    runtime.map.setPaintProperty("atlas-root-outline", "line-opacity", emphasis.rootOpacity);
+    runtime.map.setPaintProperty("atlas-active-outline", "line-opacity", emphasis.activeOpacity);
+    runtime.map.setLayoutProperty("atlas-root-labels", "visibility", props.layers.ADMINISTRATIVE ? emphasis.rootLabels : "none");
+    // Remove matching basemap names too; authoritative business labels own
+    // administrative names while small settlement detail remains available.
+    const names = [...new Set([...props.rootFeatures, ...active].map(feature => feature.region.name))];
+    runtime.map.setFilter("atlas-place-labels", ["all",
+      ["in", ["get", "class"], ["literal", ["hamlet", "isolated_dwelling", "neighbourhood"]]],
+      ["!", ["in", ["coalesce", ["get", "name:zh-Hans"], ["get", "name:zh"], ["get", "name"], ""], ["literal", names]]],
+    ]);
+  }
 
   const nextHierarchyKey = hierarchyKey(props, active);
   if (nextHierarchyKey !== runtime.hierarchyKey) {
