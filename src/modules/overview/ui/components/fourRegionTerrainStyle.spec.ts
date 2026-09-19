@@ -19,6 +19,7 @@ describe("four-region satellite and terrain style", () => {
     expect(Object.keys(FOUR_REGION_REMOTE_SOURCES)).toEqual([
       "satellite",
       "terrain-dem",
+      "hillshade-dem",
       "openmaptiles",
     ]);
     expect(FOUR_REGION_REMOTE_SOURCES.satellite?.type).toBe("raster");
@@ -29,6 +30,10 @@ describe("four-region satellite and terrain style", () => {
     expect(JSON.stringify(FOUR_REGION_REMOTE_SOURCES["terrain-dem"])).not.toContain(
       "bounds",
     );
+    expect(FOUR_REGION_REMOTE_SOURCES["hillshade-dem"]?.type).toBe("raster-dem");
+    expect(
+      FOUR_REGION_DETAIL_LAYERS.find((layer) => layer.id === "atlas-terrain-light"),
+    ).toEqual(expect.objectContaining({ source: "hillshade-dem" }));
     expect(FOUR_REGION_REMOTE_SOURCES.openmaptiles).toEqual(
       expect.objectContaining({ type: "vector" }),
     );

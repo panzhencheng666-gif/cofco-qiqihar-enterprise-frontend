@@ -7,6 +7,10 @@ import type {
 
 export type TerrainSurfaceMode = "SANDBOX" | "FUSION" | "IMAGERY";
 
+const TERRAIN_TILES = [
+  "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
+];
+
 export const FOUR_REGION_BASE_STYLE: StyleSpecification = {
   version: 8,
   glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
@@ -33,12 +37,19 @@ export const FOUR_REGION_REMOTE_SOURCES: Record<string, SourceSpecification> = {
   },
   "terrain-dem": {
     type: "raster-dem",
-    tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+    tiles: TERRAIN_TILES,
     tileSize: 256,
     maxzoom: 15,
     encoding: "terrarium",
     attribution:
       '<a href="https://registry.opendata.aws/terrain-tiles/">Mapzen Terrain Tiles on AWS</a>',
+  },
+  "hillshade-dem": {
+    type: "raster-dem",
+    tiles: TERRAIN_TILES,
+    tileSize: 256,
+    maxzoom: 12,
+    encoding: "terrarium",
   },
   openmaptiles: {
     type: "vector",
@@ -72,7 +83,7 @@ export const FOUR_REGION_DETAIL_LAYERS: LayerSpecification[] = [
   {
     id: "atlas-terrain-light",
     type: "hillshade",
-    source: "terrain-dem",
+    source: "hillshade-dem",
     paint: {
       "hillshade-accent-color": "#cdb478",
       "hillshade-exaggeration": 0.78,
