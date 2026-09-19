@@ -1233,6 +1233,8 @@ export function OverviewPage({
                 <OverviewDataModeTabs
                   mode={dataMode}
                   onModeChange={(nextMode) => {
+                    navigationRequestRef.current += 1;
+                    setPendingNavigationLabel(undefined);
                     setAnnotationArmed(false);
                     setAnnotationOpen(false);
                     if (nextMode === "PUBLIC_SITUATION") {
