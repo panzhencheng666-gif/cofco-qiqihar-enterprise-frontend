@@ -41,7 +41,9 @@ it("loads lazily and selects a keyboard result without blocking its host", async
   fireEvent.focus(input);
   fireEvent.change(input, { target: { value: "依安" } });
   await screen.findByRole("option", { name: /齐齐哈尔市 \/ 依安县/ });
-  fireEvent.keyDown(input, { key: "ArrowDown" });
+  expect(
+    fireEvent.mouseDown(screen.getByRole("option", { name: /齐齐哈尔市 \/ 依安县/ })),
+  ).toBe(false);
   fireEvent.keyDown(input, { key: "Enter" });
   await waitFor(() => expect(onSelect).toHaveBeenCalledWith(county));
   fireEvent.focus(input);

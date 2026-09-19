@@ -178,9 +178,14 @@ function SearchSession({
                   : -1,
               );
             }
-            if (event.key === "Enter" && open && matches[active] && !selecting) {
+            if (
+              event.key === "Enter" &&
+              open &&
+              matches[active < 0 ? 0 : active] &&
+              !selecting
+            ) {
               event.preventDefault();
-              void choose(matches[active].region);
+              void choose(matches[active < 0 ? 0 : active]!.region);
             }
           }}
         />
@@ -221,6 +226,7 @@ function SearchSession({
                 key={region.code}
                 aria-selected={active === index}
                 disabled={selecting}
+                onMouseDown={(event) => event.preventDefault()}
                 onClick={() => void choose(region)}
               >
                 <span>

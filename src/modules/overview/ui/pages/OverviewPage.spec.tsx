@@ -9,6 +9,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
+import type { OperationalFacilityCatalogue } from "../../domain/operationalFacilities";
 
 import type { OverviewRepository } from "../../application/ports/OverviewRepository";
 import type { OverviewRegionalDataRepository } from "../../application/ports/OverviewRegionalDataRepository";
@@ -26,7 +27,28 @@ import {
 import { HttpContractError, HttpError } from "../../../../shared/api/HttpClient";
 
 vi.mock("../components/OperationalSituationMap", () => ({
-  OperationalSituationMap: () => <div aria-label="公开运营态势地图" />,
+  OperationalSituationMap: ({
+    onRegionSelect,
+    facilities,
+  }: {
+    onRegionSelect: (region: OverviewRegion) => void;
+    facilities: { regionCode: string | null };
+  }) => (
+    <div aria-label="公开运营态势地图" data-scope={facilities.regionCode ?? "ALL"}>
+      <button
+        onClick={() =>
+          onRegionSelect({
+            code: "230200",
+            name: "齐齐哈尔市",
+            level: "PREFECTURE",
+            approvedRecordCount: null,
+          })
+        }
+      >
+        选择齐齐哈尔详情
+      </button>
+    </div>
+  ),
 }));
 
 describe("OverviewPage", () => {
@@ -127,6 +149,18 @@ describe("OverviewPage", () => {
       screen.queryByRole("heading", { name: "四区域总览" }),
     ).not.toBeInTheDocument();
     await waitFor(() => expect(operationalFacilities).toHaveBeenCalledTimes(1));
+    operationalFacilities.mockResolvedValue({
+      ...(await (operationalFacilities.mock.results[0]!.value as Promise<
+        OperationalFacilityCatalogue
+      >)),
+      regionCode: "230200",
+    });
+    await userEvent.click(screen.getByRole("button", { name: "选择齐齐哈尔详情" }));
+    await screen.findByRole("button", { name: "关闭地区详情" });
+    expect(screen.getByLabelText("公开运营态势地图")).toHaveAttribute(
+      "data-scope",
+      "ALL",
+    );
   });
 
   it("loads the regional profile when the legacy summary is unavailable below county", async () => {

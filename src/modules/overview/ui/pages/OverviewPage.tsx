@@ -295,6 +295,8 @@ export function OverviewPage({
   const [regionalDataIssue, setRegionalDataIssue] = useState<string>();
   const [operationalFacilities, setOperationalFacilities] =
     useState<OperationalFacilityCatalogue>();
+  const [mapOperationalFacilities, setMapOperationalFacilities] =
+    useState<OperationalFacilityCatalogue>();
   const [operationalFacilitiesLoading, setOperationalFacilitiesLoading] =
     useState(false);
   const [operationalFacilitiesIssue, setOperationalFacilitiesIssue] =
@@ -778,9 +780,10 @@ export function OverviewPage({
   const operationalMapMode = publicSituationMode;
   const operationalFacilityIds = publicSituationMode
     ? [
-        ...(operationalFacilities?.storageFacilities.map((facility) => facility.code) ??
-          []),
-        ...(operationalFacilities?.railwayFacilities.map(
+        ...(mapOperationalFacilities?.storageFacilities.map(
+          (facility) => facility.code,
+        ) ?? []),
+        ...(mapOperationalFacilities?.railwayFacilities.map(
           (facility) => facility.sourceId,
         ) ?? []),
       ]
@@ -792,8 +795,43 @@ export function OverviewPage({
       : undefined;
   const operationalSelectedRegion = selectedRegionSnapshot;
 
+  // Map coverage is independent of the inspector's selected region.
   useEffect(() => {
-    if (!operationalMapMode || !regionalDataRepository?.operationalFacilities) return;
+    if (!publicSituationMode || !regionalDataRepository?.operationalFacilities) return;
+    const controller = new AbortController();
+    void regionalDataRepository
+      .operationalFacilities(
+        {
+          ...(scopeRootCode !== OVERALL_SCOPE ? { regionCode: scopeRootCode } : {}),
+          ...(productCode ? { productCode } : {}),
+          asOf: new Date().toISOString().slice(0, 10),
+        },
+        controller.signal,
+      )
+      .then((next) => {
+        if (!controller.signal.aborted) setMapOperationalFacilities(next);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted)
+          setOperationalFacilitiesIssue("地图设施加载失败，请稍后重试。");
+      });
+    return () => controller.abort();
+  }, [
+    publicSituationMode,
+    regionalDataRepository,
+    scopeRootCode,
+    productCode,
+    businessSequence,
+    operationalFacilityRevision,
+  ]);
+
+  useEffect(() => {
+    if (
+      !operationalMapMode ||
+      !regionalDataRepository?.operationalFacilities ||
+      !regionalDataRegionCode
+    )
+      return;
     const controller = new AbortController();
     Promise.resolve()
       .then(() => {
@@ -1314,7 +1352,18 @@ export function OverviewPage({
                       : regionalDataIssue
                         ? { issue: regionalDataIssue }
                         : {})}
-                    {...(operationalFacilities ? { operationalFacilities } : {})}
+                    {...((
+                      selectedOperationalFacilityId || !regionalDataRegionCode
+                        ? mapOperationalFacilities
+                        : operationalFacilities
+                    )
+                      ? {
+                          operationalFacilities: (selectedOperationalFacilityId ||
+                          !regionalDataRegionCode
+                            ? mapOperationalFacilities
+                            : operationalFacilities)!,
+                        }
+                      : {})}
                     {...(operationalSituation ? { operationalSituation } : {})}
                     {...(effectiveOperationalFacilityId
                       ? {
@@ -1506,7 +1555,7 @@ export function OverviewPage({
                 {...(mapBackdrop ? { backdrop: mapBackdrop } : {})}
                 bounds={annotationBounds}
                 canReturnToParent={Boolean(parentCode && parentCode !== scopeRootCode)}
-                facilities={operationalFacilities ?? EMPTY_OPERATIONAL_FACILITIES}
+                facilities={mapOperationalFacilities ?? EMPTY_OPERATIONAL_FACILITIES}
                 features={mapFeatures}
                 rootFeatures={rootMapFeatures}
                 onFacilitySelect={(id) => {

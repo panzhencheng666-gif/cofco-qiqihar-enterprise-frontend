@@ -5,7 +5,6 @@ import { lazy, Suspense, useEffect, useEffectEvent, useMemo, useState } from "re
 import type {
   MapAnnotation,
   MapAnnotationRepository,
-  MapAnnotationType,
   SaveMapAnnotation,
 } from "../../application/ports/MapAnnotationRepository";
 import type {
@@ -118,7 +117,6 @@ export function OperationalSituationMap({
     return () => window.clearInterval(timer);
   }, []);
   const [annotation, setAnnotation] = useState<MapAnnotation>();
-  const [annotationType, setAnnotationType] = useState<MapAnnotationType>("POINT");
   const [annotationDraft, setAnnotationDraft] = useState<readonly [number, number]>();
   const [annotationIssue, setAnnotationIssue] = useState("");
   const [annotationPending, setAnnotationPending] = useState(false);
@@ -226,35 +224,33 @@ export function OperationalSituationMap({
     onAnnotationToggle?.();
   }
 
-  async function persistAnnotation(longitude: number, latitude: number) {
+  async function persistAnnotation(
+    longitude: number,
+    latitude: number,
+    end?: readonly [number, number],
+  ) {
     if (!annotationRepository || annotationPending) return;
-    if (annotationType === "RECTANGLE" && !annotationDraft) {
-      setAnnotationDraft([longitude, latitude]);
-      setAnnotationIssue("已确定矩形起点，请在地图上选择对角终点。");
-      return;
-    }
     const scope = {
       ...(selectedRegionCode ? { regionCode: selectedRegionCode } : {}),
       ...(annotationAdministrativeLevel
         ? { administrativeLevel: annotationAdministrativeLevel }
         : {}),
     };
-    const command: SaveMapAnnotation =
-      annotationType === "POINT"
-        ? {
-            type: "POINT",
-            minLongitude: longitude,
-            minLatitude: latitude,
-            ...scope,
-          }
-        : {
-            type: "RECTANGLE",
-            minLongitude: Math.min(annotationDraft![0], longitude),
-            minLatitude: Math.min(annotationDraft![1], latitude),
-            maxLongitude: Math.max(annotationDraft![0], longitude),
-            maxLatitude: Math.max(annotationDraft![1], latitude),
-            ...scope,
-          };
+    const command: SaveMapAnnotation = !end
+      ? {
+          type: "POINT",
+          minLongitude: longitude,
+          minLatitude: latitude,
+          ...scope,
+        }
+      : {
+          type: "RECTANGLE",
+          minLongitude: Math.min(end[0], longitude),
+          minLatitude: Math.min(end[1], latitude),
+          maxLongitude: Math.max(end[0], longitude),
+          maxLatitude: Math.max(end[1], latitude),
+          ...scope,
+        };
     setAnnotationPending(true);
     setAnnotationIssue("");
     try {
@@ -310,6 +306,9 @@ export function OperationalSituationMap({
           onEnhancementState={setEnhancementState}
           onAnnotationPosition={(longitude, latitude) => {
             void persistAnnotation(longitude, latitude);
+          }}
+          onAnnotationRectangle={(start, end) => {
+            void persistAnnotation(start[0], start[1], end);
           }}
           onRegionDrill={(region) => {
             setFocusRequest(undefined);
@@ -477,35 +476,13 @@ export function OperationalSituationMap({
             <header>
               <div>
                 <strong>地图标注</strong>
-                <span>直接在当前四区域地形图上选择位置</span>
+                <span>单击标记经纬度；按住左键拖拽框选范围</span>
               </div>
               <button type="button" onClick={toggleAnnotation}>
                 完成
               </button>
             </header>
             <div>
-              <button
-                aria-pressed={annotationType === "POINT"}
-                type="button"
-                onClick={() => {
-                  setAnnotationType("POINT");
-                  setAnnotationDraft(undefined);
-                  setAnnotationIssue("单击地图保存点标注。");
-                }}
-              >
-                点标注
-              </button>
-              <button
-                aria-pressed={annotationType === "RECTANGLE"}
-                type="button"
-                onClick={() => {
-                  setAnnotationType("RECTANGLE");
-                  setAnnotationDraft(undefined);
-                  setAnnotationIssue("依次选择矩形的两个对角点。");
-                }}
-              >
-                范围标注
-              </button>
               {annotation && (
                 <button
                   className="is-danger"
@@ -519,10 +496,15 @@ export function OperationalSituationMap({
             </div>
             <p role="status">
               {annotationIssue ||
-                (annotationType === "POINT"
-                  ? "单击地图保存点标注。"
-                  : "依次选择矩形的两个对角点。")}
+                "单击保存点位，按住左键拖拽保存范围；退出标注后拖动地图。"}
             </p>
+            {annotation && (
+              <output aria-label="标注经纬度">
+                {annotation.type === "POINT"
+                  ? `经度 ${annotation.minLongitude.toFixed(6)}° · 纬度 ${annotation.minLatitude.toFixed(6)}°`
+                  : `西南 ${annotation.minLongitude.toFixed(6)}°, ${annotation.minLatitude.toFixed(6)}°；东北 ${annotation.maxLongitude.toFixed(6)}°, ${annotation.maxLatitude.toFixed(6)}°`}
+              </output>
+            )}
           </section>
         )}
       </div>

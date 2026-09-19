@@ -45,6 +45,7 @@ import { weatherObservationFresh } from "./liveWeatherPresentation";
 import { weatherSpriteKind, type WeatherSpriteKind } from "./weatherSpriteKind";
 import { createWeatherSpritePainter } from "./animatedWeatherSprite";
 import { publicMapFocus } from "./publicMapFocus";
+import { mapAnnotationGesture } from "./mapAnnotationGesture";
 
 export interface RealisticSceneLayers {
   ADMINISTRATIVE: boolean;
@@ -80,6 +81,10 @@ export interface FourRegionTerrainAtlasProps {
   onFacilitySelect: (id: string) => void;
   onEnhancementState?: (state: TerrainEnhancementState) => void;
   onAnnotationPosition?: (longitude: number, latitude: number) => void;
+  onAnnotationRectangle?: (
+    start: readonly [number, number],
+    end: readonly [number, number],
+  ) => void;
   onReady?: () => void;
   onRegionDrill: (region: OverviewRegion) => void;
   onRegionSelect: (region: OverviewRegion) => void;
@@ -105,6 +110,7 @@ interface AtlasRuntime {
   viewportWidth: number;
   weatherAnimationFrameId?: number;
   weatherAnimationUpdatedAt: number;
+  suppressClickUntil?: number;
 }
 
 const ROOT_SOURCE = "atlas-root-regions";
@@ -150,7 +156,7 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
         center: centerOf(propsRef.current.bounds),
         container: host,
         dragRotate: false,
-        dragPan: false,
+        dragPan: true,
         fadeDuration: 120,
         localIdeographFontFamily: "PingFang SC, Microsoft YaHei, sans-serif",
         maxPitch: 68,
@@ -166,8 +172,8 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
     map.doubleClickZoom.disable();
     map.keyboard.disable();
     map.touchPitch.disable();
-    map.scrollZoom.enable({ around: "center" });
-    map.touchZoomRotate.enable({ around: "center" });
+    map.scrollZoom.enable();
+    map.touchZoomRotate.enable();
     map.touchZoomRotate.disableRotation();
     const runtime: AtlasRuntime = {
       destroyed: false,
@@ -181,6 +187,7 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
       weatherAnimationUpdatedAt: 0,
     };
     runtimeRef.current = runtime;
+    const releaseAnnotationGestures = installAnnotationGestures(runtime);
     host.dataset.sceneState = "loading";
     host.dataset.viewerCount = "1";
     host.dataset.createdViewerCount = "1";
@@ -212,21 +219,12 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
       host.dataset.imageryZoom = map.getZoom().toFixed(2);
       host.dataset.detailLevel = detailLevel(map.getZoom());
     });
-    map.on("zoomend", () => {
-      if (!runtime.fittedCenter || map.getZoom() > map.getMinZoom() + 0.01) return;
-      const center = map.getCenter();
-      if (
-        Math.abs(center.lng - runtime.fittedCenter[0]) +
-          Math.abs(center.lat - runtime.fittedCenter[1]) >
-        0.00001
-      )
-        map.jumpTo({ center: runtime.fittedCenter });
-    });
 
     const resizeObserver = new ResizeObserver(() => scheduleAtlasResize(runtime));
     resizeObserver.observe(host);
     return () => {
       runtime.destroyed = true;
+      releaseAnnotationGestures();
       if (runtime.resizeAnimationFrameId !== undefined)
         cancelAnimationFrame(runtime.resizeAnimationFrameId);
       if (runtime.weatherAnimationFrameId !== undefined)
@@ -314,12 +312,12 @@ function installAtlasLayers(map: MapLibreMap) {
   background.width = background.height = 128;
   const context = background.getContext("2d");
   if (context) {
-    context.fillStyle = "#13212a";
+    context.fillStyle = "#202722";
     context.fillRect(0, 0, 128, 128);
     // Quiet, non-geographic matte texture; no grid, stars or outside imagery.
     for (let y = 0; y < 128; y += 2)
       for (let x = 0; x < 128; x += 2) {
-        context.fillStyle = `rgba(117,145,155,${((x * 17 + y * 31) % 13) / 650})`;
+        context.fillStyle = `rgba(176,169,143,${((x * 17 + y * 31) % 13) / 180})`;
         context.fillRect(x, y, 1, 1);
       }
     map.addImage("atlas-survey-background", context.getImageData(0, 0, 128, 128));
@@ -341,7 +339,7 @@ function installAtlasLayers(map: MapLibreMap) {
     source: MASK_SOURCE,
     paint: {
       "fill-antialias": false,
-      "fill-color": "#13212a",
+      "fill-color": "#202722",
       "fill-opacity": 1,
       ...(context ? { "fill-pattern": "atlas-survey-background" } : {}),
     },
@@ -709,6 +707,8 @@ function synchronizeAtlas(runtime: AtlasRuntime, props: FourRegionTerrainAtlasPr
     fitCurrentHierarchy(runtime, props, active);
   }
   runtime.host.dataset.annotationActive = String(Boolean(props.annotationActive));
+  if (props.annotationActive) runtime.map.dragPan.disable();
+  else runtime.map.dragPan.enable();
   runtime.host.dataset.rootRegionCount = String(props.rootFeatures.length);
   runtime.host.dataset.activeRegionCount = String(active.length);
   runtime.host.dataset.featureCount = String(props.rootFeatures.length + active.length);
@@ -839,7 +839,85 @@ function scheduleAtlasResize(runtime: AtlasRuntime) {
   });
 }
 
+function installAnnotationGestures(runtime: AtlasRuntime) {
+  const canvas = runtime.map.getCanvas();
+  const controller = new AbortController();
+  const preview = document.createElement("div");
+  preview.style.cssText =
+    "display:none;position:absolute;pointer-events:none;border:1px solid #ffe796;background:#ffd45f33;z-index:2";
+  runtime.map.getContainer().appendChild(preview);
+  let start:
+    { id: number; pixel: [number, number]; coordinate: [number, number] } | undefined;
+  const position = (event: PointerEvent): [number, number] => {
+    const rect = canvas.getBoundingClientRect();
+    return [event.clientX - rect.left, event.clientY - rect.top];
+  };
+  canvas.addEventListener(
+    "pointerdown",
+    (event) => {
+      if (!runtime.props.annotationActive || event.button !== 0) return;
+      const pixel = position(event);
+      const coordinate = runtime.map.unproject(pixel);
+      start = {
+        id: event.pointerId,
+        pixel,
+        coordinate: [coordinate.lng, coordinate.lat],
+      };
+      canvas.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    },
+    { signal: controller.signal },
+  );
+  canvas.addEventListener(
+    "pointermove",
+    (event) => {
+      if (!start || start.id !== event.pointerId) return;
+      const end = position(event);
+      preview.style.display = "block";
+      preview.style.left = `${Math.min(start.pixel[0], end[0])}px`;
+      preview.style.top = `${Math.min(start.pixel[1], end[1])}px`;
+      preview.style.width = `${Math.abs(start.pixel[0] - end[0])}px`;
+      preview.style.height = `${Math.abs(start.pixel[1] - end[1])}px`;
+    },
+    { signal: controller.signal },
+  );
+  canvas.addEventListener(
+    "pointerup",
+    (event) => {
+      if (!start || start.id !== event.pointerId) return;
+      const gesture = start;
+      start = undefined;
+      preview.style.display = "none";
+      runtime.suppressClickUntil = performance.now() + 500;
+      if (canvas.hasPointerCapture(event.pointerId))
+        canvas.releasePointerCapture(event.pointerId);
+      if (!runtime.props.annotationActive) return;
+      const pixel = position(event);
+      const end = runtime.map.unproject(pixel);
+      if (mapAnnotationGesture(gesture.pixel, pixel) === "POINT") {
+        runtime.props.onAnnotationPosition?.(...gesture.coordinate);
+      } else {
+        runtime.props.onAnnotationRectangle?.(gesture.coordinate, [end.lng, end.lat]);
+      }
+    },
+    { signal: controller.signal },
+  );
+  canvas.addEventListener(
+    "pointercancel",
+    () => {
+      start = undefined;
+      preview.style.display = "none";
+    },
+    { signal: controller.signal },
+  );
+  return () => {
+    controller.abort();
+    preview.remove();
+  };
+}
+
 function handleMapClick(runtime: AtlasRuntime, event: MapMouseEvent) {
+  if (performance.now() < (runtime.suppressClickUntil ?? 0)) return;
   const { map, props } = runtime;
   if (props.annotationActive) {
     if (insideBounds(event.lngLat.lng, event.lngLat.lat, props.bounds))

@@ -90,7 +90,7 @@ describe("four-region terrain public situation scene", () => {
     expect(scene).toContain("map.zoomOut");
     expect(scene).toContain("dragRotate: false");
     expect(scene).toContain("map.keyboard.disable()");
-    expect(scene).toContain("dragPan: false");
+    expect(scene).toContain("dragPan: true");
     expect(scene).toContain("map.touchZoomRotate.disableRotation");
     expect(scene).toContain("renderWorldCopies: false");
   });
