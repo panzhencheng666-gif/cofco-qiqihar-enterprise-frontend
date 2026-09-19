@@ -71,6 +71,14 @@ describe("four-region terrain public situation scene", () => {
     expect(scene).not.toContain("projection.labels");
   });
 
+  it("places exactly one governed label point for each administrative feature", () => {
+    expect(scene).toContain('const ROOT_LABEL_SOURCE = "atlas-root-labels"');
+    expect(scene).toContain('const ACTIVE_LABEL_SOURCE = "atlas-active-labels"');
+    expect(scene).toContain("regionLabelCollection(props.rootFeatures)");
+    expect(scene).toContain("regionLabelCollection(active)");
+    expect(scene).toContain("function regionLabelCollection(");
+  });
+
   it("supports Google-style continuous zoom and pan without map rotation", () => {
     expect(scene).toContain("map.zoomIn");
     expect(scene).toContain("map.zoomOut");

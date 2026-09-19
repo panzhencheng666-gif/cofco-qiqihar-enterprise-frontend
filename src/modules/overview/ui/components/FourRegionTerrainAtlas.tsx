@@ -91,6 +91,8 @@ interface AtlasRuntime {
 
 const ROOT_SOURCE = "atlas-root-regions";
 const ACTIVE_SOURCE = "atlas-active-regions";
+const ROOT_LABEL_SOURCE = "atlas-root-labels";
+const ACTIVE_LABEL_SOURCE = "atlas-active-labels";
 const MASK_SOURCE = "atlas-region-mask";
 const RAIL_SOURCE = "atlas-rail-routes";
 const LOGISTICS_SOURCE = "atlas-logistics";
@@ -234,6 +236,8 @@ function installRemoteTerrain(map: MapLibreMap) {
 function installAtlasLayers(map: MapLibreMap) {
   map.addSource(ROOT_SOURCE, { type: "geojson", data: emptyCollection() });
   map.addSource(ACTIVE_SOURCE, { type: "geojson", data: emptyCollection() });
+  map.addSource(ROOT_LABEL_SOURCE, { type: "geojson", data: emptyCollection() });
+  map.addSource(ACTIVE_LABEL_SOURCE, { type: "geojson", data: emptyCollection() });
   map.addSource(MASK_SOURCE, { type: "geojson", data: emptyCollection() });
   map.addSource(RAIL_SOURCE, { type: "geojson", data: emptyCollection() });
   map.addSource(LOGISTICS_SOURCE, { type: "geojson", data: emptyCollection() });
@@ -298,7 +302,7 @@ function installAtlasLayers(map: MapLibreMap) {
   map.addLayer({
     id: "atlas-root-labels",
     type: "symbol",
-    source: ROOT_SOURCE,
+    source: ROOT_LABEL_SOURCE,
     layout: {
       "text-allow-overlap": true,
       "text-field": ["get", "name"],
@@ -366,7 +370,7 @@ function installAtlasLayers(map: MapLibreMap) {
   map.addLayer({
     id: "atlas-active-labels",
     type: "symbol",
-    source: ACTIVE_SOURCE,
+    source: ACTIVE_LABEL_SOURCE,
     layout: {
       "text-allow-overlap": false,
       "text-field": ["get", "name"],
@@ -516,11 +520,18 @@ function synchronizeAtlas(runtime: AtlasRuntime, props: FourRegionTerrainAtlasPr
     setSource(runtime.map, ROOT_SOURCE, regionCollection(props.rootFeatures, props));
   }
   if (rootsChanged) {
+    setSource(
+      runtime.map,
+      ROOT_LABEL_SOURCE,
+      regionLabelCollection(props.rootFeatures),
+    );
     setSource(runtime.map, MASK_SOURCE, fourRegionMaskCollection(props.rootFeatures));
   }
   const active = activeHierarchyFeatures(props);
-  if (hierarchyChanged || selectionChanged)
+  if (hierarchyChanged || selectionChanged) {
     setSource(runtime.map, ACTIVE_SOURCE, regionCollection(active, props));
+    setSource(runtime.map, ACTIVE_LABEL_SOURCE, regionLabelCollection(active));
+  }
   if (
     !previous ||
     previous.facilities !== props.facilities ||
@@ -693,6 +704,47 @@ function regionCollection(
       geometry: feature.geometry as unknown as GeoJsonPolygon | GeoJsonMultiPolygon,
     })),
   };
+}
+
+function regionLabelCollection(features: readonly MapFeature[]): FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: features.flatMap((feature) => {
+      const position = regionLabelPosition(feature);
+      return position
+        ? [
+            pointFeature(position[0], position[1], {
+              code: feature.region.code,
+              name: feature.region.name,
+            }),
+          ]
+        : [];
+    }),
+  };
+}
+
+function regionLabelPosition(
+  feature: MapFeature,
+): readonly [number, number] | undefined {
+  if (feature.region.locationGeoJson) {
+    try {
+      const location = JSON.parse(feature.region.locationGeoJson) as {
+        coordinates?: unknown;
+        type?: string;
+      };
+      if (
+        location.type === "Point" &&
+        Array.isArray(location.coordinates) &&
+        typeof location.coordinates[0] === "number" &&
+        typeof location.coordinates[1] === "number"
+      )
+        return [location.coordinates[0], location.coordinates[1]];
+    } catch {
+      // Fall back to the governed boundary centre when a location is malformed.
+    }
+  }
+  const bounds = featureBounds([feature]);
+  return bounds ? centerOf(bounds) : undefined;
 }
 
 function fourRegionMaskCollection(
