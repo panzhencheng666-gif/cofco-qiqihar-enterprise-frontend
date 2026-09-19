@@ -69,6 +69,13 @@ describe("four-region terrain public situation scene", () => {
   it("focuses the chosen region geometry instead of drifting outside it", () => {
     expect(scene).toContain("terrainFocusBounds(");
     expect(scene).toContain("props.selectedRegionCode");
+    expect(scene).toContain(
+      'if (changed.has("regions") || boundsKey !== runtime.lastBoundsKey)',
+    );
+    const fitAtlas = scene.slice(scene.indexOf("function fitAtlas"));
+    expect(fitAtlas.indexOf("map.setMinZoom(1.5)")).toBeLessThan(
+      fitAtlas.indexOf("map.easeTo({"),
+    );
   });
 
   it("renders operational nodes as WebGL symbols without DOM map markers", () => {

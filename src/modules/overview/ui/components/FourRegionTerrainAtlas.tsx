@@ -507,7 +507,7 @@ function synchronizeChangedSources(
     props.bounds,
   );
   const boundsKey = boundsKeyOf(focusBounds);
-  if (boundsKey !== runtime.lastBoundsKey) {
+  if (changed.has("regions") || boundsKey !== runtime.lastBoundsKey) {
     fitAtlas(runtime.map, focusBounds, runtime.lastBoundsKey ? 420 : 0);
     runtime.lastBoundsKey = boundsKey;
   }
@@ -848,6 +848,7 @@ function fitAtlas(map: MapLibreMap, bounds: GeographicBounds, duration: number) 
     [bounds.maxLongitude, bounds.maxLatitude],
   ];
   map.setMaxBounds(null);
+  map.setMinZoom(1.5);
   const camera = map.cameraForBounds(atlasBounds, {
     bearing: -8,
     padding: { bottom: 110, left: 68, right: 68, top: 150 },
