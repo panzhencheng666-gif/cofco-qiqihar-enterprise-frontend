@@ -62,10 +62,13 @@ describe("fitOperationalMap", () => {
       zoom: 5.4,
     });
     expect(map.setMinZoom).toHaveBeenLastCalledWith(5.15);
-    expect(map.setMaxBounds).toHaveBeenLastCalledWith(bounds);
+    expect(map.setMaxBounds).toHaveBeenLastCalledWith([
+      [102.14, 31.539999999999992],
+      [147.99, 68.24000000000001],
+    ]);
   });
 
-  it("can add a wider visual inset for the four-region earth presentation", () => {
+  it("can add a wider visual inset while retaining surrounding navigation context", () => {
     const center = { lng: 125.06, lat: 49.89 };
     const map = {
       cameraForBounds: vi.fn(() => ({ center, zoom: 5.4 })),
