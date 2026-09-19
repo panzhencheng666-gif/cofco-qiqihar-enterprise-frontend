@@ -886,6 +886,7 @@ function updateOperationalLayers(runtime: AtlasRuntime) {
 
 function buildOperationalMarkers(runtime: AtlasRuntime) {
   const { facilities, layers, selectedFacilityId, situation } = runtime.props;
+  const storageMarkers: ReliefPoint[] = [];
   facilities.storageFacilities.forEach((facility) => {
     if (
       facility.longitude === null ||
@@ -899,6 +900,7 @@ function buildOperationalMarkers(runtime: AtlasRuntime) {
     ]);
     if (!point) return;
     const selected = facility.code === selectedFacilityId;
+    if (!selected && !acceptProjectedMarker(point, storageMarkers, 24)) return;
     const color =
       facility.relationType === "OWNED"
         ? 0x37a66f
@@ -911,19 +913,19 @@ function buildOperationalMarkers(runtime: AtlasRuntime) {
     });
   });
   if (layers.RAILWAY) {
+    const railwayMarkers: ReliefPoint[] = [];
     facilities.railwayFacilities.forEach((facility) => {
       const point = projectCoordinate(runtime.projection, [
         facility.longitude,
         facility.latitude,
       ]);
       if (!point) return;
-      addOperationalMarker(
-        runtime,
-        point,
-        0xf5f5ec,
-        facility.sourceId === selectedFacilityId,
-        { kind: "FACILITY", id: facility.sourceId },
-      );
+      const selected = facility.sourceId === selectedFacilityId;
+      if (!selected && !acceptProjectedMarker(point, railwayMarkers, 34)) return;
+      addOperationalMarker(runtime, point, 0xf5f5ec, selected, {
+        kind: "FACILITY",
+        id: facility.sourceId,
+      });
     });
   }
   if (layers.WEATHER) {
@@ -948,15 +950,33 @@ function buildOperationalMarkers(runtime: AtlasRuntime) {
     });
   }
   if (layers.INVENTORY) {
+    const inventoryMarkers: ReliefPoint[] = [];
     situation.inventories.forEach((inventory) => {
       const point = projectCoordinate(runtime.projection, [
         inventory.longitude,
         inventory.latitude,
       ]);
       if (!point) return;
+      if (!acceptProjectedMarker(point, inventoryMarkers, 30)) return;
       addOperationalMarker(runtime, point, 0x72c995, false);
     });
   }
+}
+
+function acceptProjectedMarker(
+  point: ReliefPoint,
+  accepted: ReliefPoint[],
+  minimumDistance: number,
+) {
+  if (
+    accepted.some(
+      (candidate) =>
+        Math.hypot(candidate.x - point.x, candidate.y - point.y) < minimumDistance,
+    )
+  )
+    return false;
+  accepted.push(point);
+  return true;
 }
 
 function addOperationalMarker(

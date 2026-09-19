@@ -82,6 +82,7 @@ describe("four-region terrain public situation scene", () => {
   it("renders operational nodes inside the same WebGL scene without DOM markers", () => {
     expect(scene).toContain("buildOperationalMarkers(");
     expect(scene).toContain("buildOperationalLines(");
+    expect(scene).toContain("acceptProjectedMarker(");
     expect(scene).not.toContain('undefined, "存"');
     expect(scene).not.toContain('}, "铁路"');
     expect(scene).not.toMatch(/new\s+Marker\s*\(/);
