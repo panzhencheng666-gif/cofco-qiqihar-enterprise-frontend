@@ -2192,6 +2192,7 @@ select:focus-visible {
   gap: 7px;
 }
 .overview-cockpit-navigation .overview-region-browser summary,
+.overview-cockpit-navigation > a,
 .overview-cockpit-navigation > button {
   min-height: 31px;
   padding: 0 12px;

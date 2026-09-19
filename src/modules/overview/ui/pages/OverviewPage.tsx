@@ -30,6 +30,7 @@ import type {
   StorageFacilityDraft,
 } from "../../domain/operationalFacilities";
 import type { OperationalSituationCatalogue } from "../../domain/operationalSituation";
+import { businessDirectoryUrl } from "../businessPlatformNavigation";
 import {
   BoundaryMap,
   toMapFeature,
@@ -1612,11 +1613,9 @@ export function OverviewPage({
             className={`overview-cockpit-navigation${embeddedInBusinessPlatform ? " is-embedded" : ""}`}
             aria-label="行政区导航"
           >
-            {embeddedInBusinessPlatform && (
-              <a href="/#/我的工作/待我处理" target="_top">
-                返回业务目录
-              </a>
-            )}
+            <a href={businessDirectoryUrl()} target="_top">
+              返回业务目录
+            </a>
             <details className="overview-region-browser">
               <summary>选择地区</summary>
               <div aria-label="行政区列表">

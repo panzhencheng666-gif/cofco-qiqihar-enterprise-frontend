@@ -36,6 +36,13 @@ vi.mock("./FourRegionTerrainAtlas", () => ({
 import { OperationalSituationMap } from "./OperationalSituationMap";
 
 describe("OperationalSituationMap public-only controls", () => {
+  it("identifies the live four-region scope instead of naming a last record", () => {
+    renderSituationMap();
+    expect(
+      screen.getByText("实时总览 · 齐齐哈尔、呼伦贝尔、黑河、大兴安岭"),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "返回实时总览" })).toBeDisabled();
+  });
   it("shows saved coordinates and accepts drag rectangles without mode buttons", async () => {
     const save = vi.fn((value: SaveMapAnnotation) =>
       Promise.resolve({

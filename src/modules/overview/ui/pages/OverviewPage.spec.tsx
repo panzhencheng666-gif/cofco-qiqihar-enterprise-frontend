@@ -150,9 +150,8 @@ describe("OverviewPage", () => {
     ).not.toBeInTheDocument();
     await waitFor(() => expect(operationalFacilities).toHaveBeenCalledTimes(1));
     operationalFacilities.mockResolvedValue({
-      ...(await (operationalFacilities.mock.results[0]!.value as Promise<
-        OperationalFacilityCatalogue
-      >)),
+      ...(await (operationalFacilities.mock.results[0]!
+        .value as Promise<OperationalFacilityCatalogue>)),
       regionCode: "230200",
     });
     await userEvent.click(screen.getByRole("button", { name: "选择齐齐哈尔详情" }));
@@ -1000,7 +999,7 @@ describe("OverviewPage", () => {
 
   it("places the embedded business-directory return action before the region selector", async () => {
     const previousUrl = window.location.href;
-    window.history.replaceState({}, "", "/overview-monitoring/?embed=1#/overview");
+    window.history.replaceState({}, "", "/overview-monitoring/#/overview");
     try {
       render(
         <OverviewPage
@@ -1021,8 +1020,7 @@ describe("OverviewPage", () => {
       const returnLink = within(navigation).getByRole("link", {
         name: "返回业务目录",
       });
-      expect(navigation).toHaveClass("is-embedded");
-      expect(returnLink).toHaveAttribute("href", "/#/我的工作/待我处理");
+      expect(returnLink.getAttribute("href")).toContain("/#/我的工作/待我处理");
       expect(navigation.firstElementChild).toBe(returnLink);
       expect(within(navigation).getByText("选择地区")).toBeVisible();
     } finally {

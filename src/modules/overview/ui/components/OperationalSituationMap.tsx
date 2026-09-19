@@ -598,8 +598,22 @@ export function OperationalSituationMap({
             setTimelineIndex(Number(event.target.value));
           }}
         />
-        <span>{selectedTimeline?.title ?? "暂无真实事件记录"}</span>
-        <b>真实记录</b>
+        <span title="默认展示各地区最新观测；播放或拖动时间轴可逐条回看历史记录。">
+          {timelineTouched
+            ? `回放记录：${selectedTimeline?.title ?? "暂无真实事件记录"}`
+            : "实时总览 · 齐齐哈尔、呼伦贝尔、黑河、大兴安岭"}
+        </span>
+        <button
+          type="button"
+          disabled={!timelineTouched}
+          onClick={() => {
+            setPlaying(false);
+            setTimelineTouched(false);
+            onTimelineSelect?.(undefined);
+          }}
+        >
+          返回实时总览
+        </button>
       </section>
     </section>
   );
