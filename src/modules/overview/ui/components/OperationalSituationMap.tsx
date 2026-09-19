@@ -15,14 +15,19 @@ import type {
 import type { OperationalSituationCatalogue } from "../../domain/operationalSituation";
 import type { OverviewRegion } from "../../domain/overview";
 import type { MapFeature } from "./boundaryGeometry";
-import type { RealisticSceneCommand, RealisticSceneLayers } from "./RegionalEarthScene";
+import type {
+  RealisticSceneCommand,
+  RealisticSceneLayers,
+  TerrainEnhancementState,
+} from "./FourRegionTerrainAtlas";
+import type { TerrainSurfaceMode } from "./fourRegionTerrainStyle";
 import { focusDepotCategory } from "./realisticSituationModel";
 import {
   operationalSituationTimeline,
   type SituationTimelineItem,
 } from "./operationalSituationTimeline";
 
-const RegionalEarthScene = lazy(() => import("./RegionalEarthScene"));
+const FourRegionTerrainAtlas = lazy(() => import("./FourRegionTerrainAtlas"));
 
 export interface SituationMapBounds {
   maxLatitude: number;
@@ -95,6 +100,9 @@ export function OperationalSituationMap({
   const [layers, setLayers] = useState(DEFAULT_LAYERS);
   const [layerMenuOpen, setLayerMenuOpen] = useState(false);
   const [tiltDegrees, setTiltDegrees] = useState(52);
+  const [surfaceMode, setSurfaceMode] = useState<TerrainSurfaceMode>("FUSION");
+  const [enhancementState, setEnhancementState] =
+    useState<TerrainEnhancementState>("LOADING");
   const [command, setCommand] = useState<RealisticSceneCommand>();
   const [annotation, setAnnotation] = useState<MapAnnotation>();
   const [annotationType, setAnnotationType] = useState<MapAnnotationType>("POINT");
@@ -265,12 +273,12 @@ export function OperationalSituationMap({
       <Suspense
         fallback={
           <div className="realistic-situation-loading" role="status">
-            <strong>正在建立写实三维地理场景</strong>
-            <span>行政边界与本地地表将先出现，在线影像与地形随后增强。</span>
+            <strong>正在建立四区域写实地形图集</strong>
+            <span>正在载入中文行政边界、卫星影像和地形高程。</span>
           </div>
         }
       >
-        <RegionalEarthScene
+        <FourRegionTerrainAtlas
           {...(annotation ? { annotation } : {})}
           annotationActive={annotationActive}
           {...(annotationDraft ? { annotationDraft } : {})}
@@ -281,6 +289,7 @@ export function OperationalSituationMap({
           features={features}
           layers={layers}
           onFacilitySelect={onFacilitySelect}
+          onEnhancementState={setEnhancementState}
           onAnnotationPosition={(longitude, latitude) => {
             void persistAnnotation(longitude, latitude);
           }}
@@ -289,213 +298,249 @@ export function OperationalSituationMap({
           {...(selectedFacilityId ? { selectedFacilityId } : {})}
           {...(selectedRegionCode ? { selectedRegionCode } : {})}
           situation={visibleSituation}
+          surfaceMode={surfaceMode}
         />
       </Suspense>
 
-      <nav className="realistic-situation-filters" aria-label="公开态势筛选">
-        <button
-          aria-pressed={layers.WEATHER}
-          type="button"
-          onClick={() =>
-            setLayers((current) => ({ ...current, WEATHER: !current.WEATHER }))
-          }
-        >
-          实时天气
-        </button>
-        <button
-          aria-pressed={layers.LOGISTICS}
-          type="button"
-          onClick={() =>
-            setLayers((current) => ({ ...current, LOGISTICS: !current.LOGISTICS }))
-          }
-        >
-          物流流向
-        </button>
-        <button
-          aria-pressed={layers.INVENTORY}
-          type="button"
-          onClick={() =>
-            setLayers((current) => ({ ...current, INVENTORY: !current.INVENTORY }))
-          }
-        >
-          库存变化
-        </button>
-        <button
-          aria-expanded={layerMenuOpen}
-          type="button"
-          onClick={() => setLayerMenuOpen((current) => !current)}
-        >
-          节点图层
-        </button>
-      </nav>
+      <div className="realistic-situation-control-stack">
+        {enhancementState === "DEGRADED" && (
+          <p className="realistic-situation-enhancement-notice" role="status">
+            在线影像、高程、地名或图标增强暂不可用，四区域边界与业务图层仍可操作。
+          </p>
+        )}
+        <nav className="realistic-situation-filters" aria-label="公开态势筛选">
+          <button
+            aria-pressed={layers.WEATHER}
+            type="button"
+            onClick={() =>
+              setLayers((current) => ({ ...current, WEATHER: !current.WEATHER }))
+            }
+          >
+            实时天气
+          </button>
+          <button
+            aria-pressed={layers.LOGISTICS}
+            type="button"
+            onClick={() =>
+              setLayers((current) => ({ ...current, LOGISTICS: !current.LOGISTICS }))
+            }
+          >
+            物流流向
+          </button>
+          <button
+            aria-pressed={layers.INVENTORY}
+            type="button"
+            onClick={() =>
+              setLayers((current) => ({ ...current, INVENTORY: !current.INVENTORY }))
+            }
+          >
+            库存变化
+          </button>
+          <button
+            aria-expanded={layerMenuOpen}
+            type="button"
+            onClick={() => setLayerMenuOpen((current) => !current)}
+          >
+            节点图层
+          </button>
+        </nav>
 
-      {layerMenuOpen && (
-        <section className="realistic-situation-layer-menu" aria-label="节点图层">
-          <header>
-            <strong>节点图层</strong>
-            <button type="button" onClick={showAllDepots}>
-              全部库点
-            </button>
-          </header>
-          {DEPOT_FILTERS.map(({ code, label, shortLabel }) => (
+        <div
+          className="realistic-situation-surface-modes"
+          role="group"
+          aria-label="地表显示"
+        >
+          {(
+            [
+              ["SANDBOX", "沙盘"],
+              ["FUSION", "融合"],
+              ["IMAGERY", "实景"],
+            ] as const
+          ).map(([mode, label]) => (
             <button
-              aria-pressed={layers[code]}
-              className={`is-${code.toLowerCase()}`}
-              key={code}
+              aria-pressed={surfaceMode === mode}
+              key={mode}
               type="button"
-              onClick={() => focusDepot(code)}
+              onClick={() => setSurfaceMode(mode)}
             >
-              <span aria-hidden="true">{shortLabel}</span>
               {label}
-              <b>
-                {
-                  facilities.storageFacilities.filter(
-                    (facility) => facility.relationType === code,
-                  ).length
-                }
-              </b>
             </button>
           ))}
-          <label>
-            <input
-              checked={layers.RAILWAY}
-              type="checkbox"
-              onChange={(event) =>
-                setLayers((current) => ({ ...current, RAILWAY: event.target.checked }))
-              }
-            />
-            <span className="is-locomotive" aria-hidden="true">
-              ▰
-            </span>
-            白色内燃机车站点
-            <b>{facilities.railwayFacilities.length}</b>
-          </label>
-          <label>
-            <input
-              checked={layers.RAILWAY_ROUTE}
-              type="checkbox"
-              onChange={(event) =>
-                setLayers((current) => ({
-                  ...current,
-                  RAILWAY_ROUTE: event.target.checked,
-                }))
-              }
-            />
-            <span aria-hidden="true">—</span>
-            铁路路径
-            <b>{facilities.railwayRoutes.length}</b>
-          </label>
-        </section>
-      )}
+        </div>
 
-      {annotationActive && annotationRepository && (
-        <section className="regional-earth-annotation" aria-label="地图标注工具">
-          <header>
-            <div>
-              <strong>地图标注</strong>
-              <span>直接在当前三维地球上选择位置</span>
-            </div>
-            <button type="button" onClick={toggleAnnotation}>
-              完成
-            </button>
-          </header>
-          <div>
-            <button
-              aria-pressed={annotationType === "POINT"}
-              type="button"
-              onClick={() => {
-                setAnnotationType("POINT");
-                setAnnotationDraft(undefined);
-                setAnnotationIssue("单击地图保存点标注。");
-              }}
-            >
-              点标注
-            </button>
-            <button
-              aria-pressed={annotationType === "RECTANGLE"}
-              type="button"
-              onClick={() => {
-                setAnnotationType("RECTANGLE");
-                setAnnotationDraft(undefined);
-                setAnnotationIssue("依次选择矩形的两个对角点。");
-              }}
-            >
-              范围标注
-            </button>
-            {annotation && (
-              <button
-                className="is-danger"
-                disabled={annotationPending}
-                type="button"
-                onClick={() => void deleteAnnotation()}
-              >
-                删除标注
+        {layerMenuOpen && !annotationActive && (
+          <section className="realistic-situation-layer-menu" aria-label="节点图层">
+            <header>
+              <strong>节点图层</strong>
+              <button type="button" onClick={showAllDepots}>
+                全部库点
               </button>
-            )}
-          </div>
-          <p role="status">
-            {annotationIssue ||
-              (annotationType === "POINT"
-                ? "单击地图保存点标注。"
-                : "依次选择矩形的两个对角点。")}
-          </p>
-        </section>
-      )}
+            </header>
+            {DEPOT_FILTERS.map(({ code, label, shortLabel }) => (
+              <button
+                aria-pressed={layers[code]}
+                className={`is-${code.toLowerCase()}`}
+                key={code}
+                type="button"
+                onClick={() => focusDepot(code)}
+              >
+                <span aria-hidden="true">{shortLabel}</span>
+                {label}
+                <b>
+                  {
+                    facilities.storageFacilities.filter(
+                      (facility) => facility.relationType === code,
+                    ).length
+                  }
+                </b>
+              </button>
+            ))}
+            <label>
+              <input
+                checked={layers.RAILWAY}
+                type="checkbox"
+                onChange={(event) =>
+                  setLayers((current) => ({
+                    ...current,
+                    RAILWAY: event.target.checked,
+                  }))
+                }
+              />
+              <span className="is-locomotive" aria-hidden="true">
+                ▰
+              </span>
+              白色内燃机车站点
+              <b>{facilities.railwayFacilities.length}</b>
+            </label>
+            <label>
+              <input
+                checked={layers.RAILWAY_ROUTE}
+                type="checkbox"
+                onChange={(event) =>
+                  setLayers((current) => ({
+                    ...current,
+                    RAILWAY_ROUTE: event.target.checked,
+                  }))
+                }
+              />
+              <span aria-hidden="true">—</span>
+              铁路路径
+              <b>{facilities.railwayRoutes.length}</b>
+            </label>
+          </section>
+        )}
 
-      <div className="realistic-situation-tools" aria-label="三维地图工具">
-        {onAnnotationToggle && (
-          <button
-            aria-pressed={annotationActive}
-            type="button"
-            onClick={toggleAnnotation}
-          >
-            地图标注
-          </button>
+        {annotationActive && annotationRepository && (
+          <section className="regional-earth-annotation" aria-label="地图标注工具">
+            <header>
+              <div>
+                <strong>地图标注</strong>
+                <span>直接在当前三维地形图集上选择位置</span>
+              </div>
+              <button type="button" onClick={toggleAnnotation}>
+                完成
+              </button>
+            </header>
+            <div>
+              <button
+                aria-pressed={annotationType === "POINT"}
+                type="button"
+                onClick={() => {
+                  setAnnotationType("POINT");
+                  setAnnotationDraft(undefined);
+                  setAnnotationIssue("单击地图保存点标注。");
+                }}
+              >
+                点标注
+              </button>
+              <button
+                aria-pressed={annotationType === "RECTANGLE"}
+                type="button"
+                onClick={() => {
+                  setAnnotationType("RECTANGLE");
+                  setAnnotationDraft(undefined);
+                  setAnnotationIssue("依次选择矩形的两个对角点。");
+                }}
+              >
+                范围标注
+              </button>
+              {annotation && (
+                <button
+                  className="is-danger"
+                  disabled={annotationPending}
+                  type="button"
+                  onClick={() => void deleteAnnotation()}
+                >
+                  删除标注
+                </button>
+              )}
+            </div>
+            <p role="status">
+              {annotationIssue ||
+                (annotationType === "POINT"
+                  ? "单击地图保存点标注。"
+                  : "依次选择矩形的两个对角点。")}
+            </p>
+          </section>
         )}
-        <button
-          type="button"
-          aria-label="放大地图"
-          onClick={() => issueCommand("ZOOM_IN")}
-        >
-          ＋
-        </button>
-        <button
-          type="button"
-          aria-label="缩小地图"
-          onClick={() => issueCommand("ZOOM_OUT")}
-        >
-          －
-        </button>
-        {canReturnToParent && (
-          <button type="button" onClick={onReturnToParent}>
-            返回上级
-          </button>
-        )}
-        <button type="button" onClick={() => issueCommand("RESET")}>
-          复位
-        </button>
-        <label>
-          <span>俯视角 {tiltDegrees}°</span>
-          <input
-            aria-label="态势地图俯视角"
-            max="78"
-            min="30"
-            step="4"
-            type="range"
-            value={tiltDegrees}
-            onChange={(event) => {
-              const next = Number(event.target.value);
-              setTiltDegrees(next);
-              issueCommand("SET_TILT", next);
-            }}
-          />
-        </label>
       </div>
 
-      <p className="realistic-situation-caption">
-        {levelLabel(currentLevel)} ·
-        单击查看，双击下钻；缩放将自动切换市、县、乡镇和村级信息。
-      </p>
+      <div className="realistic-situation-lower-rail">
+        <p className="realistic-situation-caption">
+          {levelLabel(currentLevel)} ·
+          单击查看，双击下钻；缩放将自动切换市、县、乡镇和村级信息。
+        </p>
+
+        <div className="realistic-situation-tools" aria-label="三维地图工具">
+          {onAnnotationToggle && (
+            <button
+              aria-pressed={annotationActive}
+              type="button"
+              onClick={toggleAnnotation}
+            >
+              地图标注
+            </button>
+          )}
+          <button
+            type="button"
+            aria-label="放大地图"
+            onClick={() => issueCommand("ZOOM_IN")}
+          >
+            ＋
+          </button>
+          <button
+            type="button"
+            aria-label="缩小地图"
+            onClick={() => issueCommand("ZOOM_OUT")}
+          >
+            －
+          </button>
+          {canReturnToParent && (
+            <button type="button" onClick={onReturnToParent}>
+              返回上级
+            </button>
+          )}
+          <button type="button" onClick={() => issueCommand("RESET")}>
+            复位
+          </button>
+          <label>
+            <span>俯视角 {tiltDegrees}°</span>
+            <input
+              aria-label="态势地图俯视角"
+              max="78"
+              min="30"
+              step="4"
+              type="range"
+              value={tiltDegrees}
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                setTiltDegrees(next);
+                issueCommand("SET_TILT", next);
+              }}
+            />
+          </label>
+        </div>
+      </div>
 
       <section className="realistic-situation-timeline" aria-label="真实态势时间轴">
         <button
@@ -554,8 +599,18 @@ function useTimelinePlayback({
   setTimelineIndex: (updater: (current: number) => number) => void;
   timelineLength: number;
 }) {
+  const [pageVisible, setPageVisible] = useState(
+    () => typeof document === "undefined" || document.visibilityState !== "hidden",
+  );
   useEffect(() => {
-    if (!playing || timelineLength < 2) return undefined;
+    if (typeof document === "undefined") return undefined;
+    const updatePageVisibility = () =>
+      setPageVisible(document.visibilityState !== "hidden");
+    document.addEventListener("visibilitychange", updatePageVisibility);
+    return () => document.removeEventListener("visibilitychange", updatePageVisibility);
+  }, []);
+  useEffect(() => {
+    if (!pageVisible || !playing || timelineLength < 2) return undefined;
     const timer = window.setInterval(() => {
       setTimelineIndex((current) => {
         if (current >= timelineLength - 1) {
@@ -566,14 +621,21 @@ function useTimelinePlayback({
       });
     }, 1800 / playbackSpeed);
     return () => window.clearInterval(timer);
-  }, [playbackSpeed, playing, setPlaying, setTimelineIndex, timelineLength]);
+  }, [
+    pageVisible,
+    playbackSpeed,
+    playing,
+    setPlaying,
+    setTimelineIndex,
+    timelineLength,
+  ]);
 }
 
 function levelLabel(level: OverviewRegion["level"] | undefined) {
   if (level === "VILLAGE") return "行政村级写实视图";
   if (level === "TOWNSHIP") return "乡镇级写实视图";
   if (level === "COUNTY") return "县级写实视图";
-  return "四区域三维总览";
+  return "四区域三维地形总览";
 }
 
 function formatTimelineTime(value: string) {

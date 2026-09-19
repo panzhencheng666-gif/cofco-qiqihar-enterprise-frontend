@@ -78,6 +78,9 @@ describe("OverviewDataModePanel", () => {
     expect(screen.getByRole("heading", { name: "齐齐哈尔市" })).toBeVisible();
     await userEvent.click(screen.getByText("数据来源与同步状态"));
     expect(screen.getByText("NASA EONET")).toBeVisible();
+    expect(screen.getByText(/状态：正常/)).toBeVisible();
+    expect(screen.getByText(/最近成功/)).toBeVisible();
+    expect(screen.getByText("仅展示公开事件。")).toBeVisible();
     expect(
       screen.getByRole("heading", { name: "齐齐哈尔市实时天气态势" }),
     ).toBeVisible();
@@ -92,6 +95,89 @@ describe("OverviewDataModePanel", () => {
       "aria-pressed",
       "true",
     );
+  });
+
+  it("shows available weather without waiting for the facility catalogue", () => {
+    render(
+      <OverviewDataModePanel
+        loading
+        mode="PUBLIC_SITUATION"
+        operationalSituation={{
+          generatedAt: "2026-09-18T06:00:00Z",
+          weather: [
+            {
+              rootRegionCode: "230200",
+              regionName: "齐齐哈尔市",
+              longitude: 123.92,
+              latitude: 47.35,
+              observedAt: "2026-09-18T05:00:00Z",
+              meanTemperatureC: 18.2,
+              precipitationMm: 0,
+              soilMoisturePercent: 25.4,
+              risk: "未触发提示阈值",
+              assessment: "公开天气模型快照",
+              sourceName: "Open-Meteo",
+              sourceUrl: "https://open-meteo.com/",
+              fetchedAt: "2026-09-18T05:01:00Z",
+            },
+          ],
+          publicEvents: [],
+          policyEvents: [],
+          logisticsFlows: [],
+          inventories: [],
+          sources: [],
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "齐齐哈尔市实时天气态势" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "正在同步当前区域" })).toBeNull();
+  });
+
+  it("shows available facilities without waiting for the situation snapshot", () => {
+    render(
+      <OverviewDataModePanel
+        loading
+        mode="PUBLIC_SITUATION"
+        operationalFacilities={{
+          regionCode: "230200",
+          productCode: "CORN",
+          asOf: "2026-09-18",
+          storageCategories: [],
+          storageFacilities: [
+            {
+              code: "owned-1",
+              name: "齐齐哈尔一号库",
+              workUnitCode: "UNIT-1",
+              relationType: "OWNED",
+              relationLabel: "自有库",
+              regionCode: "230200",
+              regionName: "齐齐哈尔市",
+              address: "齐齐哈尔市",
+              longitude: 123.92,
+              latitude: 47.35,
+              coordinatePrecision: "EXACT",
+              coordinatePrecisionLabel: "精确坐标",
+              operationalStatus: "ACTIVE",
+              capacityTonnes: null,
+              capacityAsOf: null,
+              version: 1,
+              prices: [],
+              evidence: [],
+            },
+          ],
+          railwayFacilities: [],
+          railwayLines: [],
+          railwayRoutes: [],
+          sources: [],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("齐齐哈尔一号库")).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "正在同步当前区域" })).toBeNull();
   });
 
   it("binds live weather details and effects to the selected administrative area", () => {

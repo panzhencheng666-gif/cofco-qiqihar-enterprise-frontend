@@ -209,10 +209,19 @@ export function OperationalSituationPanel({
         <ul>
           {situation.sources.map((source) => (
             <li key={source.code}>
-              <span>
-                <i className={`is-${source.status.toLowerCase()}`} aria-hidden="true" />
-                {source.label}
-              </span>
+              <div>
+                <span>
+                  <i
+                    className={`is-${source.status.toLowerCase()}`}
+                    aria-hidden="true"
+                  />
+                  <strong>{source.label}</strong>
+                </span>
+                <small>
+                  状态：{sourceStatusLabel(source.status)} · {sourceSyncLabel(source)}
+                </small>
+                <p>{source.notice}</p>
+              </div>
               <a href={source.sourceUrl} target="_blank" rel="noreferrer">
                 原始来源
               </a>
@@ -442,6 +451,24 @@ function number(value: number | null, unit: string) {
 
 function formatTime(value: string) {
   return new Date(value).toLocaleString("zh-CN", { hour12: false });
+}
+
+function sourceStatusLabel(status: "READY" | "STALE" | "UNAVAILABLE") {
+  if (status === "READY") return "正常";
+  if (status === "STALE") return "数据已过期";
+  return "暂不可用";
+}
+
+function sourceSyncLabel({
+  lastAttemptAt,
+  lastSuccessAt,
+}: {
+  lastAttemptAt: string | null;
+  lastSuccessAt: string | null;
+}) {
+  if (lastSuccessAt) return `最近成功 ${formatTime(lastSuccessAt)}`;
+  if (lastAttemptAt) return `最近尝试 ${formatTime(lastAttemptAt)}`;
+  return "尚无同步记录";
 }
 
 function freshness(fetchedAt: string, generatedAt: string) {

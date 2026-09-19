@@ -600,6 +600,31 @@
   gap: 7px;
 }
 
+.situation-source-catalogue li {
+  align-items: flex-start;
+}
+
+.situation-source-catalogue li > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.situation-source-catalogue li span {
+  justify-content: flex-start;
+}
+
+.situation-source-catalogue li small,
+.situation-source-catalogue li p {
+  margin: 0;
+  color: #77837e;
+  line-height: 1.4;
+}
+
+.situation-source-catalogue li p {
+  color: #8b6d42;
+}
+
 .situation-source-catalogue li i {
   width: 6px;
   height: 6px;

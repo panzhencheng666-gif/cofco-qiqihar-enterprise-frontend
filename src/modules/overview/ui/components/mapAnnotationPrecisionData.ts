@@ -1,3 +1,5 @@
+import type { MultiPolygon, Polygon } from "geojson";
+
 import type { MapAnnotation } from "../../application/ports/MapAnnotationRepository";
 import type { OverviewSamplePointIcon } from "../../domain/overviewSamplePoint";
 import type { MapFeature } from "./boundaryGeometry";
@@ -13,7 +15,7 @@ export function administrativeGeoJson(
     features: [...(backdrop ? [backdrop] : []), ...features].map(
       ({ geometry, region }) => ({
         type: "Feature" as const,
-        geometry,
+        geometry: geometry as unknown as Polygon | MultiPolygon,
         properties: {
           name: region.name,
           regionCode: region.code,

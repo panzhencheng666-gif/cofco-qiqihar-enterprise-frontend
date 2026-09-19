@@ -119,6 +119,12 @@ export function OverviewDataModePanel({
   ) => Promise<void>;
   onOperationalFacilityArchive?: (facility: StorageFacility) => Promise<void>;
 }) {
+  const publicSituationReady = Boolean(operationalFacilities || operationalSituation);
+  const publicFacilities =
+    operationalFacilities ??
+    emptyOperationalFacilities(operationalSituation?.generatedAt);
+  const publicSituation =
+    operationalSituation ?? emptyOperationalSituation(operationalFacilities?.asOf);
   return (
     <section
       className={`overview-data-mode is-${mode.toLowerCase()}`}
@@ -251,9 +257,9 @@ export function OverviewDataModePanel({
       {mode === "SUPPLY_BALANCE" && !loading && !issue && !supplyBalance && (
         <p>请在地图上选择要查看的地区。</p>
       )}
-      {mode === "PUBLIC_SITUATION" && operationalFacilities && operationalSituation && (
+      {mode === "PUBLIC_SITUATION" && publicSituationReady && (
         <OperationalSituationPanel
-          facilities={operationalFacilities}
+          facilities={publicFacilities}
           {...(productLabel ? { productLabel } : {})}
           {...(onOperationalFacilitySelect
             ? { onFacilitySelect: onOperationalFacilitySelect }
@@ -274,28 +280,53 @@ export function OverviewDataModePanel({
           {...(onOperationalFacilityArchive
             ? { onFacilityArchive: onOperationalFacilityArchive }
             : {})}
-          situation={operationalSituation}
+          situation={publicSituation}
         />
       )}
-      {mode === "PUBLIC_SITUATION" &&
-        loading &&
-        (!operationalFacilities || !operationalSituation) && (
-          <div className="operational-situation-panel is-syncing">
-            <header className="situation-inspector-heading">
-              <div>
-                <span>实时区域档案</span>
-                <h2>正在同步当前区域</h2>
-                <p>三维地图已可操作，天气和业务节点完成后将在此处直接更新。</p>
-              </div>
-            </header>
-          </div>
-        )}
-      {mode === "PUBLIC_SITUATION" &&
-        !loading &&
-        !issue &&
-        (!operationalFacilities || !operationalSituation) && (
-          <p>当前没有可用的公开态势快照。</p>
-        )}
+      {mode === "PUBLIC_SITUATION" && loading && !publicSituationReady && (
+        <div className="operational-situation-panel is-syncing">
+          <header className="situation-inspector-heading">
+            <div>
+              <span>实时区域档案</span>
+              <h2>正在同步当前区域</h2>
+              <p>三维地图已可操作，天气和业务节点完成后将在此处直接更新。</p>
+            </div>
+          </header>
+        </div>
+      )}
+      {mode === "PUBLIC_SITUATION" && !loading && !issue && !publicSituationReady && (
+        <p>当前没有可用的公开态势快照。</p>
+      )}
     </section>
   );
+}
+
+function emptyOperationalFacilities(
+  generatedAt: string | undefined,
+): OperationalFacilityCatalogue {
+  return {
+    regionCode: null,
+    productCode: null,
+    asOf: generatedAt ?? "",
+    storageCategories: [],
+    storageFacilities: [],
+    railwayFacilities: [],
+    railwayLines: [],
+    railwayRoutes: [],
+    sources: [],
+  };
+}
+
+function emptyOperationalSituation(
+  asOf: string | undefined,
+): OperationalSituationCatalogue {
+  return {
+    generatedAt: asOf ?? "",
+    weather: [],
+    publicEvents: [],
+    policyEvents: [],
+    logisticsFlows: [],
+    inventories: [],
+    sources: [],
+  };
 }

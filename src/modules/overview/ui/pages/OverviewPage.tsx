@@ -1402,29 +1402,31 @@ export function OverviewPage({
         }
         map={
           <div className="overview-map-annotation-stage">
-            <BoundaryMap
-              annotationMode={annotationOpen && !publicSituationMode}
-              {...(mapBackdrop ? { backdrop: mapBackdrop } : {})}
-              features={mapFeatures}
-              points={mapPoints}
-              samplePointAggregates={sampleMode ? visibleSamplePointAggregates : []}
-              {...(activeSamplePointRepository
-                ? { samplePointAggregateStatus: visibleSamplePointAggregateStatus }
-                : {})}
-              samplePointIcons={visibleSampleNetworkIcons}
-              onSamplePointSelect={updateSelectedSamplePoint}
-              reserveRightPanel={
-                annotationArmed ||
-                dataMode === "SUPPLY_BALANCE" ||
-                dataMode === "REGIONAL_DATA" ||
-                operationalMapMode
-              }
-              selectedCode={selectedRegionCode}
-              {...(selectedSamplePointId ? { selectedSamplePointId } : {})}
-              onSelect={selectRegion}
-              onSelectionPosition={updateMapSelectionPoint}
-              onDrill={drillDown}
-            />
+            {!publicSituationMode && (
+              <BoundaryMap
+                annotationMode={annotationOpen}
+                {...(mapBackdrop ? { backdrop: mapBackdrop } : {})}
+                features={mapFeatures}
+                points={mapPoints}
+                samplePointAggregates={sampleMode ? visibleSamplePointAggregates : []}
+                {...(activeSamplePointRepository
+                  ? { samplePointAggregateStatus: visibleSamplePointAggregateStatus }
+                  : {})}
+                samplePointIcons={visibleSampleNetworkIcons}
+                onSamplePointSelect={updateSelectedSamplePoint}
+                reserveRightPanel={
+                  annotationArmed ||
+                  dataMode === "SUPPLY_BALANCE" ||
+                  dataMode === "REGIONAL_DATA" ||
+                  operationalMapMode
+                }
+                selectedCode={selectedRegionCode}
+                {...(selectedSamplePointId ? { selectedSamplePointId } : {})}
+                onSelect={selectRegion}
+                onSelectionPosition={updateMapSelectionPoint}
+                onDrill={drillDown}
+              />
+            )}
             {publicSituationMode && annotationBounds && (
               <OperationalSituationMap
                 annotationActive={annotationOpen}
