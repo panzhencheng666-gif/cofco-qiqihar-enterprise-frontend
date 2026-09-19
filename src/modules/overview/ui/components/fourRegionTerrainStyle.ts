@@ -7,15 +7,14 @@ import type {
 
 export type TerrainSurfaceMode = "SANDBOX" | "FUSION" | "IMAGERY";
 
-export function publicBoundaryHierarchy(drilled: boolean, selected: boolean): {
+export function publicBoundaryHierarchy(drilled: boolean): {
   rootOpacity: number | ExpressionSpecification;
   activeOpacity: number | ExpressionSpecification;
   rootLabels: "none" | "visible";
 } {
-  const selection: ExpressionSpecification = ["case", ["==", ["get", "selected"], true], 1, 0.42];
   return {
-    rootOpacity: drilled ? 0.16 : selected ? selection : 0.8,
-    activeOpacity: selected ? selection : 0.76,
+    rootOpacity: 0,
+    activeOpacity: 0,
     rootLabels: drilled ? "none" : "visible",
   };
 }
@@ -173,10 +172,14 @@ export const FOUR_REGION_DETAIL_LAYERS: LayerSpecification[] = [
     source: "openmaptiles",
     "source-layer": "transportation",
     minzoom: 12,
-    filter: ["in", ["get", "class"], ["literal", ["tertiary", "minor", "service", "track", "path"]]],
+    filter: [
+      "in",
+      ["get", "class"],
+      ["literal", ["tertiary", "minor", "service", "track", "path"]],
+    ],
     paint: {
       "line-color": "#9daea9",
-      "line-opacity": 0.3,
+      "line-opacity": 0.8,
       "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.35, 17, 1.1],
     },
   },
@@ -186,11 +189,41 @@ export const FOUR_REGION_DETAIL_LAYERS: LayerSpecification[] = [
     source: "openmaptiles",
     "source-layer": "transportation",
     minzoom: 6,
-    filter: ["in", ["get", "class"], ["literal", ["motorway", "trunk", "primary", "secondary"]]],
+    filter: [
+      "in",
+      ["get", "class"],
+      ["literal", ["motorway", "trunk", "primary", "secondary"]],
+    ],
     paint: {
-      "line-color": "#9daea9",
-      "line-opacity": 0.38,
-      "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.35, 14, 1.25],
+      "line-color": [
+        "match",
+        ["get", "class"],
+        "motorway",
+        "#f3c45f",
+        "trunk",
+        "#e3b866",
+        "primary",
+        "#ead994",
+        "secondary",
+        "#d9ddbd",
+        "#b6c6b7",
+      ],
+      "line-opacity": 0.9,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.45, 14, 4.5],
+    },
+  },
+  {
+    id: "atlas-base-railways",
+    type: "line",
+    source: "openmaptiles",
+    "source-layer": "transportation",
+    minzoom: 6,
+    filter: ["in", ["get", "class"], ["literal", ["rail", "transit"]]],
+    paint: {
+      "line-color": "#d5ded8",
+      "line-width": 1.2,
+      "line-dasharray": [3, 2],
+      "line-opacity": 0.75,
     },
   },
   {
@@ -215,8 +248,15 @@ export const FOUR_REGION_DETAIL_LAYERS: LayerSpecification[] = [
     type: "symbol",
     source: "openmaptiles",
     "source-layer": "place",
-    minzoom: 12,
-    filter: ["in", ["get", "class"], ["literal", ["hamlet", "isolated_dwelling", "neighbourhood"]]],
+    minzoom: 7,
+    filter: [
+      "in",
+      ["get", "class"],
+      [
+        "literal",
+        ["city", "town", "village", "hamlet", "isolated_dwelling", "neighbourhood"],
+      ],
+    ],
     layout: {
       "text-field": chineseName,
       "text-font": ["Noto Sans Regular"],

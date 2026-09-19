@@ -21,12 +21,14 @@ import type {
   TerrainEnhancementState,
 } from "./FourRegionTerrainAtlas";
 import { focusDepotCategory } from "./realisticSituationModel";
+import { weatherObservationFresh } from "./liveWeatherPresentation";
 import {
   operationalSituationTimeline,
   type SituationTimelineItem,
 } from "./operationalSituationTimeline";
 
 const FourRegionTerrainAtlas = lazy(() => import("./FourRegionTerrainAtlas"));
+import { PublicRegionSearch, type PublicRegionSearchProps } from "./PublicRegionSearch";
 
 export interface SituationMapBounds {
   maxLatitude: number;
@@ -77,6 +79,7 @@ export function OperationalSituationMap({
   selectedFacilityId,
   selectedRegionCode,
   situation,
+  regionSearch,
 }: {
   backdrop?: MapFeature;
   bounds: SituationMapBounds;
@@ -97,12 +100,22 @@ export function OperationalSituationMap({
   selectedFacilityId?: string;
   selectedRegionCode?: string;
   situation: OperationalSituationCatalogue;
+  regionSearch?: Omit<PublicRegionSearchProps, "onSelect">;
 }) {
   const [layers, setLayers] = useState(DEFAULT_LAYERS);
   const [layerMenuOpen, setLayerMenuOpen] = useState(false);
   const [enhancementState, setEnhancementState] =
     useState<TerrainEnhancementState>("LOADING");
   const [command, setCommand] = useState<RealisticSceneCommand>();
+  const [focusRequest, setFocusRequest] = useState<{
+    id: number;
+    region: OverviewRegion;
+  }>();
+  const [weatherClock, setWeatherClock] = useState(Date.now);
+  useEffect(() => {
+    const timer = window.setInterval(() => setWeatherClock(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const [annotation, setAnnotation] = useState<MapAnnotation>();
   const [annotationType, setAnnotationType] = useState<MapAnnotationType>("POINT");
   const [annotationDraft, setAnnotationDraft] = useState<readonly [number, number]>();
@@ -185,6 +198,7 @@ export function OperationalSituationMap({
   }, [annotationActive, onAnnotationArmedChange]);
 
   function issueCommand(type: RealisticSceneCommand["type"]) {
+    if (type === "RESET") setFocusRequest(undefined);
     setCommand({
       id: Date.now(),
       type,
@@ -286,6 +300,7 @@ export function OperationalSituationMap({
           {...(backdrop ? { backdrop } : {})}
           bounds={bounds}
           {...(command ? { command } : {})}
+          {...(focusRequest ? { focusRequest } : {})}
           facilities={facilities}
           features={features}
           rootFeatures={rootFeatures}
@@ -295,7 +310,10 @@ export function OperationalSituationMap({
           onAnnotationPosition={(longitude, latitude) => {
             void persistAnnotation(longitude, latitude);
           }}
-          onRegionDrill={onRegionDrill}
+          onRegionDrill={(region) => {
+            setFocusRequest(undefined);
+            onRegionDrill(region);
+          }}
           onRegionSelect={(region) => {
             setPlaying(false);
             setTimelineTouched(false);
@@ -310,19 +328,45 @@ export function OperationalSituationMap({
           {...(selectedFacilityId ? { selectedFacilityId } : {})}
           {...(selectedRegionCode ? { selectedRegionCode } : {})}
           situation={visibleSituation}
-          surfaceMode="FUSION"
+          weatherHistorical={timelineTouched}
+          surfaceMode="IMAGERY"
         />
       </Suspense>
 
       <div className="realistic-situation-control-stack">
+        {regionSearch && (
+          <PublicRegionSearch
+            {...regionSearch}
+            onSelect={(region) => {
+              setPlaying(false);
+              setTimelineTouched(false);
+              setFocusRequest({ id: Date.now(), region });
+              onRegionSelect(region);
+            }}
+          />
+        )}
+        {layers.WEATHER && (
+          <p className="situation-weather-status" role="status">
+            {timelineTouched ? "历史观测" : "观测驱动动画"} ·
+            点击云雨图标查看地区与观测时间
+            {!visibleSituation.weather.length
+              ? " · 暂无天气观测"
+              : visibleSituation.weather.some(
+                    (weather) =>
+                      !weatherObservationFresh(weather.observedAt, weatherClock),
+                  )
+                ? " · 部分观测超过90分钟或时间异常，已静态弱化"
+                : " · 随最新观测同步"}
+          </p>
+        )}
         {currentLevel === "VILLAGE" && (
           <p className="realistic-situation-enhancement-notice" role="status">
-            真实村界尚未核验，已停用系统生成的村级展示分区。村名位置仍待空间核验，可点击名称查看该村资料。
+            村名位置仍待空间核验，可点击名称查看该村资料；不展示推算村界。
           </p>
         )}
         {enhancementState === "DEGRADED" && (
           <p className="realistic-situation-enhancement-notice" role="status">
-            在线卫星影像暂不可用，已切换连续地形底图；行政边界与业务图层仍可操作。
+            在线卫星影像暂不可用，已降级为地形底图；地区搜索与业务图层仍可操作。
           </p>
         )}
         <nav className="realistic-situation-filters" aria-label="公开态势筛选">
@@ -361,13 +405,6 @@ export function OperationalSituationMap({
             节点图层
           </button>
         </nav>
-
-        <div className="situation-boundary-key" aria-label="行政边界图例">
-          <span>市界</span>
-          <span>县界</span>
-          <span>乡镇界</span>
-          <span>村界待核验</span>
-        </div>
 
         {layerMenuOpen && !annotationActive && (
           <section className="realistic-situation-layer-menu" aria-label="节点图层">
@@ -517,7 +554,13 @@ export function OperationalSituationMap({
             －
           </button>
           {canReturnToParent && (
-            <button type="button" onClick={onReturnToParent}>
+            <button
+              type="button"
+              onClick={() => {
+                setFocusRequest(undefined);
+                onReturnToParent();
+              }}
+            >
               返回上级
             </button>
           )}

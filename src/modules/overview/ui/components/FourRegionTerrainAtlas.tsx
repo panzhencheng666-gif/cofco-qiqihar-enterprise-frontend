@@ -41,8 +41,13 @@ import {
   realisticSituationIcon,
   realisticWeatherIcon,
 } from "./realisticSituationIcons";
-import { liveWeatherKind, type LiveWeatherKind } from "./liveWeatherPresentation";
+import {
+  liveWeatherKind,
+  weatherObservationFresh,
+  type LiveWeatherKind,
+} from "./liveWeatherPresentation";
 import { createWeatherSpritePainter } from "./animatedWeatherSprite";
+import { publicMapFocus } from "./publicMapFocus";
 
 export interface RealisticSceneLayers {
   ADMINISTRATIVE: boolean;
@@ -70,6 +75,7 @@ export interface FourRegionTerrainAtlasProps {
   backdrop?: MapFeature;
   bounds: GeographicBounds;
   command?: RealisticSceneCommand;
+  focusRequest?: { id: number; region: OverviewRegion };
   facilities: OperationalFacilityCatalogue;
   features: readonly MapFeature[];
   rootFeatures: readonly MapFeature[];
@@ -84,6 +90,7 @@ export interface FourRegionTerrainAtlasProps {
   selectedFacilityId?: string;
   selectedRegionCode?: string;
   situation: OperationalSituationCatalogue;
+  weatherHistorical?: boolean;
   surfaceMode?: TerrainSurfaceMode;
 }
 
@@ -310,20 +317,14 @@ function installAtlasLayers(map: MapLibreMap) {
   background.width = background.height = 128;
   const context = background.getContext("2d");
   if (context) {
-    context.fillStyle = "#142527";
+    context.fillStyle = "#13212a";
     context.fillRect(0, 0, 128, 128);
-    context.strokeStyle = "#203739";
-    context.lineWidth = 0.5;
-    for (let n = 0; n < 128; n += 32) {
-      context.beginPath();
-      context.moveTo(n, 0);
-      context.lineTo(n, 128);
-      context.moveTo(0, n);
-      context.lineTo(128, n);
-      context.stroke();
-    }
-    context.fillStyle = "#405756";
-    context.fillRect(63, 63, 2, 2);
+    // Quiet, non-geographic matte texture; no grid, stars or outside imagery.
+    for (let y = 0; y < 128; y += 2)
+      for (let x = 0; x < 128; x += 2) {
+        context.fillStyle = `rgba(117,145,155,${((x * 17 + y * 31) % 13) / 650})`;
+        context.fillRect(x, y, 1, 1);
+      }
     map.addImage("atlas-survey-background", context.getImageData(0, 0, 128, 128));
   }
   map.addSource(ROOT_SOURCE, { type: "geojson", data: emptyCollection() });
@@ -343,7 +344,7 @@ function installAtlasLayers(map: MapLibreMap) {
     source: MASK_SOURCE,
     paint: {
       "fill-antialias": false,
-      "fill-color": "#142527",
+      "fill-color": "#13212a",
       "fill-opacity": 1,
       ...(context ? { "fill-pattern": "atlas-survey-background" } : {}),
     },
@@ -352,7 +353,7 @@ function installAtlasLayers(map: MapLibreMap) {
     id: "atlas-root-fill",
     type: "fill",
     source: ROOT_SOURCE,
-    paint: { "fill-color": "#8ed0bd", "fill-opacity": 0.015 },
+    paint: { "fill-color": "#8ed0bd", "fill-opacity": 0 },
   });
   map.addLayer({
     id: "atlas-root-glow",
@@ -371,7 +372,7 @@ function installAtlasLayers(map: MapLibreMap) {
     source: ROOT_SOURCE,
     paint: {
       "line-color": "#9ef6ff",
-      "line-opacity": 0.98,
+      "line-opacity": 0,
       "line-width": ["interpolate", ["linear"], ["zoom"], 4, 1.2, 10, 1.6],
     },
   });
@@ -399,7 +400,7 @@ function installAtlasLayers(map: MapLibreMap) {
     layout: { "fill-sort-key": ["get", "levelRank"] },
     paint: {
       "fill-color": ["case", ["==", ["get", "selected"], true], "#f6ca5c", "#8ed4bf"],
-      "fill-opacity": ["case", ["==", ["get", "selected"], true], 0.035, 0.015],
+      "fill-opacity": 0,
     },
   });
   map.addLayer({
@@ -419,7 +420,7 @@ function installAtlasLayers(map: MapLibreMap) {
         "#80f7ce",
         "#9ef6ff",
       ],
-      "line-opacity": 0.96,
+      "line-opacity": 0,
       "line-width": ["case", ["==", ["get", "selected"], true], 1.5, 0.85],
     },
   });
@@ -505,6 +506,7 @@ function installAtlasLayers(map: MapLibreMap) {
     filter: [
       "all",
       ["==", ["get", "kind"], "WEATHER"],
+      ["==", ["get", "weatherFresh"], true],
       ["in", ["get", "weatherKind"], ["literal", ["CLOUD", "RAIN", "STORM"]]],
     ],
     paint: {
@@ -532,23 +534,11 @@ function installAtlasLayers(map: MapLibreMap) {
     filter: ["==", ["get", "kind"], "WEATHER"],
     layout: {
       "icon-allow-overlap": true,
-      "icon-image": [
-        "match",
-        ["get", "weatherKind"],
-        "CLOUD",
-        "atlas-icon-weather-cloud",
-        "RAIN",
-        "atlas-icon-weather-rain",
-        "SNOW",
-        "atlas-icon-weather-snow",
-        "STORM",
-        "atlas-icon-weather-storm",
-        "atlas-icon-weather-clear",
-      ],
+      "icon-image": ["get", "weatherImage"],
       "icon-size": ["interpolate", ["linear"], ["zoom"], 5, 0.85, 12, 1.1],
     },
     paint: {
-      "icon-opacity": 0.98,
+      "icon-opacity": ["case", ["==", ["get", "weatherFresh"], true], 0.98, 0.55],
     },
   });
   map.addLayer({
@@ -622,7 +612,8 @@ function synchronizeAtlas(runtime: AtlasRuntime, props: FourRegionTerrainAtlasPr
   if (hierarchyChanged || selectionChanged) {
     // Keep only the current children plus the selected parent outline, never
     // accumulate earlier levels or use unverified village display partitions.
-    const outlined = active.length && props.backdrop ? [props.backdrop, ...active] : active;
+    const outlined =
+      active.length && props.backdrop ? [props.backdrop, ...active] : active;
     setSource(runtime.map, ACTIVE_SOURCE, regionCollection(outlined, props));
     setSource(runtime.map, ACTIVE_LABEL_SOURCE, regionLabelCollection(active));
   }
@@ -631,12 +622,18 @@ function synchronizeAtlas(runtime: AtlasRuntime, props: FourRegionTerrainAtlasPr
     previous.facilities !== props.facilities ||
     previous.situation !== props.situation ||
     previous.layers !== props.layers ||
-    previous.selectedFacilityId !== props.selectedFacilityId
+    previous.selectedFacilityId !== props.selectedFacilityId ||
+    previous.weatherHistorical !== props.weatherHistorical
   ) {
     setSource(runtime.map, RAIL_SOURCE, railwayCollection(props));
     setSource(runtime.map, LOGISTICS_SOURCE, logisticsCollection(props));
     setSource(runtime.map, INVENTORY_SOURCE, inventoryCollection(props));
     setSource(runtime.map, MARKER_SOURCE, markerCollection(props));
+    runtime.map.setLayoutProperty(
+      "atlas-base-railways",
+      "visibility",
+      props.layers.RAILWAY_ROUTE ? "visible" : "none",
+    );
   }
   if (
     !previous ||
@@ -646,23 +643,71 @@ function synchronizeAtlas(runtime: AtlasRuntime, props: FourRegionTerrainAtlasPr
     setSource(runtime.map, ANNOTATION_SOURCE, annotationCollection(props));
   if (!previous || previous.surfaceMode !== props.surfaceMode)
     applySurfaceMode(runtime.map, props.surfaceMode ?? "FUSION");
-  if (!previous || hierarchyChanged || selectionChanged || previous.layers.ADMINISTRATIVE !== props.layers.ADMINISTRATIVE) {
+  if (
+    !previous ||
+    hierarchyChanged ||
+    selectionChanged ||
+    previous.focusRequest !== props.focusRequest ||
+    previous.layers.ADMINISTRATIVE !== props.layers.ADMINISTRATIVE
+  ) {
     setAdministrativeVisibility(runtime.map, props.layers.ADMINISTRATIVE);
-    const emphasis = publicBoundaryHierarchy(active.length > 0, Boolean(props.selectedRegionCode));
-    runtime.map.setPaintProperty("atlas-root-outline", "line-opacity", emphasis.rootOpacity);
-    runtime.map.setPaintProperty("atlas-active-outline", "line-opacity", emphasis.activeOpacity);
-    runtime.map.setLayoutProperty("atlas-root-labels", "visibility", props.layers.ADMINISTRATIVE ? emphasis.rootLabels : "none");
+    const emphasis = publicBoundaryHierarchy(active.length > 0);
+    runtime.map.setPaintProperty(
+      "atlas-root-outline",
+      "line-opacity",
+      emphasis.rootOpacity,
+    );
+    runtime.map.setPaintProperty(
+      "atlas-active-outline",
+      "line-opacity",
+      emphasis.activeOpacity,
+    );
+    runtime.map.setLayoutProperty(
+      "atlas-root-labels",
+      "visibility",
+      props.layers.ADMINISTRATIVE && !props.focusRequest ? emphasis.rootLabels : "none",
+    );
     // Remove matching basemap names too; authoritative business labels own
     // administrative names while small settlement detail remains available.
-    const names = [...new Set([...props.rootFeatures, ...active].map(feature => feature.region.name))];
-    runtime.map.setFilter("atlas-place-labels", ["all",
-      ["in", ["get", "class"], ["literal", ["hamlet", "isolated_dwelling", "neighbourhood"]]],
-      ["!", ["in", ["coalesce", ["get", "name:zh-Hans"], ["get", "name:zh"], ["get", "name"], ""], ["literal", names]]],
+    const names = [
+      ...new Set(
+        [...(props.focusRequest ? [] : props.rootFeatures), ...active].map(
+          (feature) => feature.region.name,
+        ),
+      ),
+    ];
+    runtime.map.setFilter("atlas-place-labels", [
+      "all",
+      [
+        "in",
+        ["get", "class"],
+        [
+          "literal",
+          ["city", "town", "village", "hamlet", "isolated_dwelling", "neighbourhood"],
+        ],
+      ],
+      [
+        "!",
+        [
+          "in",
+          [
+            "coalesce",
+            ["get", "name:zh-Hans"],
+            ["get", "name:zh"],
+            ["get", "name"],
+            "",
+          ],
+          ["literal", names],
+        ],
+      ],
     ]);
   }
 
   const nextHierarchyKey = hierarchyKey(props, active);
-  if (nextHierarchyKey !== runtime.hierarchyKey) {
+  if (
+    nextHierarchyKey !== runtime.hierarchyKey ||
+    previous?.focusRequest !== props.focusRequest
+  ) {
     runtime.hierarchyKey = nextHierarchyKey;
     fitCurrentHierarchy(runtime, props, active);
   }
@@ -704,8 +749,11 @@ function fitCurrentHierarchy(
       ? [props.backdrop]
       : active
     : props.rootFeatures;
-  const bounds = featureBounds(focusFeatures) ?? props.bounds;
-  const rootView = active.length === 0;
+  const searchBounds = props.focusRequest
+    ? publicMapFocus(props.focusRequest.region)
+    : undefined;
+  const bounds = searchBounds ?? featureBounds(focusFeatures) ?? props.bounds;
+  const rootView = !searchBounds && active.length === 0;
   const padding = calculateOperationalMapPadding(runtime.host, 125);
   const map = runtime.map;
   delete runtime.fittedCenter;
@@ -765,6 +813,8 @@ function fitCurrentHierarchy(
   // four-region outline on wide screens. User panning is disabled instead.
   runtime.host.dataset.minimumZoom = low.toFixed(2);
   runtime.host.dataset.imageryZoom = runtime.map.getZoom().toFixed(2);
+  runtime.host.dataset.focusRegion = props.focusRequest?.region.code ?? "";
+  runtime.host.dataset.focusBounds = JSON.stringify(bounds);
 }
 
 function scheduleAtlasResize(runtime: AtlasRuntime) {
@@ -1099,6 +1149,9 @@ function markerCollection(props: FourRegionTerrainAtlasProps): FeatureCollection
           name: weather.regionName,
           regionCode: weather.regionCode ?? weather.rootRegionCode,
           weatherKind: liveWeatherKind(weather),
+          weatherFresh:
+            !props.weatherHistorical && weatherObservationFresh(weather.observedAt),
+          weatherImage: `atlas-icon-weather-${liveWeatherKind(weather).toLowerCase()}${!props.weatherHistorical && weatherObservationFresh(weather.observedAt) ? "" : "-static"}`,
         }),
       );
     });
@@ -1114,7 +1167,9 @@ function startWeatherAnimation(runtime: AtlasRuntime) {
       const id = `atlas-icon-weather-${kind.toLowerCase()}`;
       if (runtime.map.hasImage(id)) runtime.map.removeImage(id);
       runtime.map.addImage(id, paint(kind, 0), { pixelRatio: 2 });
+      runtime.map.addImage(`${id}-static`, paint(kind, 0), { pixelRatio: 2 });
     }
+  let freshnessCheckedAt = 0;
   const animate = (timestamp: number) => {
     if (runtime.destroyed) return;
     if (
@@ -1123,19 +1178,27 @@ function startWeatherAnimation(runtime: AtlasRuntime) {
       timestamp - runtime.weatherAnimationUpdatedAt >= 90 &&
       runtime.map.getLayer("atlas-weather-pulse")
     ) {
-      const motionTime = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? 0
-        : timestamp;
+      if (timestamp - freshnessCheckedAt > 30_000) {
+        setSource(runtime.map, MARKER_SOURCE, markerCollection(runtime.props));
+        freshnessCheckedAt = timestamp;
+      }
+      const motionTime =
+        runtime.props.weatherHistorical ||
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? 0
+          : timestamp;
       if (paint)
         for (const kind of new Set(
-          runtime.props.situation.weather.map(liveWeatherKind),
+          runtime.props.situation.weather
+            .filter((weather) => weatherObservationFresh(weather.observedAt))
+            .map(liveWeatherKind),
         )) {
           runtime.map.updateImage(
             `atlas-icon-weather-${kind.toLowerCase()}`,
             paint(kind, motionTime),
           );
         }
-      const phase = (Math.sin(timestamp / 520) + 1) / 2;
+      const phase = (Math.sin(motionTime / 1200) + 1) / 2;
       runtime.map.setPaintProperty(
         "atlas-weather-pulse",
         "circle-radius",
@@ -1144,7 +1207,7 @@ function startWeatherAnimation(runtime: AtlasRuntime) {
       runtime.map.setPaintProperty(
         "atlas-weather-pulse",
         "circle-opacity",
-        0.12 + phase * 0.24,
+        0.08 + phase * 0.1,
       );
       runtime.weatherAnimationUpdatedAt = timestamp;
       runtime.host.dataset.weatherAnimation = "active";

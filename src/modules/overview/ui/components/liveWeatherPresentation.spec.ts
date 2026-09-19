@@ -5,6 +5,7 @@ import {
   liveWeatherEvidence,
   liveWeatherHeadline,
   liveWeatherKind,
+  weatherObservationFresh,
 } from "./liveWeatherPresentation";
 
 const observation = {
@@ -24,6 +25,13 @@ const observation = {
 } satisfies WeatherObservation;
 
 describe("live weather presentation", () => {
+  it("does not present stale, invalid or future observations as current", () => {
+    const now = Date.parse("2026-09-19T03:00:00Z");
+    expect(weatherObservationFresh(observation.observedAt, now)).toBe(true);
+    expect(weatherObservationFresh("2026-09-19T00:00:00Z", now)).toBe(false);
+    expect(weatherObservationFresh("invalid", now)).toBe(false);
+    expect(weatherObservationFresh("2026-09-20T00:00:00Z", now)).toBe(false);
+  });
   it("derives rain visuals and evidence from the actual observation", () => {
     expect(liveWeatherKind(observation)).toBe("RAIN");
     expect(liveWeatherHeadline("泰来县", observation)).toBe("泰来县降雨影响提示");
@@ -35,5 +43,15 @@ describe("live weather presentation", () => {
     expect(liveWeatherKind({ ...observation, weatherCode: 75 })).toBe("SNOW");
     expect(liveWeatherKind({ ...observation, weatherCode: 80 })).toBe("RAIN");
     expect(liveWeatherKind({ ...observation, weatherCode: 82 })).toBe("RAIN");
+  });
+  it("does not turn a rain risk statement into observed rain when precipitation is zero", () => {
+    expect(
+      liveWeatherKind({
+        ...observation,
+        precipitationMm: 0,
+        cloudCoverPercent: 20,
+        risk: "未触发降雨风险",
+      }),
+    ).toBe("CLEAR");
   });
 });

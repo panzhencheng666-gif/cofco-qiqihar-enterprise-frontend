@@ -17,24 +17,62 @@ export function createWeatherSpritePainter() {
       ctx.fillStyle = glow;
       ctx.fillRect(40, 10, 112, 110);
     } else {
-      // The motion is illustrative; location and weather type come from observations.
-      for (let i = 0; i < 7; i += 1) {
-        const x = 36 + i * 19 + Math.sin(time / 1500 + i) * 6;
-        const y = 48 + Math.sin(i * 2) * 10;
-        const g = ctx.createRadialGradient(x - 5, y - 8, 2, x, y, 32);
-        g.addColorStop(0, "#ffffffef");
-        g.addColorStop(0.48, kind === "STORM" ? "#8a9caee6" : "#dceef5e6");
-        g.addColorStop(1, "#c7eaff00");
+      // Layered billows with directional light, a shaded underside and rain
+      // curtain. This is an observation-driven symbol, never a radar footprint.
+      const wet = kind === "RAIN" || kind === "STORM";
+      const drift = Math.sin(time / 2600) * 3;
+      if (wet) {
+        const curtain = ctx.createLinearGradient(0, 66, 0, 140);
+        curtain.addColorStop(0, "#93b9d04d");
+        curtain.addColorStop(1, "#80c9ea00");
+        ctx.fillStyle = curtain;
+        ctx.beginPath();
+        ctx.moveTo(40, 60);
+        ctx.lineTo(159, 60);
+        ctx.lineTo(145, 142);
+        ctx.lineTo(24, 142);
+        ctx.closePath();
+        ctx.fill();
+      }
+      const billows = [
+        [50, 55, 23],
+        [76, 40, 29],
+        [111, 42, 33],
+        [145, 56, 25],
+        [71, 64, 24],
+        [108, 66, 27],
+        [132, 68, 20],
+      ];
+      // One continuous shaded silhouette avoids shiny disconnected spheres.
+      ctx.beginPath();
+      for (const [cx, cy, radius] of billows) {
+        ctx.moveTo(cx! + drift + radius!, cy!);
+        ctx.arc(cx! + drift, cy!, radius! * 0.93, 0, Math.PI * 2);
+      }
+      const body = ctx.createLinearGradient(0, 12, 0, 92);
+      body.addColorStop(0, "#f3f7f9");
+      body.addColorStop(0.45, wet ? "#b8c8d1" : "#e2eaf0");
+      body.addColorStop(1, wet ? "#657d8e" : "#a5bbc7");
+      ctx.fillStyle = body;
+      ctx.fill();
+      for (const [cx, cy, radius] of billows) {
+        const x = cx! + drift;
+        const y = cy!;
+        const r = radius!;
+        const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.45, 1, x, y, r);
+        g.addColorStop(0, kind === "STORM" ? "#e4edf260" : "#ffffff90");
+        g.addColorStop(0.55, "#f0f6fa35");
+        g.addColorStop(1, "#eaf5fa00");
         ctx.fillStyle = g;
-        ctx.fillRect(x - 34, y - 34, 68, 68);
+        ctx.fillRect(x - r, y - r, r * 2, r * 2);
       }
       if (kind === "RAIN" || kind === "STORM" || kind === "SNOW") {
         ctx.strokeStyle = "#b9edffdd";
         ctx.fillStyle = "#eefaff";
-        ctx.lineWidth = 2;
-        for (let i = 0; i < 18; i += 1) {
+        ctx.lineWidth = 1.1;
+        for (let i = 0; i < 38; i += 1) {
           const x = 43 + ((i * 29) % 112);
-          const y = 70 + ((time / (kind === "SNOW" ? 65 : 14) + i * 17) % 58);
+          const y = 76 + ((time / (kind === "SNOW" ? 65 : 11) + i * 17) % 58);
           ctx.globalAlpha = Math.max(0, 1 - (y - 80) / 55);
           ctx.beginPath();
           if (kind === "SNOW") {
@@ -42,7 +80,7 @@ export function createWeatherSpritePainter() {
             ctx.fill();
           } else {
             ctx.moveTo(x, y);
-            ctx.lineTo(x - 4, y + 10);
+            ctx.lineTo(x - 5, y + 14);
             ctx.stroke();
           }
         }

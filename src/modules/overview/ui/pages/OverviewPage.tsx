@@ -1474,6 +1474,16 @@ export function OverviewPage({
             )}
             {publicSituationMode && annotationBounds && (
               <OperationalSituationMap
+                {...(year !== undefined
+                  ? {
+                      regionSearch: {
+                        repository,
+                        roots: rootRegions.filter((region) => !region.mapContextOnly),
+                        productCode,
+                        year,
+                      },
+                    }
+                  : {})}
                 annotationActive={annotationOpen}
                 {...(mapBackdrop ? { backdrop: mapBackdrop } : {})}
                 bounds={annotationBounds}

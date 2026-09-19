@@ -229,6 +229,17 @@
   pointer-events: auto;
 }
 
+.situation-weather-status {
+  max-width: 440px;
+  margin: 0;
+  padding: 6px 10px;
+  color: #c6d8df;
+  background: #172a34e6;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .realistic-situation-scene[data-annotation-active="true"] canvas,
 .four-region-terrain-atlas[data-annotation-active="true"] canvas {
   cursor: crosshair;

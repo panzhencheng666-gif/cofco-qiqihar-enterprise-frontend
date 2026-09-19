@@ -2,6 +2,12 @@ import type { WeatherObservation } from "../../domain/operationalSituation";
 
 export type LiveWeatherKind = "CLEAR" | "CLOUD" | "RAIN" | "SNOW" | "STORM";
 
+/** UI freshness ceiling; observation time, not the request completion time. */
+export function weatherObservationFresh(observedAt: string, now = Date.now()) {
+  const age = now - Date.parse(observedAt);
+  return Number.isFinite(age) && age >= -5 * 60_000 && age <= 90 * 60_000;
+}
+
 export function liveWeatherKind(weather: WeatherObservation): LiveWeatherKind {
   const code = weather.weatherCode;
   if (code !== undefined && code !== null) {
@@ -11,8 +17,8 @@ export function liveWeatherKind(weather: WeatherObservation): LiveWeatherKind {
     if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return "RAIN";
     if ((code >= 1 && code <= 3) || code === 45 || code === 48) return "CLOUD";
   }
-  if (weather.risk.includes("暴雨") || weather.risk.includes("雷")) return "STORM";
-  if (weather.risk.includes("降雨") || weather.risk.includes("降水")) return "RAIN";
+  // Risk text may describe a forecast or explicitly say no rainfall; only
+  // observed code/precipitation/cloud cover may drive the current animation.
   if ((weather.meanTemperatureC ?? 1) <= 0 && (weather.precipitationMm ?? 0) > 0)
     return "SNOW";
   if ((weather.precipitationMm ?? 0) > 0) return "RAIN";

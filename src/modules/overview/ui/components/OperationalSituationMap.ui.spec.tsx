@@ -25,7 +25,7 @@ describe("OperationalSituationMap public-only controls", () => {
     const { container } = renderSituationMap();
 
     const atlas = await screen.findByTestId("four-region-atlas");
-    expect(atlas).toHaveAttribute("data-surface-mode", "FUSION");
+    expect(atlas).toHaveAttribute("data-surface-mode", "IMAGERY");
     expect(screen.getAllByRole("button", { name: "地图标注" })).toHaveLength(1);
     expect(screen.queryByRole("group", { name: "地表显示" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "沙盘" })).not.toBeInTheDocument();
@@ -45,7 +45,7 @@ describe("OperationalSituationMap public-only controls", () => {
 
     expect(
       screen.getByText(
-        "在线卫星影像暂不可用，已切换连续地形底图；行政边界与业务图层仍可操作。",
+        "在线卫星影像暂不可用，已降级为地形底图；地区搜索与业务图层仍可操作。",
       ),
     ).toBeVisible();
   });
