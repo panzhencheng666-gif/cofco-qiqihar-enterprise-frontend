@@ -64,6 +64,35 @@ describe("fitOperationalMap", () => {
     expect(map.setMinZoom).toHaveBeenLastCalledWith(5.15);
     expect(map.setMaxBounds).toHaveBeenLastCalledWith(bounds);
   });
+
+  it("can add a wider visual inset for the four-region earth presentation", () => {
+    const center = { lng: 125.06, lat: 49.89 };
+    const map = {
+      cameraForBounds: vi.fn(() => ({ center, zoom: 5.4 })),
+      jumpTo: vi.fn(),
+      setMaxBounds: vi.fn(),
+      setMinZoom: vi.fn(),
+    };
+    const bounds: [[number, number], [number, number]] = [
+      [120.48, 46.22],
+      [129.65, 53.56],
+    ];
+
+    fitOperationalMap(
+      map,
+      bounds,
+      { bottom: 96, left: 54, right: 54, top: 175 },
+      52,
+      0.45,
+    );
+
+    expect(map.jumpTo).toHaveBeenCalledWith({
+      bearing: 0,
+      center,
+      pitch: 52,
+      zoom: 4.95,
+    });
+  });
 });
 
 function domRect(x: number, y: number, width: number, height: number): DOMRect {

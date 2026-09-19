@@ -45,6 +45,7 @@ export function fitOperationalMap(
   bounds: [[number, number], [number, number]],
   padding: OperationalMapPadding,
   pitch: number,
+  zoomInset = 0,
 ) {
   map.setMaxBounds(null);
   map.setMinZoom(0);
@@ -56,13 +57,14 @@ export function fitOperationalMap(
     !Number.isFinite(camera.zoom)
   )
     return;
+  const zoom = Math.max(0, camera.zoom - zoomInset);
   map.jumpTo({
     bearing: 0,
     center: camera.center,
     pitch,
-    zoom: camera.zoom,
+    zoom,
   });
-  map.setMinZoom(Math.max(0, camera.zoom - 0.25));
+  map.setMinZoom(Math.max(0, zoom - 0.25));
   map.setMaxBounds(bounds);
 }
 import type { Map as MapLibreMap } from "maplibre-gl";
