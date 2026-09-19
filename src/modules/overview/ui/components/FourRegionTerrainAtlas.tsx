@@ -305,7 +305,7 @@ function installAtlasLayers(map: MapLibreMap) {
     paint: {
       "fill-antialias": false,
       "fill-color": "#173a3c",
-      "fill-opacity": 0.48,
+      "fill-opacity": 0.64,
     },
   });
   map.addLayer({
@@ -455,7 +455,7 @@ function installAtlasLayers(map: MapLibreMap) {
     layout: {
       "icon-allow-overlap": false,
       "icon-image": "atlas-icon-inventory",
-      "icon-size": ["interpolate", ["linear"], ["zoom"], 5, 0.32, 12, 0.52],
+      "icon-size": ["interpolate", ["linear"], ["zoom"], 5, 0.46, 12, 0.62],
     },
     paint: {
       "icon-opacity": 0.86,
@@ -483,7 +483,7 @@ function installAtlasLayers(map: MapLibreMap) {
         "case",
         ["==", ["get", "selected"], true],
         0.68,
-        ["interpolate", ["linear"], ["zoom"], 5, 0.42, 12, 0.62],
+        ["interpolate", ["linear"], ["zoom"], 5, 0.58, 12, 0.74],
       ],
     },
     paint: {
@@ -537,7 +537,7 @@ function installAtlasLayers(map: MapLibreMap) {
         "atlas-icon-weather-storm",
         "atlas-icon-weather-clear",
       ],
-      "icon-size": ["interpolate", ["linear"], ["zoom"], 5, 0.48, 12, 0.72],
+      "icon-size": ["interpolate", ["linear"], ["zoom"], 5, 0.58, 12, 0.76],
     },
     paint: {
       "icon-opacity": 0.98,
@@ -689,7 +689,7 @@ function fitCurrentHierarchy(
     toMapBounds(bounds),
     padding,
     rootView ? 45 : 50,
-    rootView ? -0.65 : 0,
+    rootView ? -0.25 : 0,
   );
   runtime.host.dataset.imageryZoom = runtime.map.getZoom().toFixed(2);
 }
