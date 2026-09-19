@@ -593,7 +593,7 @@ function fitCurrentHierarchy(
     : props.rootFeatures;
   const bounds = featureBounds(focusFeatures) ?? props.bounds;
   const padding = calculateOperationalMapPadding(runtime.host, 150);
-  fitOperationalMap(runtime.map, toMapBounds(bounds), padding, 52, 0.45);
+  fitOperationalMap(runtime.map, toMapBounds(bounds), padding, 52, 0.1);
   runtime.host.dataset.imageryZoom = runtime.map.getZoom().toFixed(2);
 }
 
