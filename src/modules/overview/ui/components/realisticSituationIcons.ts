@@ -20,9 +20,19 @@ export function realisticSituationIcon(kind: RealisticSituationIconKind) {
 }
 
 export function realisticWeatherIcon(weatherCode: number | null | undefined) {
-  if (weatherCode !== null && weatherCode !== undefined && weatherCode >= 71 && weatherCode <= 86)
+  if (
+    weatherCode !== null &&
+    weatherCode !== undefined &&
+    weatherCode >= 71 &&
+    weatherCode <= 86
+  )
     return svgDataUrl(weatherSvg("降雪", "snow"));
-  if (weatherCode !== null && weatherCode !== undefined && weatherCode >= 51 && weatherCode <= 67)
+  if (
+    weatherCode !== null &&
+    weatherCode !== undefined &&
+    weatherCode >= 51 &&
+    weatherCode <= 67
+  )
     return svgDataUrl(weatherSvg("降雨", "rain"));
   if (weatherCode !== null && weatherCode !== undefined && weatherCode >= 95)
     return svgDataUrl(weatherSvg("雷暴", "storm"));
@@ -55,7 +65,10 @@ function dieselLocomotiveSvg() {
 </svg>`;
 }
 
-function weatherSvg(label: string, kind: "clear" | "cloud" | "rain" | "snow" | "storm") {
+function weatherSvg(
+  label: string,
+  kind: "clear" | "cloud" | "rain" | "snow" | "storm",
+) {
   const precipitation =
     kind === "rain" || kind === "storm"
       ? `<path d="M25 44l-4 9M37 44l-4 9M49 44l-4 9" stroke="#8bd4ee" stroke-width="3" stroke-linecap="round"/>`
@@ -80,4 +93,3 @@ function weatherSvg(label: string, kind: "clear" | "cloud" | "rain" | "snow" | "
 function svgDataUrl(svg: string) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
-

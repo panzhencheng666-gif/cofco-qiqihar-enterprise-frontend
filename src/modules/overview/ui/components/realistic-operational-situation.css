@@ -49,7 +49,7 @@
   position: absolute;
   z-index: 3;
   right: 0.4rem;
-  bottom: 0.2rem;
+  bottom: 4.75rem;
   max-width: 52%;
   color: rgb(255 255 255 / 84%);
   font-size: 9px;
@@ -63,6 +63,7 @@
 
 .realistic-situation-filters,
 .realistic-situation-layer-menu,
+.regional-earth-annotation,
 .realistic-situation-tools,
 .realistic-situation-timeline,
 .realistic-situation-caption {
@@ -74,8 +75,12 @@
   backdrop-filter: blur(12px);
 }
 
+.realistic-situation-scene[data-annotation-active="true"] canvas {
+  cursor: crosshair;
+}
+
 .realistic-situation-filters {
-  top: 5.2rem;
+  top: 10.2rem;
   left: 1rem;
   display: flex;
   gap: 0.25rem;
@@ -108,12 +113,67 @@
 }
 
 .realistic-situation-layer-menu {
-  top: 8rem;
+  top: 13rem;
   left: 1rem;
   display: grid;
   width: 15.5rem;
   gap: 0.25rem;
   padding: 0.55rem;
+}
+
+.regional-earth-annotation {
+  top: 13rem;
+  left: 1rem;
+  display: grid;
+  width: min(21rem, calc(100% - 2rem));
+  gap: 0.6rem;
+  padding: 0.75rem;
+  background: rgb(31 37 33 / 88%);
+}
+
+.regional-earth-annotation header,
+.regional-earth-annotation header > div,
+.regional-earth-annotation > div {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.regional-earth-annotation header {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.regional-earth-annotation header > div {
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.regional-earth-annotation header span,
+.regional-earth-annotation p {
+  margin: 0;
+  color: rgb(255 255 255 / 72%);
+  font-size: 0.68rem;
+}
+
+.regional-earth-annotation button {
+  min-height: 1.9rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid rgb(255 255 255 / 34%);
+  border-radius: 3px;
+  color: #fff;
+  background: rgb(255 255 255 / 8%);
+  cursor: pointer;
+}
+
+.regional-earth-annotation button[aria-pressed="true"] {
+  border-color: #f0cf79;
+  color: #ffecaf;
+}
+
+.regional-earth-annotation button.is-danger {
+  margin-left: auto;
+  border-color: rgb(237 147 126 / 48%);
+  color: #ffd1c6;
 }
 
 .realistic-situation-layer-menu header {
@@ -185,10 +245,6 @@
   padding: 0.3rem;
 }
 
-.overview-command-center.has-side-data-panel .realistic-situation-tools {
-  right: calc(var(--command-details-width) + 1rem);
-}
-
 .realistic-situation-tools label {
   display: grid;
   width: 8.5rem;
@@ -199,19 +255,15 @@
 
 .realistic-situation-caption {
   bottom: 5.8rem;
-  left: 50%;
-  max-width: 30rem;
+  left: 1rem;
+  max-width: 21rem;
   margin: 0;
   padding: 0.45rem 0.65rem;
   color: rgb(255 255 255 / 88%);
   font-size: 0.68rem;
   pointer-events: none;
   text-align: center;
-  transform: translateX(-50%);
-}
-
-.overview-command-center.has-side-data-panel .realistic-situation-caption {
-  left: calc((100% - var(--command-details-width)) / 2);
+  transform: none;
 }
 
 .realistic-situation-timeline {
@@ -224,10 +276,6 @@
   gap: 0.5rem;
   min-height: 3.5rem;
   padding: 0.45rem 0.55rem;
-}
-
-.overview-command-center.has-side-data-panel .realistic-situation-timeline {
-  right: calc(var(--command-details-width) + 1rem);
 }
 
 .realistic-situation-timeline time,

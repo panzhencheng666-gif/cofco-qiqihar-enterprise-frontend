@@ -48,7 +48,6 @@ import { useOverviewRealtimeRefresh } from "../hooks/useOverviewRealtimeRefresh"
 import { useOverviewSampleNetworkLayers } from "../hooks/useOverviewSampleNetworkLayers";
 import { visibleSampleNetworkMapIcons } from "../presentation/sampleNetworkLayers";
 import { HttpContractError, HttpError } from "../../../../shared/api/HttpClient";
-import { MapAnnotationOverlay } from "../components/MapAnnotationOverlay";
 import { OperationalSituationMap } from "../components/OperationalSituationMap";
 import type { SituationTimelineItem } from "../components/operationalSituationTimeline";
 import { flattenCoordinates, type MapFeature } from "../components/boundaryGeometry";
@@ -770,16 +769,6 @@ export function OverviewPage({
         : [],
     [sampleMode, sampleNetworkModel.icons, visibleRegions, selectedSamplePointId],
   );
-  const annotationSampleNetworkIcons = useMemo(
-    () =>
-      visibleSampleNetworkMapIcons(
-        visibleRegions[0]?.level,
-        selectedSamplePointId,
-        sampleNetworkModel.icons,
-      ),
-    [sampleNetworkModel.icons, selectedSamplePointId, visibleRegions],
-  );
-
   const regionalDataRegionCode =
     selectedRegion?.code ||
     mapContextRegion?.code ||
@@ -1207,6 +1196,7 @@ export function OverviewPage({
         sampleNetworkMode={
           activeSamplePointRepository ? sampleNetworkModel.mode : "actual"
         }
+        showLegend={!publicSituationMode}
         {...(overallMapScope
           ? {
               boundarySource: {
@@ -1332,7 +1322,7 @@ export function OverviewPage({
                 operationalMapMode,
               scopeLabel: "地区数据范围：齐齐哈尔、黑河、呼伦贝尔、大兴安岭及下级地区",
               dataSourceLabel: publicSituationMode
-                ? "公开态势融合 NASA EONET 开放事件、Open-Meteo 区域天气、核定库点及 OpenStreetMap 铁路参考"
+                ? "来源：公开地理服务、Open-Meteo 与正式业务数据"
                 : dataMode === "REGIONAL_DATA"
                   ? "正式地区数据优先；缺项和未来值由系统统计模型自动生成"
                   : "地区与供需数据保存后即为正式数据；历史版本由系统自动留存",
@@ -1413,7 +1403,7 @@ export function OverviewPage({
         map={
           <div className="overview-map-annotation-stage">
             <BoundaryMap
-              annotationMode={annotationOpen}
+              annotationMode={annotationOpen && !publicSituationMode}
               {...(mapBackdrop ? { backdrop: mapBackdrop } : {})}
               features={mapFeatures}
               points={mapPoints}
@@ -1449,6 +1439,8 @@ export function OverviewPage({
                 }}
                 {...(mapAnnotationRepository
                   ? {
+                      annotationRepository: mapAnnotationRepository,
+                      onAnnotationArmedChange: setAnnotationArmed,
                       onAnnotationToggle: () => {
                         setAnnotationArmed(false);
                         setAnnotationOpen((current) => !current);
@@ -1463,40 +1455,16 @@ export function OverviewPage({
                   ? { selectedFacilityId: effectiveOperationalFacilityId }
                   : {})}
                 {...(selectedRegionCode ? { selectedRegionCode } : {})}
+                {...(annotationLevel(selectedRegionSnapshot?.level)
+                  ? {
+                      annotationAdministrativeLevel: annotationLevel(
+                        selectedRegionSnapshot?.level,
+                      )!,
+                    }
+                  : {})}
                 situation={operationalSituation ?? EMPTY_OPERATIONAL_SITUATION}
               />
             )}
-            {publicSituationMode &&
-              annotationOpen &&
-              mapAnnotationRepository &&
-              annotationBounds && (
-                <MapAnnotationOverlay
-                  active
-                  bounds={annotationBounds}
-                  features={mapFeatures}
-                  onRegionDrill={drillDown}
-                  onRegionSelect={selectRegion}
-                  onSamplePointSelect={updateSelectedSamplePoint}
-                  repository={mapAnnotationRepository}
-                  samplePointIcons={annotationSampleNetworkIcons}
-                  onArmedChange={setAnnotationArmed}
-                  onClose={() => {
-                    setAnnotationArmed(false);
-                    setAnnotationOpen(false);
-                  }}
-                  {...(mapBackdrop ? { backdrop: mapBackdrop } : {})}
-                  {...(selectedRegionCode ? { regionCode: selectedRegionCode } : {})}
-                  {...(selectedRegionCode ? { selectedRegionCode } : {})}
-                  {...(selectedSamplePointId ? { selectedSamplePointId } : {})}
-                  {...(annotationLevel(selectedRegionSnapshot?.level)
-                    ? {
-                        administrativeLevel: annotationLevel(
-                          selectedRegionSnapshot?.level,
-                        )!,
-                      }
-                    : {})}
-                />
-              )}
           </div>
         }
         navigation={

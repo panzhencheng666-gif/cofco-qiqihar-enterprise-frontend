@@ -3,25 +3,26 @@ import "./realistic-operational-situation.css";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 
 import type {
+  MapAnnotation,
+  MapAnnotationRepository,
+  MapAnnotationType,
+  SaveMapAnnotation,
+} from "../../application/ports/MapAnnotationRepository";
+import type {
   OperationalFacilityCatalogue,
   StorageFacilityRelation,
 } from "../../domain/operationalFacilities";
 import type { OperationalSituationCatalogue } from "../../domain/operationalSituation";
 import type { OverviewRegion } from "../../domain/overview";
 import type { MapFeature } from "./boundaryGeometry";
-import type {
-  RealisticSceneCommand,
-  RealisticSceneLayers,
-} from "./RealisticOperationalSituationMap";
+import type { RealisticSceneCommand, RealisticSceneLayers } from "./RegionalEarthScene";
 import { focusDepotCategory } from "./realisticSituationModel";
 import {
   operationalSituationTimeline,
   type SituationTimelineItem,
 } from "./operationalSituationTimeline";
 
-const RealisticOperationalSituationMap = lazy(
-  () => import("./RealisticOperationalSituationMap"),
-);
+const RegionalEarthScene = lazy(() => import("./RegionalEarthScene"));
 
 export interface SituationMapBounds {
   maxLatitude: number;
@@ -60,6 +61,9 @@ export function OperationalSituationMap({
   features,
   onFacilitySelect,
   annotationActive = false,
+  annotationAdministrativeLevel,
+  annotationRepository,
+  onAnnotationArmedChange,
   onAnnotationToggle,
   onRegionDrill,
   onRegionSelect,
@@ -76,6 +80,9 @@ export function OperationalSituationMap({
   features: readonly MapFeature[];
   onFacilitySelect: (id: string) => void;
   annotationActive?: boolean;
+  annotationAdministrativeLevel?: SaveMapAnnotation["administrativeLevel"];
+  annotationRepository?: MapAnnotationRepository;
+  onAnnotationArmedChange?: (armed: boolean) => void;
   onAnnotationToggle?: () => void;
   onRegionDrill: (region: OverviewRegion) => void;
   onRegionSelect: (region: OverviewRegion) => void;
@@ -89,6 +96,11 @@ export function OperationalSituationMap({
   const [layerMenuOpen, setLayerMenuOpen] = useState(false);
   const [tiltDegrees, setTiltDegrees] = useState(52);
   const [command, setCommand] = useState<RealisticSceneCommand>();
+  const [annotation, setAnnotation] = useState<MapAnnotation>();
+  const [annotationType, setAnnotationType] = useState<MapAnnotationType>("POINT");
+  const [annotationDraft, setAnnotationDraft] = useState<readonly [number, number]>();
+  const [annotationIssue, setAnnotationIssue] = useState("");
+  const [annotationPending, setAnnotationPending] = useState(false);
   const timeline = useMemo(
     () => operationalSituationTimeline(situation, facilities),
     [facilities, situation],
@@ -138,8 +150,29 @@ export function OperationalSituationMap({
   });
 
   useEffect(() => {
-    onTimelineSelect?.(selectedTimeline);
-  }, [onTimelineSelect, selectedTimeline]);
+    onTimelineSelect?.(timelineTouched ? selectedTimeline : undefined);
+  }, [onTimelineSelect, selectedTimeline, timelineTouched]);
+
+  useEffect(() => {
+    if (!annotationRepository) return;
+    let live = true;
+    annotationRepository
+      .current()
+      .then((value) => {
+        if (live) setAnnotation(value);
+      })
+      .catch(() => {
+        if (live) setAnnotationIssue("已保存标注读取失败，请重试。");
+      });
+    return () => {
+      live = false;
+    };
+  }, [annotationRepository]);
+
+  useEffect(() => {
+    onAnnotationArmedChange?.(annotationActive);
+    return () => onAnnotationArmedChange?.(false);
+  }, [annotationActive, onAnnotationArmedChange]);
 
   function issueCommand(type: RealisticSceneCommand["type"], tilt?: number) {
     setCommand({
@@ -162,6 +195,71 @@ export function OperationalSituationMap({
     }));
   }
 
+  function toggleAnnotation() {
+    setLayerMenuOpen(false);
+    setAnnotationDraft(undefined);
+    setAnnotationIssue("");
+    onAnnotationToggle?.();
+  }
+
+  async function persistAnnotation(longitude: number, latitude: number) {
+    if (!annotationRepository || annotationPending) return;
+    if (annotationType === "RECTANGLE" && !annotationDraft) {
+      setAnnotationDraft([longitude, latitude]);
+      setAnnotationIssue("已确定矩形起点，请在地图上选择对角终点。");
+      return;
+    }
+    const scope = {
+      ...(selectedRegionCode ? { regionCode: selectedRegionCode } : {}),
+      ...(annotationAdministrativeLevel
+        ? { administrativeLevel: annotationAdministrativeLevel }
+        : {}),
+    };
+    const command: SaveMapAnnotation =
+      annotationType === "POINT"
+        ? {
+            type: "POINT",
+            minLongitude: longitude,
+            minLatitude: latitude,
+            ...scope,
+          }
+        : {
+            type: "RECTANGLE",
+            minLongitude: Math.min(annotationDraft![0], longitude),
+            minLatitude: Math.min(annotationDraft![1], latitude),
+            maxLongitude: Math.max(annotationDraft![0], longitude),
+            maxLatitude: Math.max(annotationDraft![1], latitude),
+            ...scope,
+          };
+    setAnnotationPending(true);
+    setAnnotationIssue("");
+    try {
+      setAnnotation(await annotationRepository.save(command));
+      setAnnotationDraft(undefined);
+      setAnnotationIssue("标注已保存到当前账号。");
+    } catch {
+      setAnnotationIssue("标注保存失败，请重新选择位置后重试。");
+    } finally {
+      setAnnotationPending(false);
+    }
+  }
+
+  async function deleteAnnotation() {
+    if (!annotationRepository || annotationPending) return;
+    setAnnotationPending(true);
+    setAnnotationIssue("");
+    try {
+      await annotationRepository.delete();
+      setAnnotation(undefined);
+      setAnnotationDraft(undefined);
+      setAnnotationIssue("已删除当前账号保存的地图标注。");
+    } catch {
+      setAnnotationIssue("标注删除失败，请稍后重试。");
+    } finally {
+      setAnnotationPending(false);
+    }
+  }
+
   return (
     <section className="realistic-situation-layer" aria-label="公开运营态势地图">
       <Suspense
@@ -172,7 +270,10 @@ export function OperationalSituationMap({
           </div>
         }
       >
-        <RealisticOperationalSituationMap
+        <RegionalEarthScene
+          {...(annotation ? { annotation } : {})}
+          annotationActive={annotationActive}
+          {...(annotationDraft ? { annotationDraft } : {})}
           {...(backdrop ? { backdrop } : {})}
           bounds={bounds}
           {...(command ? { command } : {})}
@@ -180,6 +281,9 @@ export function OperationalSituationMap({
           features={features}
           layers={layers}
           onFacilitySelect={onFacilitySelect}
+          onAnnotationPosition={(longitude, latitude) => {
+            void persistAnnotation(longitude, latitude);
+          }}
           onRegionDrill={onRegionDrill}
           onRegionSelect={onRegionSelect}
           {...(selectedFacilityId ? { selectedFacilityId } : {})}
@@ -284,14 +388,68 @@ export function OperationalSituationMap({
         </section>
       )}
 
+      {annotationActive && annotationRepository && (
+        <section className="regional-earth-annotation" aria-label="地图标注工具">
+          <header>
+            <div>
+              <strong>地图标注</strong>
+              <span>直接在当前三维地球上选择位置</span>
+            </div>
+            <button type="button" onClick={toggleAnnotation}>
+              完成
+            </button>
+          </header>
+          <div>
+            <button
+              aria-pressed={annotationType === "POINT"}
+              type="button"
+              onClick={() => {
+                setAnnotationType("POINT");
+                setAnnotationDraft(undefined);
+                setAnnotationIssue("单击地图保存点标注。");
+              }}
+            >
+              点标注
+            </button>
+            <button
+              aria-pressed={annotationType === "RECTANGLE"}
+              type="button"
+              onClick={() => {
+                setAnnotationType("RECTANGLE");
+                setAnnotationDraft(undefined);
+                setAnnotationIssue("依次选择矩形的两个对角点。");
+              }}
+            >
+              范围标注
+            </button>
+            {annotation && (
+              <button
+                className="is-danger"
+                disabled={annotationPending}
+                type="button"
+                onClick={() => void deleteAnnotation()}
+              >
+                删除标注
+              </button>
+            )}
+          </div>
+          <p role="status">
+            {annotationIssue ||
+              (annotationType === "POINT"
+                ? "单击地图保存点标注。"
+                : "依次选择矩形的两个对角点。")}
+          </p>
+        </section>
+      )}
+
       <div className="realistic-situation-tools" aria-label="三维地图工具">
         {onAnnotationToggle && (
           <button
             aria-pressed={annotationActive}
             type="button"
-            onClick={onAnnotationToggle}
+            onClick={toggleAnnotation}
           >
-            标注
+            地图标注
           </button>
         )}
         <button

@@ -5,6 +5,7 @@ import * as CesiumRuntimeModule from "cesium";
 import { useEffect, useRef } from "react";
 import type * as Cesium from "cesium";
 
+import type { MapAnnotation } from "../../application/ports/MapAnnotationRepository";
 import type { OperationalFacilityCatalogue } from "../../domain/operationalFacilities";
 import type { OperationalSituationCatalogue } from "../../domain/operationalSituation";
 import type { OverviewRegion } from "../../domain/overview";
@@ -40,7 +41,10 @@ export interface RealisticSceneCommand {
   type: "ZOOM_IN" | "ZOOM_OUT" | "RESET" | "SET_TILT";
 }
 
-export interface RealisticOperationalSituationMapProps {
+export interface RegionalEarthSceneProps {
+  annotation?: MapAnnotation;
+  annotationActive?: boolean;
+  annotationDraft?: readonly [number, number];
   backdrop?: MapFeature;
   bounds: GeographicBounds;
   command?: RealisticSceneCommand;
@@ -48,6 +52,7 @@ export interface RealisticOperationalSituationMapProps {
   features: readonly MapFeature[];
   layers: RealisticSceneLayers;
   onFacilitySelect: (id: string) => void;
+  onAnnotationPosition?: (longitude: number, latitude: number) => void;
   onReady?: () => void;
   onRegionDrill: (region: OverviewRegion) => void;
   onRegionSelect: (region: OverviewRegion) => void;
@@ -62,7 +67,7 @@ interface ActiveScene {
   destroy: () => void;
   lifecycle: SituationViewerLifecycle;
   points: Cesium.PointPrimitiveCollection;
-  props: RealisticOperationalSituationMapProps;
+  props: RegionalEarthSceneProps;
   runtime: CesiumRuntime;
   viewer: Cesium.Viewer;
   weatherBillboards: Cesium.Billboard[];
@@ -71,12 +76,14 @@ interface ActiveScene {
 
 const SATELLITE_URL =
   "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer";
+const TRANSPORTATION_URL =
+  "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer";
+const PLACES_URL =
+  "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer";
 const ELEVATION_URL =
   "https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer";
 
-export default function RealisticOperationalSituationMap(
-  props: RealisticOperationalSituationMapProps,
-) {
+export default function RegionalEarthScene(props: RegionalEarthSceneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const propsRef = useRef(props);
   const sceneRef = useRef<ActiveScene | undefined>(undefined);
@@ -125,7 +132,7 @@ export default function RealisticOperationalSituationMap(
 
 function createScene(
   container: HTMLDivElement,
-  initialProps: RealisticOperationalSituationMapProps,
+  initialProps: RegionalEarthSceneProps,
 ): ActiveScene {
   const runtime = CesiumRuntimeModule;
   (window as Window & { CESIUM_BASE_URL?: string }).CESIUM_BASE_URL =
@@ -198,16 +205,14 @@ function createScene(
   };
 
   const clickHandler = new runtime.ScreenSpaceEventHandler(viewer.scene.canvas);
-  clickHandler.setInputAction(
-    (movement: { position: Cesium.Cartesian2 }) =>
-      handlePick(scene, movement.position, false),
-    runtime.ScreenSpaceEventType.LEFT_CLICK,
-  );
-  clickHandler.setInputAction(
-    (movement: { position: Cesium.Cartesian2 }) =>
-      handlePick(scene, movement.position, true),
-    runtime.ScreenSpaceEventType.LEFT_DOUBLE_CLICK,
-  );
+  clickHandler.setInputAction((movement: { position: Cesium.Cartesian2 }) => {
+    if (handleAnnotationPosition(scene, movement.position)) return;
+    handlePick(scene, movement.position, false);
+  }, runtime.ScreenSpaceEventType.LEFT_CLICK);
+  clickHandler.setInputAction((movement: { position: Cesium.Cartesian2 }) => {
+    if (scene.props.annotationActive) return;
+    handlePick(scene, movement.position, true);
+  }, runtime.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
   let constraining = false;
   const constrainCamera = () => {
     if (constraining) return;
@@ -276,9 +281,11 @@ async function enhanceRealism(scene: ActiveScene, isDestroyed: () => boolean) {
   const results = await Promise.allSettled([
     runtime.ArcGisMapServerImageryProvider.fromUrl(SATELLITE_URL),
     runtime.ArcGISTiledElevationTerrainProvider.fromUrl(ELEVATION_URL),
+    runtime.ArcGisMapServerImageryProvider.fromUrl(TRANSPORTATION_URL),
+    runtime.ArcGisMapServerImageryProvider.fromUrl(PLACES_URL),
   ]);
   if (isDestroyed() || viewer.isDestroyed()) return;
-  const [imagery, terrain] = results;
+  const [imagery, terrain, transportation, places] = results;
   if (imagery.status === "fulfilled") {
     const layer = viewer.imageryLayers.addImageryProvider(imagery.value);
     layer.brightness = 0.94;
@@ -287,6 +294,14 @@ async function enhanceRealism(scene: ActiveScene, isDestroyed: () => boolean) {
     container.dataset.imageryState = "satellite";
   } else {
     container.dataset.imageryState = "local-fallback";
+  }
+  if (transportation.status === "fulfilled") {
+    const layer = viewer.imageryLayers.addImageryProvider(transportation.value);
+    layer.alpha = 0.72;
+  }
+  if (places.status === "fulfilled") {
+    const layer = viewer.imageryLayers.addImageryProvider(places.value);
+    layer.alpha = 0.82;
   }
   if (terrain.status === "fulfilled") {
     viewer.terrainProvider = terrain.value;
@@ -297,10 +312,7 @@ async function enhanceRealism(scene: ActiveScene, isDestroyed: () => boolean) {
   viewer.scene.requestRender();
 }
 
-function synchronizeScene(
-  scene: ActiveScene,
-  props: RealisticOperationalSituationMapProps,
-) {
+function synchronizeScene(scene: ActiveScene, props: RegionalEarthSceneProps) {
   const { runtime, viewer, billboards, points } = scene;
   scene.props = props;
   viewer.entities.removeAll();
@@ -311,6 +323,8 @@ function synchronizeScene(
   if (props.layers.ADMINISTRATIVE) addRegions(scene, props);
   addRoutes(scene, props);
   addMarkers(scene, props);
+  addAnnotation(scene, props);
+  scene.container.dataset.annotationActive = String(Boolean(props.annotationActive));
 
   const boundsKey = [
     props.bounds.minLongitude,
@@ -335,13 +349,15 @@ function synchronizeScene(
   void runtime;
 }
 
-function addRegions(scene: ActiveScene, props: RealisticOperationalSituationMapProps) {
+function addRegions(scene: ActiveScene, props: RegionalEarthSceneProps) {
   const { runtime, viewer } = scene;
   const features = [...(props.backdrop ? [props.backdrop] : []), ...props.features];
   const seen = new Set<string>();
   for (const feature of features) {
     if (seen.has(feature.region.code)) continue;
     seen.add(feature.region.code);
+    if (feature === props.backdrop && feature.region.level === currentLevel(props))
+      continue;
     const selected = feature.region.code === props.selectedRegionCode;
     const polygons =
       feature.geometry.type === "Polygon"
@@ -360,9 +376,9 @@ function addRegions(scene: ActiveScene, props: RealisticOperationalSituationMapP
               (hole) => new runtime.PolygonHierarchy(positionsFromRing(runtime, hole)),
             ),
           ),
-          material: runtime.Color.fromCssColorString(
-            selected ? "#d9a441" : "#f4f0df",
-          ).withAlpha(selected ? 0.22 : 0.06),
+          material: runtime.Color.fromCssColorString("#d6b45e").withAlpha(
+            selected ? 0.075 : 0.001,
+          ),
         },
       });
       viewer.entities.add({
@@ -370,10 +386,10 @@ function addRegions(scene: ActiveScene, props: RealisticOperationalSituationMapP
         polyline: {
           clampToGround: true,
           material: runtime.Color.fromCssColorString(
-            selected ? "#f2b642" : "#f8f6ec",
-          ).withAlpha(selected ? 1 : 0.88),
+            selected ? "#f0cf79" : "#f5f1df",
+          ).withAlpha(selected ? 0.82 : 0.46),
           positions: outerPositions,
-          width: selected ? 3 : 1.5,
+          width: selected ? 1.6 : 0.8,
         },
       });
     });
@@ -382,7 +398,7 @@ function addRegions(scene: ActiveScene, props: RealisticOperationalSituationMapP
       id: `region:${feature.region.code}:label`,
       position: runtime.Cartesian3.fromDegrees(longitude, latitude, 160),
       label: {
-        backgroundColor: runtime.Color.fromCssColorString("#17201d").withAlpha(0.58),
+        backgroundColor: runtime.Color.fromCssColorString("#17201d").withAlpha(0.44),
         backgroundPadding: new runtime.Cartesian2(8, 5),
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
         distanceDisplayCondition: labelDistance(runtime, feature.region.level),
@@ -391,7 +407,7 @@ function addRegions(scene: ActiveScene, props: RealisticOperationalSituationMapP
         outlineColor: runtime.Color.fromCssColorString("#18241f"),
         outlineWidth: 3,
         pixelOffset: new runtime.Cartesian2(0, -9),
-        showBackground: true,
+        showBackground: selected,
         style: runtime.LabelStyle.FILL_AND_OUTLINE,
         text: feature.region.name,
       },
@@ -399,7 +415,7 @@ function addRegions(scene: ActiveScene, props: RealisticOperationalSituationMapP
   }
 }
 
-function addRoutes(scene: ActiveScene, props: RealisticOperationalSituationMapProps) {
+function addRoutes(scene: ActiveScene, props: RegionalEarthSceneProps) {
   const { runtime, viewer } = scene;
   if (props.layers.RAILWAY_ROUTE) {
     for (const route of props.facilities.railwayRoutes) {
@@ -446,7 +462,7 @@ function addRoutes(scene: ActiveScene, props: RealisticOperationalSituationMapPr
   }
 }
 
-function addMarkers(scene: ActiveScene, props: RealisticOperationalSituationMapProps) {
+function addMarkers(scene: ActiveScene, props: RegionalEarthSceneProps) {
   const { runtime, billboards, points } = scene;
   for (const facility of props.facilities.storageFacilities) {
     if (
@@ -537,6 +553,87 @@ function addMarkers(scene: ActiveScene, props: RealisticOperationalSituationMapP
   }
 }
 
+function addAnnotation(scene: ActiveScene, props: RegionalEarthSceneProps) {
+  const { runtime, viewer } = scene;
+  const annotation = props.annotation;
+  if (annotation?.type === "POINT") {
+    viewer.entities.add({
+      id: "saved-map-annotation",
+      position: runtime.Cartesian3.fromDegrees(
+        annotation.minLongitude,
+        annotation.minLatitude,
+        80,
+      ),
+      point: {
+        color: runtime.Color.fromCssColorString("#f1c64c"),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        outlineColor: runtime.Color.WHITE,
+        outlineWidth: 3,
+        pixelSize: 15,
+      },
+    });
+  }
+  if (annotation?.type === "RECTANGLE") {
+    viewer.entities.add({
+      id: "saved-map-annotation",
+      rectangle: {
+        coordinates: runtime.Rectangle.fromDegrees(
+          annotation.minLongitude,
+          annotation.minLatitude,
+          annotation.maxLongitude,
+          annotation.maxLatitude,
+        ),
+        fill: true,
+        material: runtime.Color.fromCssColorString("#e2b83f").withAlpha(0.16),
+        outline: true,
+        outlineColor: runtime.Color.fromCssColorString("#ffe587"),
+      },
+    });
+  }
+  if (props.annotationDraft) {
+    viewer.entities.add({
+      id: "draft-map-annotation",
+      position: runtime.Cartesian3.fromDegrees(
+        props.annotationDraft[0],
+        props.annotationDraft[1],
+        90,
+      ),
+      point: {
+        color: runtime.Color.fromCssColorString("#fff1aa"),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        outlineColor: runtime.Color.fromCssColorString("#433510"),
+        outlineWidth: 2,
+        pixelSize: 12,
+      },
+    });
+  }
+}
+
+function handleAnnotationPosition(scene: ActiveScene, position: Cesium.Cartesian2) {
+  if (!scene.props.annotationActive || !scene.props.onAnnotationPosition) return false;
+  const ray = scene.viewer.camera.getPickRay(position);
+  const cartesian = ray
+    ? scene.viewer.scene.globe.pick(ray, scene.viewer.scene)
+    : undefined;
+  const surface =
+    cartesian ??
+    scene.viewer.camera.pickEllipsoid(position, scene.viewer.scene.globe.ellipsoid);
+  if (!surface) return true;
+  const point = scene.runtime.Cartographic.fromCartesian(surface);
+  const longitude = scene.runtime.Math.toDegrees(point.longitude);
+  const latitude = scene.runtime.Math.toDegrees(point.latitude);
+  const { bounds } = scene.props;
+  if (
+    longitude < bounds.minLongitude ||
+    longitude > bounds.maxLongitude ||
+    latitude < bounds.minLatitude ||
+    latitude > bounds.maxLatitude
+  )
+    return true;
+  scene.props.onAnnotationPosition(longitude, latitude);
+  return true;
+}
+
 function handlePick(scene: ActiveScene, position: Cesium.Cartesian2, drill: boolean) {
   const picked = scene.viewer.scene.pick(position) as { id?: unknown } | undefined;
   const id = picked?.id;
@@ -612,16 +709,16 @@ function flyToBounds(
     offset: new scene.runtime.HeadingPitchRange(
       scene.runtime.Math.toRadians(target.headingDegrees),
       scene.runtime.Math.toRadians(target.pitchDegrees),
-      Math.max(target.height, sphere.radius * 1.35),
+      Math.max(target.height, sphere.radius * (level === "PREFECTURE" ? 2.15 : 1.42)),
     ),
   });
 }
 
-function currentLevel(props: RealisticOperationalSituationMapProps) {
+function currentLevel(props: RegionalEarthSceneProps) {
   return props.features[0]?.region.level ?? props.backdrop?.region.level;
 }
 
-function regionFeatures(props: RealisticOperationalSituationMapProps) {
+function regionFeatures(props: RegionalEarthSceneProps) {
   return [...(props.backdrop ? [props.backdrop] : []), ...props.features];
 }
 

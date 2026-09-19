@@ -102,4 +102,3 @@
 - [ ] Measure cold and warm Public Situation entry, viewer count, DOM marker count, and network request behavior.
 - [ ] Browser-verify four-region overview, all hierarchy levels, camera boundaries, live weather, all marker filters, routes, panel scrolling, form persistence, XLSX import, and refresh stability.
 - [ ] Record source limitations separately from implementation defects and commit the final local checkpoint.
-

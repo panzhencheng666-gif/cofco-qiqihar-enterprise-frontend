@@ -281,11 +281,11 @@ export function OverviewDataModePanel({
         loading &&
         (!operationalFacilities || !operationalSituation) && (
           <div className="operational-situation-panel is-syncing">
-            <header>
+            <header className="situation-inspector-heading">
               <div>
-                <span>PUBLIC OPERATIONAL PICTURE</span>
-                <h2>公开运营态势</h2>
-                <p>地图已可操作，天气、库点、铁路与事件正在并行同步。</p>
+                <span>实时区域档案</span>
+                <h2>正在同步当前区域</h2>
+                <p>三维地图已可操作，天气和业务节点完成后将在此处直接更新。</p>
               </div>
             </header>
           </div>

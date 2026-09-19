@@ -4,9 +4,9 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-describe("realistic public situation scene", () => {
+describe("regional earth public situation scene", () => {
   const scene = readFileSync(
-    resolve("src/modules/overview/ui/components/RealisticOperationalSituationMap.tsx"),
+    resolve("src/modules/overview/ui/components/RegionalEarthScene.tsx"),
     "utf8",
   );
   const wrapper = readFileSync(
@@ -19,6 +19,8 @@ describe("realistic public situation scene", () => {
     expect(scene).toContain('publicAssetUrl("Cesium/Assets/Textures/NaturalEarthII")');
     expect(scene).toContain("ArcGisMapServerImageryProvider.fromUrl");
     expect(scene).toContain("ArcGISTiledElevationTerrainProvider.fromUrl");
+    expect(scene).toContain("World_Transportation");
+    expect(scene).toContain("World_Boundaries_and_Places");
     expect(scene).toContain('dataset.imageryState = "local-fallback"');
     expect(scene).toContain('dataset.terrainState = "ellipsoid-fallback"');
   });
@@ -37,5 +39,19 @@ describe("realistic public situation scene", () => {
     expect(wrapper).toContain('code: "HISTORICAL_LEASED"');
     expect(wrapper).toContain("focusDepotCategory(category)");
     expect(wrapper).toContain("白色内燃机车站点");
+  });
+
+  it("edits account annotations inside the same earth scene", () => {
+    expect(wrapper).toContain("地图标注");
+    expect(wrapper).toContain("annotationRepository.save(command)");
+    expect(wrapper).toContain("annotationRepository.delete()");
+    expect(scene).toContain("handleAnnotationPosition");
+    expect(scene).toContain('id: "saved-map-annotation"');
+  });
+
+  it("keeps the geography continuous instead of painting an isolated region plate", () => {
+    expect(scene).toContain("World_Boundaries_and_Places");
+    expect(scene).toContain("selected ? 0.075 : 0.001");
+    expect(scene).not.toContain("extrudedHeight");
   });
 });

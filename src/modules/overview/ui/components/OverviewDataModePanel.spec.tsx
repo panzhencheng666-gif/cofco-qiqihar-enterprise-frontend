@@ -75,14 +75,19 @@ describe("OverviewDataModePanel", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "公开运营态势" })).toBeVisible();
-    await userEvent.click(screen.getByText("来源目录（1）"));
+    expect(screen.getByRole("heading", { name: "齐齐哈尔市" })).toBeVisible();
+    await userEvent.click(screen.getByText("数据来源与同步状态"));
     expect(screen.getByText("NASA EONET")).toBeVisible();
     expect(
       screen.getByRole("heading", { name: "齐齐哈尔市实时天气态势" }),
     ).toBeVisible();
-    expect(screen.getByRole("img", { name: "动态天气：齐齐哈尔市" })).toBeVisible();
-    expect(screen.getByText(/不会补造事件/)).toBeVisible();
+    expect(
+      screen.getByRole("img", { name: "齐齐哈尔市实时天气动态场景" }),
+    ).toBeVisible();
+    expect(screen.getByRole("link", { name: "原始来源" })).toHaveAttribute(
+      "href",
+      "https://eonet.gsfc.nasa.gov/api/v3/events",
+    );
     expect(screen.getByRole("button", { name: "天气" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -141,7 +146,7 @@ describe("OverviewDataModePanel", () => {
 
     expect(screen.getByRole("heading", { name: "古城镇降雨影响提示" })).toBeVisible();
     expect(screen.getByText("连续降雨影响预警")).toBeVisible();
-    expect(screen.getByText(/当前沿用所属齐齐哈尔市公开观测/)).toBeVisible();
+    expect(screen.getByText(/当前沿用所属齐齐哈尔市观测/)).toBeVisible();
   });
 
   it("renders regional metrics without embedding the mode navigation", () => {

@@ -33,4 +33,3 @@ describe("realistic situation icons", () => {
     expect(decodeDataUrl(realisticWeatherIcon(1))).toContain("晴间多云");
   });
 });
-

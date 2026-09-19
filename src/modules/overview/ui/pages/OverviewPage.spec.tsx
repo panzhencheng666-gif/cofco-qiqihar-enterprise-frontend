@@ -120,7 +120,7 @@ describe("OverviewPage", () => {
     expect(screen.queryByRole("button", { name: "关联库点" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "铁路站点" })).not.toBeInTheDocument();
     await userEvent.click(await screen.findByRole("button", { name: "公开态势" }));
-    expect(await screen.findByRole("heading", { name: "公开运营态势" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "四区域总览" })).toBeVisible();
     await waitFor(() => expect(operationalFacilities).toHaveBeenCalledTimes(1));
   });
 

@@ -30,6 +30,7 @@ export function OverviewCommandCenter({
   sampleNetworkControls,
   sampleMode = true,
   sampleNetworkMode = "actual",
+  showLegend = true,
   scopeLabel,
   samplePoints,
   selectedSamplePoint,
@@ -59,6 +60,7 @@ export function OverviewCommandCenter({
   sampleNetworkControls?: ReactNode;
   sampleMode?: boolean;
   sampleNetworkMode?: SampleNetworkLayerMode;
+  showLegend?: boolean;
   scopeLabel?: string;
   samplePoints?: ReactNode;
   selectedSamplePoint?: { details: ReactNode; name: string };
@@ -183,65 +185,67 @@ export function OverviewCommandCenter({
           </section>
         ))}
 
-      <aside className="overview-command-legend">
-        <h3>图例</h3>
-        <span>
-          <i className="is-boundary" />
-          市界
-        </span>
-        <span>
-          <i className="is-county" />
-          县区界
-        </span>
-        <span>
-          <i className="is-township" />
-          乡镇界
-        </span>
-        <span>
-          <i className="is-village" />
-          行政村界
-        </span>
-        {sampleMode && (
-          <>
-            <span>
-              <img
-                alt=""
-                className="is-production-sample"
-                src={publicAssetUrl("overview/sample-points/production-rice.svg")}
-              />
-              产情类样本点
-            </span>
-            <span>
-              <img
-                alt=""
-                className="is-market-sample"
-                src={publicAssetUrl("overview/sample-points/market-bank.svg")}
-              />
-              市场类样本点
-            </span>
-            <span>
-              <img
-                alt=""
-                className="is-logistics-sample"
-                src={publicAssetUrl("overview/sample-points/logistics-car.svg")}
-              />
-              物流类样本点
-            </span>
-            <span>
-              <i className="is-design-coverage" />
-              设计覆盖
-            </span>
-            <span>
-              <i className="is-design-exact" />
-              设计样本位置
-            </span>
-            <span>
-              <i className="is-design-expired" />
-              作废设计样本
-            </span>
-          </>
-        )}
-      </aside>
+      {showLegend && (
+        <aside className="overview-command-legend">
+          <h3>图例</h3>
+          <span>
+            <i className="is-boundary" />
+            市界
+          </span>
+          <span>
+            <i className="is-county" />
+            县区界
+          </span>
+          <span>
+            <i className="is-township" />
+            乡镇界
+          </span>
+          <span>
+            <i className="is-village" />
+            行政村界
+          </span>
+          {sampleMode && (
+            <>
+              <span>
+                <img
+                  alt=""
+                  className="is-production-sample"
+                  src={publicAssetUrl("overview/sample-points/production-rice.svg")}
+                />
+                产情类样本点
+              </span>
+              <span>
+                <img
+                  alt=""
+                  className="is-market-sample"
+                  src={publicAssetUrl("overview/sample-points/market-bank.svg")}
+                />
+                市场类样本点
+              </span>
+              <span>
+                <img
+                  alt=""
+                  className="is-logistics-sample"
+                  src={publicAssetUrl("overview/sample-points/logistics-car.svg")}
+                />
+                物流类样本点
+              </span>
+              <span>
+                <i className="is-design-coverage" />
+                设计覆盖
+              </span>
+              <span>
+                <i className="is-design-exact" />
+                设计样本位置
+              </span>
+              <span>
+                <i className="is-design-expired" />
+                作废设计样本
+              </span>
+            </>
+          )}
+        </aside>
+      )}
       <div className="overview-command-tools">
         {dataModeControls}
         {navigation}

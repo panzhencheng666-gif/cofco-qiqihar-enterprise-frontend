@@ -91,4 +91,3 @@ Local browser acceptance must prove:
 - selected-node route display;
 - depot form persistence and XLSX import with atomic row errors;
 - no blank map during refresh, no delayed DOM marker flood, and a fully scrollable inspector.
-

@@ -55,7 +55,7 @@ export function realisticCamera(
   const latitudeSpan = Math.max(0.02, bounds.maxLatitude - bounds.minLatitude);
   const dominantSpan = Math.max(longitudeSpan, latitudeSpan * 1.35);
   const minimumHeight: Readonly<Record<OverviewRegion["level"], number>> = {
-    PREFECTURE: 1_150_000,
+    PREFECTURE: 2_200_000,
     COUNTY: 360_000,
     TOWNSHIP: 110_000,
     VILLAGE: 24_000,
@@ -66,7 +66,7 @@ export function realisticCamera(
     latitude: (bounds.minLatitude + bounds.maxLatitude) / 2,
     height: Math.max(minimumHeight[targetLevel], dominantSpan * 72_000),
     headingDegrees: targetLevel === "PREFECTURE" ? 2 : 0,
-    pitchDegrees: targetLevel === "PREFECTURE" ? -64 : -56,
+    pitchDegrees: targetLevel === "PREFECTURE" ? -48 : -56,
   };
 }
 
