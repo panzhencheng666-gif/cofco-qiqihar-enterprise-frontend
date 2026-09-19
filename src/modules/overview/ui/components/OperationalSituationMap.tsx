@@ -282,7 +282,6 @@ export function OperationalSituationMap({
           {...(annotation ? { annotation } : {})}
           annotationActive={annotationActive}
           {...(annotationDraft ? { annotationDraft } : {})}
-          {...(backdrop ? { backdrop } : {})}
           bounds={bounds}
           {...(command ? { command } : {})}
           facilities={facilities}

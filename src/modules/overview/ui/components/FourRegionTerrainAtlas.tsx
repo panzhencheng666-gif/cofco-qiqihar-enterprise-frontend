@@ -46,7 +46,6 @@ export interface FourRegionTerrainAtlasProps {
   annotation?: MapAnnotation;
   annotationActive?: boolean;
   annotationDraft?: readonly [number, number];
-  backdrop?: MapFeature;
   bounds: GeographicBounds;
   command?: RealisticSceneCommand;
   facilities: OperationalFacilityCatalogue;
@@ -116,17 +115,14 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
   const geometryKey = useMemo(
     () =>
       JSON.stringify({
-        backdrop: props.backdrop,
         features: props.features,
         rootFeatures: props.rootFeatures,
       }),
-    [props.backdrop, props.features, props.rootFeatures],
+    [props.features, props.rootFeatures],
   );
   const projectedFeatures = useMemo(() => {
     const byCode = new Map<string, MapFeature>();
     props.rootFeatures.forEach((feature) => byCode.set(feature.region.code, feature));
-    if (props.backdrop && !byCode.has(props.backdrop.region.code))
-      byCode.set(props.backdrop.region.code, props.backdrop);
     props.features.forEach((feature) => byCode.set(feature.region.code, feature));
     return [...byCode.values()];
     // eslint-disable-next-line react-hooks/exhaustive-deps

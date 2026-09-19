@@ -59,6 +59,7 @@ describe("four-region terrain public situation scene", () => {
   it("uses only platform-supplied hierarchy features and labels", () => {
     expect(scene).toContain("props.features");
     expect(scene).toContain("props.rootFeatures");
+    expect(scene).not.toContain("props.backdrop");
     expect(scene).toContain("projection.labels");
     expect(scene).not.toContain("OpenFreeMap");
     expect(scene).not.toContain("World_Boundaries_and_Places");
