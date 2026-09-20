@@ -277,6 +277,7 @@ describe("HttpOverviewRegionalDataRepository", () => {
                   method: "媒体公开数据",
                   sourceName: "人民网黑龙江频道",
                   sourceUrl: "https://example.test/processing",
+                  verifiedAt: null,
                 },
               ],
               weather: {
@@ -335,10 +336,12 @@ describe("HttpOverviewRegionalDataRepository", () => {
     expect(get.mock.calls[2]?.[0]).toContain(
       "/api/v1/overview/regional-agriculture-profile?",
     );
+    expect(get.mock.calls[2]?.[2]).toEqual({ timeoutMs: 30_000 });
     expect(summary.comparisonMessage).toBeNull();
     expect(balance.rows[0]?.display).toBeNull();
     expect(profile.crops[0]?.forecasts[0]?.year).toBe(2027);
     expect(profile.weather?.meanTemperatureC).toBe("15.8");
     expect(profile.indicators?.[0]?.value).toBe("191");
+    expect(profile.indicators?.[0]?.verifiedAt).toBeUndefined();
   });
 });

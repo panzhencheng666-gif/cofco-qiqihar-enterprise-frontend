@@ -952,7 +952,6 @@ export function OverviewPage({
                 if (active && next) {
                   setRegionalSummary(next);
                   setSupplyBalance(undefined);
-                  setRegionalDataLoading(false);
                 }
                 return next;
               })

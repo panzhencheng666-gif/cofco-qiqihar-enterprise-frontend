@@ -156,7 +156,10 @@ const regionalAgricultureProfileSchema = z.object({
           method: z.string(),
           sourceName: z.string(),
           sourceUrl: z.string(),
-          verifiedAt: z.string().optional(),
+          verifiedAt: z
+            .string()
+            .nullish()
+            .transform((value) => value ?? undefined),
         }),
       )
       .optional(),
@@ -514,6 +517,7 @@ export class HttpOverviewRegionalDataRepository implements OverviewRegionalDataR
           year: query.year,
         })}`,
         regionalAgricultureProfileSchema,
+        { timeoutMs: 30_000 },
       )
     ).data;
   }

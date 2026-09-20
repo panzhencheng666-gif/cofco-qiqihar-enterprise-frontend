@@ -316,6 +316,56 @@ describe("OverviewPage", () => {
     },
   );
 
+  it("keeps the regional profile loading state instead of flashing the legacy summary", async () => {
+    const regionalSummary = vi
+      .fn<OverviewRegionalDataRepository["regionalSummary"]>()
+      .mockResolvedValue({
+        regionCode: "230200",
+        regionName: "齐齐哈尔市",
+        administrativeLevel: "PREFECTURE",
+        year: 2026,
+        productCode: "CORN",
+        plantedAreaMu: "6100000",
+        yieldPerMuKg: null,
+        totalOutputKg: null,
+        areaChangeWanMu: "14.5",
+        areaChangeRatePercent: "2.43",
+        currentDataAvailable: true,
+        comparisonAvailable: true,
+        areaChangeRateAvailable: true,
+        comparisonMessage: null,
+      });
+    const regionalDataRepository: OverviewRegionalDataRepository = {
+      agricultureProfile: vi.fn<
+        NonNullable<OverviewRegionalDataRepository["agricultureProfile"]>
+      >(() => new Promise(() => undefined)),
+      regionalSummary,
+      supplyBalance: vi.fn(),
+    };
+    render(
+      <OverviewPage
+        regionalDataRepository={regionalDataRepository}
+        repository={{
+          mapScope: () => Promise.resolve(sampleMapScope),
+          options: () => Promise.resolve(options),
+          regions: () => Promise.resolve([sampleRegion]),
+          locations: () => Promise.resolve([]),
+          indicators: () => Promise.resolve([]),
+          dashboard: () => Promise.resolve(emptyDashboard),
+        }}
+      />,
+    );
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "齐齐哈尔市，已核定 1 条" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "地区数据" }));
+
+    await waitFor(() => expect(regionalSummary).toHaveBeenCalledOnce());
+    expect(screen.getByText("正在同步地区正式数据")).toBeVisible();
+    expect(screen.queryByText("结构调整增减")).not.toBeInTheDocument();
+  });
+
   it("reloads supply balance when the selected regional annual production changes", async () => {
     let realtimeCallbacks: OverviewRealtimeCallbacks | undefined;
     const realtimeStream: OverviewRealtimeStream = {

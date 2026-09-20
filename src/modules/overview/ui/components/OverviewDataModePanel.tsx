@@ -125,6 +125,11 @@ export function OverviewDataModePanel({
     emptyOperationalFacilities(operationalSituation?.generatedAt);
   const publicSituation =
     operationalSituation ?? emptyOperationalSituation(operationalFacilities?.asOf);
+  const showRegionalSummary =
+    mode === "REGIONAL_DATA" &&
+    !loading &&
+    !agricultureProfile &&
+    Boolean(regionalSummary);
   return (
     <section
       className={`overview-data-mode is-${mode.toLowerCase()}`}
@@ -148,7 +153,7 @@ export function OverviewDataModePanel({
           profile={agricultureProfile}
         />
       )}
-      {mode === "REGIONAL_DATA" && !agricultureProfile && regionalSummary && (
+      {showRegionalSummary && regionalSummary && (
         <>
           <header>
             <strong>{regionalSummary.regionName}</strong>
