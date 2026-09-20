@@ -81,6 +81,72 @@ describe("OverviewPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("does not restart the facility catalogue for unrelated realtime business changes", async () => {
+    let realtimeCallbacks: OverviewRealtimeCallbacks | undefined;
+    const invalidateBusinessData = vi.fn();
+    const operationalFacilities = vi
+      .fn<NonNullable<OverviewRegionalDataRepository["operationalFacilities"]>>()
+      .mockResolvedValue({
+        regionCode: null,
+        productCode: "CORN",
+        asOf: "2026-09-20",
+        storageCategories: [],
+        storageFacilities: [],
+        railwayFacilities: [],
+        railwayLines: [],
+        railwayRoutes: [],
+        sources: [],
+      });
+    render(
+      <OverviewPage
+        realtimeStream={{
+          subscribe: (callbacks) => {
+            realtimeCallbacks = callbacks;
+            return () => undefined;
+          },
+        }}
+        regionalDataRepository={{
+          operationalFacilities,
+          operationalSituation: vi.fn().mockResolvedValue({
+            generatedAt: "2026-09-20T12:00:00Z",
+            weather: [],
+            publicEvents: [],
+            policyEvents: [],
+            sources: [],
+          }),
+          regionalSummary: vi.fn(),
+          supplyBalance: vi.fn(),
+        }}
+        repository={{
+          invalidateBusinessData,
+          mapScope: () => Promise.resolve(sampleMapScope),
+          options: () => Promise.resolve(options),
+          regions: () => Promise.resolve([sampleRegion]),
+          locations: () => Promise.resolve([]),
+          indicators: () => Promise.resolve([]),
+          dashboard: () => Promise.resolve(emptyDashboard),
+        }}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "公开态势" }));
+    await waitFor(() => expect(operationalFacilities).toHaveBeenCalledTimes(1));
+    invalidateBusinessData.mockClear();
+
+    act(() =>
+      realtimeCallbacks?.onBusinessChange({
+        aggregateType: "REPORT_RECORD",
+        actionCode: "REPORT_RECORD_UPDATED",
+        productCode: "CORN",
+        regionCodes: ["230200"],
+        surveyYear: 2026,
+      }),
+    );
+
+    await waitFor(() => expect(invalidateBusinessData).toHaveBeenCalledTimes(1));
+    expect(operationalFacilities).toHaveBeenCalledTimes(1);
+  });
+
   it("merges storage and railway facilities into one public situation mode", async () => {
     const operationalFacilities = vi
       .fn<NonNullable<OverviewRegionalDataRepository["operationalFacilities"]>>()

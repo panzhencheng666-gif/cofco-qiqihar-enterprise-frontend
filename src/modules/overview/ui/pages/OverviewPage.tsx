@@ -822,7 +822,6 @@ export function OverviewPage({
     regionalDataRepository,
     scopeRootCode,
     productCode,
-    businessSequence,
     operationalFacilityRevision,
   ]);
 
@@ -860,7 +859,6 @@ export function OverviewPage({
       });
     return () => controller.abort();
   }, [
-    businessSequence,
     operationalMapMode,
     operationalFacilityRevision,
     productCode,
