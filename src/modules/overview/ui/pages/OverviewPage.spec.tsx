@@ -228,86 +228,93 @@ describe("OverviewPage", () => {
     );
   });
 
-  it("loads the regional profile when the legacy summary is unavailable below county", async () => {
-    const regionalSummary = vi
-      .fn<OverviewRegionalDataRepository["regionalSummary"]>()
-      .mockRejectedValue(new Error("legacy summary does not support township"));
-    const regionalDataRepository: OverviewRegionalDataRepository = {
-      agricultureProfile: vi.fn().mockResolvedValue({
-        regionCode: "230200",
-        regionName: "齐齐哈尔市",
-        administrativeLevel: "PREFECTURE",
-        year: 2026,
-        automatic: true,
-        generatedAt: "2026-09-14T10:00:00Z",
-        regionFacts: {
-          areaSquareKilometres: "42202.36",
-          directChildCount: 16,
-          countyCount: 16,
-          townshipCount: 232,
-          villageCount: 2332,
-        },
-        sourceSummary: "地区年度正式数据优先，缺项由统计模型自动补齐",
-        calculationMethod: "结构系数估算；复合增长公式预测",
-        crops: [
-          {
-            productCode: "CORN",
-            productName: "玉米",
-            dataKind: "OBSERVED",
-            plantedAreaMu: "1500000",
-            yieldPerMuKg: "650",
-            totalOutputKg: "975000000",
-            structurePercent: "62",
-            basis: "采用地区年度正式数据自动汇总",
-            forecasts: [],
+  it.each(["failed", "pending"])(
+    "shows the regional profile independently when summary is %s",
+    async (summaryState) => {
+      const regionalSummary = vi
+        .fn<OverviewRegionalDataRepository["regionalSummary"]>()
+        .mockImplementation(() =>
+          summaryState === "pending"
+            ? new Promise(() => undefined)
+            : Promise.reject(new Error("legacy summary does not support township")),
+        );
+      const regionalDataRepository: OverviewRegionalDataRepository = {
+        agricultureProfile: vi.fn().mockResolvedValue({
+          regionCode: "230200",
+          regionName: "齐齐哈尔市",
+          administrativeLevel: "PREFECTURE",
+          year: 2026,
+          automatic: true,
+          generatedAt: "2026-09-14T10:00:00Z",
+          regionFacts: {
+            areaSquareKilometres: "42202.36",
+            directChildCount: 16,
+            countyCount: 16,
+            townshipCount: 232,
+            villageCount: 2332,
           },
-        ],
-      }),
-      regionalSummary,
-      supplyBalance: vi.fn(),
-    };
-    render(
-      <OverviewPage
-        regionalDataRepository={regionalDataRepository}
-        repository={{
-          mapScope: () => Promise.resolve(sampleMapScope),
-          options: () => Promise.resolve(options),
-          regions: () => Promise.resolve([sampleRegion]),
-          locations: () => Promise.resolve([]),
-          indicators: () => Promise.resolve([]),
-          dashboard: () => Promise.resolve(emptyDashboard),
-        }}
-      />,
-    );
+          sourceSummary: "地区年度正式数据优先，缺项由统计模型自动补齐",
+          calculationMethod: "结构系数估算；复合增长公式预测",
+          crops: [
+            {
+              productCode: "CORN",
+              productName: "玉米",
+              dataKind: "OBSERVED",
+              plantedAreaMu: "1500000",
+              yieldPerMuKg: "650",
+              totalOutputKg: "975000000",
+              structurePercent: "62",
+              basis: "采用地区年度正式数据自动汇总",
+              forecasts: [],
+            },
+          ],
+        }),
+        regionalSummary,
+        supplyBalance: vi.fn(),
+      };
+      render(
+        <OverviewPage
+          regionalDataRepository={regionalDataRepository}
+          repository={{
+            mapScope: () => Promise.resolve(sampleMapScope),
+            options: () => Promise.resolve(options),
+            regions: () => Promise.resolve([sampleRegion]),
+            locations: () => Promise.resolve([]),
+            indicators: () => Promise.resolve([]),
+            dashboard: () => Promise.resolve(emptyDashboard),
+          }}
+        />,
+      );
 
-    expect(await screen.findByRole("button", { name: "样本点" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(regionalSummary).not.toHaveBeenCalled();
-    await userEvent.click(
-      await screen.findByRole("button", { name: "齐齐哈尔市，已核定 1 条" }),
-    );
-    await userEvent.click(screen.getByRole("button", { name: "地区数据" }));
+      expect(await screen.findByRole("button", { name: "样本点" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      expect(regionalSummary).not.toHaveBeenCalled();
+      await userEvent.click(
+        await screen.findByRole("button", { name: "齐齐哈尔市，已核定 1 条" }),
+      );
+      await userEvent.click(screen.getByRole("button", { name: "地区数据" }));
 
-    await waitFor(() =>
-      expect(regionalSummary).toHaveBeenCalledWith({
-        regionCode: "230200",
-        year: 2026,
-        productCode: "CORN",
-      }),
-    );
-    expect(
-      await screen.findByRole("heading", { name: "齐齐哈尔市农业概况" }),
-    ).toBeVisible();
-    expect(
-      screen.getByText("公开资料自动核验 · 缺项自动补算 · 仅预测下一年"),
-    ).toBeVisible();
-    expect(
-      screen.getByText("地区数据范围：齐齐哈尔、黑河、呼伦贝尔、大兴安岭及下级地区"),
-    ).toBeVisible();
-    expect(screen.queryByText(/数据范围：.*个县区/)).not.toBeInTheDocument();
-  });
+      await waitFor(() =>
+        expect(regionalSummary).toHaveBeenCalledWith({
+          regionCode: "230200",
+          year: 2026,
+          productCode: "CORN",
+        }),
+      );
+      expect(
+        await screen.findByRole("heading", { name: "齐齐哈尔市农业概况" }),
+      ).toBeVisible();
+      expect(
+        screen.getByText("公开资料自动核验 · 缺项自动补算 · 仅预测下一年"),
+      ).toBeVisible();
+      expect(
+        screen.getByText("地区数据范围：齐齐哈尔、黑河、呼伦贝尔、大兴安岭及下级地区"),
+      ).toBeVisible();
+      expect(screen.queryByText(/数据范围：.*个县区/)).not.toBeInTheDocument();
+    },
+  );
 
   it("reloads supply balance when the selected regional annual production changes", async () => {
     let realtimeCallbacks: OverviewRealtimeCallbacks | undefined;
@@ -2733,6 +2740,7 @@ describe("OverviewPage", () => {
       "aria-pressed",
       "true",
     );
+    expect(screen.queryByLabelText("总揽关键指标")).not.toBeInTheDocument();
     expect(
       await within(map).findByRole("img", {
         name: /众兴村设计覆盖，行政村展示分区覆盖徽标/,

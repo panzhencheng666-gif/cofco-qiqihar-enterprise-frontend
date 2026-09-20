@@ -159,7 +159,9 @@ describe("four-region terrain public situation scene", () => {
     expect(overviewPage).toContain(
       "!publicSituationMode || operationalSelectedRegion ? (",
     );
-    expect(overviewPage).toContain("showBusinessMetrics={!publicSituationMode}");
+    expect(overviewPage).toContain(
+      '!activeSamplePointRepository || sampleNetworkModel.mode === "actual"',
+    );
     expect(overviewPage).toContain('if (nextMode === "PUBLIC_SITUATION")');
     expect(overviewPage).toContain("navigationRequestRef.current += 1");
     expect(overviewPage).toContain("setSelectedRegionSnapshot(undefined)");
