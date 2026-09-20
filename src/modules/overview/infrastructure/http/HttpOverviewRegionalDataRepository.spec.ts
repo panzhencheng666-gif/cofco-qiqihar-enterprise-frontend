@@ -188,6 +188,7 @@ describe("HttpOverviewRegionalDataRepository", () => {
     expect(get.mock.calls[0]?.[0]).toBe(
       "/api/v1/overview/operational-facilities?productCode=SOYBEAN&asOf=2026-09-18",
     );
+    expect(get.mock.calls[0]?.[2]).toEqual({ timeoutMs: 60_000 });
     expect(result.storageFacilities[0]?.longitude).toBe(125.8476007);
     expect(result.railwayFacilities[0]?.name).toBe("泰来");
     expect(result.railwayRoutes[0]?.name).toBe("滨洲铁路");

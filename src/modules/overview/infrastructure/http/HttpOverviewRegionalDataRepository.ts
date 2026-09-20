@@ -552,7 +552,7 @@ export class HttpOverviewRegionalDataRepository implements OverviewRegionalDataR
       await this.http.get(
         `/api/v1/overview/operational-facilities${queryString(query)}`,
         operationalFacilityCatalogueSchema,
-        signal ? { signal } : undefined,
+        { ...(signal ? { signal } : {}), timeoutMs: 60_000 },
       )
     ).data;
   }
