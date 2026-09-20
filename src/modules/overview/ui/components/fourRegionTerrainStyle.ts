@@ -32,7 +32,7 @@ export const FACILITY_ICON_SIZE: ExpressionSpecification = [
 ];
 
 const TERRAIN_TILES = [
-  "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
+  "cofco-terrain://{z}/{x}/{y}.png",
 ];
 
 export const FOUR_REGION_BASE_STYLE: StyleSpecification = {

@@ -17,6 +17,7 @@ import type {
 import {
   Map as MapLibreMap,
   setWorkerUrl,
+  addProtocol,
   type GeoJSONSource,
   type MapGeoJSONFeature,
   type MapMouseEvent,
@@ -52,6 +53,25 @@ import { weatherSpriteKind, type WeatherSpriteKind } from "./weatherSpriteKind";
 import { createWeatherSpritePainter } from "./animatedWeatherSprite";
 import { publicMapFocus } from "./publicMapFocus";
 import { mapAnnotationGesture } from "./mapAnnotationGesture";
+import { createTerrainTileCache } from "./terrainTileCache";
+
+const loadTerrainTile = createTerrainTileCache();
+addProtocol("cofco-terrain", async (request, controller) => {
+  const tile = /^cofco-terrain:\/\/(\d+)\/(\d+)\/(\d+)\.png$/.exec(request.url);
+  if (
+    !tile ||
+    Number(tile[1]) > 15 ||
+    Number(tile[2]) >= 2 ** Number(tile[1]) ||
+    Number(tile[3]) >= 2 ** Number(tile[1])
+  )
+    throw new Error("Invalid terrain tile");
+  controller.signal.throwIfAborted();
+  const data = await loadTerrainTile(
+    `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${tile[1]}/${tile[2]}/${tile[3]}.png`,
+  );
+  controller.signal.throwIfAborted();
+  return { data };
+});
 
 export interface RealisticSceneLayers {
   ADMINISTRATIVE: boolean;
