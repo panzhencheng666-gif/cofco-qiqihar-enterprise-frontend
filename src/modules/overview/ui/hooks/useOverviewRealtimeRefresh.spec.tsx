@@ -117,14 +117,32 @@ describe("useOverviewRealtimeRefresh", () => {
     act(() => {
       vi.advanceTimersByTime(500);
     });
-    expect(screen.getByText("3:3:3")).toBeInTheDocument();
+    expect(screen.getByText("2:2:2")).toBeInTheDocument();
     act(() => {
       vi.advanceTimersByTime(60_000);
     });
-    expect(screen.getByText("3:3:3")).toBeInTheDocument();
+    expect(screen.getByText("2:2:2")).toBeInTheDocument();
 
     unmount();
     expect(stream.closed).toBe(true);
+  });
+
+  it("does not rebuild the overview for brief realtime disconnect and reconnect cycles", () => {
+    vi.useFakeTimers();
+    const stream = new FakeRealtimeStream();
+    render(<Harness stream={stream} />);
+
+    act(() => {
+      for (let cycle = 0; cycle < 5; cycle += 1) {
+        stream.callbacks.onDisconnected();
+        vi.advanceTimersByTime(2_000);
+        stream.callbacks.onConnected();
+        vi.advanceTimersByTime(500);
+      }
+    });
+
+    expect(screen.getByText("0:0:0")).toBeInTheDocument();
+    expect(screen.getByTestId("geography-sequence")).toHaveTextContent("0");
   });
 
   it("keeps one subscription and does not refresh samples when only product changes", () => {
