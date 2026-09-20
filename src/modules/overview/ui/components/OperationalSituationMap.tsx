@@ -59,6 +59,16 @@ const DEPOT_FILTERS: readonly {
   { code: "HISTORICAL_LEASED", label: "历史租赁库", shortLabel: "历" },
 ];
 
+const ENHANCEMENT_NOTICE: Partial<Record<TerrainEnhancementState, string>> = {
+  DEGRADED_IMAGERY: "在线卫星影像加载失败；地图仍显示已成功加载的其他图层。",
+  DEGRADED_TERRAIN: "在线高程地形加载失败；地图仍显示已成功加载的其他图层。",
+  DEGRADED_BASEMAP: "在线道路与地名底图加载失败；地图仍显示已成功加载的其他图层。",
+  DEGRADED_ICONS: "部分业务图标加载失败；地图数据与查询仍可使用。",
+  DEGRADED_MULTIPLE: "多个在线地图增强源加载失败；地图仍显示已成功加载的图层。",
+  DEGRADED_RENDERER:
+    "地图渲染器初始化失败，当前无法显示地图；筛选条件和页面数据仍保留。",
+};
+
 export function OperationalSituationMap({
   backdrop,
   bounds,
@@ -159,6 +169,13 @@ export function OperationalSituationMap({
     [selectedTime, situation],
   );
   const currentLevel = features[0]?.region.level ?? backdrop?.region.level;
+  const enhancementNotice = ENHANCEMENT_NOTICE[enhancementState];
+  const railwayWithinCount = facilities.railwayFacilities.filter(
+    (facility) => facility.locationRelation === "WITHIN",
+  ).length;
+  const railwayNearbyCount = facilities.railwayFacilities.filter(
+    (facility) => facility.locationRelation === "NEARBY",
+  ).length;
 
   useTimelinePlayback({
     playbackSpeed,
@@ -367,9 +384,9 @@ export function OperationalSituationMap({
             村名位置仍待空间核验，可点击名称查看该村资料；不展示推算村界。
           </p>
         )}
-        {enhancementState === "DEGRADED" && (
+        {enhancementNotice && (
           <p className="realistic-situation-enhancement-notice" role="status">
-            在线卫星影像暂不可用，已降级为地形底图；地区搜索与业务图层仍可操作。
+            {enhancementNotice}
           </p>
         )}
         <nav className="realistic-situation-filters" aria-label="公开态势筛选">
@@ -450,7 +467,12 @@ export function OperationalSituationMap({
               <span className="is-locomotive" aria-hidden="true">
                 ▰
               </span>
-              白色内燃机车站点
+              <span className="realistic-situation-layer-menu__copy">
+                白色内燃机车站点
+                <small>
+                  境内 {railwayWithinCount} · 邻近 {railwayNearbyCount}（淡色环）
+                </small>
+              </span>
               <b>{facilities.railwayFacilities.length}</b>
             </label>
             <label>

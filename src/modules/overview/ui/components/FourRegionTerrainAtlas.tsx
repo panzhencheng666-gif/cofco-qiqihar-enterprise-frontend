@@ -3,7 +3,6 @@ import mapWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "./realistic-operational-situation.css";
 
 import { useEffect, useRef } from "react";
-import { union } from "@turf/union";
 import type {
   Feature,
   FeatureCollection,
@@ -54,6 +53,18 @@ import { createWeatherSpritePainter } from "./animatedWeatherSprite";
 import { publicMapFocus } from "./publicMapFocus";
 import { mapAnnotationGesture } from "./mapAnnotationGesture";
 import { createTerrainTileCache } from "./terrainTileCache";
+import {
+  fourRegionContextMaskCollection,
+  railwayMarkerPresentation,
+  settledMarkerImages,
+  terrainEnhancementStateAfterInitialIdle,
+  terrainEnhancementStateForFailures,
+  terrainEnhancementStateForSource,
+  type TerrainEnhancementFailure,
+  type TerrainEnhancementState,
+} from "./fourRegionTerrainModel";
+
+export type { TerrainEnhancementState } from "./fourRegionTerrainModel";
 
 const loadTerrainTile = createTerrainTileCache();
 addProtocol("cofco-terrain", async (request, controller) => {
@@ -90,8 +101,6 @@ export interface RealisticSceneCommand {
   type: "ZOOM_IN" | "ZOOM_OUT" | "RESET";
 }
 
-export type TerrainEnhancementState = "LOADING" | "READY" | "DEGRADED";
-
 export interface FourRegionTerrainAtlasProps {
   annotation?: MapAnnotation;
   annotationActive?: boolean;
@@ -124,6 +133,7 @@ export interface FourRegionTerrainAtlasProps {
 
 interface AtlasRuntime {
   destroyed: boolean;
+  enhancementFailures: Set<TerrainEnhancementFailure>;
   hierarchyKey: string;
   host: HTMLDivElement;
   map: MapLibreMap;
@@ -192,7 +202,7 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
         style: FOUR_REGION_BASE_STYLE,
       });
     } catch {
-      propsRef.current.onEnhancementState?.("DEGRADED");
+      propsRef.current.onEnhancementState?.("DEGRADED_RENDERER");
       return;
     }
     map.doubleClickZoom.disable();
@@ -203,6 +213,7 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
     map.touchZoomRotate.disableRotation();
     const runtime: AtlasRuntime = {
       destroyed: false,
+      enhancementFailures: new Set(),
       hierarchyKey: "",
       host,
       map,
@@ -218,14 +229,16 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
     host.dataset.viewerCount = "1";
     host.dataset.createdViewerCount = "1";
     host.dataset.imageryMode = "multiresolution-tile-pyramid";
+    host.dataset.enhancementState = "loading";
     propsRef.current.onEnhancementState?.("LOADING");
 
     map.on("load", () => void initializeAtlas(runtime));
     map.on("error", (event) => {
       const sourceId = (event as { sourceId?: string }).sourceId;
       if (!sourceId || !Object.hasOwn(FOUR_REGION_REMOTE_SOURCES, sourceId)) return;
-      host.dataset.enhancementState = "degraded";
-      propsRef.current.onEnhancementState?.("DEGRADED");
+      const state = terrainEnhancementStateForSource(sourceId);
+      if (!state) return;
+      reportEnhancementFailure(runtime, state);
     });
     map.on("click", (event) => handleMapClick(runtime, event));
     map.on("mousemove", (event) => {
@@ -280,14 +293,11 @@ async function initializeAtlas(runtime: AtlasRuntime) {
   if (runtime.destroyed) return;
   const { host, map } = runtime;
   installRemoteTerrain(map);
-  try {
-    await installAtlasMarkerImages(map);
-  } catch {
-    if (runtime.destroyed) return;
-    host.dataset.enhancementState = "degraded-icons";
-    runtime.props.onEnhancementState?.("DEGRADED");
-  }
+  const markerImagesDegraded = await installAtlasMarkerImages(map);
   if (runtime.destroyed) return;
+  if (markerImagesDegraded) {
+    reportEnhancementFailure(runtime, "DEGRADED_ICONS");
+  }
   installAtlasLayers(map);
   runtime.ready = true;
   host.dataset.sceneState = "local-ready";
@@ -296,9 +306,21 @@ async function initializeAtlas(runtime: AtlasRuntime) {
   runtime.props.onReady?.();
   map.once("idle", () => {
     if (runtime.destroyed) return;
-    host.dataset.enhancementState = "ready";
-    runtime.props.onEnhancementState?.("READY");
+    const state = terrainEnhancementStateAfterInitialIdle(runtime.enhancementFailures);
+    host.dataset.enhancementState = state.toLowerCase();
+    runtime.props.onEnhancementState?.(state);
   });
+}
+
+function reportEnhancementFailure(
+  runtime: AtlasRuntime,
+  failure: TerrainEnhancementFailure,
+) {
+  runtime.enhancementFailures.add(failure);
+  const state = terrainEnhancementStateForFailures(runtime.enhancementFailures);
+  if (!state) return;
+  runtime.host.dataset.enhancementState = state.toLowerCase();
+  runtime.props.onEnhancementState?.(state);
 }
 
 async function installAtlasMarkerImages(map: MapLibreMap) {
@@ -314,14 +336,21 @@ async function installAtlasMarkerImages(map: MapLibreMap) {
     ["atlas-icon-weather-snow", realisticWeatherIcon(73)],
     ["atlas-icon-weather-storm", realisticWeatherIcon(95)],
   ] as const;
-  const images = await Promise.all(
+  const settled = await Promise.allSettled(
     sources.map(
       async ([id, source]) => [id, await loadSvgMarkerImage(source)] as const,
     ),
   );
+  const { images, hasFailures: loadFailures } = settledMarkerImages(settled);
+  let hasFailures = loadFailures;
   images.forEach(([id, image]) => {
-    if (!map.hasImage(id)) map.addImage(id, image, { pixelRatio: 2 });
+    try {
+      if (!map.hasImage(id)) map.addImage(id, image, { pixelRatio: 2 });
+    } catch {
+      hasFailures = true;
+    }
   });
+  return hasFailures;
 }
 
 function installRemoteTerrain(map: MapLibreMap) {
@@ -363,10 +392,23 @@ function installAtlasLayers(map: MapLibreMap) {
     id: "atlas-region-mask",
     type: "fill",
     source: MASK_SOURCE,
+    filter: ["==", ["get", "kind"], "outside-four-region-context"],
     paint: {
       "fill-antialias": false,
       "fill-color": "#202722",
       "fill-opacity": 1,
+      ...(context ? { "fill-pattern": "atlas-survey-background" } : {}),
+    },
+  });
+  map.addLayer({
+    id: "atlas-region-context",
+    type: "fill",
+    source: MASK_SOURCE,
+    filter: ["==", ["get", "kind"], "four-region-context-ring"],
+    paint: {
+      "fill-antialias": false,
+      "fill-color": "#202722",
+      "fill-opacity": 0.58,
       ...(context ? { "fill-pattern": "atlas-survey-background" } : {}),
     },
   });
@@ -497,6 +539,24 @@ function installAtlasLayers(map: MapLibreMap) {
     },
   });
   map.addLayer({
+    id: "atlas-nearby-railway-halo",
+    type: "circle",
+    source: MARKER_SOURCE,
+    filter: [
+      "all",
+      ["==", ["get", "kind"], "RAILWAY"],
+      ["==", ["get", "nearby"], true],
+    ],
+    paint: {
+      "circle-color": "#342d22",
+      "circle-opacity": 0.34,
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 12, 12, 17],
+      "circle-stroke-color": "#f0c96c",
+      "circle-stroke-opacity": 0.92,
+      "circle-stroke-width": 2,
+    },
+  });
+  map.addLayer({
     id: "atlas-operational-markers",
     type: "symbol",
     source: MARKER_SOURCE,
@@ -517,7 +577,7 @@ function installAtlasLayers(map: MapLibreMap) {
       "icon-size": FACILITY_ICON_SIZE,
     },
     paint: {
-      "icon-opacity": 0.98,
+      "icon-opacity": ["case", ["==", ["get", "nearby"], true], 0.68, 0.98],
     },
   });
   map.addLayer({
@@ -627,7 +687,11 @@ function synchronizeAtlas(runtime: AtlasRuntime, props: FourRegionTerrainAtlasPr
       ROOT_LABEL_SOURCE,
       regionLabelCollection(props.rootFeatures),
     );
-    setSource(runtime.map, MASK_SOURCE, fourRegionMaskCollection(props.rootFeatures));
+    setSource(
+      runtime.map,
+      MASK_SOURCE,
+      fourRegionContextMaskCollection(props.rootFeatures),
+    );
   }
   const active = activeHierarchyFeatures(props);
   if (hierarchyChanged || selectionChanged) {
@@ -1111,61 +1175,6 @@ function regionLabelPosition(
   return bounds ? centerOf(bounds) : undefined;
 }
 
-function fourRegionMaskCollection(
-  rootFeatures: readonly MapFeature[],
-): FeatureCollection {
-  const polygons = rootFeatures.map(
-    (feature): Feature<GeoJsonPolygon | GeoJsonMultiPolygon> => ({
-      type: "Feature",
-      properties: {},
-      geometry: feature.geometry as unknown as GeoJsonPolygon | GeoJsonMultiPolygon,
-    }),
-  );
-  // Adjacent/overlapping holes are invalid GeoJSON and create triangular gaps.
-  const merged =
-    polygons.length > 1
-      ? union({ type: "FeatureCollection", features: polygons })
-      : polygons[0];
-  const rings = !merged
-    ? []
-    : merged.geometry.type === "Polygon"
-      ? [merged.geometry.coordinates[0]!]
-      : merged.geometry.coordinates.map((polygon) => polygon[0]!);
-  const holes = rings.map(clockwiseRing);
-  const world: GeoJsonPosition[] = [
-    [-179.9, -84.9],
-    [179.9, -84.9],
-    [179.9, 84.9],
-    [-179.9, 84.9],
-    [-179.9, -84.9],
-  ];
-  return {
-    type: "FeatureCollection",
-    features: [
-      {
-        type: "Feature",
-        properties: { kind: "outside-four-regions" },
-        geometry: { type: "Polygon", coordinates: [world, ...holes] },
-      },
-    ],
-  };
-}
-
-function clockwiseRing(ring: GeoJsonPosition[]) {
-  return signedRingArea(ring) > 0 ? [...ring].reverse() : ring;
-}
-
-function signedRingArea(ring: readonly GeoJsonPosition[]) {
-  let area = 0;
-  for (let index = 0; index < ring.length - 1; index += 1) {
-    const current = ring[index];
-    const next = ring[index + 1];
-    if (!current || !next) continue;
-    area += current[0]! * next[1]! - next[0]! * current[1]!;
-  }
-  return area / 2;
-}
-
 function railwayCollection(props: FourRegionTerrainAtlasProps): FeatureCollection {
   if (!props.layers.RAILWAY_ROUTE) return emptyCollection();
   const features: Feature[] = [];
@@ -1231,11 +1240,15 @@ function markerCollection(props: FourRegionTerrainAtlasProps): FeatureCollection
   });
   if (props.layers.RAILWAY) {
     props.facilities.railwayFacilities.forEach((facility) => {
+      const presentation = railwayMarkerPresentation(
+        facility.locationRelation,
+        facility.name,
+      );
       features.push(
         pointFeature(facility.longitude, facility.latitude, {
           id: facility.sourceId,
           kind: "RAILWAY",
-          name: facility.name,
+          ...presentation,
           selected: facility.sourceId === props.selectedFacilityId,
         }),
       );

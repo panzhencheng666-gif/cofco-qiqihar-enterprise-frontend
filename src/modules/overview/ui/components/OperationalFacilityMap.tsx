@@ -96,7 +96,8 @@ export function OperationalFacilityMap({
     const fitVisibleBounds = (duration = 0) => {
       fitFacilityMap(map, bounds, container, viewAngleRef.current, duration);
     };
-    map.on("style.load", fitVisibleBounds);
+    const fitVisibleBoundsOnStyleLoad = () => fitVisibleBounds();
+    map.on("style.load", fitVisibleBoundsOnStyleLoad);
     const commandCenter = container.closest(".overview-command-center");
     const observed = [
       container,
@@ -122,7 +123,7 @@ export function OperationalFacilityMap({
       cancelAnimationFrame(resizeFrame);
       resizeObserver?.disconnect();
       window.removeEventListener("resize", scheduleFit);
-      map.off("style.load", fitVisibleBounds);
+      map.off("style.load", fitVisibleBoundsOnStyleLoad);
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
       mapRef.current = null;

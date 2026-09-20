@@ -391,7 +391,6 @@
 .realistic-situation-layer-menu > button,
 .realistic-situation-layer-menu > label {
   display: grid;
-  grid-template-columns: 1.6rem 1fr auto;
   align-items: center;
   min-height: 2.25rem;
   gap: 0.45rem;
@@ -400,8 +399,30 @@
   text-align: left;
 }
 
+.realistic-situation-layer-menu > button {
+  grid-template-columns: 1.6rem 1fr auto;
+}
+
+.realistic-situation-layer-menu > label {
+  grid-template-columns: 1rem 1.6rem minmax(0, 1fr) auto;
+}
+
+.realistic-situation-layer-menu__copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.1rem;
+}
+
+.realistic-situation-layer-menu__copy small {
+  color: rgb(255 255 255 / 72%);
+  font-size: 0.64rem;
+  line-height: 1.35;
+}
+
 .realistic-situation-layer-menu > button > span,
-.realistic-situation-layer-menu > label > span {
+.realistic-situation-layer-menu
+  > label
+  > span:not(.realistic-situation-layer-menu__copy) {
   display: grid;
   width: 1.45rem;
   height: 1.45rem;
