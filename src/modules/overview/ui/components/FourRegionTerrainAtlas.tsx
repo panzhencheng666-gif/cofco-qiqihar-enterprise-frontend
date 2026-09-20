@@ -1,4 +1,5 @@
 import "maplibre-gl/dist/maplibre-gl.css";
+import mapWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "./realistic-operational-situation.css";
 
 import { useEffect, useRef } from "react";
@@ -15,10 +16,15 @@ import type {
 } from "geojson";
 import {
   Map as MapLibreMap,
+  setWorkerUrl,
   type GeoJSONSource,
   type MapGeoJSONFeature,
   type MapMouseEvent,
 } from "maplibre-gl";
+
+// The engine's dynamic import.meta.url worker lookup cannot survive bundling.
+// Emit the worker explicitly so GeoJSON, terrain and symbols work in production.
+setWorkerUrl(mapWorkerUrl);
 
 import type { MapAnnotation } from "../../application/ports/MapAnnotationRepository";
 import type { OperationalFacilityCatalogue } from "../../domain/operationalFacilities";
