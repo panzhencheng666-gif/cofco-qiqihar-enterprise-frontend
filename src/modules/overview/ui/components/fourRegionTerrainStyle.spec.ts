@@ -5,6 +5,7 @@ import {
   FOUR_REGION_BASE_STYLE,
   FOUR_REGION_DETAIL_LAYERS,
   FOUR_REGION_REMOTE_SOURCES,
+  OPERATIONAL_FACILITY_ICON_SIZE,
   surfaceModePaint,
 } from "./fourRegionTerrainStyle";
 
@@ -36,6 +37,17 @@ describe("four-region satellite and terrain style", () => {
       6.5,
     ]);
     expect(JSON.stringify(FACILITY_ICON_SIZE)).not.toContain("selected");
+    expect(OPERATIONAL_FACILITY_ICON_SIZE.slice(0, 5)).toEqual([
+      "interpolate",
+      ["exponential", 1.45],
+      ["zoom"],
+      4,
+      ["case", ["==", ["get", "kind"], "RAILWAY"], 0.24, 0.16],
+    ]);
+    expect(OPERATIONAL_FACILITY_ICON_SIZE.slice(-2)).toEqual([
+      22,
+      ["case", ["==", ["get", "kind"], "RAILWAY"], 9.75, 6.5],
+    ]);
   });
 
   it("renders a local shell before any remote provider responds", () => {

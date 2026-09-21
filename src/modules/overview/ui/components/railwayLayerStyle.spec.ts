@@ -1,6 +1,6 @@
 import { validateStyleMin } from "@maplibre/maplibre-gl-style-spec";
 import { expect, it } from "vitest";
-import { FACILITY_ICON_SIZE } from "./fourRegionTerrainStyle";
+import { OPERATIONAL_FACILITY_ICON_SIZE } from "./fourRegionTerrainStyle";
 
 it("accepts the actual facility zoom expression instead of dropping all stations", () => {
   const errors = validateStyleMin({
@@ -16,7 +16,10 @@ it("accepts the actual facility zoom expression instead of dropping all stations
         id: "stations",
         type: "symbol",
         source: "stations",
-        layout: { "icon-image": "railway", "icon-size": FACILITY_ICON_SIZE },
+        layout: {
+          "icon-image": "railway",
+          "icon-size": OPERATIONAL_FACILITY_ICON_SIZE,
+        },
       },
     ],
   });

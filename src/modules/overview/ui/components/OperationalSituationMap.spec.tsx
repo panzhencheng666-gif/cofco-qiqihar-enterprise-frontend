@@ -126,7 +126,9 @@ describe("four-region terrain public situation scene", () => {
     expect(scene).toContain("requestAnimationFrame");
     expect(scene).toContain('"atlas-icon-railway"');
     expect(scene).toContain('"atlas-icon-depot-owned"');
-    expect(scene).toContain('id: "atlas-inventory"');
+    expect(scene).not.toContain('id: "atlas-inventory"');
+    expect(scene).not.toContain('"atlas-icon-inventory"');
+    expect(scene).not.toContain("inventoryCollection(");
     expect(scene).toContain('type: "symbol"');
   });
 
