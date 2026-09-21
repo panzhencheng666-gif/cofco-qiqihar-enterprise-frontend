@@ -1,5 +1,5 @@
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 import type { ProxyOptions } from "vite";
 
 export const localDevelopmentActor = "wang-yang";
@@ -144,6 +144,7 @@ export default defineConfig({
     },
   },
   test: {
+    exclude: [...configDefaults.exclude, "scripts/blender/**/*.spec.mjs"],
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/testing/setup.ts"],

@@ -12,5 +12,6 @@ blob-report/
 *.tsbuildinfo
 .superpowers/
 .worktrees/
+work/
 *.log
 .DS_Store

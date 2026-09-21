@@ -11,6 +11,7 @@
     "assets:blender:build": "blender --background --factory-startup --python scripts/blender/generate-four-region-atlas.py -- --input work/blender/four-regions.geojson --output public/overview/blender/four-region-atlas.glb --manifest public/overview/blender/four-region-atlas.json",
     "assets:blender:source": "node scripts/blender/export-four-region-source.mjs",
     "assets:blender:validate": "blender --background --factory-startup --python scripts/blender/validate-four-region-atlas.py -- --asset public/overview/blender/four-region-atlas.glb --manifest public/overview/blender/four-region-atlas.json",
+    "preview:blender:capture": "node scripts/capture-blender-overview-preview.mjs",
     "predev": "node scripts/prepare-cesium-assets.mjs",
     "prebuild": "node scripts/prepare-cesium-assets.mjs",
     "dev": "vite --host 127.0.0.1 --port 63200 --strictPort",
