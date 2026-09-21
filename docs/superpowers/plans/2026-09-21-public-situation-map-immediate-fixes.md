@@ -24,6 +24,7 @@
 ### Task 1: Deterministic all-marker layout
 
 **Files:**
+
 - Create: `src/modules/overview/ui/components/operationalMarkerLayout.ts`
 - Create: `src/modules/overview/ui/components/operationalMarkerLayout.spec.ts`
 
@@ -69,9 +70,7 @@ const result = layoutOperationalMarkers(markers, {
   viewportHeight: 700,
   marginPx: 7,
 });
-expect(result.map(({ id }) => id).sort()).toEqual(
-  markers.map(({ id }) => id).sort(),
-);
+expect(result.map(({ id }) => id).sort()).toEqual(markers.map(({ id }) => id).sort());
 expect(new Set(result.map(({ x, y }) => `${x}:${y}`))).toHaveLength(160);
 ```
 
@@ -100,12 +99,14 @@ git commit -m "feat(overview): lay out every operational marker"
 ### Task 2: Render all facilities with zoom-proportional size
 
 **Files:**
+
 - Modify: `src/modules/overview/ui/components/fourRegionTerrainStyle.ts`
 - Modify: `src/modules/overview/ui/components/fourRegionTerrainStyle.spec.ts`
 - Modify: `src/modules/overview/ui/components/FourRegionTerrainAtlas.tsx`
 - Modify: `src/modules/overview/ui/components/OperationalSituationMap.spec.tsx`
 
 **Interfaces:**
+
 - Consumes: `layoutOperationalMarkers` from Task 1.
 - Produces: internal `refreshOperationalMarkerSources(runtime)` for marker and leader GeoJSON.
 
@@ -115,11 +116,17 @@ Require the shared icon-size expression without a selected-size branch:
 
 ```ts
 expect(FACILITY_ICON_SIZE).toEqual([
-  "interpolate", ["linear"], ["zoom"],
-  4, 0.44,
-  7, 0.56,
-  10, 0.69,
-  13, 0.81,
+  "interpolate",
+  ["linear"],
+  ["zoom"],
+  4,
+  0.44,
+  7,
+  0.56,
+  10,
+  0.69,
+  13,
+  0.81,
 ]);
 ```
 
@@ -174,6 +181,7 @@ git commit -m "fix(overview): keep all facility markers visible"
 ### Task 3: Complete region facility directory
 
 **Files:**
+
 - Modify: `src/modules/overview/ui/components/OperationalFacilityPanel.tsx`
 - Modify: `src/modules/overview/ui/components/OperationalFacilityPanel.spec.tsx`
 - Modify: `src/modules/overview/ui/components/OperationalSituationPanel.tsx`
@@ -181,6 +189,7 @@ git commit -m "fix(overview): keep all facility markers visible"
 - Modify: `src/modules/overview/ui/components/operational-situation.css`
 
 **Interfaces:**
+
 - Consumes: the region-scoped catalogue already loaded by `OverviewPage` and the shared `selectedFacilityId`.
 - Produces: complete list controls that call the existing `onFacilitySelect(id)` callback.
 
@@ -221,6 +230,7 @@ git commit -m "feat(overview): list every regional facility"
 ### Task 4: Fast, explicit remote-imagery degradation
 
 **Files:**
+
 - Create: `src/modules/overview/ui/components/remoteMapEnhancement.ts`
 - Create: `src/modules/overview/ui/components/remoteMapEnhancement.spec.ts`
 - Modify: `src/modules/overview/ui/components/FourRegionTerrainAtlas.tsx`
@@ -233,10 +243,7 @@ git commit -m "feat(overview): list every regional facility"
 
 ```ts
 export type RemoteEnhancementId =
-  | "satellite"
-  | "terrain-dem"
-  | "hillshade-dem"
-  | "openmaptiles";
+  "satellite" | "terrain-dem" | "hillshade-dem" | "openmaptiles";
 
 export interface RemoteEnhancementStatus {
   failed: ReadonlySet<RemoteEnhancementId>;
@@ -308,6 +315,7 @@ git commit -m "fix(overview): degrade unavailable imagery quickly"
 ### Task 5: Focused regression and real-browser acceptance
 
 **Files:**
+
 - Modify only when a failing assertion identifies a defect in files already owned by Tasks 1-4.
 - Record evidence in the handoff; do not add screenshots or ad hoc QA HTML to Git.
 
