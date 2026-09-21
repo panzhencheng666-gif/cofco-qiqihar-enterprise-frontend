@@ -42,7 +42,7 @@ describe("four-region satellite and terrain style", () => {
       ["exponential", 1.45],
       ["zoom"],
       4,
-      ["case", ["==", ["get", "kind"], "RAILWAY"], 0.24, 0.16],
+      ["case", ["==", ["get", "kind"], "RAILWAY"], 0.24, 0.75],
     ]);
     expect(OPERATIONAL_FACILITY_ICON_SIZE.slice(-2)).toEqual([
       22,

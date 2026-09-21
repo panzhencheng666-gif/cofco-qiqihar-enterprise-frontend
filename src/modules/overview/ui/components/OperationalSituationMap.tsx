@@ -453,6 +453,21 @@ export function OperationalSituationMap({
                 </b>
               </button>
             ))}
+            {facilities.storageFacilities.some(
+              (facility) => facility.longitude === null || facility.latitude === null,
+            ) && (
+              <p role="status" className="realistic-situation-unlocated">
+                待定位库点：
+                {facilities.storageFacilities
+                  .filter(
+                    (facility) =>
+                      facility.longitude === null || facility.latitude === null,
+                  )
+                  .map((facility) => facility.name)
+                  .join("、")}
+                。已计入数量，核定坐标后才可在地图标点。
+              </p>
+            )}
             <label>
               <input
                 checked={layers.RAILWAY}

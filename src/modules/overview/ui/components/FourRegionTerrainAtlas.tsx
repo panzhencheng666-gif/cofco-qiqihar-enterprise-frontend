@@ -707,6 +707,7 @@ function installAtlasLayers(map: MapLibreMap) {
     layout: {
       "icon-allow-overlap": true,
       "icon-ignore-placement": true,
+      "symbol-sort-key": ["case", ["==", ["get", "kind"], "RAILWAY"], 0, 1],
       "icon-image": [
         "match",
         ["get", "kind"],
@@ -783,6 +784,8 @@ function installAtlasLayers(map: MapLibreMap) {
       "text-halo-width": 1.4,
     },
   });
+  // Business facilities remain clickable and visible above the weather artwork.
+  map.moveLayer("atlas-operational-markers", "atlas-marker-labels");
   map.addLayer({
     id: "atlas-annotation-fill",
     type: "fill",
