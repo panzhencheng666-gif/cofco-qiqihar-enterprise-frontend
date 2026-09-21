@@ -5,14 +5,17 @@ import { BrowserOverviewRealtimeStream } from "./BrowserOverviewRealtimeStream";
 describe("BrowserOverviewRealtimeStream", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("derives the initial cursor from the latest visible notification", async () => {
+  it("uses the shared stream watermark even when the inbox has older notifications", async () => {
     const source = new FakeEventSource();
     const createEventSource = vi.fn(() => source as unknown as EventSource);
     const fetchResponse = vi.fn(() =>
       Promise.resolve(
         new Response(
           JSON.stringify({
-            data: { items: [{ sequence: 1199 }, { sequence: 1203 }] },
+            data: {
+              currentSequence: 9000,
+              items: [{ sequence: 1199 }, { sequence: 1203 }],
+            },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
@@ -28,7 +31,7 @@ describe("BrowserOverviewRealtimeStream", () => {
 
     await vi.waitFor(() =>
       expect(createEventSource).toHaveBeenCalledWith(
-        "/api/v1/business-events/stream?after=1203",
+        "/api/v1/business-events/stream?after=9000",
       ),
     );
     expect(fetchResponse).toHaveBeenCalledWith("/api/v1/notifications", {
@@ -36,6 +39,33 @@ describe("BrowserOverviewRealtimeStream", () => {
       headers: { Accept: "application/json" },
     });
     unsubscribe();
+  });
+
+  it("does not replay history after cursor failure and retries only the cursor", async () => {
+    vi.useFakeTimers();
+    const createEventSource = vi.fn(
+      () => new FakeEventSource() as unknown as EventSource,
+    );
+    const loadCursor = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue(9000);
+    const unsubscribe = new BrowserOverviewRealtimeStream(
+      createEventSource,
+      loadCursor,
+    ).subscribe({
+      onBusinessChange: vi.fn(),
+      onConnected: vi.fn(),
+      onDisconnected: vi.fn(),
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(createEventSource).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(14000);
+    expect(createEventSource).toHaveBeenCalledExactlyOnceWith(
+      "/api/v1/business-events/stream?after=9000",
+    );
+    unsubscribe();
+    vi.useRealTimers();
   });
 
   it("starts after the latest visible notification and delivers a business change", async () => {

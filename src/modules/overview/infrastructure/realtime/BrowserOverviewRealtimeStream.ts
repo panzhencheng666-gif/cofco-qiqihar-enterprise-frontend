@@ -15,16 +15,25 @@ export class BrowserOverviewRealtimeStream implements OverviewRealtimeStream {
   subscribe(callbacks: OverviewRealtimeCallbacks) {
     let source: EventSource | undefined;
     let closed = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let latestSequence = 0;
     const stopMapRevision = new BrowserOverviewMapRevisionMonitor().subscribe(() =>
       callbacks.onBusinessChange({ aggregateType: "OVERVIEW_MAP", regionCodes: [] }),
     );
     const onBusinessChange = (event: Event) => {
       const change = parseBusinessChange(event);
-      if (change) callbacks.onBusinessChange(change);
+      if (!change) return;
+      const sequence = Number((event as MessageEvent).lastEventId);
+      if (sequence > 0 && Number.isSafeInteger(sequence)) {
+        if (sequence <= latestSequence) return;
+        latestSequence = sequence;
+      }
+      callbacks.onBusinessChange(change);
     };
     const connect = (cursor: number) => {
       if (closed) return;
       const safeCursor = Number.isSafeInteger(cursor) ? Math.max(0, cursor) : 0;
+      latestSequence = safeCursor;
       source = this.createEventSource(
         `/api/v1/business-events/stream?after=${safeCursor}`,
       );
@@ -32,10 +41,18 @@ export class BrowserOverviewRealtimeStream implements OverviewRealtimeStream {
       source.onopen = () => callbacks.onConnected();
       source.onerror = () => callbacks.onDisconnected();
     };
-    void this.loadInitialCursor().then(connect, () => connect(0));
+    const initialize = () => {
+      void this.loadInitialCursor().then(connect, () => {
+        if (closed) return;
+        callbacks.onDisconnected();
+        retryTimer = setTimeout(initialize, 15_000);
+      });
+    };
+    initialize();
 
     return () => {
       closed = true;
+      if (retryTimer !== undefined) clearTimeout(retryTimer);
       stopMapRevision();
       source?.removeEventListener("business-change", onBusinessChange);
       source?.close();
@@ -52,8 +69,16 @@ async function loadLatestVisibleNotificationSequence(): Promise<number> {
     throw new Error(`Notification cursor request failed: ${response.status}`);
   }
   const payload = (await response.json()) as {
-    data?: { items?: Array<{ sequence?: unknown }> };
+    data?: { currentSequence?: number; items?: Array<{ sequence?: unknown }> };
   };
+  const currentSequence = payload.data?.currentSequence;
+  if (
+    typeof currentSequence === "number" &&
+    Number.isSafeInteger(currentSequence) &&
+    currentSequence >= 0
+  ) {
+    return currentSequence;
+  }
   return (payload.data?.items ?? []).reduce((latest, item) => {
     const sequence = item.sequence;
     return typeof sequence === "number" &&
