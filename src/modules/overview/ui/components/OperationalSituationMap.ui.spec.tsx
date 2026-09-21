@@ -133,6 +133,73 @@ describe("OperationalSituationMap public-only controls", () => {
 
     expect(screen.getByText("境内 0 · 邻近 0（淡色环）")).toBeVisible();
   });
+
+  it("keeps an unlocated leased depot visibly represented on the map without inventing coordinates", async () => {
+    const onFacilitySelect = vi.fn();
+    renderSituationMap({
+      onFacilitySelect,
+      facilities: {
+        regionCode: null,
+        productCode: null,
+        asOf: "2026-09-19",
+        storageCategories: [{ code: "LEASED", label: "租赁库点", count: 2 }],
+        storageFacilities: [
+          {
+            code: "leased-positioned",
+            name: "已定位租赁库",
+            workUnitCode: "UNIT",
+            relationType: "LEASED",
+            relationLabel: "租赁库点",
+            regionCode: "150722122008",
+            regionName: "安民村",
+            address: "安民村",
+            longitude: 124.4,
+            latitude: 48.5,
+            coordinatePrecision: "EXACT",
+            coordinatePrecisionLabel: "精确定位",
+            operationalStatus: "ACTIVE",
+            capacityTonnes: null,
+            capacityAsOf: null,
+            version: 1,
+            prices: [],
+            evidence: [],
+          },
+          {
+            code: "leased-unlocated",
+            name: "莫旗国丰粮库",
+            workUnitCode: "UNIT",
+            relationType: "LEASED",
+            relationLabel: "租赁库点",
+            regionCode: "150722122008",
+            regionName: "安民村",
+            address: "登特科镇安民村",
+            longitude: null,
+            latitude: null,
+            coordinatePrecision: "UNKNOWN",
+            coordinatePrecisionLabel: "待核定",
+            operationalStatus: "ACTIVE",
+            capacityTonnes: null,
+            capacityAsOf: null,
+            version: 1,
+            prices: [],
+            evidence: [],
+          },
+        ],
+        railwayFacilities: [],
+        railwayLines: [],
+        railwayRoutes: [],
+        sources: [],
+      },
+    });
+
+    expect(screen.getByRole("status", { name: "库点地图数量" })).toHaveTextContent(
+      "租赁库点 2 · 地图已定位 1 · 待定位 1",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "莫旗国丰粮库待定位库点记录" }),
+    );
+    expect(onFacilitySelect).toHaveBeenCalledExactlyOnceWith("leased-unlocated");
+  });
 });
 
 function renderSituationMap(

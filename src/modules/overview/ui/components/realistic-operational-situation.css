@@ -196,6 +196,7 @@
 .realistic-situation-filters,
 .realistic-situation-surface-modes,
 .realistic-situation-layer-menu,
+.realistic-situation-unlocated-dock,
 .regional-earth-annotation,
 .realistic-situation-tools,
 .realistic-situation-timeline,
@@ -257,6 +258,58 @@
   color: #fff0bd;
   font-size: 0.7rem;
   line-height: 1.45;
+}
+
+.realistic-situation-unlocated-dock {
+  position: static;
+  display: grid;
+  grid-column: 1 / -1;
+  width: min(24rem, calc(100vw - var(--situation-edge) * 2));
+  gap: 0.35rem;
+  padding: 0.5rem 0.6rem;
+  border-color: rgb(217 154 0 / 66%);
+}
+
+.realistic-situation-unlocated-dock > strong {
+  color: #fff0bd;
+  font-size: 0.72rem;
+}
+
+.realistic-situation-unlocated-dock > button {
+  display: grid;
+  grid-template-columns: 1.55rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem;
+  border: 1px solid rgb(255 255 255 / 24%);
+  border-radius: 5px;
+  color: #fff;
+  background: rgb(255 255 255 / 7%);
+  cursor: pointer;
+  text-align: left;
+}
+
+.realistic-situation-unlocated-dock > button > span:first-child {
+  display: grid;
+  width: 1.45rem;
+  height: 1.45rem;
+  place-items: center;
+  border: 1px dashed #fff;
+  border-radius: 3px;
+  background: #d99a00;
+  font-size: 0.66rem;
+  font-weight: 800;
+}
+
+.realistic-situation-unlocated-dock > button > span:last-child {
+  display: grid;
+  gap: 0.08rem;
+  font-size: 0.72rem;
+}
+
+.realistic-situation-unlocated-dock small {
+  color: rgb(255 255 255 / 70%);
+  font-size: 0.62rem;
 }
 
 .realistic-situation-filters {
