@@ -8,6 +8,7 @@
     "npm": ">=11.6.0 <12"
   },
   "scripts": {
+    "assets:blender:source": "node scripts/blender/export-four-region-source.mjs",
     "predev": "node scripts/prepare-cesium-assets.mjs",
     "prebuild": "node scripts/prepare-cesium-assets.mjs",
     "dev": "vite --host 127.0.0.1 --port 63200 --strictPort",
