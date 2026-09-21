@@ -5707,6 +5707,7 @@ select:focus-visible {
     padding: 22px 16px 16px;
     overflow: hidden;
     flex: 0 0 auto;
+    animation: none;
   }
 
   .overview-selection-link {
