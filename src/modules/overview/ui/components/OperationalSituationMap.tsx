@@ -579,8 +579,8 @@ export function OperationalSituationMap({
       </div>
 
       <p className="realistic-situation-credits">
-        四区域卫星地表：Esri World Imagery · 降水雷达：RainViewer ·
-        行政边界：平台治理数据
+        四区域卫星地表：企业影像网关（商业源按部署配置；未配置时回退 Esri World
+        Imagery） · 降水雷达：RainViewer · 行政边界：平台治理数据
       </p>
 
       <section className="realistic-situation-timeline" aria-label="真实态势时间轴">

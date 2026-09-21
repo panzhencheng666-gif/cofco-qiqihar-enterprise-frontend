@@ -54,7 +54,7 @@ export const FOUR_REGION_REMOTE_SOURCES: Record<string, SourceSpecification> = {
     tiles: ["/api/v1/overview/map-imagery/tiles/{z}/{x}/{y}"],
     tileSize: 256,
     maxzoom: 18,
-    attribution: "企业商业影像服务",
+    attribution: "企业影像网关（商业源按部署配置；未配置时回退 Esri World Imagery）",
   },
   "terrain-dem": {
     type: "raster-dem",
