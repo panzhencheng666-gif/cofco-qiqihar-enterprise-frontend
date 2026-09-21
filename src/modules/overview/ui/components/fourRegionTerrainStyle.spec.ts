@@ -41,6 +41,12 @@ describe("four-region satellite and terrain style", () => {
       "openmaptiles",
     ]);
     expect(FOUR_REGION_REMOTE_SOURCES.satellite?.type).toBe("raster");
+    expect(JSON.stringify(FOUR_REGION_REMOTE_SOURCES.satellite)).toContain(
+      "/api/v1/overview/map-imagery/tiles/{z}/{x}/{y}",
+    );
+    expect(JSON.stringify(FOUR_REGION_REMOTE_SOURCES.satellite)).not.toContain(
+      "arcgisonline.com",
+    );
     expect(JSON.stringify(FOUR_REGION_REMOTE_SOURCES.satellite)).not.toContain(
       "bounds",
     );

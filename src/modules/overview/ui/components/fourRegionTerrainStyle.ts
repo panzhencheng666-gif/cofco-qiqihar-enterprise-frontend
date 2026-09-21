@@ -51,13 +51,10 @@ export const FOUR_REGION_BASE_STYLE: StyleSpecification = {
 export const FOUR_REGION_REMOTE_SOURCES: Record<string, SourceSpecification> = {
   satellite: {
     type: "raster",
-    tiles: [
-      "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    ],
+    tiles: ["/api/v1/overview/map-imagery/tiles/{z}/{x}/{y}"],
     tileSize: 256,
     maxzoom: 18,
-    attribution:
-      '<a href="https://www.esri.com/en-us/legal/terms/full-master-agreement">Esri World Imagery</a>',
+    attribution: "企业商业影像服务",
   },
   "terrain-dem": {
     type: "raster-dem",

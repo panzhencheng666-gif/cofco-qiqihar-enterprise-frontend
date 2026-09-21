@@ -52,7 +52,7 @@ describe("four-region terrain public situation scene", () => {
     expect(scene).toContain("FOUR_REGION_DETAIL_LAYERS");
     expect(scene).toContain("map.setTerrain");
     expect(scene).toContain('map.on("zoom"');
-    expect(terrainStyle).toContain("World_Imagery/MapServer/tile/{z}/{y}/{x}");
+    expect(terrainStyle).toContain("/api/v1/overview/map-imagery/tiles/{z}/{x}/{y}");
     expect(terrainStyle).toContain('id: "atlas-buildings"');
     expect(terrainStyle).toContain('id: "atlas-road-labels"');
     expect(terrainStyle).not.toContain("World_Imagery/MapServer/export");
