@@ -1514,6 +1514,8 @@ function refreshOperationalMarkerSources(runtime: AtlasRuntime) {
     );
   }
 
+  runtime.host.dataset.operationalMarkerCount = String(markerFeatures.length);
+  runtime.host.dataset.operationalLeaderCount = String(leaderFeatures.length);
   markerFeatures.push(...weatherMarkerFeatures(runtime.props));
   setSource(runtime.map, MARKER_SOURCE, {
     type: "FeatureCollection",
