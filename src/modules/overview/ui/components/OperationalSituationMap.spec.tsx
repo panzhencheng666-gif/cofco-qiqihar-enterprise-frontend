@@ -98,22 +98,23 @@ describe("four-region terrain public situation scene", () => {
   });
 
   it("renders operational nodes inside the same WebGL scene without DOM markers", () => {
-    expect(scene).toContain("markerCollection(");
+    expect(scene).toContain("operationalMarkerCollection(");
     expect(scene).toContain("railwayCollection(");
     expect(scene).toContain("logisticsCollection(");
     expect(scene).not.toMatch(/new\s+Marker\s*\(/);
     expect(scene).toContain('data-dom-markers="0"');
   });
 
-  it("keeps every enabled facility visible and reconnects displaced icons to anchors", () => {
+  it("keeps every enabled facility at its exact coordinate without leader relocation", () => {
     expect(scene).toContain('"icon-allow-overlap": true');
     expect(scene).toContain('"icon-ignore-placement": true');
-    expect(scene).toContain("const MARKER_LEADER_SOURCE");
-    expect(scene).toContain('id: "atlas-operational-marker-leaders"');
-    expect(scene).toContain('map.on("moveend"');
-    expect(scene).toContain("refreshOperationalMarkerSources(runtime)");
-    expect(scene).toContain("anchorLongitude");
-    expect(scene).toContain("anchorLatitude");
+    expect(scene).not.toContain("layoutOperationalMarkers");
+    expect(scene).not.toContain("MARKER_LEADER_SOURCE");
+    expect(scene).not.toContain('id: "atlas-operational-marker-leaders"');
+    expect(scene).not.toContain("anchorLongitude");
+    expect(scene).not.toContain("anchorLatitude");
+    expect(scene).not.toContain("displaced:");
+    expect(scene).toContain("operationalMarkerCollection(runtime.props)");
   });
 
   it("uses animated weather and recognizable railway and grain-depot icons", () => {

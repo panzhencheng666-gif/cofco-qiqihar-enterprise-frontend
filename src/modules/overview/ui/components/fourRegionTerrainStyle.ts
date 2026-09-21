@@ -21,16 +21,16 @@ export function publicBoundaryHierarchy(drilled: boolean): {
 
 export const FACILITY_ICON_SIZE: ExpressionSpecification = [
   "interpolate",
-  ["linear"],
+  ["exponential", 1.35],
   ["zoom"],
   4,
-  0.44,
+  0.18,
   7,
-  0.56,
+  0.3,
   10,
-  0.69,
+  0.52,
   13,
-  0.81,
+  0.84,
 ];
 
 const TERRAIN_TILES = ["cofco-terrain://{z}/{x}/{y}.png"];

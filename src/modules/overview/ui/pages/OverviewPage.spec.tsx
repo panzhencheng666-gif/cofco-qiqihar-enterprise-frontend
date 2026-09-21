@@ -228,6 +228,83 @@ describe("OverviewPage", () => {
     );
   });
 
+  it("keeps the selected region catalogue when a railway detail is opened", async () => {
+    const railwayFacility = (sourceId: string, name: string) => ({
+      sourceId,
+      name,
+      kind: "station",
+      longitude: 124,
+      latitude: 47,
+      operator: "",
+      reference: "",
+      status: "运营情况待核验",
+      service: "业务范围待核验",
+      locationRelation: "WITHIN" as const,
+      distanceKm: 0,
+      nearbyLines: "",
+      sourceUrl: `https://www.openstreetmap.org/${sourceId}`,
+    });
+    const globalCatalogue: OperationalFacilityCatalogue = {
+      regionCode: null,
+      productCode: "CORN",
+      asOf: "2026-09-21",
+      storageCategories: [],
+      storageFacilities: [],
+      railwayFacilities: [
+        railwayFacility("node/global-qiqihar", "齐齐哈尔站"),
+        railwayFacility("node/global-heihe", "黑河站"),
+      ],
+      railwayLines: [],
+      railwayRoutes: [],
+      sources: [],
+    };
+    const regionalCatalogue: OperationalFacilityCatalogue = {
+      ...globalCatalogue,
+      regionCode: "230200",
+      railwayFacilities: [railwayFacility("node/global-qiqihar", "齐齐哈尔站")],
+    };
+    const operationalFacilities = vi
+      .fn<NonNullable<OverviewRegionalDataRepository["operationalFacilities"]>>()
+      .mockResolvedValueOnce(globalCatalogue)
+      .mockResolvedValueOnce(regionalCatalogue);
+
+    render(
+      <OverviewPage
+        regionalDataRepository={{
+          operationalFacilities,
+          operationalSituation: vi.fn().mockResolvedValue({
+            generatedAt: "2026-09-21T05:00:00Z",
+            weather: [],
+            publicEvents: [],
+            policyEvents: [],
+            sources: [],
+          }),
+          regionalSummary: vi.fn(),
+          supplyBalance: vi.fn(),
+        }}
+        repository={{
+          mapScope: () => Promise.resolve(sampleMapScope),
+          options: () => Promise.resolve(options),
+          regions: () => Promise.resolve([sampleRegion]),
+          locations: () => Promise.resolve([]),
+          indicators: () => Promise.resolve([]),
+          dashboard: () => Promise.resolve(emptyDashboard),
+        }}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "公开态势" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "选择齐齐哈尔详情" }),
+    );
+    const railwayTab = await screen.findByRole("button", { name: "铁路 1" });
+
+    await userEvent.click(railwayTab);
+
+    expect(screen.getByRole("button", { name: "铁路 1" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "铁路 2" })).not.toBeInTheDocument();
+  });
+
   it.each(["failed", "pending"])(
     "shows the regional profile independently when summary is %s",
     async (summaryState) => {

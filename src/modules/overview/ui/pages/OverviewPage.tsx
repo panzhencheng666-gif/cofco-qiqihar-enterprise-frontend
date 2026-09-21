@@ -1372,13 +1372,12 @@ export function OverviewPage({
                         ? { issue: regionalDataIssue }
                         : {})}
                     {...((
-                      selectedOperationalFacilityId || !regionalDataRegionCode
+                      !regionalDataRegionCode
                         ? mapOperationalFacilities
                         : operationalFacilities
                     )
                       ? {
-                          operationalFacilities: (selectedOperationalFacilityId ||
-                          !regionalDataRegionCode
+                          operationalFacilities: (!regionalDataRegionCode
                             ? mapOperationalFacilities
                             : operationalFacilities)!,
                         }
