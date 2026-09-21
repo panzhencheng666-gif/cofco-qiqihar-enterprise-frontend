@@ -22,6 +22,12 @@ import {
   type MapMouseEvent,
 } from "maplibre-gl";
 
+import {
+  createBlenderOverviewLayer,
+  type BlenderOverviewLayer,
+} from "./BlenderOverviewLayer";
+import { parseBlenderAtlasManifest } from "./blenderAtlasContract";
+
 // The engine's dynamic import.meta.url worker lookup cannot survive bundling.
 // Emit the worker explicitly so GeoJSON, terrain and symbols work in production.
 setWorkerUrl(mapWorkerUrl);
@@ -115,6 +121,7 @@ export interface FourRegionTerrainAtlasProps {
   annotationDraft?: readonly [number, number];
   backdrop?: MapFeature;
   bounds: GeographicBounds;
+  blenderEnabled?: boolean;
   command?: RealisticSceneCommand;
   focusRequest?: { id: number; region: OverviewRegion };
   facilities: OperationalFacilityCatalogue;
@@ -140,6 +147,7 @@ export interface FourRegionTerrainAtlasProps {
 }
 
 interface AtlasRuntime {
+  blenderLayer?: BlenderOverviewLayer;
   destroyed: boolean;
   enhancementFailures: Set<TerrainEnhancementFailure>;
   enhancementTimers: Map<RemoteEnhancementId, ReturnType<typeof setTimeout>>;
@@ -170,6 +178,8 @@ const MARKER_SOURCE = "atlas-markers";
 const ANNOTATION_SOURCE = "atlas-annotation";
 const REGION_LAYER_IDS = ["atlas-active-fill", "atlas-root-fill"] as const;
 const FACILITY_KINDS = ["OWNED", "LEASED", "HISTORICAL_LEASED", "RAILWAY"];
+const BLENDER_LAYER_ID = "atlas-blender-enhancement";
+const BLENDER_MANIFEST_URL = `${import.meta.env.BASE_URL}overview/blender/four-region-atlas.json`;
 
 export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -200,7 +210,7 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
         bearing: 0,
         center: centerOf(propsRef.current.bounds),
         container: host,
-        dragRotate: false,
+        dragRotate: true,
         dragPan: true,
         fadeDuration: 0,
         localIdeographFontFamily: "PingFang SC, Microsoft YaHei, sans-serif",
@@ -220,7 +230,7 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
     map.touchPitch.disable();
     map.scrollZoom.enable();
     map.touchZoomRotate.enable();
-    map.touchZoomRotate.disableRotation();
+    map.touchZoomRotate.enableRotation();
     const runtime: AtlasRuntime = {
       destroyed: false,
       enhancementFailures: new Set(),
@@ -245,6 +255,7 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
     host.dataset.createdViewerCount = "1";
     host.dataset.imageryMode = "multiresolution-tile-pyramid";
     host.dataset.enhancementState = "loading";
+    host.dataset.blenderState = "loading";
     propsRef.current.onEnhancementState?.("LOADING");
 
     map.on("load", () => void initializeAtlas(runtime));
@@ -276,7 +287,16 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
         ],
       });
       map.getCanvas().style.cursor = interactive.length ? "pointer" : "";
+      const hoveredArea = interactive.find((feature) =>
+        (REGION_LAYER_IDS as readonly string[]).includes(feature.layer.id),
+      );
+      runtime.blenderLayer?.setHoveredRegion(
+        propsRef.current.annotationActive || !hoveredArea
+          ? undefined
+          : featureStringProperty(hoveredArea, "code"),
+      );
     });
+    map.on("mouseout", () => runtime.blenderLayer?.setHoveredRegion(undefined));
     map.on("zoom", () => {
       host.dataset.imageryZoom = map.getZoom().toFixed(2);
       host.dataset.detailLevel = detailLevel(map.getZoom());
@@ -292,6 +312,7 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
         cancelAnimationFrame(runtime.weatherAnimationFrameId);
       runtime.enhancementTimers.forEach((timer) => clearTimeout(timer));
       runtime.enhancementTimers.clear();
+      runtime.blenderLayer?.dispose();
       resizeObserver.disconnect();
       runtimeRef.current = null;
       map.remove();
@@ -324,6 +345,7 @@ async function initializeAtlas(runtime: AtlasRuntime) {
     reportEnhancementFailure(runtime, "DEGRADED_ICONS");
   }
   installAtlasLayers(map);
+  void installBlenderEnhancement(runtime);
   runtime.ready = true;
   host.dataset.sceneState = "local-ready";
   synchronizeAtlas(runtime, runtime.props);
@@ -346,6 +368,41 @@ function reportEnhancementFailure(
   if (!state) return;
   runtime.host.dataset.enhancementState = state.toLowerCase();
   runtime.props.onEnhancementState?.(state);
+}
+
+async function installBlenderEnhancement(runtime: AtlasRuntime) {
+  try {
+    const response = await fetch(BLENDER_MANIFEST_URL, { cache: "no-cache" });
+    if (!response.ok)
+      throw new Error(`Blender manifest returned HTTP ${response.status}`);
+    const manifest = parseBlenderAtlasManifest(await response.json());
+    if (runtime.destroyed) return;
+    const layer = createBlenderOverviewLayer({
+      manifest,
+      onReady: () => {
+        if (runtime.destroyed) return;
+        runtime.host.dataset.blenderState = "ready";
+        synchronizeBlenderEnhancement(runtime, runtime.props);
+      },
+      onFailure: () => {
+        if (runtime.destroyed) return;
+        runtime.host.dataset.blenderState = "failed";
+        reportEnhancementFailure(runtime, "DEGRADED_BLENDER");
+        queueMicrotask(() => {
+          if (runtime.destroyed || !runtime.map.getLayer(BLENDER_LAYER_ID)) return;
+          runtime.map.removeLayer(BLENDER_LAYER_ID);
+          delete runtime.blenderLayer;
+        });
+      },
+    });
+    runtime.blenderLayer = layer;
+    runtime.map.addLayer(layer, "atlas-root-glow");
+    synchronizeBlenderEnhancement(runtime, runtime.props);
+  } catch {
+    if (runtime.destroyed) return;
+    runtime.host.dataset.blenderState = "failed";
+    reportEnhancementFailure(runtime, "DEGRADED_BLENDER");
+  }
 }
 
 function startRemoteEnhancementDeadlines(runtime: AtlasRuntime) {
@@ -814,6 +871,8 @@ function installAtlasLayers(map: MapLibreMap) {
 function synchronizeAtlas(runtime: AtlasRuntime, props: FourRegionTerrainAtlasProps) {
   const previous = runtime.syncedProps;
   runtime.props = props;
+  synchronizeBlenderEnhancement(runtime, props);
+  syncRotationForAnnotation(runtime, props);
   const rootsChanged = !previous || previous.rootFeatures !== props.rootFeatures;
   const hierarchyChanged =
     rootsChanged ||
@@ -958,6 +1017,39 @@ function synchronizeAtlas(runtime: AtlasRuntime, props: FourRegionTerrainAtlasPr
     props.layers.WEATHER ? props.situation.weather.length : 0,
   );
   runtime.syncedProps = props;
+}
+
+function synchronizeBlenderEnhancement(
+  runtime: AtlasRuntime,
+  props: FourRegionTerrainAtlasProps,
+) {
+  if (!runtime.blenderLayer) return;
+  const enabled = props.blenderEnabled ?? true;
+  runtime.blenderLayer?.setEnabled(enabled);
+  runtime.blenderLayer?.setSelectedRegion(props.selectedRegionCode);
+  const rootCodes = new Set(props.rootFeatures.map(({ region }) => region.code));
+  const contextCode = props.backdrop?.region.code;
+  runtime.blenderLayer?.setVisibleRegionCodes(
+    contextCode && rootCodes.has(contextCode)
+      ? [contextCode]
+      : props.backdrop
+        ? []
+        : [...rootCodes],
+  );
+  runtime.host.dataset.blenderEnabled = String(enabled);
+}
+
+function syncRotationForAnnotation(
+  runtime: AtlasRuntime,
+  props: FourRegionTerrainAtlasProps,
+) {
+  if (props.annotationActive) {
+    runtime.map.dragRotate.disable();
+    runtime.map.touchZoomRotate.disableRotation();
+    return;
+  }
+  runtime.map.dragRotate.enable();
+  runtime.map.touchZoomRotate.enableRotation();
 }
 
 function activeHierarchyFeatures(props: FourRegionTerrainAtlasProps) {

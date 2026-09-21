@@ -9,6 +9,10 @@ describe("four-region terrain public situation scene", () => {
     "src/modules/overview/ui/components/FourRegionTerrainAtlas.tsx",
   );
   const scene = existsSync(scenePath) ? readFileSync(scenePath, "utf8") : "";
+  const blenderLayer = readFileSync(
+    resolve("src/modules/overview/ui/components/BlenderOverviewLayer.ts"),
+    "utf8",
+  );
   const terrainStyle = readFileSync(
     resolve("src/modules/overview/ui/components/fourRegionTerrainStyle.ts"),
     "utf8",
@@ -85,16 +89,30 @@ describe("four-region terrain public situation scene", () => {
     expect(scene).toContain("function regionLabelCollection(");
   });
 
-  it("supports Google-style continuous zoom and pan without map rotation", () => {
+  it("supports continuous zoom, pan, and constrained three-dimensional rotation", () => {
     expect(scene).toContain("map.zoomIn");
     expect(scene).toContain("map.zoomOut");
-    expect(scene).toContain("dragRotate: false");
+    expect(scene).toContain("dragRotate: true");
     expect(scene).toContain("map.keyboard.disable()");
     expect(scene).toContain("dragPan: true");
-    expect(scene).toContain("map.touchZoomRotate.disableRotation");
+    expect(scene).toContain("map.touchZoomRotate.enableRotation");
+    expect(scene).toContain("syncRotationForAnnotation(runtime, props)");
     expect(scene).toContain("renderWorldCopies: false");
     expect(scene).toContain("fadeDuration: 0");
     expect(scene).toContain("refreshExpiredTiles: false");
+  });
+
+  it("adds Blender as an optional visual layer without replacing authoritative interaction", () => {
+    expect(scene).toContain("createBlenderOverviewLayer");
+    expect(blenderLayer).toContain('id: "atlas-blender-enhancement"');
+    expect(scene).toContain("parseBlenderAtlasManifest");
+    expect(scene).toContain("runtime.blenderLayer?.setSelectedRegion");
+    expect(scene).toContain("runtime.blenderLayer?.setHoveredRegion");
+    expect(scene).toContain("layers: [...REGION_LAYER_IDS]");
+    expect(scene).toContain("props.onRegionSelect(region)");
+    expect(scene).toContain("props.onRegionDrill(region)");
+    expect(scene).toContain('"DEGRADED_BLENDER"');
+    expect(wrapper).toContain("立体增强");
   });
 
   it("renders operational nodes inside the same WebGL scene without DOM markers", () => {

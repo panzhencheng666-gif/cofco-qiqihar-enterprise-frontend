@@ -63,6 +63,7 @@ const ENHANCEMENT_NOTICE: Partial<Record<TerrainEnhancementState, string>> = {
   DEGRADED_IMAGERY: "卫星影像暂不可用，已保留行政边界和业务节点。",
   DEGRADED_TERRAIN: "高程地形暂不可用，已保留卫星底图和业务节点。",
   DEGRADED_BASEMAP: "道路与地名底图暂不可用，已保留行政边界和业务节点。",
+  DEGRADED_BLENDER: "立体增强暂不可用，已自动保留原有地图和全部业务交互。",
   DEGRADED_ICONS: "部分业务图标加载失败；地图数据与查询仍可使用。",
   DEGRADED_MULTIPLE: "多个在线地图源暂不可用，已保留本地底图、行政边界和业务节点。",
   DEGRADED_RENDERER:
@@ -113,6 +114,7 @@ export function OperationalSituationMap({
   regionSearch?: Omit<PublicRegionSearchProps, "onSelect">;
 }) {
   const [layers, setLayers] = useState(DEFAULT_LAYERS);
+  const [blenderEnabled, setBlenderEnabled] = useState(true);
   const [layerMenuOpen, setLayerMenuOpen] = useState(false);
   const [enhancementState, setEnhancementState] =
     useState<TerrainEnhancementState>("LOADING");
@@ -313,6 +315,7 @@ export function OperationalSituationMap({
           {...(annotationDraft ? { annotationDraft } : {})}
           {...(backdrop ? { backdrop } : {})}
           bounds={bounds}
+          blenderEnabled={blenderEnabled}
           {...(command ? { command } : {})}
           {...(focusRequest ? { focusRequest } : {})}
           facilities={facilities}
@@ -538,6 +541,14 @@ export function OperationalSituationMap({
         </p>
 
         <div className="realistic-situation-tools" aria-label="三维地图工具">
+          <button
+            aria-pressed={blenderEnabled}
+            className={blenderEnabled ? "is-active" : undefined}
+            type="button"
+            onClick={() => setBlenderEnabled((current) => !current)}
+          >
+            立体增强
+          </button>
           {onAnnotationToggle && (
             <button
               aria-pressed={annotationActive}
