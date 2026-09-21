@@ -7,14 +7,14 @@ const tile = () =>
   });
 describe("terrain tile download cache", () => {
   it("briefly retains immutable elevation tiles when no expiry is supplied", async () => {
-    const fetcher = vi.fn(async () => new Response(new Uint8Array([1])));
+    const fetcher = vi.fn(() => Promise.resolve(new Response(new Uint8Array([1]))));
     const load = createTerrainTileCache(fetcher);
     await load("tile");
     await load("tile");
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
   it("shares concurrent terrain/shadow downloads and returns independent buffers", async () => {
-    const fetcher = vi.fn(async () => tile());
+    const fetcher = vi.fn(() => Promise.resolve(tile()));
     const load = createTerrainTileCache(fetcher);
     const [a, b] = await Promise.all([load("tile"), load("tile")]);
     expect(fetcher).toHaveBeenCalledTimes(1);
@@ -25,14 +25,14 @@ describe("terrain tile download cache", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
   it("does not retain no-store responses or failures", async () => {
-    const fetcher = vi.fn(
-      async () => new Response("x", { headers: { "cache-control": "no-store" } }),
+    const fetcher = vi.fn(() =>
+      Promise.resolve(new Response("x", { headers: { "cache-control": "no-store" } })),
     );
     const load = createTerrainTileCache(fetcher);
     await load("tile");
     await load("tile");
     expect(fetcher).toHaveBeenCalledTimes(2);
-    const failure = vi.fn(async () => new Response("", { status: 503 }));
+    const failure = vi.fn(() => Promise.resolve(new Response("", { status: 503 })));
     const retry = createTerrainTileCache(failure);
     await expect(retry("tile")).rejects.toThrow("503");
     await expect(retry("tile")).rejects.toThrow("503");
@@ -40,7 +40,7 @@ describe("terrain tile download cache", () => {
   });
   it("expires cached tiles and bounds retained bytes", async () => {
     let now = 0;
-    const fetcher = vi.fn(async () => tile());
+    const fetcher = vi.fn(() => Promise.resolve(tile()));
     const load = createTerrainTileCache(fetcher, { maxBytes: 3, now: () => now });
     await load("a");
     await load("b");

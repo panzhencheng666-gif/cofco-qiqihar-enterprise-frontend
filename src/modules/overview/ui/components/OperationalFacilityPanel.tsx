@@ -50,7 +50,7 @@ function StoragePanel({
       </header>
       <div className="operational-facility-panel__categories" aria-label="库点分类统计">
         {catalogue.storageCategories.map((category) => (
-          <span key={category.code}>
+          <span aria-label={`${category.label} ${category.count}`} key={category.code}>
             {category.label} <b>{category.count}</b>
           </span>
         ))}
@@ -58,6 +58,7 @@ function StoragePanel({
       <div className="operational-facility-panel__list" aria-label="关联库点列表">
         {catalogue.storageFacilities.map((facility) => (
           <button
+            aria-label={`${facility.name}库点记录`}
             aria-pressed={facility.code === selected?.code}
             key={facility.code}
             type="button"
@@ -172,6 +173,10 @@ function RailwayPanel({
   selected: RailwayFacility | undefined;
 }) {
   const source = catalogue.sources.find((item) => item.code === "RAILWAY");
+  const withinCount = catalogue.railwayFacilities.filter(
+    (facility) => facility.locationRelation === "WITHIN",
+  ).length;
+  const nearbyCount = catalogue.railwayFacilities.length - withinCount;
   return (
     <div className="operational-facility-panel is-railway">
       <header>
@@ -182,30 +187,41 @@ function RailwayPanel({
         <SourceBadge status={source?.status} />
       </header>
       <div className="railway-facility-route" aria-label="铁路线路概况">
-        <span>
-          已收录站点 <b>{catalogue.railwayFacilities.length}</b>
+        <span aria-label={`境内站点 ${withinCount}`}>
+          境内站点 <b>{withinCount}</b>
         </span>
-        <span>
+        <span aria-label={`邻近站点 ${nearbyCount}`}>
+          邻近站点 <b>{nearbyCount}</b>
+        </span>
+        <span aria-label={`关联线路 ${catalogue.railwayLines.length}`}>
           关联线路 <b>{catalogue.railwayLines.length}</b>
         </span>
       </div>
       <div className="operational-facility-panel__list" aria-label="铁路站点列表">
-        {catalogue.railwayFacilities.map((facility) => (
-          <button
-            aria-pressed={facility.sourceId === selected?.sourceId}
-            key={facility.sourceId}
-            type="button"
-            onClick={() => onSelect(facility.sourceId)}
-          >
-            <b>{facility.name}</b>
-            <span>
-              {facility.locationRelation === "WITHIN"
-                ? "范围内"
-                : `边界外约 ${facility.distanceKm} 公里`}{" "}
-              · {facility.kind}
-            </span>
-          </button>
-        ))}
+        {[...catalogue.railwayFacilities]
+          .sort(
+            (left, right) =>
+              Number(left.locationRelation === "NEARBY") -
+                Number(right.locationRelation === "NEARBY") ||
+              left.name.localeCompare(right.name, "zh-CN"),
+          )
+          .map((facility) => (
+            <button
+              aria-label={`${facility.name}铁路站点记录`}
+              aria-pressed={facility.sourceId === selected?.sourceId}
+              key={facility.sourceId}
+              type="button"
+              onClick={() => onSelect(facility.sourceId)}
+            >
+              <b>{facility.name}</b>
+              <span>
+                {facility.locationRelation === "WITHIN"
+                  ? "范围内"
+                  : `边界外约 ${facility.distanceKm} 公里`}{" "}
+                · {facility.kind}
+              </span>
+            </button>
+          ))}
       </div>
       {selected ? (
         <RailwayFacilityCard catalogue={catalogue} facility={selected} />

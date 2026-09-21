@@ -4,7 +4,15 @@ import {
   RELIEF_DOUBLE_CLICK_LAYOUT_DELAY_MS,
   useReliefLabelPriority,
 } from "./useReliefLabelPriority";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import * as THREE from "three";
 import { Line2 } from "three/examples/jsm/lines/Line2.js";
 import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
@@ -418,15 +426,19 @@ export default function TerrainReliefBoundaryMap({
     detailLayoutOpenRef.current = activeDetailLayout;
   }, [activeDetailLayout]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const viewport = hostRef.current?.parentElement;
     if (!viewport) return;
     // CSS reserves the real reading-panel width, including its unscaled text.
     // Observe that viewport in stage coordinates so geometry and hit targets
     // reframe together when the panel expands, collapses or the window resizes.
     const measure = () => {
-      setVisibleMapWidth(viewport.clientWidth);
-      setCompactMapHeight(window.innerWidth <= 800 ? viewport.clientHeight : undefined);
+      const compact = window.innerWidth <= 800;
+      // Desktop uses the stable presentation-stage frame; the CSS detail rail
+      // clips that frame without replacing the WebGL renderer. Mobile has no
+      // fixed stage scale, so it still follows the measured stacked viewport.
+      setVisibleMapWidth(compact ? viewport.clientWidth : undefined);
+      setCompactMapHeight(compact ? viewport.clientHeight : undefined);
     };
     const observer = new ResizeObserver(measure);
     observer.observe(viewport);

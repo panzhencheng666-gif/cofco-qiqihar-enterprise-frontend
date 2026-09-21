@@ -21,6 +21,72 @@ const township = region("230225204", "宝山乡", "TOWNSHIP", "230225");
 const village = region("230225204014", "宝山村", "VILLAGE", "230225204");
 
 test.describe("overview owned-relief interaction", () => {
+  test("keeps every selected facility through wheel zoom and drag, then lists the searched region", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ height: 900, width: 1440 });
+    const imageryRequests: string[] = [];
+    await installOverviewFixture(page, {
+      publicSituation: true,
+      onImageryRequest: (url) => imageryRequests.push(url),
+    });
+    await page.goto("/#/overview");
+    await page.getByRole("button", { name: "公开态势" }).click();
+
+    const atlas = page.locator('[data-renderer="maplibre-four-region-terrain"]');
+    await expect(atlas).toBeVisible();
+    await expect(atlas.locator("canvas")).toBeVisible();
+    await expect(atlas).toHaveAttribute("data-facility-icon-count", "5");
+    await expect(atlas).toHaveAttribute("data-operational-marker-count", "5");
+    await expect.poll(() => imageryRequests.length).toBeGreaterThan(0);
+    expect(
+      imageryRequests.every(
+        (url) =>
+          new URL(url).origin === "http://127.0.0.1:63210" &&
+          new URL(url).pathname.startsWith("/api/v1/overview/map-imagery/tiles/"),
+      ),
+    ).toBe(true);
+
+    const canvas = atlas.locator("canvas");
+    await canvas.hover();
+    await page.mouse.wheel(0, -700);
+    await expect
+      .poll(async () => Number(await atlas.getAttribute("data-imagery-zoom")))
+      .toBeGreaterThan(0);
+    await expect(atlas).toHaveAttribute("data-operational-marker-count", "5");
+    const zoomAfterWheel = Number(await atlas.getAttribute("data-imagery-zoom"));
+
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    if (box) {
+      const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      await page.mouse.move(start.x, start.y);
+      await page.mouse.down();
+      await page.mouse.move(start.x + 90, start.y + 45, { steps: 6 });
+      await page.mouse.up();
+    }
+    await expect(atlas).toHaveAttribute("data-operational-marker-count", "5");
+    expect(Number(await atlas.getAttribute("data-imagery-zoom"))).toBeCloseTo(
+      zoomAfterWheel,
+      1,
+    );
+
+    const search = page.getByRole("combobox", { name: "搜索市县乡村" });
+    await search.fill("齐齐哈尔市");
+    await page.getByRole("option", { name: /^齐齐哈尔市市 \/ 地区/ }).click();
+    const details = page.getByRole("complementary", {
+      name: "齐齐哈尔市态势详情",
+    });
+    await expect(details).toBeVisible();
+    await details.getByRole("button", { name: "库点 3" }).click();
+    await expect(details.getByLabel("关联库点列表").getByRole("button")).toHaveCount(3);
+    await details.getByRole("button", { name: "铁路 1" }).click();
+    await expect(details.getByLabel("铁路站点列表").getByRole("button")).toHaveCount(2);
+    await expect(details.getByLabel("境内站点 1")).toBeVisible();
+    await expect(details.getByLabel("邻近站点 1")).toBeVisible();
+  });
+
   for (const viewport of [
     { height: 844, label: "390x844 mobile", width: 390 },
     { height: 1024, label: "768 tablet", width: 768 },
@@ -416,7 +482,9 @@ async function enterSelectedRegion(page: Page) {
 async function installOverviewFixture(
   page: Page,
   options: {
+    onImageryRequest?: (url: string) => void;
     onFormalSampleQuery?: (query: string) => void;
+    publicSituation?: boolean;
     sampleCount?: number;
   } = {},
 ) {
@@ -472,6 +540,18 @@ async function installOverviewFixture(
     const parentCode = requestUrl.searchParams.get("parentCode");
     const regionCode = requestUrl.searchParams.get("regionCode");
     const pathname = requestUrl.pathname;
+    if (pathname.startsWith("/api/v1/overview/map-imagery/tiles/")) {
+      options.onImageryRequest?.(requestUrl.toString());
+      await route.fulfill({
+        body: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+          "base64",
+        ),
+        contentType: "image/png",
+        status: 200,
+      });
+      return;
+    }
     const data = pathname.endsWith("/options")
       ? {
           products: [{ code: "CORN", label: "玉米" }],
@@ -528,7 +608,13 @@ async function installOverviewFixture(
                     ? []
                     : pathname.endsWith("/dashboard")
                       ? dashboardFor(regionCode)
-                      : undefined;
+                      : options.publicSituation &&
+                          pathname.endsWith("/operational-facilities")
+                        ? publicFacilities(regionCode)
+                        : options.publicSituation &&
+                            pathname.endsWith("/operational-situation")
+                          ? publicSituation()
+                          : undefined;
 
     if (data === undefined) {
       await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
@@ -541,6 +627,129 @@ async function installOverviewFixture(
           : { data },
     });
   });
+}
+
+function publicFacilities(regionCode: string | null) {
+  return {
+    regionCode,
+    productCode: "CORN",
+    asOf: "2026-09-21",
+    storageCategories: [
+      { code: "OWNED", label: "自有库点", count: 1 },
+      { code: "LEASED", label: "租赁库点", count: 1 },
+      { code: "HISTORICAL_LEASED", label: "历史租赁库点", count: 1 },
+    ],
+    storageFacilities: [
+      storageFacility("owned-1", "齐齐哈尔自有库", "OWNED", "自有库点", 123.91, 47.35),
+      storageFacility(
+        "leased-1",
+        "齐齐哈尔租赁库",
+        "LEASED",
+        "租赁库点",
+        123.92,
+        47.36,
+      ),
+      storageFacility(
+        "historical-1",
+        "齐齐哈尔历史租赁库",
+        "HISTORICAL_LEASED",
+        "历史租赁库点",
+        123.93,
+        47.37,
+      ),
+    ],
+    railwayFacilities: [
+      railwayFacility("rail-within", "齐齐哈尔站", "WITHIN", 0, 123.94, 47.38),
+      railwayFacility("rail-nearby", "邻近编组站", "NEARBY", 8.2, 123.95, 47.39),
+    ],
+    railwayLines: [],
+    railwayRoutes: [],
+    sources: [
+      {
+        code: "STORAGE",
+        label: "关联库点",
+        status: "READY",
+        sourceAsOf: "2026-09-21",
+        sourceUrl: null,
+        notice: "已核验库点。",
+      },
+      {
+        code: "RAILWAY",
+        label: "铁路站点",
+        status: "READY",
+        sourceAsOf: "2026-09-21",
+        sourceUrl: "https://www.openstreetmap.org/copyright",
+        notice: "公开地理参考。",
+      },
+    ],
+  };
+}
+
+function storageFacility(
+  code: string,
+  name: string,
+  relationType: "OWNED" | "LEASED" | "HISTORICAL_LEASED",
+  relationLabel: string,
+  longitude: number,
+  latitude: number,
+) {
+  return {
+    code,
+    name,
+    workUnitCode: "UNIT-001",
+    relationType,
+    relationLabel,
+    regionCode: city.code,
+    regionName: city.name,
+    address: `${city.name}${name}`,
+    longitude,
+    latitude,
+    coordinatePrecision: "EXACT",
+    coordinatePrecisionLabel: "精确坐标",
+    operationalStatus: "ACTIVE",
+    capacityTonnes: 1000,
+    capacityAsOf: "2026-09-21",
+    version: 1,
+    prices: [],
+    evidence: [],
+  };
+}
+
+function railwayFacility(
+  sourceId: string,
+  name: string,
+  locationRelation: "WITHIN" | "NEARBY",
+  distanceKm: number,
+  longitude: number,
+  latitude: number,
+) {
+  return {
+    sourceId,
+    name,
+    kind: "station",
+    longitude,
+    latitude,
+    operator: "中国铁路哈尔滨局集团有限公司",
+    reference: "fixture",
+    status: "active",
+    service: "freight",
+    locationRelation,
+    distanceKm,
+    nearbyLines: "滨洲线",
+    sourceUrl: "https://www.openstreetmap.org/copyright",
+  };
+}
+
+function publicSituation() {
+  return {
+    generatedAt: "2026-09-21T04:00:00Z",
+    weather: [],
+    publicEvents: [],
+    policyEvents: [],
+    logisticsFlows: [],
+    inventories: [],
+    sources: [],
+  };
 }
 
 function overviewSamplePointList(

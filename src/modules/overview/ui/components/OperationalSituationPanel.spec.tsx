@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { OperationalFacilityCatalogue } from "../../domain/operationalFacilities";
 import type { OperationalSituationCatalogue } from "../../domain/operationalSituation";
@@ -110,6 +110,72 @@ const situation: OperationalSituationCatalogue = {
   ],
 };
 
+const directoryFacilities: OperationalFacilityCatalogue = {
+  ...facilities,
+  storageCategories: [
+    { code: "OWNED", label: "自有库点", count: 1 },
+    { code: "LEASED", label: "租赁库点", count: 1 },
+    { code: "HISTORICAL_LEASED", label: "历史租赁库点", count: 0 },
+  ],
+  storageFacilities: [
+    {
+      code: "owned-1",
+      name: "齐齐哈尔自有库",
+      workUnitCode: "owned-1",
+      relationType: "OWNED",
+      relationLabel: "自有库点",
+      regionCode: "230200",
+      regionName: "齐齐哈尔市",
+      address: "建华区",
+      longitude: 123.9,
+      latitude: 47.35,
+      coordinatePrecision: "EXACT",
+      coordinatePrecisionLabel: "精确坐标",
+      operationalStatus: "ACTIVE",
+      capacityTonnes: 1000,
+      capacityAsOf: "2026-09-01",
+      version: 1,
+      prices: [],
+      evidence: [],
+    },
+    {
+      code: "leased-1",
+      name: "齐齐哈尔租赁库",
+      workUnitCode: "leased-1",
+      relationType: "LEASED",
+      relationLabel: "租赁库点",
+      regionCode: "230200",
+      regionName: "齐齐哈尔市",
+      address: "龙沙区",
+      longitude: 123.95,
+      latitude: 47.3,
+      coordinatePrecision: "STREET",
+      coordinatePrecisionLabel: "街道级坐标",
+      operationalStatus: "ACTIVE",
+      capacityTonnes: null,
+      capacityAsOf: null,
+      version: 1,
+      prices: [],
+      evidence: [],
+    },
+  ],
+  railwayFacilities: [
+    facilities.railwayFacilities[0]!,
+    {
+      ...facilities.railwayFacilities[0]!,
+      sourceId: "rail-2",
+      name: "昂昂溪站",
+    },
+    {
+      ...facilities.railwayFacilities[0]!,
+      sourceId: "rail-nearby",
+      name: "邻近站",
+      locationRelation: "NEARBY",
+      distanceKm: 12,
+    },
+  ],
+};
+
 describe("OperationalSituationPanel", () => {
   it("renders one selected-region inspector instead of a dashboard wall", () => {
     render(
@@ -143,5 +209,29 @@ describe("OperationalSituationPanel", () => {
     expect(screen.getByText("期末库存")).toBeInTheDocument();
     expect(screen.getByText("1,200")).toBeInTheDocument();
     expect(screen.getByText("暂无审核通过的跨区物流记录")).toBeInTheDocument();
+  });
+
+  it("shows every region-scoped depot and railway station with exact counts", () => {
+    const onFacilitySelect = vi.fn();
+    render(
+      <OperationalSituationPanel
+        facilities={directoryFacilities}
+        onFacilitySelect={onFacilitySelect}
+        selectedRegion={selectedRegion}
+        situation={{ ...situation, weather: [] }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "库点 2" })).toBeVisible();
+    expect(screen.getAllByRole("button", { name: /库点记录$/ })).toHaveLength(2);
+    expect(screen.getByLabelText("自有库点 1")).toBeVisible();
+    expect(screen.getByLabelText("租赁库点 1")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "铁路 2" }));
+    expect(screen.getByLabelText("境内站点 2")).toBeVisible();
+    expect(screen.getByLabelText("邻近站点 1")).toBeVisible();
+    expect(screen.getAllByRole("button", { name: /铁路站点记录$/ })).toHaveLength(3);
+    fireEvent.click(screen.getByRole("button", { name: "邻近站铁路站点记录" }));
+    expect(onFacilitySelect).toHaveBeenCalledWith("rail-nearby");
   });
 });

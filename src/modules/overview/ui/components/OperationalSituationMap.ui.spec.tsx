@@ -20,8 +20,23 @@ vi.mock("./FourRegionTerrainAtlas", () => ({
     ) => void;
   }) => (
     <div data-surface-mode={surfaceMode} data-testid="four-region-atlas">
-      <button type="button" onClick={() => onEnhancementState?.("DEGRADED")}>
-        模拟增强失败
+      <button type="button" onClick={() => onEnhancementState?.("DEGRADED_IMAGERY")}>
+        模拟卫星失败
+      </button>
+      <button type="button" onClick={() => onEnhancementState?.("DEGRADED_TERRAIN")}>
+        模拟地形失败
+      </button>
+      <button type="button" onClick={() => onEnhancementState?.("DEGRADED_BASEMAP")}>
+        模拟底图失败
+      </button>
+      <button type="button" onClick={() => onEnhancementState?.("DEGRADED_ICONS")}>
+        模拟图标失败
+      </button>
+      <button type="button" onClick={() => onEnhancementState?.("DEGRADED_MULTIPLE")}>
+        模拟多源失败
+      </button>
+      <button type="button" onClick={() => onEnhancementState?.("DEGRADED_RENDERER")}>
+        模拟渲染器失败
       </button>
       <button onClick={() => onAnnotationPosition?.(123.123456, 48.654321)}>
         模拟标点
@@ -93,16 +108,30 @@ describe("OperationalSituationMap public-only controls", () => {
     );
   });
 
-  it("keeps the local four-region map usable when online enhancements fail", async () => {
+  it.each([
+    ["模拟卫星失败", "卫星影像暂不可用，已保留行政边界和业务节点。"],
+    ["模拟地形失败", "高程地形暂不可用，已保留卫星底图和业务节点。"],
+    ["模拟底图失败", "道路与地名底图暂不可用，已保留行政边界和业务节点。"],
+    ["模拟图标失败", "部分业务图标加载失败；地图数据与查询仍可使用。"],
+    ["模拟多源失败", "多个在线地图源暂不可用，已保留本地底图、行政边界和业务节点。"],
+    [
+      "模拟渲染器失败",
+      "地图渲染器初始化失败，当前无法显示地图；筛选条件和页面数据仍保留。",
+    ],
+  ])("reports the failed online enhancement for %s", async (button, notice) => {
     renderSituationMap();
 
-    await userEvent.click(await screen.findByRole("button", { name: "模拟增强失败" }));
+    await userEvent.click(await screen.findByRole("button", { name: button }));
 
-    expect(
-      screen.getByText(
-        "在线卫星影像暂不可用，已降级为地形底图；地区搜索与业务图层仍可操作。",
-      ),
-    ).toBeVisible();
+    expect(screen.getByText(notice)).toBeVisible();
+  });
+
+  it("explains how local and nearby railway markers differ", async () => {
+    renderSituationMap();
+
+    await userEvent.click(screen.getByRole("button", { name: "节点图层" }));
+
+    expect(screen.getByText("境内 0 · 邻近 0（淡色环）")).toBeVisible();
   });
 });
 

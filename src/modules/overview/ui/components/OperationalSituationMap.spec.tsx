@@ -52,7 +52,7 @@ describe("four-region terrain public situation scene", () => {
     expect(scene).toContain("FOUR_REGION_DETAIL_LAYERS");
     expect(scene).toContain("map.setTerrain");
     expect(scene).toContain('map.on("zoom"');
-    expect(terrainStyle).toContain("World_Imagery/MapServer/tile/{z}/{y}/{x}");
+    expect(terrainStyle).toContain("/api/v1/overview/map-imagery/tiles/{z}/{x}/{y}");
     expect(terrainStyle).toContain('id: "atlas-buildings"');
     expect(terrainStyle).toContain('id: "atlas-road-labels"');
     expect(terrainStyle).not.toContain("World_Imagery/MapServer/export");
@@ -93,6 +93,8 @@ describe("four-region terrain public situation scene", () => {
     expect(scene).toContain("dragPan: true");
     expect(scene).toContain("map.touchZoomRotate.disableRotation");
     expect(scene).toContain("renderWorldCopies: false");
+    expect(scene).toContain("fadeDuration: 0");
+    expect(scene).toContain("refreshExpiredTiles: false");
   });
 
   it("renders operational nodes inside the same WebGL scene without DOM markers", () => {
@@ -101,6 +103,17 @@ describe("four-region terrain public situation scene", () => {
     expect(scene).toContain("logisticsCollection(");
     expect(scene).not.toMatch(/new\s+Marker\s*\(/);
     expect(scene).toContain('data-dom-markers="0"');
+  });
+
+  it("keeps every enabled facility visible and reconnects displaced icons to anchors", () => {
+    expect(scene).toContain('"icon-allow-overlap": true');
+    expect(scene).toContain('"icon-ignore-placement": true');
+    expect(scene).toContain("const MARKER_LEADER_SOURCE");
+    expect(scene).toContain('id: "atlas-operational-marker-leaders"');
+    expect(scene).toContain('map.on("moveend"');
+    expect(scene).toContain("refreshOperationalMarkerSources(runtime)");
+    expect(scene).toContain("anchorLongitude");
+    expect(scene).toContain("anchorLatitude");
   });
 
   it("uses animated weather and recognizable railway and grain-depot icons", () => {
@@ -159,7 +172,9 @@ describe("four-region terrain public situation scene", () => {
     expect(overviewPage).toContain(
       "!publicSituationMode || operationalSelectedRegion ? (",
     );
-    expect(overviewPage).toContain("showBusinessMetrics={!publicSituationMode}");
+    expect(overviewPage).toContain(
+      '!activeSamplePointRepository || sampleNetworkModel.mode === "actual"',
+    );
     expect(overviewPage).toContain('if (nextMode === "PUBLIC_SITUATION")');
     expect(overviewPage).toContain("navigationRequestRef.current += 1");
     expect(overviewPage).toContain("setSelectedRegionSnapshot(undefined)");

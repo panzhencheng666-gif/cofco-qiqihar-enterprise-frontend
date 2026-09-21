@@ -156,7 +156,10 @@ const regionalAgricultureProfileSchema = z.object({
           method: z.string(),
           sourceName: z.string(),
           sourceUrl: z.string(),
-          verifiedAt: z.string().optional(),
+          verifiedAt: z
+            .string()
+            .nullish()
+            .transform((value) => value ?? undefined),
         }),
       )
       .optional(),
@@ -514,6 +517,7 @@ export class HttpOverviewRegionalDataRepository implements OverviewRegionalDataR
           year: query.year,
         })}`,
         regionalAgricultureProfileSchema,
+        { timeoutMs: 30_000 },
       )
     ).data;
   }
@@ -552,7 +556,7 @@ export class HttpOverviewRegionalDataRepository implements OverviewRegionalDataR
       await this.http.get(
         `/api/v1/overview/operational-facilities${queryString(query)}`,
         operationalFacilityCatalogueSchema,
-        signal ? { signal } : undefined,
+        { ...(signal ? { signal } : {}), timeoutMs: 60_000 },
       )
     ).data;
   }

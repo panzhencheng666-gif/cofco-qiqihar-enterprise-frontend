@@ -19,21 +19,21 @@ export function publicBoundaryHierarchy(drilled: boolean): {
   };
 }
 
-// Camera expressions must be at the top level; nesting zoom inside a case
-// causes MapLibre to reject the entire facility layer.
 export const FACILITY_ICON_SIZE: ExpressionSpecification = [
   "interpolate",
   ["linear"],
   ["zoom"],
-  5,
-  ["case", ["==", ["get", "selected"], true], 0.88, 0.72],
-  12,
-  ["case", ["==", ["get", "selected"], true], 1.05, 0.9],
+  4,
+  0.44,
+  7,
+  0.56,
+  10,
+  0.69,
+  13,
+  0.81,
 ];
 
-const TERRAIN_TILES = [
-  "cofco-terrain://{z}/{x}/{y}.png",
-];
+const TERRAIN_TILES = ["cofco-terrain://{z}/{x}/{y}.png"];
 
 export const FOUR_REGION_BASE_STYLE: StyleSpecification = {
   version: 8,
@@ -51,13 +51,10 @@ export const FOUR_REGION_BASE_STYLE: StyleSpecification = {
 export const FOUR_REGION_REMOTE_SOURCES: Record<string, SourceSpecification> = {
   satellite: {
     type: "raster",
-    tiles: [
-      "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    ],
+    tiles: ["/api/v1/overview/map-imagery/tiles/{z}/{x}/{y}"],
     tileSize: 256,
     maxzoom: 18,
-    attribution:
-      '<a href="https://www.esri.com/en-us/legal/terms/full-master-agreement">Esri World Imagery</a>',
+    attribution: "企业影像网关（商业源按部署配置；未配置时回退 Esri World Imagery）",
   },
   "terrain-dem": {
     type: "raster-dem",

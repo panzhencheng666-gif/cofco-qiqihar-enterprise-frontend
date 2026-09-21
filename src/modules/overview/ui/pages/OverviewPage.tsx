@@ -822,7 +822,6 @@ export function OverviewPage({
     regionalDataRepository,
     scopeRootCode,
     productCode,
-    businessSequence,
     operationalFacilityRevision,
   ]);
 
@@ -860,7 +859,6 @@ export function OverviewPage({
       });
     return () => controller.abort();
   }, [
-    businessSequence,
     operationalMapMode,
     operationalFacilityRevision,
     productCode,
@@ -948,23 +946,29 @@ export function OverviewPage({
     const request = () =>
       dataMode === "REGIONAL_DATA"
         ? Promise.all([
-            regionalDataRepository.regionalSummary(query).then((next) => {
-              if (active && next) {
-                setRegionalSummary(next);
-                setSupplyBalance(undefined);
-                setRegionalDataLoading(false);
-              }
-              return next;
-            }).catch(() => undefined),
-            (regionalDataRepository.agricultureProfile?.(query) ??
-              Promise.resolve(undefined)).then((profile) => {
-              if (active && profile) {
-                setAgricultureProfile(profile);
-                setSupplyBalance(undefined);
-                setRegionalDataLoading(false);
-              }
-              return profile;
-            }).catch(() => undefined),
+            regionalDataRepository
+              .regionalSummary(query)
+              .then((next) => {
+                if (active && next) {
+                  setRegionalSummary(next);
+                  setSupplyBalance(undefined);
+                }
+                return next;
+              })
+              .catch(() => undefined),
+            (
+              regionalDataRepository.agricultureProfile?.(query) ??
+              Promise.resolve(undefined)
+            )
+              .then((profile) => {
+                if (active && profile) {
+                  setAgricultureProfile(profile);
+                  setSupplyBalance(undefined);
+                  setRegionalDataLoading(false);
+                }
+                return profile;
+              })
+              .catch(() => undefined),
           ]).then(([next, profile]) => {
             if (!active) return;
             if (!next && !profile) throw new Error("regional data unavailable");
@@ -981,7 +985,7 @@ export function OverviewPage({
         setRegionalDataLoading(true);
         setRegionalDataIssue(undefined);
       })
-      .then(() => active ? request() : undefined)
+      .then(() => (active ? request() : undefined))
       .then(() => {
         if (!active) return;
         setRegionalDataLoading(false);
@@ -1274,7 +1278,10 @@ export function OverviewPage({
   return (
     <>
       <OverviewCommandCenter
-        showBusinessMetrics={!publicSituationMode}
+        showBusinessMetrics={
+          sampleMode &&
+          (!activeSamplePointRepository || sampleNetworkModel.mode === "actual")
+        }
         publicSituation={publicSituationMode}
         onReturnToOverview={() => {
           navigationRequestRef.current += 1;

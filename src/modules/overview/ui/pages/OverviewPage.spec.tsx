@@ -81,6 +81,72 @@ describe("OverviewPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("does not restart the facility catalogue for unrelated realtime business changes", async () => {
+    let realtimeCallbacks: OverviewRealtimeCallbacks | undefined;
+    const invalidateBusinessData = vi.fn();
+    const operationalFacilities = vi
+      .fn<NonNullable<OverviewRegionalDataRepository["operationalFacilities"]>>()
+      .mockResolvedValue({
+        regionCode: null,
+        productCode: "CORN",
+        asOf: "2026-09-20",
+        storageCategories: [],
+        storageFacilities: [],
+        railwayFacilities: [],
+        railwayLines: [],
+        railwayRoutes: [],
+        sources: [],
+      });
+    render(
+      <OverviewPage
+        realtimeStream={{
+          subscribe: (callbacks) => {
+            realtimeCallbacks = callbacks;
+            return () => undefined;
+          },
+        }}
+        regionalDataRepository={{
+          operationalFacilities,
+          operationalSituation: vi.fn().mockResolvedValue({
+            generatedAt: "2026-09-20T12:00:00Z",
+            weather: [],
+            publicEvents: [],
+            policyEvents: [],
+            sources: [],
+          }),
+          regionalSummary: vi.fn(),
+          supplyBalance: vi.fn(),
+        }}
+        repository={{
+          invalidateBusinessData,
+          mapScope: () => Promise.resolve(sampleMapScope),
+          options: () => Promise.resolve(options),
+          regions: () => Promise.resolve([sampleRegion]),
+          locations: () => Promise.resolve([]),
+          indicators: () => Promise.resolve([]),
+          dashboard: () => Promise.resolve(emptyDashboard),
+        }}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "公开态势" }));
+    await waitFor(() => expect(operationalFacilities).toHaveBeenCalledTimes(1));
+    invalidateBusinessData.mockClear();
+
+    act(() =>
+      realtimeCallbacks?.onBusinessChange({
+        aggregateType: "REPORT_RECORD",
+        actionCode: "REPORT_RECORD_UPDATED",
+        productCode: "CORN",
+        regionCodes: ["230200"],
+        surveyYear: 2026,
+      }),
+    );
+
+    await waitFor(() => expect(invalidateBusinessData).toHaveBeenCalledTimes(1));
+    expect(operationalFacilities).toHaveBeenCalledTimes(1);
+  });
+
   it("merges storage and railway facilities into one public situation mode", async () => {
     const operationalFacilities = vi
       .fn<NonNullable<OverviewRegionalDataRepository["operationalFacilities"]>>()
@@ -162,43 +228,117 @@ describe("OverviewPage", () => {
     );
   });
 
-  it.each(["failed", "pending"])("shows the regional profile independently when summary is %s", async (summaryState) => {
+  it.each(["failed", "pending"])(
+    "shows the regional profile independently when summary is %s",
+    async (summaryState) => {
+      const regionalSummary = vi
+        .fn<OverviewRegionalDataRepository["regionalSummary"]>()
+        .mockImplementation(() =>
+          summaryState === "pending"
+            ? new Promise(() => undefined)
+            : Promise.reject(new Error("legacy summary does not support township")),
+        );
+      const regionalDataRepository: OverviewRegionalDataRepository = {
+        agricultureProfile: vi.fn().mockResolvedValue({
+          regionCode: "230200",
+          regionName: "齐齐哈尔市",
+          administrativeLevel: "PREFECTURE",
+          year: 2026,
+          automatic: true,
+          generatedAt: "2026-09-14T10:00:00Z",
+          regionFacts: {
+            areaSquareKilometres: "42202.36",
+            directChildCount: 16,
+            countyCount: 16,
+            townshipCount: 232,
+            villageCount: 2332,
+          },
+          sourceSummary: "地区年度正式数据优先，缺项由统计模型自动补齐",
+          calculationMethod: "结构系数估算；复合增长公式预测",
+          crops: [
+            {
+              productCode: "CORN",
+              productName: "玉米",
+              dataKind: "OBSERVED",
+              plantedAreaMu: "1500000",
+              yieldPerMuKg: "650",
+              totalOutputKg: "975000000",
+              structurePercent: "62",
+              basis: "采用地区年度正式数据自动汇总",
+              forecasts: [],
+            },
+          ],
+        }),
+        regionalSummary,
+        supplyBalance: vi.fn(),
+      };
+      render(
+        <OverviewPage
+          regionalDataRepository={regionalDataRepository}
+          repository={{
+            mapScope: () => Promise.resolve(sampleMapScope),
+            options: () => Promise.resolve(options),
+            regions: () => Promise.resolve([sampleRegion]),
+            locations: () => Promise.resolve([]),
+            indicators: () => Promise.resolve([]),
+            dashboard: () => Promise.resolve(emptyDashboard),
+          }}
+        />,
+      );
+
+      expect(await screen.findByRole("button", { name: "样本点" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      expect(regionalSummary).not.toHaveBeenCalled();
+      await userEvent.click(
+        await screen.findByRole("button", { name: "齐齐哈尔市，已核定 1 条" }),
+      );
+      await userEvent.click(screen.getByRole("button", { name: "地区数据" }));
+
+      await waitFor(() =>
+        expect(regionalSummary).toHaveBeenCalledWith({
+          regionCode: "230200",
+          year: 2026,
+          productCode: "CORN",
+        }),
+      );
+      expect(
+        await screen.findByRole("heading", { name: "齐齐哈尔市农业概况" }),
+      ).toBeVisible();
+      expect(
+        screen.getByText("公开资料自动核验 · 缺项自动补算 · 仅预测下一年"),
+      ).toBeVisible();
+      expect(
+        screen.getByText("地区数据范围：齐齐哈尔、黑河、呼伦贝尔、大兴安岭及下级地区"),
+      ).toBeVisible();
+      expect(screen.queryByText(/数据范围：.*个县区/)).not.toBeInTheDocument();
+    },
+  );
+
+  it("keeps the regional profile loading state instead of flashing the legacy summary", async () => {
     const regionalSummary = vi
       .fn<OverviewRegionalDataRepository["regionalSummary"]>()
-      .mockImplementation(() => summaryState === "pending"
-        ? new Promise(() => undefined)
-        : Promise.reject(new Error("legacy summary does not support township")));
-    const regionalDataRepository: OverviewRegionalDataRepository = {
-      agricultureProfile: vi.fn().mockResolvedValue({
+      .mockResolvedValue({
         regionCode: "230200",
         regionName: "齐齐哈尔市",
         administrativeLevel: "PREFECTURE",
         year: 2026,
-        automatic: true,
-        generatedAt: "2026-09-14T10:00:00Z",
-        regionFacts: {
-          areaSquareKilometres: "42202.36",
-          directChildCount: 16,
-          countyCount: 16,
-          townshipCount: 232,
-          villageCount: 2332,
-        },
-        sourceSummary: "地区年度正式数据优先，缺项由统计模型自动补齐",
-        calculationMethod: "结构系数估算；复合增长公式预测",
-        crops: [
-          {
-            productCode: "CORN",
-            productName: "玉米",
-            dataKind: "OBSERVED",
-            plantedAreaMu: "1500000",
-            yieldPerMuKg: "650",
-            totalOutputKg: "975000000",
-            structurePercent: "62",
-            basis: "采用地区年度正式数据自动汇总",
-            forecasts: [],
-          },
-        ],
-      }),
+        productCode: "CORN",
+        plantedAreaMu: "6100000",
+        yieldPerMuKg: null,
+        totalOutputKg: null,
+        areaChangeWanMu: "14.5",
+        areaChangeRatePercent: "2.43",
+        currentDataAvailable: true,
+        comparisonAvailable: true,
+        areaChangeRateAvailable: true,
+        comparisonMessage: null,
+      });
+    const regionalDataRepository: OverviewRegionalDataRepository = {
+      agricultureProfile: vi.fn<
+        NonNullable<OverviewRegionalDataRepository["agricultureProfile"]>
+      >(() => new Promise(() => undefined)),
       regionalSummary,
       supplyBalance: vi.fn(),
     };
@@ -216,33 +356,14 @@ describe("OverviewPage", () => {
       />,
     );
 
-    expect(await screen.findByRole("button", { name: "样本点" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(regionalSummary).not.toHaveBeenCalled();
     await userEvent.click(
       await screen.findByRole("button", { name: "齐齐哈尔市，已核定 1 条" }),
     );
     await userEvent.click(screen.getByRole("button", { name: "地区数据" }));
 
-    await waitFor(() =>
-      expect(regionalSummary).toHaveBeenCalledWith({
-        regionCode: "230200",
-        year: 2026,
-        productCode: "CORN",
-      }),
-    );
-    expect(
-      await screen.findByRole("heading", { name: "齐齐哈尔市农业概况" }),
-    ).toBeVisible();
-    expect(
-      screen.getByText("公开资料自动核验 · 缺项自动补算 · 仅预测下一年"),
-    ).toBeVisible();
-    expect(
-      screen.getByText("地区数据范围：齐齐哈尔、黑河、呼伦贝尔、大兴安岭及下级地区"),
-    ).toBeVisible();
-    expect(screen.queryByText(/数据范围：.*个县区/)).not.toBeInTheDocument();
+    await waitFor(() => expect(regionalSummary).toHaveBeenCalledOnce());
+    expect(screen.getByText("正在同步地区正式数据")).toBeVisible();
+    expect(screen.queryByText("结构调整增减")).not.toBeInTheDocument();
   });
 
   it("reloads supply balance when the selected regional annual production changes", async () => {
@@ -2669,6 +2790,7 @@ describe("OverviewPage", () => {
       "aria-pressed",
       "true",
     );
+    expect(screen.queryByLabelText("总揽关键指标")).not.toBeInTheDocument();
     expect(
       await within(map).findByRole("img", {
         name: /众兴村设计覆盖，行政村展示分区覆盖徽标/,
