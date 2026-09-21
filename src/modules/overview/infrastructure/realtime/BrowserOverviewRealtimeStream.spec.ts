@@ -109,6 +109,43 @@ describe("BrowserOverviewRealtimeStream", () => {
     expect(source.closed).toBe(true);
   });
 
+  it("delivers a repeated stream sequence only once", async () => {
+    const source = new FakeEventSource();
+    const onBusinessChange = vi.fn();
+    const unsubscribe = new BrowserOverviewRealtimeStream(
+      () => source as unknown as EventSource,
+      () => Promise.resolve(1203),
+    ).subscribe({
+      onBusinessChange,
+      onConnected: vi.fn(),
+      onDisconnected: vi.fn(),
+    });
+
+    await vi.waitFor(() => expect(source.listenerCount()).toBe(1));
+    const payload = JSON.stringify({
+      aggregateType: "SAMPLE_NETWORK_YEAR",
+      actionCode: "SAMPLE_NETWORK_PUBLISHED",
+      productCode: "CORN",
+      regionCodes: ["230208"],
+      surveyYear: 2025,
+    });
+    source.dispatch(
+      new MessageEvent("business-change", {
+        data: payload,
+        lastEventId: "1204",
+      }),
+    );
+    source.dispatch(
+      new MessageEvent("business-change", {
+        data: payload,
+        lastEventId: "1204",
+      }),
+    );
+
+    expect(onBusinessChange).toHaveBeenCalledTimes(1);
+    unsubscribe();
+  });
+
   it("delivers the V158 design-coordinate dataset contract unchanged", async () => {
     const source = new FakeEventSource();
     const onBusinessChange = vi.fn();
