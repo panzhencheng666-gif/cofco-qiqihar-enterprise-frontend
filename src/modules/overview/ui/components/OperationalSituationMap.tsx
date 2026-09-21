@@ -176,6 +176,19 @@ export function OperationalSituationMap({
   const railwayNearbyCount = facilities.railwayFacilities.filter(
     (facility) => facility.locationRelation === "NEARBY",
   ).length;
+  const unlocatedStorageFacilities = facilities.storageFacilities.filter(
+    (facility) => facility.longitude === null || facility.latitude === null,
+  );
+  const unlocatedStorageSummaries = facilities.storageCategories.flatMap((category) => {
+    const unlocatedCount = unlocatedStorageFacilities.filter(
+      (facility) => facility.relationType === category.code,
+    ).length;
+    return unlocatedCount === 0
+      ? []
+      : [
+          `${category.label} ${category.count} · 地图已定位 ${Math.max(0, category.count - unlocatedCount)} · 待定位 ${unlocatedCount}`,
+        ];
+  });
 
   useTimelinePlayback({
     playbackSpeed,
@@ -379,6 +392,32 @@ export function OperationalSituationMap({
             ) && " · 问号表示云况数据缺失，不推断晴天"}
           </p>
         )}
+        {unlocatedStorageFacilities.length > 0 && (
+          <section
+            aria-label="库点地图数量"
+            className="realistic-situation-unlocated-dock"
+            role="status"
+          >
+            <strong>{unlocatedStorageSummaries.join("；")}</strong>
+            {unlocatedStorageFacilities.map((facility) => (
+              <button
+                aria-label={`${facility.name}待定位库点记录`}
+                className={`is-${facility.relationType.toLowerCase()}`}
+                key={facility.code}
+                type="button"
+                onClick={() => onFacilitySelect(facility.code)}
+              >
+                <span aria-hidden="true">
+                  {facility.relationType === "OWNED" ? "自" : "租"}
+                </span>
+                <span>
+                  {facility.name}
+                  <small>坐标待核定，未伪造地图位置</small>
+                </span>
+              </button>
+            ))}
+          </section>
+        )}
         {currentLevel === "VILLAGE" && (
           <p className="realistic-situation-enhancement-notice" role="status">
             村名位置仍待空间核验，可点击名称查看该村资料；不展示推算村界。
@@ -453,6 +492,21 @@ export function OperationalSituationMap({
                 </b>
               </button>
             ))}
+            {facilities.storageFacilities.some(
+              (facility) => facility.longitude === null || facility.latitude === null,
+            ) && (
+              <p role="status" className="realistic-situation-unlocated">
+                待定位库点：
+                {facilities.storageFacilities
+                  .filter(
+                    (facility) =>
+                      facility.longitude === null || facility.latitude === null,
+                  )
+                  .map((facility) => facility.name)
+                  .join("、")}
+                。已计入数量，核定坐标后才可在地图标点。
+              </p>
+            )}
             <label>
               <input
                 checked={layers.RAILWAY}
