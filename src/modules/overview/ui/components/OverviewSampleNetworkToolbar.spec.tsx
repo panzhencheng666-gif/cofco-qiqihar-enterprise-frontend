@@ -5,6 +5,47 @@ import { vi } from "vitest";
 import { OverviewSampleNetworkToolbar } from "./OverviewSampleNetworkToolbar";
 
 describe("OverviewSampleNetworkToolbar", () => {
+  it("controls the Blender foundation without changing the selected sample layer", async () => {
+    const onBlenderEnabledChange = vi.fn();
+    const setMode = vi.fn();
+    render(
+      <OverviewSampleNetworkToolbar
+        blenderEnabled
+        model={{
+          applicable: true,
+          catalog: undefined,
+          catalogState: "idle",
+          categoryCode: undefined,
+          comparison: undefined,
+          designPoints: [],
+          designPointState: "idle",
+          icons: [],
+          issue: undefined,
+          mode: "actual",
+          region: undefined,
+          setCategoryCode: vi.fn(),
+          setMode,
+          setShowExactDesignLocations: vi.fn(),
+          setTypeCode: vi.fn(),
+          showExactDesignLocations: false,
+          state: "ready",
+          typeCode: undefined,
+        }}
+        onBlenderEnabledChange={onBlenderEnabledChange}
+      />,
+    );
+
+    const enhancement = screen.getByRole("button", { name: "Blender 立体增强" });
+    expect(enhancement).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(enhancement);
+    expect(onBlenderEnabledChange).toHaveBeenCalledWith(false);
+    expect(setMode).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "现有样本" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
   it("exports the same formal sample inventory without adding a review step", async () => {
     const onExport = vi.fn();
     render(

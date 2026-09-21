@@ -26,14 +26,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function numericTuple(value: unknown, length: number, label: string): number[] {
-  if (
-    !Array.isArray(value) ||
-    value.length !== length ||
-    value.some((item) => typeof item !== "number" || !Number.isFinite(item))
-  ) {
+  if (!Array.isArray(value) || value.length !== length) {
     throw new Error(`${label} must contain ${length} finite numbers`);
   }
-  return value;
+  return value.map((item: unknown) => {
+    if (typeof item !== "number" || !Number.isFinite(item)) {
+      throw new Error(`${label} must contain ${length} finite numbers`);
+    }
+    return item;
+  });
 }
 
 function requiredString(record: Record<string, unknown>, key: string): string {

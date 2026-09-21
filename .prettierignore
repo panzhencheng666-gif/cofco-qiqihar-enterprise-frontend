@@ -1,2 +1,4 @@
 # Canonical public-source snapshot; retain byte-for-byte provenance and embedded hashes.
 public/data/railways/osm-20260915.json
+# Deterministic Blender build output; the generator owns its compact byte format.
+public/overview/blender/four-region-atlas.json

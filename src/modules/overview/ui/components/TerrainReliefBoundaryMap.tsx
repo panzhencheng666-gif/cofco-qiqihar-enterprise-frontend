@@ -56,6 +56,11 @@ import {
   createTerrainSurfaceMaterial,
 } from "./terrainReliefMaterials";
 import { publicAssetUrl } from "../../../../shared/assets/publicAssetUrl";
+import {
+  isFourRegionBlenderScope,
+  loadBlenderReliefFoundation,
+  type BlenderReliefFoundationController,
+} from "./blenderReliefFoundation";
 
 export { compactAdministrativeName } from "./terrainReliefGeometry";
 
@@ -74,6 +79,7 @@ export const RELIEF_LAYER_Z = {
 } as const;
 const RELIEF_FRAME_INSET = 0.035;
 const TERRAIN_URL = publicAssetUrl("overview/command-terrain-v2.webp");
+const BLENDER_MANIFEST_URL = publicAssetUrl("overview/blender/four-region-atlas.json");
 const samplePointRoleAssetUrl = {
   PRODUCTION: publicAssetUrl("overview/sample-points/production-rice.svg"),
   MARKET: publicAssetUrl("overview/sample-points/market-bank.svg"),
@@ -178,6 +184,7 @@ const IDENTITY_LAYOUT_TRANSFORM: ReliefLayoutTransform = {
 
 export default function TerrainReliefBoundaryMap({
   backdrop,
+  blenderEnabled = false,
   command,
   features,
   onDrill,
@@ -196,6 +203,7 @@ export default function TerrainReliefBoundaryMap({
   annotationMode = false,
 }: {
   backdrop?: MapFeature;
+  blenderEnabled?: boolean;
   command?: OverviewMapCommand;
   features: readonly MapFeature[];
   onDrill: (region: OverviewRegion) => void;
@@ -214,6 +222,10 @@ export default function TerrainReliefBoundaryMap({
   annotationMode?: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const blenderFoundationRef = useRef<BlenderReliefFoundationController | undefined>(
+    undefined,
+  );
+  const blenderEnabledRef = useRef(blenderEnabled);
   const callbacksRef = useRef<RendererCallbacks>({
     onDrill,
     onReady,
@@ -473,6 +485,7 @@ export default function TerrainReliefBoundaryMap({
 
   useEffect(() => {
     selectedRef.current = selectedCode;
+    blenderFoundationRef.current?.setSelectedRegion(selectedCode || undefined);
     if (selectedCode && !selectedComponentRef.current.startsWith(`${selectedCode}::`)) {
       const primary = primaryComponentByRegionRef.current.get(selectedCode);
       selectedComponentRef.current = primary ? reliefComponentKey(primary) : "";
@@ -495,6 +508,12 @@ export default function TerrainReliefBoundaryMap({
     );
     renderRef.current();
   }, [activeDetailLayout, activeProjection, selectedCode, stageWidth]);
+
+  useEffect(() => {
+    blenderEnabledRef.current = blenderEnabled;
+    blenderFoundationRef.current?.setEnabled(blenderEnabled);
+    renderRef.current();
+  }, [blenderEnabled]);
 
   useEffect(() => {
     if (!command) return;
@@ -611,6 +630,14 @@ export default function TerrainReliefBoundaryMap({
     const pointMaterials = new Map<string, THREE.MeshBasicMaterial>();
     componentReliefVisualsRef.current = componentReliefVisuals;
     pointMaterialsRef.current = pointMaterials;
+    const blenderAbortController = new AbortController();
+    const blenderScope = isFourRegionBlenderScope(
+      terrainProjection.features.map(({ region }) => region.code),
+    );
+    if (sceneHost) {
+      sceneHost.dataset.blenderEnabled = String(blenderEnabledRef.current);
+      sceneHost.dataset.blenderState = blenderScope ? "loading" : "out-of-scope";
+    }
 
     let renderCount = 0;
     const render = () => {
@@ -906,6 +933,7 @@ export default function TerrainReliefBoundaryMap({
         componentSelectionUpdateRef.current = (identity) => {
           const key = reliefComponentKey(identity);
           selectedComponentRef.current = key;
+          blenderFoundationRef.current?.setSelectedRegion(identity.regionCode);
           componentReliefUpdateRef.current();
           if (sceneHost) {
             sceneHost.dataset.selectedRegion = identity.regionCode;
@@ -922,6 +950,7 @@ export default function TerrainReliefBoundaryMap({
           const nextKey = identity ? reliefComponentKey(identity) : "";
           if (nextKey === hoveredComponentKey) return;
           hoveredComponentKey = nextKey;
+          blenderFoundationRef.current?.setHoveredRegion(identity?.regionCode);
           componentReliefUpdateRef.current(nextKey);
           if (sceneHost) {
             sceneHost.dataset.hoveredRegion = identity?.regionCode ?? "";
@@ -1041,6 +1070,41 @@ export default function TerrainReliefBoundaryMap({
           positionCallbackRef.current,
           stageWidth,
         );
+
+        const foundationScreenBounds = reliefSceneBounds(terrainProjection);
+        if (blenderScope && foundationScreenBounds) {
+          void loadBlenderReliefFoundation({
+            enabled: blenderEnabledRef.current,
+            manifestUrl: BLENDER_MANIFEST_URL,
+            scene: reliefRoot,
+            ...(selectedRef.current ? { selectedCode: selectedRef.current } : {}),
+            signal: blenderAbortController.signal,
+            targetBounds: {
+              maxX: foundationScreenBounds.maxX - STAGE_WIDTH / 2,
+              maxY: STAGE_HEIGHT / 2 - foundationScreenBounds.minY,
+              minX: foundationScreenBounds.minX - STAGE_WIDTH / 2,
+              minY: STAGE_HEIGHT / 2 - foundationScreenBounds.maxY,
+            },
+          })
+            .then((controller) => {
+              if (disposed) {
+                controller.dispose();
+                return;
+              }
+              blenderFoundationRef.current = controller;
+              if (sceneHost) sceneHost.dataset.blenderState = "ready";
+              render();
+            })
+            .catch((cause: unknown) => {
+              if (disposed || blenderAbortController.signal.aborted) return;
+              if (sceneHost) {
+                sceneHost.dataset.blenderState = "failed";
+                sceneHost.dataset.blenderFailure =
+                  cause instanceof Error ? cause.message : "Blender atlas failed";
+              }
+              render();
+            });
+        }
       })
       .catch(() => {
         if (!disposed) callbacksRef.current.onUnavailable("地表纹理加载失败");
@@ -1084,6 +1148,9 @@ export default function TerrainReliefBoundaryMap({
 
     return () => {
       disposed = true;
+      blenderAbortController.abort();
+      blenderFoundationRef.current?.dispose();
+      blenderFoundationRef.current = undefined;
       renderer.domElement.removeEventListener("click", handleClick);
       renderer.domElement.removeEventListener("dblclick", handleDoubleClick);
       renderer.domElement.removeEventListener("pointermove", handlePointerMove);
@@ -1131,6 +1198,7 @@ export default function TerrainReliefBoundaryMap({
   return (
     <div
       className="overview-terrain-relief-map"
+      data-blender-enabled={blenderEnabled}
       data-command-stage-width={stageWidth}
       data-details-panel-left={visibleMapWidth ?? overviewDetailsPanelLeft(stageWidth)}
       data-visible-surface-max-x={activeSurfaceBounds?.maxX}

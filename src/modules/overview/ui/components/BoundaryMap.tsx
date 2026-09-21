@@ -28,6 +28,7 @@ const EMPTY_SAMPLE_POINT_ICONS: readonly OverviewSamplePointIcon[] = [];
 
 export function BoundaryMap({
   backdrop,
+  blenderEnabled = false,
   features,
   onDrill,
   onSamplePointSelect,
@@ -44,6 +45,7 @@ export function BoundaryMap({
   annotationMode = false,
 }: {
   backdrop?: MapFeature;
+  blenderEnabled?: boolean;
   features: readonly MapFeature[];
   onDrill: (region: OverviewRegion) => void;
   onSamplePointSelect?: (samplePointId: string) => void;
@@ -134,6 +136,7 @@ export function BoundaryMap({
     >
       <TerrainReliefBoundaryMap
         {...(backdrop ? { backdrop } : {})}
+        blenderEnabled={blenderEnabled}
         {...(command ? { command } : {})}
         features={features}
         points={points}

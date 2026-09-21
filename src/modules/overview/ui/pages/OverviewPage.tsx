@@ -313,6 +313,7 @@ export function OverviewPage({
     useState<SituationTimelineItem>();
   const [sampleExportPending, setSampleExportPending] = useState(false);
   const [sampleExportIssue, setSampleExportIssue] = useState<string>();
+  const [sampleBlenderEnabled, setSampleBlenderEnabled] = useState(true);
   const [pendingNavigationLabel, setPendingNavigationLabel] = useState<string>();
   const dashboardQueryKeyRef = useRef("");
   const navigationRequestRef = useRef(0);
@@ -1535,6 +1536,7 @@ export function OverviewPage({
             {!publicSituationMode && (
               <BoundaryMap
                 annotationMode={annotationOpen}
+                blenderEnabled={sampleMode && sampleBlenderEnabled}
                 {...(mapBackdrop ? { backdrop: mapBackdrop } : {})}
                 features={mapFeatures}
                 points={mapPoints}
@@ -1660,8 +1662,10 @@ export function OverviewPage({
           ? {
               sampleNetworkControls: (
                 <OverviewSampleNetworkToolbar
+                  blenderEnabled={sampleBlenderEnabled}
                   exportPending={sampleExportPending}
                   model={sampleNetworkModel}
+                  onBlenderEnabledChange={setSampleBlenderEnabled}
                   {...(activeSamplePointRepository.exportInventory
                     ? { onExport: () => void exportFormalSamples() }
                     : {})}

@@ -4,11 +4,15 @@ import type { SampleNetworkLayerMode } from "../../domain/overviewSamplePoint";
 import type { OverviewSampleNetworkLayerModel } from "../hooks/useOverviewSampleNetworkLayers";
 
 export function OverviewSampleNetworkToolbar({
+  blenderEnabled,
   model,
+  onBlenderEnabledChange,
   onExport,
   exportPending = false,
 }: {
+  blenderEnabled?: boolean;
   model: OverviewSampleNetworkLayerModel;
+  onBlenderEnabledChange?: (enabled: boolean) => void;
   onExport?: () => void;
   exportPending?: boolean;
 }) {
@@ -84,6 +88,17 @@ export function OverviewSampleNetworkToolbar({
           </button>
         ))}
       </div>
+      {blenderEnabled !== undefined && onBlenderEnabledChange ? (
+        <button
+          aria-label="Blender 立体增强"
+          aria-pressed={blenderEnabled}
+          className={blenderEnabled ? "is-active" : undefined}
+          onClick={() => onBlenderEnabledChange(!blenderEnabled)}
+          type="button"
+        >
+          立体增强
+        </button>
+      ) : null}
       {onExport && (
         <button
           aria-label="导出正式样本清单"

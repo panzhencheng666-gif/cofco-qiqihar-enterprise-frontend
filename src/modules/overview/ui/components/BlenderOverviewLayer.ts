@@ -2,15 +2,16 @@ import {
   AmbientLight,
   Camera,
   DirectionalLight,
-  Group,
-  Material,
   Matrix4,
   Mesh,
   MeshStandardMaterial,
-  Object3D,
   Scene,
   Vector3,
   WebGLRenderer,
+  type BufferGeometry,
+  type Group,
+  type Material,
+  type Object3D,
 } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import {
@@ -70,13 +71,19 @@ function defaultRenderer(
   return renderer;
 }
 
-function materialsOf(item: Mesh): Material[] {
+type AtlasMesh = Mesh<BufferGeometry, Material | Material[]>;
+
+function isAtlasMesh(item: Object3D): item is AtlasMesh {
+  return item instanceof Mesh;
+}
+
+function materialsOf(item: AtlasMesh): Material[] {
   return Array.isArray(item.material) ? item.material : [item.material];
 }
 
 function disposeObject(root: Object3D) {
   root.traverse((item) => {
-    if (!(item instanceof Mesh)) return;
+    if (!isAtlasMesh(item)) return;
     item.geometry.dispose();
     materialsOf(item).forEach((material) => material.dispose());
   });
@@ -119,7 +126,7 @@ export function createBlenderOverviewLayer({
     if (!modelRoot) return;
     manifest.regions.forEach(({ code, objectName }) => {
       const item = modelRoot?.getObjectByName(objectName);
-      if (!(item instanceof Mesh)) return;
+      if (!item || !isAtlasMesh(item)) return;
       const state = blenderRegionVisualState(
         code,
         selectedCode,
@@ -189,7 +196,7 @@ export function createBlenderOverviewLayer({
     render(_context: WebGL2RenderingContext, options: CustomRenderMethodInput) {
       if (!renderer || !modelRoot || !enabled || disposed) return;
       camera.projectionMatrix
-        .fromArray(options.modelViewProjectionMatrix as unknown as number[])
+        .fromArray(options.modelViewProjectionMatrix)
         .multiply(localTransform);
       renderer.resetState();
       renderer.render(scene, camera);

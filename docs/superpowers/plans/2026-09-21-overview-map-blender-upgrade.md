@@ -44,11 +44,13 @@
 ### Task 1: Export the authoritative four-region Blender source
 
 **Files:**
+
 - Create: `scripts/blender/export-four-region-source.mjs`
 - Create: `scripts/blender/export-four-region-source.spec.mjs`
 - Modify: `package.json`
 
 **Interfaces:**
+
 - Consumes: local `GET /api/v1/overview/regions?productCode=CORN&year=2026`, header `X-Actor: wang-yang`.
 - Produces: `FeatureCollection<Polygon | MultiPolygon>` with feature properties `{ code, name, level, sourceName, sourceRevision }` ordered as `230200`, `231100`, `150700`, `232700`.
 
@@ -61,7 +63,14 @@ import { normalizeRootRegions } from "./export-four-region-source.mjs";
 
 const boundary = JSON.stringify({
   type: "Polygon",
-  coordinates: [[[123, 46], [124, 46], [124, 47], [123, 46]]],
+  coordinates: [
+    [
+      [123, 46],
+      [124, 46],
+      [124, 47],
+      [123, 46],
+    ],
+  ],
 });
 
 test("exports exactly the governed four regions in stable order", () => {
@@ -70,7 +79,12 @@ test("exports exactly the governed four regions in stable order", () => {
     ["150700", "呼伦贝尔市"],
     ["231100", "黑河市"],
     ["230200", "齐齐哈尔市"],
-  ].map(([code, name]) => ({ code, name, level: "PREFECTURE", boundaryGeoJson: boundary }));
+  ].map(([code, name]) => ({
+    code,
+    name,
+    level: "PREFECTURE",
+    boundaryGeoJson: boundary,
+  }));
   assert.deepEqual(
     normalizeRootRegions({ data }).features.map((feature) => feature.properties.code),
     ["230200", "231100", "150700", "232700"],
@@ -83,7 +97,13 @@ test("rejects missing or context-only prefectures", () => {
     () =>
       normalizeRootRegions({
         data: [
-          { code: "230200", name: "齐齐哈尔市", level: "PREFECTURE", boundaryGeoJson: boundary, mapContextOnly: true },
+          {
+            code: "230200",
+            name: "齐齐哈尔市",
+            level: "PREFECTURE",
+            boundaryGeoJson: boundary,
+            mapContextOnly: true,
+          },
         ],
       }),
     /expected four regions/,
@@ -153,6 +173,7 @@ git commit -m "feat(overview): export governed Blender map source"
 ### Task 2: Generate and validate the Blender GLB
 
 **Files:**
+
 - Create: `scripts/blender/generate-four-region-atlas.py`
 - Create: `scripts/blender/validate-four-region-atlas.py`
 - Create: `public/overview/blender/four-region-atlas.glb`
@@ -160,6 +181,7 @@ git commit -m "feat(overview): export governed Blender map source"
 - Modify: `package.json`
 
 **Interfaces:**
+
 - Consumes: Task 1 GeoJSON and `--source-revision` supplied from the API response.
 - Produces: GLB objects named `region_230200`, `region_231100`, `region_150700`, `region_232700`; manifest shape below.
 
@@ -234,12 +256,14 @@ git commit -m "feat(overview): generate four-region Blender atlas"
 ### Task 3: Add a typed Three.js custom-layer adapter
 
 **Files:**
+
 - Create: `src/modules/overview/ui/components/blenderAtlasContract.ts`
 - Create: `src/modules/overview/ui/components/blenderAtlasContract.spec.ts`
 - Create: `src/modules/overview/ui/components/BlenderOverviewLayer.ts`
 - Create: `src/modules/overview/ui/components/blenderOverviewLayer.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `BlenderAtlasManifest`, a MapLibre `Map`, and callbacks `{ onReady, onFailure }`.
 - Produces: `createBlenderOverviewLayer(options): CustomLayerInterface & BlenderOverviewController`.
 
@@ -256,9 +280,9 @@ export interface BlenderOverviewController {
 
 ```ts
 it("accepts only the governed four-region manifest", () => {
-  expect(parseBlenderAtlasManifest(validManifest).regions.map(({ code }) => code)).toEqual([
-    "230200", "231100", "150700", "232700",
-  ]);
+  expect(
+    parseBlenderAtlasManifest(validManifest).regions.map(({ code }) => code),
+  ).toEqual(["230200", "231100", "150700", "232700"]);
   expect(() => parseBlenderAtlasManifest({ ...validManifest, regions: [] })).toThrow(
     "four governed regions",
   );
@@ -325,12 +349,14 @@ git commit -m "feat(overview): add Blender map custom layer"
 ### Task 4: Integrate enhancement, interaction, and fallback into the existing map
 
 **Files:**
+
 - Modify: `src/modules/overview/ui/components/FourRegionTerrainAtlas.tsx`
 - Modify: `src/modules/overview/ui/components/OperationalSituationMap.tsx`
 - Modify: `src/modules/overview/ui/components/OperationalSituationMap.spec.tsx`
 - Modify: `src/modules/overview/ui/components/realistic-operational-situation.css`
 
 **Interfaces:**
+
 - Consumes: Task 3 `createBlenderOverviewLayer`, current `rootFeatures`, `features`, `selectedRegionCode`, and existing MapLibre click/drill handlers.
 - Produces: an optional `blenderEnabled` visual enhancement that never changes geographic selection or drilldown.
 
@@ -391,11 +417,13 @@ git commit -m "feat(overview): integrate Blender terrain enhancement"
 ### Task 5: Produce and verify the loopback-only interactive preview
 
 **Files:**
+
 - Create: `scripts/capture-blender-overview-preview.mjs`
 - Create: `outputs/blender-overview-root.png` outside the repository for user delivery.
 - Create: `outputs/blender-overview-drilldown.png` outside the repository for user delivery.
 
 **Interfaces:**
+
 - Consumes: local backend `127.0.0.1:8090`, Vite `127.0.0.1:63200`, and the integrated map.
 - Produces: two screenshots plus terminal evidence for renderer state, selected code, custom-layer presence, and fallback behavior.
 
@@ -468,3 +496,26 @@ Expected: the repository is clean and ahead only by the bounded local implementa
 - [ ] Focused tests, lint, architecture, and build pass.
 - [ ] Chrome and Safari loopback previews are inspected.
 - [ ] No publish, push, or production deployment command is run.
+
+---
+
+## Scope Correction: Default Sample-Point Map
+
+The default 总揽监测 entry is the sample-point map, not the public-situation tab. The finished preview must therefore load the same governed Blender asset into the existing `TerrainReliefBoundaryMap` root scene while preserving every sample-network contract.
+
+**Additional files:**
+
+- `src/modules/overview/ui/components/blenderReliefFoundation.ts`
+- `src/modules/overview/ui/components/blenderReliefFoundation.spec.ts`
+- `src/modules/overview/ui/components/TerrainReliefBoundaryMap.tsx`
+- `src/modules/overview/ui/components/BoundaryMap.tsx`
+- `src/modules/overview/ui/components/OverviewSampleNetworkToolbar.tsx`
+- `src/modules/overview/ui/pages/OverviewPage.tsx`
+
+**Required behavior:**
+
+- [x] Load the GLB only when the visible authoritative features are exactly the four governed root regions.
+- [x] Keep current, design, and historical sample layers, aggregate counts, exact coordinates, selection, and drilldown authoritative.
+- [x] Expose a separate accessible `Blender 立体增强` switch without changing the selected sample layer.
+- [x] Dispose the GLB and report `out-of-scope` after drilling below the four-region root.
+- [x] Verify root enabled/disabled screenshots and a live drilldown containing actual and design sample markers.

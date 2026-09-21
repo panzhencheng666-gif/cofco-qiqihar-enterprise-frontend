@@ -51,7 +51,7 @@ describe("Blender overview custom layer", () => {
     const repaint = vi.fn();
     const layer = createBlenderOverviewLayer({
       manifest,
-      loadScene: async () => scene,
+      loadScene: () => Promise.resolve(scene),
       createRenderer: () => ({
         dispose: vi.fn(),
         render: vi.fn(),
@@ -92,7 +92,7 @@ describe("Blender overview custom layer", () => {
     const rendererDispose = vi.fn();
     const layer = createBlenderOverviewLayer({
       manifest,
-      loadScene: async () => scene,
+      loadScene: () => Promise.resolve(scene),
       createRenderer: () => ({
         dispose: rendererDispose,
         render: vi.fn(),

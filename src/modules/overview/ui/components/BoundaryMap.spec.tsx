@@ -177,6 +177,35 @@ describe("BoundaryMap", () => {
     expect(terrainRuntime.props).toMatchObject({ reserveRightPanel: true });
   });
 
+  it("forwards the Blender foundation state without replacing sample overlays", () => {
+    const icon = {
+      samplePointId: "94000000-0000-0000-0000-000000000001",
+      name: "权威样本点",
+      iconKey: "farmer",
+      types: [{ code: "FARMER", name: "农户", iconKey: "farmer" }],
+      longitude: 123.5,
+      latitude: 47.5,
+      dataQualityReason: null,
+    };
+
+    render(
+      <BoundaryMap
+        blenderEnabled={false}
+        features={[feature("230200")]}
+        onDrill={vi.fn()}
+        onSelect={vi.fn()}
+        points={[]}
+        samplePointIcons={[icon]}
+        selectedCode=""
+      />,
+    );
+
+    expect(terrainRuntime.props).toMatchObject({
+      blenderEnabled: false,
+      samplePointIcons: [icon],
+    });
+  });
+
   it("announces informational network markers without empty-action buttons", () => {
     render(
       <BoundaryMap
