@@ -176,7 +176,9 @@ describe("OverviewDataModePanel", () => {
       />,
     );
 
-    expect(screen.getByText("齐齐哈尔一号库")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "齐齐哈尔一号库库点记录" }),
+    ).toBeVisible();
     expect(screen.queryByRole("heading", { name: "正在同步当前区域" })).toBeNull();
   });
 

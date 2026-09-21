@@ -290,7 +290,8 @@ function WeatherDetail({
       </dl>
       <section className="situation-weather-detail__assessment">
         <span>影响判断</span>
-        <h4>{weather.risk}</h4>
+        <h4>{areaName}降雨影响提示</h4>
+        <strong>{weather.risk}</strong>
         <p>{weather.assessment}</p>
         <small>
           {productLabel ?? "当前筛选品种"} · {liveWeatherEvidence(weather)}
