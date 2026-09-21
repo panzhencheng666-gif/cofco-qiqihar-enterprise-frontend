@@ -162,10 +162,12 @@ describe("OverviewPage", () => {
     );
   });
 
-  it("loads the regional profile when the legacy summary is unavailable below county", async () => {
+  it.each(["failed", "pending"])("shows the regional profile independently when summary is %s", async (summaryState) => {
     const regionalSummary = vi
       .fn<OverviewRegionalDataRepository["regionalSummary"]>()
-      .mockRejectedValue(new Error("legacy summary does not support township"));
+      .mockImplementation(() => summaryState === "pending"
+        ? new Promise(() => undefined)
+        : Promise.reject(new Error("legacy summary does not support township")));
     const regionalDataRepository: OverviewRegionalDataRepository = {
       agricultureProfile: vi.fn().mockResolvedValue({
         regionCode: "230200",

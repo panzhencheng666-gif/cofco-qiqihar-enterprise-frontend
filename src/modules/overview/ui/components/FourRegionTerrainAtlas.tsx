@@ -1,4 +1,5 @@
 import "maplibre-gl/dist/maplibre-gl.css";
+import mapWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "./realistic-operational-situation.css";
 
 import { useEffect, useRef } from "react";
@@ -15,10 +16,16 @@ import type {
 } from "geojson";
 import {
   Map as MapLibreMap,
+  setWorkerUrl,
+  addProtocol,
   type GeoJSONSource,
   type MapGeoJSONFeature,
   type MapMouseEvent,
 } from "maplibre-gl";
+
+// The engine's dynamic import.meta.url worker lookup cannot survive bundling.
+// Emit the worker explicitly so GeoJSON, terrain and symbols work in production.
+setWorkerUrl(mapWorkerUrl);
 
 import type { MapAnnotation } from "../../application/ports/MapAnnotationRepository";
 import type { OperationalFacilityCatalogue } from "../../domain/operationalFacilities";
@@ -46,6 +53,25 @@ import { weatherSpriteKind, type WeatherSpriteKind } from "./weatherSpriteKind";
 import { createWeatherSpritePainter } from "./animatedWeatherSprite";
 import { publicMapFocus } from "./publicMapFocus";
 import { mapAnnotationGesture } from "./mapAnnotationGesture";
+import { createTerrainTileCache } from "./terrainTileCache";
+
+const loadTerrainTile = createTerrainTileCache();
+addProtocol("cofco-terrain", async (request, controller) => {
+  const tile = /^cofco-terrain:\/\/(\d+)\/(\d+)\/(\d+)\.png$/.exec(request.url);
+  if (
+    !tile ||
+    Number(tile[1]) > 15 ||
+    Number(tile[2]) >= 2 ** Number(tile[1]) ||
+    Number(tile[3]) >= 2 ** Number(tile[1])
+  )
+    throw new Error("Invalid terrain tile");
+  controller.signal.throwIfAborted();
+  const data = await loadTerrainTile(
+    `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${tile[1]}/${tile[2]}/${tile[3]}.png`,
+  );
+  controller.signal.throwIfAborted();
+  return { data };
+});
 
 export interface RealisticSceneLayers {
   ADMINISTRATIVE: boolean;

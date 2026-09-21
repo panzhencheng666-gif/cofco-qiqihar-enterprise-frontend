@@ -945,18 +945,29 @@ export function OverviewPage({
     if (!regionalDataRegionCode || !productCode || year === undefined) return;
     let active = true;
     const query = { regionCode: regionalDataRegionCode, productCode, year };
-    const request =
+    const request = () =>
       dataMode === "REGIONAL_DATA"
         ? Promise.all([
-            regionalDataRepository.regionalSummary(query).catch(() => undefined),
-            regionalDataRepository.agricultureProfile?.(query) ??
-              Promise.resolve(undefined),
+            regionalDataRepository.regionalSummary(query).then((next) => {
+              if (active && next) {
+                setRegionalSummary(next);
+                setSupplyBalance(undefined);
+                setRegionalDataLoading(false);
+              }
+              return next;
+            }).catch(() => undefined),
+            (regionalDataRepository.agricultureProfile?.(query) ??
+              Promise.resolve(undefined)).then((profile) => {
+              if (active && profile) {
+                setAgricultureProfile(profile);
+                setSupplyBalance(undefined);
+                setRegionalDataLoading(false);
+              }
+              return profile;
+            }).catch(() => undefined),
           ]).then(([next, profile]) => {
             if (!active) return;
             if (!next && !profile) throw new Error("regional data unavailable");
-            setRegionalSummary(next);
-            setAgricultureProfile(profile);
-            setSupplyBalance(undefined);
           })
         : regionalDataRepository.supplyBalance(query).then((next) => {
             if (!active) return;
@@ -970,7 +981,7 @@ export function OverviewPage({
         setRegionalDataLoading(true);
         setRegionalDataIssue(undefined);
       })
-      .then(() => request)
+      .then(() => active ? request() : undefined)
       .then(() => {
         if (!active) return;
         setRegionalDataLoading(false);

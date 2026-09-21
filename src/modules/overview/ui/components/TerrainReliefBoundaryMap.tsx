@@ -1,4 +1,5 @@
 import { useDeferredMapSelection } from "./useDeferredMapSelection";
+import { reliefTerrainSourceKey } from "./terrainReliefSource";
 import {
   RELIEF_DOUBLE_CLICK_LAYOUT_DELAY_MS,
   useReliefLabelPriority,
@@ -242,7 +243,17 @@ export default function TerrainReliefBoundaryMap({
   const renderedStageWidth = Math.max(STAGE_WIDTH, Math.ceil(stageWidth));
   const wideStageOffset = overviewWideStageOffset(renderedStageWidth);
   const terrainSourceKey = useMemo(
-    () => JSON.stringify({ backdrop, features, points }),
+    () =>
+      reliefTerrainSourceKey({ ...(backdrop ? { backdrop } : {}), features, points }),
+    [backdrop, features, points],
+  );
+  const currentRegions = useMemo(
+    () =>
+      new Map([
+        ...(backdrop ? [[backdrop.region.code, backdrop.region] as const] : []),
+        ...features.map(({ region }) => [region.code, region] as const),
+        ...points.map(({ region }) => [region.code, region] as const),
+      ]),
     [backdrop, features, points],
   );
   const terrainSource = useMemo(
@@ -447,8 +458,13 @@ export default function TerrainReliefBoundaryMap({
   }, [cancelLayoutTimer, detailsOpen, selectedCode]);
 
   useEffect(() => {
-    callbacksRef.current = { onDrill, onReady, onSelect, onUnavailable };
-  }, [onDrill, onReady, onSelect, onUnavailable]);
+    callbacksRef.current = {
+      onDrill: (region) => onDrill(currentRegions.get(region.code) ?? region),
+      onReady,
+      onSelect: (region) => onSelect(currentRegions.get(region.code) ?? region),
+      onUnavailable,
+    };
+  }, [currentRegions, onDrill, onReady, onSelect, onUnavailable]);
 
   useEffect(() => {
     if (!annotationMode) return;
@@ -1147,7 +1163,17 @@ export default function TerrainReliefBoundaryMap({
         {overlayLayout.labels
           .filter(({ region, visible }) => visible && !region.mapContextOnly)
           .map(
-            ({ componentId, footprint, kind, leaderAnchor, point, region, scale }) => {
+            ({
+              componentId,
+              footprint,
+              kind,
+              leaderAnchor,
+              point,
+              region: projectedRegion,
+              scale,
+            }) => {
+              const region =
+                currentRegions.get(projectedRegion.code) ?? projectedRegion;
               const identity = primaryComponentIdentity(activeProjection, region);
               const leaderRatio = leaderAnchor
                 ? Math.max(

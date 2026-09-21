@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { reliefTerrainSourceKey } from "./terrainReliefSource";
 
 import type { OverviewRegion } from "../../domain/overview";
 import type {
@@ -62,7 +63,8 @@ export function BoundaryMap({
   const [webGlEnabled, setWebGlEnabled] = useState(canRenderWebGlMap);
   const [fallbackReason, setFallbackReason] = useState("");
   const sceneRevisionKey = useMemo(
-    () => JSON.stringify({ backdrop, features, points }),
+    () =>
+      reliefTerrainSourceKey({ ...(backdrop ? { backdrop } : {}), features, points }),
     [backdrop, features, points],
   );
   const sceneRevision = useMemo(() => ({ key: sceneRevisionKey }), [sceneRevisionKey]);
