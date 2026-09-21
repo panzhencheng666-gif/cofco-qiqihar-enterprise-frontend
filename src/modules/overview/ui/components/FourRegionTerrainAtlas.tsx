@@ -52,6 +52,7 @@ import { weatherSpriteKind, type WeatherSpriteKind } from "./weatherSpriteKind";
 import { createWeatherSpritePainter } from "./animatedWeatherSprite";
 import { publicMapFocus } from "./publicMapFocus";
 import { mapAnnotationGesture } from "./mapAnnotationGesture";
+import { layoutOperationalMarkers } from "./operationalMarkerLayout";
 import { createTerrainTileCache } from "./terrainTileCache";
 import {
   fourRegionContextMaskCollection,
@@ -158,6 +159,7 @@ const RAIL_SOURCE = "atlas-rail-routes";
 const LOGISTICS_SOURCE = "atlas-logistics";
 const INVENTORY_SOURCE = "atlas-inventory";
 const MARKER_SOURCE = "atlas-markers";
+const MARKER_LEADER_SOURCE = "atlas-marker-leaders";
 const ANNOTATION_SOURCE = "atlas-annotation";
 const REGION_LAYER_IDS = ["atlas-active-fill", "atlas-root-fill"] as const;
 const FACILITY_KINDS = ["OWNED", "LEASED", "HISTORICAL_LEASED", "RAILWAY"];
@@ -257,6 +259,9 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
     map.on("zoom", () => {
       host.dataset.imageryZoom = map.getZoom().toFixed(2);
       host.dataset.detailLevel = detailLevel(map.getZoom());
+    });
+    map.on("moveend", () => {
+      if (runtime.ready) refreshOperationalMarkerSources(runtime);
     });
 
     const resizeObserver = new ResizeObserver(() => scheduleAtlasResize(runtime));
@@ -386,6 +391,10 @@ function installAtlasLayers(map: MapLibreMap) {
   map.addSource(LOGISTICS_SOURCE, { type: "geojson", data: emptyCollection() });
   map.addSource(INVENTORY_SOURCE, { type: "geojson", data: emptyCollection() });
   map.addSource(MARKER_SOURCE, { type: "geojson", data: emptyCollection() });
+  map.addSource(MARKER_LEADER_SOURCE, {
+    type: "geojson",
+    data: emptyCollection(),
+  });
   map.addSource(ANNOTATION_SOURCE, { type: "geojson", data: emptyCollection() });
 
   map.addLayer({
@@ -539,6 +548,32 @@ function installAtlasLayers(map: MapLibreMap) {
     },
   });
   map.addLayer({
+    id: "atlas-operational-marker-leaders",
+    type: "line",
+    source: MARKER_LEADER_SOURCE,
+    paint: {
+      "line-color": "#f4ead0",
+      "line-opacity": 0.62,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 4, 0.7, 13, 1.25],
+    },
+  });
+  map.addLayer({
+    id: "atlas-selected-facility-halo",
+    type: "circle",
+    source: MARKER_SOURCE,
+    filter: [
+      "all",
+      ["in", ["get", "kind"], ["literal", FACILITY_KINDS]],
+      ["==", ["get", "selected"], true],
+    ],
+    paint: {
+      "circle-color": "rgba(255,212,95,0.18)",
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 4, 10, 13, 18],
+      "circle-stroke-color": "#ffd45f",
+      "circle-stroke-width": 2,
+    },
+  });
+  map.addLayer({
     id: "atlas-nearby-railway-halo",
     type: "circle",
     source: MARKER_SOURCE,
@@ -562,7 +597,8 @@ function installAtlasLayers(map: MapLibreMap) {
     source: MARKER_SOURCE,
     filter: ["in", ["get", "kind"], ["literal", FACILITY_KINDS]],
     layout: {
-      "icon-allow-overlap": false,
+      "icon-allow-overlap": true,
+      "icon-ignore-placement": true,
       "icon-image": [
         "match",
         ["get", "kind"],
@@ -713,7 +749,7 @@ function synchronizeAtlas(runtime: AtlasRuntime, props: FourRegionTerrainAtlasPr
     setSource(runtime.map, RAIL_SOURCE, railwayCollection(props));
     setSource(runtime.map, LOGISTICS_SOURCE, logisticsCollection(props));
     setSource(runtime.map, INVENTORY_SOURCE, inventoryCollection(props));
-    setSource(runtime.map, MARKER_SOURCE, markerCollection(props));
+    refreshOperationalMarkerSources(runtime);
     runtime.map.setLayoutProperty(
       "atlas-base-railways",
       "visibility",
@@ -795,6 +831,7 @@ function synchronizeAtlas(runtime: AtlasRuntime, props: FourRegionTerrainAtlasPr
   ) {
     runtime.hierarchyKey = nextHierarchyKey;
     fitCurrentHierarchy(runtime, props, active);
+    refreshOperationalMarkerSources(runtime);
   }
   runtime.host.dataset.annotationActive = String(Boolean(props.annotationActive));
   if (props.annotationActive) runtime.map.dragPan.disable();
@@ -926,6 +963,7 @@ function scheduleAtlasResize(runtime: AtlasRuntime) {
         runtime.props,
         activeHierarchyFeatures(runtime.props),
       );
+    if (runtime.ready && viewportChanged) refreshOperationalMarkerSources(runtime);
   });
 }
 
@@ -1018,8 +1056,14 @@ function handleMapClick(runtime: AtlasRuntime, event: MapMouseEvent) {
     .queryRenderedFeatures(event.point, { layers: ["atlas-operational-markers"] })
     .find((feature) => featureStringProperty(feature, "id"));
   const facilityId = facility ? featureStringProperty(facility, "id") : undefined;
-  if (facilityId) {
-    const area = map.queryRenderedFeatures(event.point, {
+  if (facility && facilityId) {
+    const anchorLongitude = featureNumberProperty(facility, "anchorLongitude");
+    const anchorLatitude = featureNumberProperty(facility, "anchorLatitude");
+    const anchorPoint =
+      anchorLongitude === undefined || anchorLatitude === undefined
+        ? event.point
+        : map.project([anchorLongitude, anchorLatitude]);
+    const area = map.queryRenderedFeatures(anchorPoint, {
       layers: [...REGION_LAYER_IDS],
     })[0];
     const code = area ? featureStringProperty(area, "code") : undefined;
@@ -1220,8 +1264,18 @@ function inventoryCollection(props: FourRegionTerrainAtlasProps): FeatureCollect
   };
 }
 
-function markerCollection(props: FourRegionTerrainAtlasProps): FeatureCollection {
-  const features: Feature[] = [];
+interface OperationalMarkerCandidate {
+  id: string;
+  latitude: number;
+  layoutId: string;
+  longitude: number;
+  properties: Record<string, string | number | boolean>;
+}
+
+function operationalMarkerCandidates(
+  props: FourRegionTerrainAtlasProps,
+): OperationalMarkerCandidate[] {
+  const candidates: OperationalMarkerCandidate[] = [];
   props.facilities.storageFacilities.forEach((facility) => {
     if (
       facility.longitude === null ||
@@ -1229,14 +1283,18 @@ function markerCollection(props: FourRegionTerrainAtlasProps): FeatureCollection
       !props.layers[facility.relationType]
     )
       return;
-    features.push(
-      pointFeature(facility.longitude, facility.latitude, {
+    candidates.push({
+      id: facility.code,
+      layoutId: `${facility.relationType}:${facility.code}`,
+      longitude: facility.longitude,
+      latitude: facility.latitude,
+      properties: {
         id: facility.code,
         kind: facility.relationType,
         name: facility.name,
         selected: facility.code === props.selectedFacilityId,
-      }),
-    );
+      },
+    });
   });
   if (props.layers.RAILWAY) {
     props.facilities.railwayFacilities.forEach((facility) => {
@@ -1244,16 +1302,32 @@ function markerCollection(props: FourRegionTerrainAtlasProps): FeatureCollection
         facility.locationRelation,
         facility.name,
       );
-      features.push(
-        pointFeature(facility.longitude, facility.latitude, {
+      candidates.push({
+        id: facility.sourceId,
+        layoutId: `RAILWAY:${facility.sourceId}`,
+        longitude: facility.longitude,
+        latitude: facility.latitude,
+        properties: {
           id: facility.sourceId,
           kind: "RAILWAY",
           ...presentation,
           selected: facility.sourceId === props.selectedFacilityId,
-        }),
-      );
+        },
+      });
     });
   }
+  return candidates;
+}
+
+function markerCollection(props: FourRegionTerrainAtlasProps): FeatureCollection {
+  const features: Feature[] = operationalMarkerCandidates(props).map((candidate) =>
+    pointFeature(candidate.longitude, candidate.latitude, {
+      ...candidate.properties,
+      anchorLongitude: candidate.longitude,
+      anchorLatitude: candidate.latitude,
+      displaced: false,
+    }),
+  );
   if (props.layers.WEATHER) {
     props.situation.weather.forEach((weather) => {
       features.push(
@@ -1271,6 +1345,125 @@ function markerCollection(props: FourRegionTerrainAtlasProps): FeatureCollection
     });
   }
   return { type: "FeatureCollection", features };
+}
+
+function refreshOperationalMarkerSources(runtime: AtlasRuntime) {
+  const candidates = operationalMarkerCandidates(runtime.props);
+  const markerFeatures: Feature[] = [];
+  const leaderFeatures: Feature[] = [];
+  const viewportWidth = runtime.host.clientWidth;
+  const viewportHeight = runtime.host.clientHeight;
+
+  try {
+    const gapPx = facilityMarkerGap(runtime.map.getZoom());
+    const projected = candidates.map((candidate) => {
+      const point = runtime.map.project([candidate.longitude, candidate.latitude]);
+      return { candidate, id: candidate.layoutId, x: point.x, y: point.y };
+    });
+    const visible = projected.filter(
+      ({ x, y }) =>
+        x >= -gapPx &&
+        x <= viewportWidth + gapPx &&
+        y >= -gapPx &&
+        y <= viewportHeight + gapPx,
+    );
+    const layout = layoutOperationalMarkers(visible, {
+      gapPx,
+      viewportWidth,
+      viewportHeight,
+      marginPx: gapPx / 2,
+    });
+    const candidatesByLayoutId = new Map(
+      candidates.map((candidate) => [candidate.layoutId, candidate]),
+    );
+    layout.forEach((item) => {
+      const candidate = candidatesByLayoutId.get(item.id);
+      if (!candidate) return;
+      const display = runtime.map.unproject([item.x, item.y]);
+      markerFeatures.push(
+        pointFeature(display.lng, display.lat, {
+          ...candidate.properties,
+          anchorLongitude: candidate.longitude,
+          anchorLatitude: candidate.latitude,
+          displaced: item.displaced,
+        }),
+      );
+      if (item.displaced)
+        leaderFeatures.push({
+          type: "Feature",
+          properties: { id: candidate.id },
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [candidate.longitude, candidate.latitude],
+              [display.lng, display.lat],
+            ],
+          },
+        });
+    });
+    markerFeatures.push(
+      ...projected
+        .filter(({ candidate }) => !visible.some(({ id }) => id === candidate.layoutId))
+        .map(({ candidate }) =>
+          pointFeature(candidate.longitude, candidate.latitude, {
+            ...candidate.properties,
+            anchorLongitude: candidate.longitude,
+            anchorLatitude: candidate.latitude,
+            displaced: false,
+          }),
+        ),
+    );
+  } catch {
+    markerFeatures.push(
+      ...candidates.map((candidate) =>
+        pointFeature(candidate.longitude, candidate.latitude, {
+          ...candidate.properties,
+          anchorLongitude: candidate.longitude,
+          anchorLatitude: candidate.latitude,
+          displaced: false,
+        }),
+      ),
+    );
+  }
+
+  markerFeatures.push(...weatherMarkerFeatures(runtime.props));
+  setSource(runtime.map, MARKER_SOURCE, {
+    type: "FeatureCollection",
+    features: markerFeatures,
+  });
+  setSource(runtime.map, MARKER_LEADER_SOURCE, {
+    type: "FeatureCollection",
+    features: leaderFeatures,
+  });
+}
+
+function weatherMarkerFeatures(props: FourRegionTerrainAtlasProps): Feature[] {
+  if (!props.layers.WEATHER) return [];
+  return props.situation.weather.map((weather) =>
+    pointFeature(weather.longitude, weather.latitude, {
+      id: weather.regionCode ?? weather.rootRegionCode,
+      kind: "WEATHER",
+      name: weather.regionName,
+      regionCode: weather.regionCode ?? weather.rootRegionCode,
+      weatherKind: weatherSpriteKind(weather),
+      weatherFresh:
+        !props.weatherHistorical && weatherObservationFresh(weather.observedAt),
+      weatherImage: `atlas-icon-weather-${weatherSpriteKind(weather).toLowerCase()}${!props.weatherHistorical && weatherObservationFresh(weather.observedAt) ? "" : "-static"}`,
+    }),
+  );
+}
+
+function facilityMarkerGap(zoom: number) {
+  const stops = [
+    [4, 0.44],
+    [7, 0.56],
+    [10, 0.69],
+    [13, 0.81],
+  ] as const;
+  const lower = [...stops].reverse().find(([stop]) => zoom >= stop) ?? stops[0];
+  const upper = stops.find(([stop]) => zoom <= stop) ?? stops.at(-1)!;
+  const ratio = upper[0] === lower[0] ? 0 : (zoom - lower[0]) / (upper[0] - lower[0]);
+  return 32 * (lower[1] + (upper[1] - lower[1]) * ratio) + 4;
 }
 
 function startWeatherAnimation(runtime: AtlasRuntime) {
@@ -1301,7 +1494,7 @@ function startWeatherAnimation(runtime: AtlasRuntime) {
       runtime.map.getLayer("atlas-weather-pulse")
     ) {
       if (timestamp - freshnessCheckedAt > 30_000) {
-        setSource(runtime.map, MARKER_SOURCE, markerCollection(runtime.props));
+        refreshOperationalMarkerSources(runtime);
         freshnessCheckedAt = timestamp;
       }
       const motionTime =
@@ -1414,6 +1607,11 @@ function setSource(map: MapLibreMap, id: string, data: FeatureCollection) {
 function featureStringProperty(feature: MapGeoJSONFeature, key: string) {
   const value: unknown = feature.properties?.[key];
   return typeof value === "string" ? value : undefined;
+}
+
+function featureNumberProperty(feature: MapGeoJSONFeature, key: string) {
+  const value: unknown = feature.properties?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function emptyCollection(): FeatureCollection {

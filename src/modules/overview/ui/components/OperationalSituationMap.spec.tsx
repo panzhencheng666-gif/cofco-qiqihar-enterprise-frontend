@@ -103,6 +103,17 @@ describe("four-region terrain public situation scene", () => {
     expect(scene).toContain('data-dom-markers="0"');
   });
 
+  it("keeps every enabled facility visible and reconnects displaced icons to anchors", () => {
+    expect(scene).toContain('"icon-allow-overlap": true');
+    expect(scene).toContain('"icon-ignore-placement": true');
+    expect(scene).toContain("const MARKER_LEADER_SOURCE");
+    expect(scene).toContain('id: "atlas-operational-marker-leaders"');
+    expect(scene).toContain('map.on("moveend"');
+    expect(scene).toContain("refreshOperationalMarkerSources(runtime)");
+    expect(scene).toContain("anchorLongitude");
+    expect(scene).toContain("anchorLatitude");
+  });
+
   it("uses animated weather and recognizable railway and grain-depot icons", () => {
     expect(scene).toContain("realisticSituationIcon(");
     expect(scene).toContain("realisticWeatherIcon(");

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  FACILITY_ICON_SIZE,
   FOUR_REGION_BASE_STYLE,
   FOUR_REGION_DETAIL_LAYERS,
   FOUR_REGION_REMOTE_SOURCES,
@@ -8,6 +9,23 @@ import {
 } from "./fourRegionTerrainStyle";
 
 describe("four-region satellite and terrain style", () => {
+  it("scales every facility icon together without selection-based resizing", () => {
+    expect(FACILITY_ICON_SIZE).toEqual([
+      "interpolate",
+      ["linear"],
+      ["zoom"],
+      4,
+      0.44,
+      7,
+      0.56,
+      10,
+      0.69,
+      13,
+      0.81,
+    ]);
+    expect(JSON.stringify(FACILITY_ICON_SIZE)).not.toContain("selected");
+  });
+
   it("renders a local shell before any remote provider responds", () => {
     expect(FOUR_REGION_BASE_STYLE.sources).toEqual({});
     expect(FOUR_REGION_BASE_STYLE.layers).toEqual([
