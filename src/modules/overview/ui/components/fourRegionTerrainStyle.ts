@@ -45,6 +45,32 @@ export const FACILITY_ICON_SIZE: ExpressionSpecification = [
   6.5,
 ];
 
+export const OPERATIONAL_FACILITY_ICON_SIZE: ExpressionSpecification = [
+  "interpolate",
+  ["exponential", 1.45],
+  ["zoom"],
+  4,
+  ["case", ["==", ["get", "kind"], "RAILWAY"], 0.24, 0.16],
+  6,
+  ["case", ["==", ["get", "kind"], "RAILWAY"], 0.375, 0.25],
+  8,
+  ["case", ["==", ["get", "kind"], "RAILWAY"], 0.75, 0.5],
+  10,
+  ["case", ["==", ["get", "kind"], "RAILWAY"], 1.35, 0.9],
+  12,
+  ["case", ["==", ["get", "kind"], "RAILWAY"], 2.25, 1.5],
+  14,
+  ["case", ["==", ["get", "kind"], "RAILWAY"], 3.45, 2.3],
+  16,
+  ["case", ["==", ["get", "kind"], "RAILWAY"], 4.8, 3.2],
+  18,
+  ["case", ["==", ["get", "kind"], "RAILWAY"], 6.3, 4.2],
+  20,
+  ["case", ["==", ["get", "kind"], "RAILWAY"], 7.95, 5.3],
+  22,
+  ["case", ["==", ["get", "kind"], "RAILWAY"], 9.75, 6.5],
+];
+
 const TERRAIN_TILES = ["cofco-terrain://{z}/{x}/{y}.png"];
 
 export const FOUR_REGION_BASE_STYLE: StyleSpecification = {

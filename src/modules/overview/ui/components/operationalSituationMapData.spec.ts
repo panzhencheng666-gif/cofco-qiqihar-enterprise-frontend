@@ -33,11 +33,21 @@ const situation = {
       risk: "常规",
     },
   ],
+  inventories: [
+    {
+      regionCode: "230200",
+      productCode: "CORN",
+      regionName: "齐齐哈尔市",
+      inventoryTonnes: 1234,
+      longitude: 123.92,
+      latitude: 47.35,
+    },
+  ],
   publicEvents: [],
 } as unknown as OperationalSituationCatalogue;
 
 describe("operational situation map data", () => {
-  it("keeps weather in administrative details instead of creating map markers", () => {
+  it("keeps weather and inventory metrics out of the governed facility markers", () => {
     expect(operationalMarkers(facilities, situation)).toEqual([]);
   });
 

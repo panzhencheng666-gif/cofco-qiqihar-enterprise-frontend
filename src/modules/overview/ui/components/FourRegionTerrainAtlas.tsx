@@ -32,10 +32,10 @@ import type { OperationalSituationCatalogue } from "../../domain/operationalSitu
 import type { OverviewRegion } from "../../domain/overview";
 import { flattenCoordinates, type MapFeature } from "./boundaryGeometry";
 import {
-  FACILITY_ICON_SIZE,
   FOUR_REGION_BASE_STYLE,
   FOUR_REGION_DETAIL_LAYERS,
   FOUR_REGION_REMOTE_SOURCES,
+  OPERATIONAL_FACILITY_ICON_SIZE,
   publicBoundaryHierarchy,
   surfaceModePaint,
   type TerrainSurfaceMode,
@@ -166,7 +166,6 @@ const ACTIVE_LABEL_SOURCE = "atlas-active-labels";
 const MASK_SOURCE = "atlas-region-mask";
 const RAIL_SOURCE = "atlas-rail-routes";
 const LOGISTICS_SOURCE = "atlas-logistics";
-const INVENTORY_SOURCE = "atlas-inventory";
 const MARKER_SOURCE = "atlas-markers";
 const ANNOTATION_SOURCE = "atlas-annotation";
 const REGION_LAYER_IDS = ["atlas-active-fill", "atlas-root-fill"] as const;
@@ -413,7 +412,6 @@ function setRemoteEnhancementVisibility(
 async function installAtlasMarkerImages(map: MapLibreMap) {
   const sources = [
     ["atlas-icon-depot-owned", realisticSituationIcon("OWNED")],
-    ["atlas-icon-inventory", realisticSituationIcon("OWNED")],
     ["atlas-icon-depot-leased", realisticSituationIcon("LEASED")],
     ["atlas-icon-depot-historical", realisticSituationIcon("HISTORICAL_LEASED")],
     ["atlas-icon-railway", realisticSituationIcon("RAILWAY")],
@@ -471,7 +469,6 @@ function installAtlasLayers(map: MapLibreMap) {
   map.addSource(MASK_SOURCE, { type: "geojson", data: emptyCollection() });
   map.addSource(RAIL_SOURCE, { type: "geojson", data: emptyCollection() });
   map.addSource(LOGISTICS_SOURCE, { type: "geojson", data: emptyCollection() });
-  map.addSource(INVENTORY_SOURCE, { type: "geojson", data: emptyCollection() });
   map.addSource(MARKER_SOURCE, { type: "geojson", data: emptyCollection() });
   map.addSource(ANNOTATION_SOURCE, { type: "geojson", data: emptyCollection() });
 
@@ -613,19 +610,6 @@ function installAtlasLayers(map: MapLibreMap) {
     },
   });
   map.addLayer({
-    id: "atlas-inventory",
-    type: "symbol",
-    source: INVENTORY_SOURCE,
-    layout: {
-      "icon-allow-overlap": false,
-      "icon-image": "atlas-icon-inventory",
-      "icon-size": ["interpolate", ["linear"], ["zoom"], 5, 0.46, 12, 0.62],
-    },
-    paint: {
-      "icon-opacity": 0.86,
-    },
-  });
-  map.addLayer({
     id: "atlas-selected-facility-halo",
     type: "circle",
     source: MARKER_SOURCE,
@@ -734,7 +718,7 @@ function installAtlasLayers(map: MapLibreMap) {
         "atlas-icon-depot-historical",
         "atlas-icon-railway",
       ],
-      "icon-size": FACILITY_ICON_SIZE,
+      "icon-size": OPERATIONAL_FACILITY_ICON_SIZE,
     },
     paint: {
       "icon-opacity": ["case", ["==", ["get", "nearby"], true], 0.68, 0.98],
@@ -872,7 +856,6 @@ function synchronizeAtlas(runtime: AtlasRuntime, props: FourRegionTerrainAtlasPr
   ) {
     setSource(runtime.map, RAIL_SOURCE, railwayCollection(props));
     setSource(runtime.map, LOGISTICS_SOURCE, logisticsCollection(props));
-    setSource(runtime.map, INVENTORY_SOURCE, inventoryCollection(props));
     refreshOperationalMarkerSources(runtime);
     runtime.map.setLayoutProperty(
       "atlas-base-railways",
@@ -1369,18 +1352,6 @@ function logisticsCollection(props: FourRegionTerrainAtlasProps): FeatureCollect
         ],
       },
     })),
-  };
-}
-
-function inventoryCollection(props: FourRegionTerrainAtlasProps): FeatureCollection {
-  if (!props.layers.INVENTORY) return emptyCollection();
-  return {
-    type: "FeatureCollection",
-    features: (props.situation.inventories ?? []).map((inventory) =>
-      pointFeature(inventory.longitude, inventory.latitude, {
-        regionCode: inventory.regionCode,
-      }),
-    ),
   };
 }
 

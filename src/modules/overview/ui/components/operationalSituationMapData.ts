@@ -4,7 +4,7 @@ import type {
 } from "../../domain/operationalFacilities";
 import type { OperationalSituationCatalogue } from "../../domain/operationalSituation";
 
-export type OperationalLayerCode = "STORAGE" | "RAILWAY" | "INVENTORY" | "PUBLIC_EVENT";
+export type OperationalLayerCode = "STORAGE" | "RAILWAY" | "PUBLIC_EVENT";
 
 export interface OperationalMarker {
   id: string;
@@ -38,13 +38,6 @@ export function operationalMarkers(
       name: facility.name,
       longitude: facility.longitude,
       latitude: facility.latitude,
-    })),
-    ...(situation.inventories ?? []).map((inventory) => ({
-      id: `inventory:${inventory.regionCode}:${inventory.productCode}`,
-      kind: "INVENTORY" as const,
-      name: `${inventory.regionName}库存 ${inventory.inventoryTonnes.toLocaleString("zh-CN")} 吨`,
-      longitude: inventory.longitude,
-      latitude: inventory.latitude,
     })),
     ...situation.publicEvents.map((event) => ({
       id: event.eventId,
