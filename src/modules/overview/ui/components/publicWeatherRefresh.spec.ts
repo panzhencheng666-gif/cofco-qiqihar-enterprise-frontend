@@ -78,6 +78,28 @@ it("matches regionCode ahead of root and rejects older, unrelated and empty obse
   expect(result.weather[2]).toBe(original.weather[2]);
 });
 
+it("accepts a condition observation from the preceding hourly weather slot", async () => {
+  const original = catalogue([{ ...weather("1"), observedAt: "2026-09-19T12:15:00Z" }]);
+  const load = vi.fn(() =>
+    Promise.resolve(
+      catalogue([
+        {
+          ...weather("1"),
+          observedAt: "2026-09-19T12:00:00Z",
+          weatherCode: 2,
+          cloudCoverPercent: 55,
+        },
+      ]),
+    ),
+  );
+
+  const result = await enrichPublicWeather(original, load);
+
+  expect(result.weather[0]?.weatherCode).toBe(2);
+  expect(result.weather[0]?.cloudCoverPercent).toBe(55);
+  expect(result.weather[0]?.observedAt).toBe("2026-09-19T12:00:00Z");
+});
+
 it("keeps partial failures and uses at most two concurrent requests", async () => {
   let running = 0;
   let peak = 0;

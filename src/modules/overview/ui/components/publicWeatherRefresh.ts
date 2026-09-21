@@ -6,6 +6,20 @@ import type {
 const hasCondition = (row: WeatherObservation) =>
   row.weatherCode != null || row.cloudCoverPercent != null;
 const regionCode = (row: WeatherObservation) => row.regionCode ?? row.rootRegionCode;
+const CONDITION_OBSERVATION_LAG_MS = 90 * 60_000;
+
+const conditionFreshEnoughFor = (
+  candidate: WeatherObservation,
+  original: WeatherObservation,
+) => {
+  const candidateTime = Date.parse(candidate.observedAt);
+  const originalTime = Date.parse(original.observedAt);
+  return (
+    Number.isFinite(candidateTime) &&
+    Number.isFinite(originalTime) &&
+    candidateTime >= originalTime - CONDITION_OBSERVATION_LAG_MS
+  );
+};
 
 export async function enrichPublicWeather(
   catalogue: OperationalSituationCatalogue,
@@ -52,7 +66,7 @@ export async function enrichPublicWeather(
       if (hasCondition(original)) return original;
       const replacement = observations
         .get(regionCode(original))
-        ?.filter((row) => Date.parse(row.observedAt) >= Date.parse(original.observedAt))
+        ?.filter((row) => conditionFreshEnoughFor(row, original))
         .sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt))[0];
       return replacement ? { ...original, ...replacement } : original;
     }),
