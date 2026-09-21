@@ -53,6 +53,14 @@ import { createWeatherSpritePainter } from "./animatedWeatherSprite";
 import { publicMapFocus } from "./publicMapFocus";
 import { mapAnnotationGesture } from "./mapAnnotationGesture";
 import { layoutOperationalMarkers } from "./operationalMarkerLayout";
+import {
+  enhancementTimeoutMs,
+  isRemoteEnhancementId,
+  nextEnhancementStatus,
+  REMOTE_ENHANCEMENT_IDS,
+  type RemoteEnhancementId,
+  type RemoteEnhancementStatus,
+} from "./remoteMapEnhancement";
 import { createTerrainTileCache } from "./terrainTileCache";
 import {
   fourRegionContextMaskCollection,
@@ -135,11 +143,13 @@ export interface FourRegionTerrainAtlasProps {
 interface AtlasRuntime {
   destroyed: boolean;
   enhancementFailures: Set<TerrainEnhancementFailure>;
+  enhancementTimers: Map<RemoteEnhancementId, ReturnType<typeof setTimeout>>;
   hierarchyKey: string;
   host: HTMLDivElement;
   map: MapLibreMap;
   props: FourRegionTerrainAtlasProps;
   ready: boolean;
+  remoteEnhancementStatus: RemoteEnhancementStatus;
   fittedCenter?: [number, number];
   resizeAnimationFrameId?: number;
   syncedProps?: FourRegionTerrainAtlasProps;
@@ -195,12 +205,13 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
         container: host,
         dragRotate: false,
         dragPan: true,
-        fadeDuration: 120,
+        fadeDuration: 0,
         localIdeographFontFamily: "PingFang SC, Microsoft YaHei, sans-serif",
         maxPitch: 68,
         minPitch: 34,
         pitch: 52,
         renderWorldCopies: false,
+        refreshExpiredTiles: false,
         style: FOUR_REGION_BASE_STYLE,
       });
     } catch {
@@ -216,11 +227,16 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
     const runtime: AtlasRuntime = {
       destroyed: false,
       enhancementFailures: new Set(),
+      enhancementTimers: new Map(),
       hierarchyKey: "",
       host,
       map,
       props: propsRef.current,
       ready: false,
+      remoteEnhancementStatus: {
+        failed: new Set(),
+        pending: new Set(REMOTE_ENHANCEMENT_IDS),
+      },
       viewportHeight: 0,
       viewportWidth: 0,
       weatherAnimationUpdatedAt: 0,
@@ -237,10 +253,18 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
     map.on("load", () => void initializeAtlas(runtime));
     map.on("error", (event) => {
       const sourceId = (event as { sourceId?: string }).sourceId;
-      if (!sourceId || !Object.hasOwn(FOUR_REGION_REMOTE_SOURCES, sourceId)) return;
-      const state = terrainEnhancementStateForSource(sourceId);
-      if (!state) return;
-      reportEnhancementFailure(runtime, state);
+      if (!isRemoteEnhancementId(sourceId)) return;
+      updateRemoteEnhancement(runtime, sourceId, "FAILED");
+    });
+    map.on("sourcedata", (event) => {
+      const sourceId = (event as { sourceId?: string }).sourceId;
+      if (!isRemoteEnhancementId(sourceId)) return;
+      try {
+        if (map.getSource(sourceId) && map.isSourceLoaded(sourceId))
+          updateRemoteEnhancement(runtime, sourceId, "READY");
+      } catch {
+        // A transient source inspection failure is handled by its deadline.
+      }
     });
     map.on("click", (event) => handleMapClick(runtime, event));
     map.on("mousemove", (event) => {
@@ -273,6 +297,8 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
         cancelAnimationFrame(runtime.resizeAnimationFrameId);
       if (runtime.weatherAnimationFrameId !== undefined)
         cancelAnimationFrame(runtime.weatherAnimationFrameId);
+      runtime.enhancementTimers.forEach((timer) => clearTimeout(timer));
+      runtime.enhancementTimers.clear();
       resizeObserver.disconnect();
       runtimeRef.current = null;
       map.remove();
@@ -298,6 +324,7 @@ async function initializeAtlas(runtime: AtlasRuntime) {
   if (runtime.destroyed) return;
   const { host, map } = runtime;
   installRemoteTerrain(map);
+  startRemoteEnhancementDeadlines(runtime);
   const markerImagesDegraded = await installAtlasMarkerImages(map);
   if (runtime.destroyed) return;
   if (markerImagesDegraded) {
@@ -326,6 +353,67 @@ function reportEnhancementFailure(
   if (!state) return;
   runtime.host.dataset.enhancementState = state.toLowerCase();
   runtime.props.onEnhancementState?.(state);
+}
+
+function startRemoteEnhancementDeadlines(runtime: AtlasRuntime) {
+  REMOTE_ENHANCEMENT_IDS.forEach((id) => {
+    const previous = runtime.enhancementTimers.get(id);
+    if (previous !== undefined) clearTimeout(previous);
+    runtime.enhancementTimers.set(
+      id,
+      setTimeout(
+        () => updateRemoteEnhancement(runtime, id, "FAILED"),
+        enhancementTimeoutMs(id),
+      ),
+    );
+  });
+}
+
+function updateRemoteEnhancement(
+  runtime: AtlasRuntime,
+  id: RemoteEnhancementId,
+  type: "FAILED" | "READY",
+) {
+  if (runtime.destroyed) return;
+  const timer = runtime.enhancementTimers.get(id);
+  if (timer !== undefined) clearTimeout(timer);
+  runtime.enhancementTimers.delete(id);
+  runtime.remoteEnhancementStatus = nextEnhancementStatus(
+    runtime.remoteEnhancementStatus,
+    { id, type },
+  );
+  setRemoteEnhancementVisibility(runtime, id, type === "READY");
+
+  const failure = terrainEnhancementStateForSource(id);
+  if (failure) {
+    if (type === "FAILED") runtime.enhancementFailures.add(failure);
+    else {
+      const equivalentSourceStillFailed = [
+        ...runtime.remoteEnhancementStatus.failed,
+      ].some((failedId) => terrainEnhancementStateForSource(failedId) === failure);
+      if (!equivalentSourceStillFailed) runtime.enhancementFailures.delete(failure);
+    }
+  }
+  const state =
+    terrainEnhancementStateForFailures(runtime.enhancementFailures) ??
+    (runtime.remoteEnhancementStatus.pending.size ? "LOADING" : "READY");
+  runtime.host.dataset.enhancementState = state.toLowerCase();
+  runtime.props.onEnhancementState?.(state);
+}
+
+function setRemoteEnhancementVisibility(
+  runtime: AtlasRuntime,
+  id: RemoteEnhancementId,
+  visible: boolean,
+) {
+  const { map } = runtime;
+  FOUR_REGION_DETAIL_LAYERS.forEach((layer) => {
+    if ((layer as { source?: string }).source !== id || !map.getLayer(layer.id)) return;
+    map.setLayoutProperty(layer.id, "visibility", visible ? "visible" : "none");
+  });
+  if (id !== "terrain-dem") return;
+  if (!visible) map.setTerrain(null);
+  else if (runtime.ready) applySurfaceMode(map, runtime.props.surfaceMode ?? "FUSION");
 }
 
 async function installAtlasMarkerImages(map: MapLibreMap) {

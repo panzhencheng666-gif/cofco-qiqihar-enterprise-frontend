@@ -60,11 +60,11 @@ const DEPOT_FILTERS: readonly {
 ];
 
 const ENHANCEMENT_NOTICE: Partial<Record<TerrainEnhancementState, string>> = {
-  DEGRADED_IMAGERY: "在线卫星影像加载失败；地图仍显示已成功加载的其他图层。",
-  DEGRADED_TERRAIN: "在线高程地形加载失败；地图仍显示已成功加载的其他图层。",
-  DEGRADED_BASEMAP: "在线道路与地名底图加载失败；地图仍显示已成功加载的其他图层。",
+  DEGRADED_IMAGERY: "卫星影像暂不可用，已保留行政边界和业务节点。",
+  DEGRADED_TERRAIN: "高程地形暂不可用，已保留卫星底图和业务节点。",
+  DEGRADED_BASEMAP: "道路与地名底图暂不可用，已保留行政边界和业务节点。",
   DEGRADED_ICONS: "部分业务图标加载失败；地图数据与查询仍可使用。",
-  DEGRADED_MULTIPLE: "多个在线地图增强源加载失败；地图仍显示已成功加载的图层。",
+  DEGRADED_MULTIPLE: "多个在线地图源暂不可用，已保留本地底图、行政边界和业务节点。",
   DEGRADED_RENDERER:
     "地图渲染器初始化失败，当前无法显示地图；筛选条件和页面数据仍保留。",
 };

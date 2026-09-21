@@ -93,6 +93,8 @@ describe("four-region terrain public situation scene", () => {
     expect(scene).toContain("dragPan: true");
     expect(scene).toContain("map.touchZoomRotate.disableRotation");
     expect(scene).toContain("renderWorldCopies: false");
+    expect(scene).toContain("fadeDuration: 0");
+    expect(scene).toContain("refreshExpiredTiles: false");
   });
 
   it("renders operational nodes inside the same WebGL scene without DOM markers", () => {
