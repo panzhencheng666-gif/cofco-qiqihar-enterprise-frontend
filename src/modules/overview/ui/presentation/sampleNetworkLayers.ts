@@ -31,7 +31,10 @@ export function visibleSampleNetworkMapIcons(
   icons: readonly OverviewSamplePointIcon[],
 ): readonly OverviewSamplePointIcon[] {
   if (regionLevel === "TOWNSHIP" || regionLevel === "VILLAGE") return icons;
-  return [];
+  return icons.filter(
+    ({ layerType }) =>
+      layerType === "DESIGN_EXACT_LOCATION" || layerType === "DESIGN_EXPIRED_LOCATION",
+  );
 }
 
 export function sampleNetworkLayerIcons(
@@ -77,15 +80,14 @@ export function sampleNetworkLayerIcons(
 function designSamplePointIcon(
   point: OverviewDesignSamplePoint,
 ): OverviewSamplePointIcon {
+  const expired = point.lifecycleStatus === "EXPIRED";
+  const schematic = point.locationMode === "REGION_SCHEMATIC";
   return {
     samplePointId: `design-sample-point:${point.id}`,
-    name:
-      point.locationMode === "REGION_SCHEMATIC"
-        ? `${point.name}（示意位置）`
-        : point.name,
+    name: `${point.name}${expired ? "（已作废）" : ""}${schematic ? "（示意位置）" : ""}`,
     regionCode: point.regionCode,
     iconKey: "design-reference",
-    layerType: "DESIGN_EXACT_LOCATION",
+    layerType: expired ? "DESIGN_EXPIRED_LOCATION" : "DESIGN_EXACT_LOCATION",
     types: [
       {
         code: "DESIGN_SAMPLE_POINT",

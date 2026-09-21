@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import type { MasterDataRepository } from "../../application/ports/MasterDataRepository";
 import type { HttpClient } from "../../../../shared/api/HttpClient";
+import { ReadRequestCache } from "../../../../shared/api/ReadRequestCache";
 
 const wireOptionSchema = z.object({ code: z.string(), name: z.string() });
 const businessPeriodListSchema = z.object({
@@ -45,24 +46,26 @@ const regionHierarchyListSchema = z.object({
 });
 
 export class HttpMasterDataRepository implements MasterDataRepository {
+  private readonly reads = new ReadRequestCache();
+
   constructor(private readonly http: HttpClient) {}
 
   async getBusinessPeriods() {
-    return (
-      await this.http.get(
-        "/api/v1/master-data/business-periods",
-        businessPeriodListSchema,
-      )
-    ).data.map(({ code, name, ...period }) => ({ id: code, name, ...period }));
+    const path = "/api/v1/master-data/business-periods";
+    return this.reads.get(path, async () =>
+      (await this.http.get(path, businessPeriodListSchema)).data.map(
+        ({ code, name, ...period }) => ({ id: code, name, ...period }),
+      ),
+    );
   }
 
   async getSupplySurveyPeriods() {
-    return (
-      await this.http.get(
-        "/api/v1/master-data/supply-survey-periods",
-        supplySurveyPeriodListSchema,
-      )
-    ).data.map(({ code, name, ...period }) => ({ id: code, name, ...period }));
+    const path = "/api/v1/master-data/supply-survey-periods";
+    return this.reads.get(path, async () =>
+      (await this.http.get(path, supplySurveyPeriodListSchema)).data.map(
+        ({ code, name, ...period }) => ({ id: code, name, ...period }),
+      ),
+    );
   }
 
   async getProducts(domain?: string, pageKind?: string) {
@@ -70,50 +73,45 @@ export class HttpMasterDataRepository implements MasterDataRepository {
       domain === undefined && pageKind === undefined
         ? ""
         : `?domain=${encodeURIComponent(domain ?? "")}&pageKind=${encodeURIComponent(pageKind ?? "")}`;
-    return (
-      await this.http.get(
-        `/api/v1/master-data/products${applicability}`,
-        optionListSchema,
-      )
-    ).data.map(toMasterDataOption);
+    const path = `/api/v1/master-data/products${applicability}`;
+    return this.reads.get(path, async () =>
+      (await this.http.get(path, optionListSchema)).data.map(toMasterDataOption),
+    );
   }
 
   async getCultivars(productCode: string) {
-    return (
-      await this.http.get(
-        `/api/v1/master-data/products/${productCode}/cultivars`,
-        optionListSchema,
-      )
-    ).data.map(toMasterDataOption);
+    const path = `/api/v1/master-data/products/${encodeURIComponent(productCode)}/cultivars`;
+    return this.reads.get(path, async () =>
+      (await this.http.get(path, optionListSchema)).data.map(toMasterDataOption),
+    );
   }
 
   async getMarketObjectTypes(productCode: string) {
-    return (
-      await this.http.get(
-        `/api/v1/master-data/object-types?domain=MARKET&productCode=${productCode}`,
-        optionListSchema,
-      )
-    ).data.map(toMasterDataOption);
+    const path = `/api/v1/master-data/object-types?domain=MARKET&productCode=${encodeURIComponent(productCode)}`;
+    return this.reads.get(path, async () =>
+      (await this.http.get(path, optionListSchema)).data.map(toMasterDataOption),
+    );
   }
 
   async getMonitoringPeriods(domain: "MARKET", productCode: string) {
-    return (
-      await this.http.get(
-        `/api/v1/master-data/monitoring-periods?domain=${domain}&productCode=${productCode}`,
-        optionListSchema,
-      )
-    ).data.map(toMasterDataOption);
+    const path = `/api/v1/master-data/monitoring-periods?domain=${encodeURIComponent(domain)}&productCode=${encodeURIComponent(productCode)}`;
+    return this.reads.get(path, async () =>
+      (await this.http.get(path, optionListSchema)).data.map(toMasterDataOption),
+    );
   }
 
   async getRegionRoots() {
-    return (
-      await this.http.get("/api/v1/master-data/regions", regionRootListSchema)
-    ).data.map(({ code, name, parentCode, level }) => ({
-      id: code,
-      name,
-      parentCode,
-      level,
-    }));
+    const path = "/api/v1/master-data/regions";
+    return this.reads.get(path, async () =>
+      (await this.http.get(path, regionRootListSchema)).data.map(
+        ({ code, name, parentCode, level }) => ({
+          id: code,
+          name,
+          parentCode,
+          level,
+        }),
+      ),
+    );
   }
 
   async getRegionChildren(parentId?: string) {
@@ -121,16 +119,18 @@ export class HttpMasterDataRepository implements MasterDataRepository {
       parentId === undefined
         ? "/api/v1/regions"
         : `/api/v1/regions?parentCode=${encodeURIComponent(parentId)}`;
-    return (await this.http.get(path, regionHierarchyListSchema)).data;
+    return this.reads.get(
+      path,
+      async () => (await this.http.get(path, regionHierarchyListSchema)).data,
+    );
   }
 
   async getRegionPath(regionId: string) {
-    return (
-      await this.http.get(
-        `/api/v1/regions/${encodeURIComponent(regionId)}/path`,
-        regionHierarchyListSchema,
-      )
-    ).data;
+    const path = `/api/v1/regions/${encodeURIComponent(regionId)}/path`;
+    return this.reads.get(
+      path,
+      async () => (await this.http.get(path, regionHierarchyListSchema)).data,
+    );
   }
 }
 

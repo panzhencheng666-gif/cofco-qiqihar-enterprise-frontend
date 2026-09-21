@@ -4,11 +4,13 @@ export interface HttpClient {
   get<T>(path: string, schema: ZodType<T>, options?: HttpRequestOptions): Promise<T>;
   post?<T>(path: string, body: unknown, schema: ZodType<T>): Promise<T>;
   put?<T>(path: string, body: unknown, schema: ZodType<T>): Promise<T>;
+  delete?<T>(path: string, schema: ZodType<T>): Promise<T>;
   download?(path: string): Promise<HttpDownload>;
 }
 
 export interface HttpRequestOptions {
   signal?: AbortSignal;
+  timeoutMs?: number;
 }
 
 export interface HttpDownload {
@@ -75,6 +77,10 @@ export class FetchHttpClient implements HttpClient {
     return this.request("PUT", path, body, schema);
   }
 
+  async delete<T>(path: string, schema: ZodType<T>): Promise<T> {
+    return this.request("DELETE", path, undefined, schema);
+  }
+
   async download(path: string): Promise<HttpDownload> {
     const response = await fetch(`${this.baseUrl}${path}`, {
       credentials: "same-origin",
@@ -102,7 +108,7 @@ export class FetchHttpClient implements HttpClient {
     const cancel = () => controller.abort();
     if (options?.signal?.aborted) cancel();
     else options?.signal?.addEventListener("abort", cancel, { once: true });
-    const deadline = setTimeout(cancel, 15_000);
+    const deadline = setTimeout(cancel, options?.timeoutMs ?? 15_000);
     try {
       const response = await fetch(`${this.baseUrl}${path}`, {
         method,

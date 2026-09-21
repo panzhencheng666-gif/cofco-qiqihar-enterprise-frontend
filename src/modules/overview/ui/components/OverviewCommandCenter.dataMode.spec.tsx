@@ -37,6 +37,24 @@ describe("OverviewCommandCenter data mode slot", () => {
     expect(screen.getByLabelText("总揽关键指标")).toBeInTheDocument();
   });
 
+  it("does not leak sample business KPIs into an independent map mode", () => {
+    render(
+      <OverviewCommandCenter
+        showBusinessMetrics={false}
+        filters={<div />}
+        map={<div />}
+        navigation={<div />}
+        onCloseDetails={vi.fn()}
+        onEnterSelectedRegion={vi.fn()}
+        productLabel="玉米"
+        sampleMode={false}
+      />,
+    );
+
+    expect(screen.queryByLabelText("总揽关键指标")).not.toBeInTheDocument();
+    expect(screen.getByRole("main")).toHaveClass("without-business-kpis");
+  });
+
   it("replaces sample-derived KPI cards with the selected independent data mode", () => {
     render(
       <OverviewCommandCenter
@@ -54,7 +72,7 @@ describe("OverviewCommandCenter data mode slot", () => {
     expect(screen.getByLabelText("地区数据指标")).toBeInTheDocument();
     expect(screen.queryByLabelText("总揽关键指标")).not.toBeInTheDocument();
     expect(screen.getByText("已同步地区正式数据")).toBeInTheDocument();
-    expect(screen.queryByText("等待审核数据")).not.toBeInTheDocument();
+    expect(screen.queryByText("等待入库数据")).not.toBeInTheDocument();
   });
 
   it("reserves the right side for supply balance without covering the map", () => {

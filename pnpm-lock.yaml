@@ -10,6 +10,12 @@ importers:
       "@tanstack/react-query":
         specifier: 5.101.4
         version: 5.101.4(react@19.2.8)
+      "@turf/buffer":
+        specifier: ^7.4.0
+        version: 7.4.0
+      "@turf/difference":
+        specifier: ^7.4.0
+        version: 7.4.0
       "@turf/helpers":
         specifier: ^7.4.0
         version: 7.4.0
@@ -20,8 +26,8 @@ importers:
         specifier: 1.143.0
         version: 1.143.0
       maplibre-gl:
-        specifier: 6.1.0
-        version: 6.1.0
+        specifier: ^6.10.0
+        version: 6.10.0
       react:
         specifier: 19.2.8
         version: 19.2.8
@@ -522,17 +528,17 @@ packages:
         integrity: sha512-FVMOcmSP/yqol45t7StApEyTL5/vmqBCuFhH9n+fFuINenhaX+YgHHIt1yJ86S8kln3uJLcMvmEU2cfn6E2eCQ==,
       }
 
-  "@maplibre/maplibre-gl-style-spec@26.2.1":
+  "@maplibre/maplibre-gl-style-spec@26.4.4":
     resolution:
       {
-        integrity: sha512-QFKCXkOeSzOr8jF75jm6kySOg+dUvOehPhRi68gcOYPHb7U5JloUq0dJW0Y5/fZV8ygfT0Vp2RWodvq+fyxFWA==,
+        integrity: sha512-hG4RZR4PBd/+6A3ODdZ3AnQRF106ZQk1y3bhwDg8bH/A4Oz2tnRUJVVWs9BZa6gXZ1d3UKe89C+Mm+olGBELvA==,
       }
     hasBin: true
 
-  "@maplibre/mlt@1.1.12":
+  "@maplibre/mlt@1.3.0":
     resolution:
       {
-        integrity: sha512-ZeK5w2TTeHOajcLaEQs1KZXw2V9wIKo1PmThlxlsHoXsQsYlBqLJzPOd6tJHRtGTChUY3DPPmjXRArYVvAbmZw==,
+        integrity: sha512-7M2O7ABM80Oi8XPkfkrjKB8mOBIxGoVgkA52Mu4RMWoBvvMdagQ522+WxVYujZsMpqIr3BpzrTbXrm4k8lCzCQ==,
       }
 
   "@maplibre/vt-pbf@4.3.2":
@@ -781,16 +787,58 @@ packages:
     peerDependencies:
       "@testing-library/dom": ">=7.21.4"
 
+  "@turf/bbox@7.4.0":
+    resolution:
+      {
+        integrity: sha512-yOX9lALc2GmjYUIE99+nRj7eZA7eDtx7Ixu/hrgIo+YqHvL1reaPVTC9rQWMHMm0pH0/WHjzk8uOpAHjptrudQ==,
+      }
+
+  "@turf/buffer@7.4.0":
+    resolution:
+      {
+        integrity: sha512-ewYjC7NmmP+BZ8JcjX1TglzYH1FCMWAh5L08j0iAP4lbn3/AutVjjbwIXedZZy5He1OfgmXf+rIBcNXdeEYceg==,
+      }
+
+  "@turf/center@7.4.0":
+    resolution:
+      {
+        integrity: sha512-JVuTaIdnQtmTV8eQfVxqza1okKiaFzgVeIA6Xoy/u6aBMxg2+oBpS6GcHZkEqR8OapPWValB1AYYqimUSiyOXw==,
+      }
+
+  "@turf/clone@7.4.0":
+    resolution:
+      {
+        integrity: sha512-IfYnuil7XYJauy3crzIYEr26QkmBiTgFdGfYwUUe3S6dawX+lyb3vhuaYyssEPcCJq83g0G7hwxZy7141Mmzjg==,
+      }
+
+  "@turf/difference@7.4.0":
+    resolution:
+      {
+        integrity: sha512-4zV7Xi3CwUdyNsDzrPty08PiUeYYVBdbCnNVlSf8sk5Z7SL7seA42RabRG8ByTzcrbLATeDU4oTEthVhOGPlyw==,
+      }
+
   "@turf/helpers@7.4.0":
     resolution:
       {
         integrity: sha512-7PAwLZqOdRzTI5g9bHvUwlloAXPDH/mlajtryk0tw4ZwGMtmXsAyF4QundsAMfy4u48Fyd3AUqMXY0SMxqJGWg==,
       }
 
+  "@turf/jsts@2.7.2":
+    resolution:
+      {
+        integrity: sha512-zAezGlwWHPyU0zxwcX2wQY3RkRpwuoBmhhNE9HY9kWhFDkCxZ3aWK5URKwa/SWKJbj9aztO+8vtdiBA28KVJFg==,
+      }
+
   "@turf/meta@7.4.0":
     resolution:
       {
         integrity: sha512-3cLUvlEyDuSnMSzrjhaLAEiYR8xhbfWyTVQlrlEw40xL81d4KF4PqUWbjTXKpXZStdYbet2GCurl79KMypNw6g==,
+      }
+
+  "@turf/projection@7.4.0":
+    resolution:
+      {
+        integrity: sha512-ZS932qM+18V1UBvNlrNXUCD7mh9CzQqZzw/ElVtb0kAk6N00FYQ9bo26Cca08UZKXh3rZqG/e4eCK74JNGS4Zg==,
       }
 
   "@turf/union@7.4.0":
@@ -1176,6 +1224,12 @@ packages:
         integrity: sha512-RKshQI1R3YQ+n9YJz2QQ147P66ELpa1FQEg20Dk8oW9t2KgLbpDLLp9aGZ7y8WHSshDknG0bknqGw5/tyCs5tw==,
       }
 
+  bidi-js@1.1.0:
+    resolution:
+      {
+        integrity: sha512-fX1Onk0tdVPC7obPWB5EbJ1z7NVhLq4m2xZLq2YXBkxzMXIGRpNMU88n0EPgWseKl12J7zXs7qrDxPK4sRs2fg==,
+      }
+
   bignumber.js@9.3.1:
     resolution:
       {
@@ -1286,6 +1340,18 @@ packages:
     resolution:
       {
         integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==,
+      }
+
+  d3-array@2.12.1:
+    resolution:
+      {
+        integrity: sha512-B0ErZK/66mHtEsR1TkPEEkwdy+WDesimkM5gpZr5Dsg54BiTA5RXtYW5qTLIAcekaS9xfZrzBLF/OAkB3Qn1YQ==,
+      }
+
+  d3-geo@2.0.2:
+    resolution:
+      {
+        integrity: sha512-8pM1WGMLGFuhq9S+FpPURxic+gKzjluCD/CHTuUF3mXMeiCo0i6R0tO1s4+GArRFde96SLcW/kOFRjoAosPsFA==,
       }
 
   data-urls@7.0.0:
@@ -1714,6 +1780,12 @@ packages:
       }
     engines: { node: ^14.17.0 || ^16.13.0 || >=18.0.0 }
 
+  internmap@1.0.1:
+    resolution:
+      {
+        integrity: sha512-lDB5YccMydFBtasVtxnZ3MRBHuaoE8GKsppq+EchKL2U4nK/DmEpPHNH8MZe5HkMtpSiTSOZwfN0tzYjO/lJEw==,
+      }
+
   interpret@3.1.1:
     resolution:
       {
@@ -1832,6 +1904,13 @@ packages:
       }
     engines: { node: ">=6" }
     hasBin: true
+
+  jsts@2.7.1:
+    resolution:
+      {
+        integrity: sha512-x2wSZHEBK20CY+Wy+BPE7MrFQHW6sIsdaGUMEqmGAio+3gFzQaBYPwLRonUfQf9Ak8pBieqj9tUofX1+WtAEIg==,
+      }
+    engines: { node: ">= 12" }
 
   kdbush@4.1.0:
     resolution:
@@ -2020,10 +2099,10 @@ packages:
         integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==,
       }
 
-  maplibre-gl@6.1.0:
+  maplibre-gl@6.10.0:
     resolution:
       {
-        integrity: sha512-vLRukjvbUai4SXW2/jKo8rPsw6YMXuA/b4fKFVSulZKFVRHkOvk4ZmNlDSVZpTYPV0/7/iTqq8ltYdyr764b7w==,
+        integrity: sha512-pZIJ1/rsB1jDjT3eBTfMaeSY45lRKdCuZtqXqTnkUrn0UJO9IwtbywT5ym3/cz57MGEELwAwQSYjB/Fj9TlktQ==,
       }
     engines: { node: ">=16.14.0", npm: ">=8.1.0" }
 
@@ -3133,7 +3212,7 @@ snapshots:
     dependencies:
       kdbush: 4.1.0
 
-  "@maplibre/maplibre-gl-style-spec@26.2.1":
+  "@maplibre/maplibre-gl-style-spec@26.4.4":
     dependencies:
       "@mapbox/jsonlint-lines-primitives": 2.0.3
       "@mapbox/unitbezier": 1.0.0
@@ -3142,7 +3221,7 @@ snapshots:
       quickselect: 3.0.0
       tinyqueue: 3.0.0
 
-  "@maplibre/mlt@1.1.12":
+  "@maplibre/mlt@1.3.0":
     dependencies:
       "@mapbox/point-geometry": 1.1.0
 
@@ -3262,14 +3341,66 @@ snapshots:
     dependencies:
       "@testing-library/dom": 10.4.1
 
+  "@turf/bbox@7.4.0":
+    dependencies:
+      "@turf/helpers": 7.4.0
+      "@turf/meta": 7.4.0
+      "@types/geojson": 7946.0.16
+      tslib: 2.8.1
+
+  "@turf/buffer@7.4.0":
+    dependencies:
+      "@turf/bbox": 7.4.0
+      "@turf/center": 7.4.0
+      "@turf/helpers": 7.4.0
+      "@turf/jsts": 2.7.2
+      "@turf/meta": 7.4.0
+      "@turf/projection": 7.4.0
+      "@types/geojson": 7946.0.16
+      d3-geo: 2.0.2
+      tslib: 2.8.1
+
+  "@turf/center@7.4.0":
+    dependencies:
+      "@turf/bbox": 7.4.0
+      "@turf/helpers": 7.4.0
+      "@types/geojson": 7946.0.16
+      tslib: 2.8.1
+
+  "@turf/clone@7.4.0":
+    dependencies:
+      "@turf/helpers": 7.4.0
+      "@types/geojson": 7946.0.16
+      tslib: 2.8.1
+
+  "@turf/difference@7.4.0":
+    dependencies:
+      "@turf/helpers": 7.4.0
+      "@turf/meta": 7.4.0
+      "@types/geojson": 7946.0.16
+      polyclip-ts: 0.16.8
+      tslib: 2.8.1
+
   "@turf/helpers@7.4.0":
     dependencies:
       "@types/geojson": 7946.0.16
       tslib: 2.8.1
 
+  "@turf/jsts@2.7.2":
+    dependencies:
+      jsts: 2.7.1
+
   "@turf/meta@7.4.0":
     dependencies:
       "@turf/helpers": 7.4.0
+      "@types/geojson": 7946.0.16
+      tslib: 2.8.1
+
+  "@turf/projection@7.4.0":
+    dependencies:
+      "@turf/clone": 7.4.0
+      "@turf/helpers": 7.4.0
+      "@turf/meta": 7.4.0
       "@types/geojson": 7946.0.16
       tslib: 2.8.1
 
@@ -3525,6 +3656,10 @@ snapshots:
     dependencies:
       require-from-string: 2.0.2
 
+  bidi-js@1.1.0:
+    dependencies:
+      require-from-string: 2.0.2
+
   bignumber.js@9.3.1: {}
 
   bitmap-sdf@1.0.4: {}
@@ -3582,6 +3717,14 @@ snapshots:
   css.escape@1.5.1: {}
 
   csstype@3.2.3: {}
+
+  d3-array@2.12.1:
+    dependencies:
+      internmap: 1.0.1
+
+  d3-geo@2.0.2:
+    dependencies:
+      d3-array: 2.12.1
 
   data-urls@7.0.0:
     dependencies:
@@ -3819,6 +3962,8 @@ snapshots:
 
   ini@4.1.1: {}
 
+  internmap@1.0.1: {}
+
   interpret@3.1.1: {}
 
   is-core-module@2.16.2:
@@ -3883,6 +4028,8 @@ snapshots:
   json-stringify-pretty-compact@4.0.0: {}
 
   json5@2.2.3: {}
+
+  jsts@2.7.1: {}
 
   kdbush@4.1.0: {}
 
@@ -3968,17 +4115,18 @@ snapshots:
     dependencies:
       "@jridgewell/sourcemap-codec": 1.5.5
 
-  maplibre-gl@6.1.0:
+  maplibre-gl@6.10.0:
     dependencies:
       "@mapbox/point-geometry": 1.1.0
       "@mapbox/tiny-sdf": 2.2.0
       "@mapbox/unitbezier": 1.0.0
       "@mapbox/vector-tile": 3.0.0
       "@maplibre/geojson-vt": 6.1.1
-      "@maplibre/maplibre-gl-style-spec": 26.2.1
-      "@maplibre/mlt": 1.1.12
+      "@maplibre/maplibre-gl-style-spec": 26.4.4
+      "@maplibre/mlt": 1.3.0
       "@maplibre/vt-pbf": 4.3.2
       "@types/geojson": 7946.0.16
+      bidi-js: 1.1.0
       earcut: 3.2.3
       gl-matrix: 3.4.4
       kdbush: 4.1.0

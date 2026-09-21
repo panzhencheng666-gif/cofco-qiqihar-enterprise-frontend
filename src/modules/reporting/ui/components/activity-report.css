@@ -1,0 +1,323 @@
+.reporting-view-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 6px;
+  border: 1px solid rgb(76 138 163 / 24%);
+  border-radius: 12px;
+  background: rgb(235 246 250 / 78%);
+}
+
+.reporting-view-tabs button {
+  padding: 9px 16px;
+  border: 0;
+  border-radius: 8px;
+  color: #41606f;
+  background: transparent;
+  cursor: pointer;
+}
+
+.reporting-view-tabs button[aria-pressed="true"] {
+  color: white;
+  background: linear-gradient(135deg, #0d6786, #1991a5);
+  box-shadow: 0 7px 18px rgb(13 103 134 / 24%);
+}
+
+.activity-report-period {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  margin: -4px 0 12px;
+  color: #526c78;
+  font-size: 12px;
+}
+
+.activity-report-period select {
+  min-width: 110px;
+  padding: 7px 9px;
+  border: 1px solid #b9d4dd;
+  border-radius: 7px;
+  background: white;
+}
+
+.activity-story {
+  display: grid;
+  gap: 10px;
+}
+
+.activity-story__stage {
+  position: relative;
+  min-height: 460px;
+  overflow: hidden;
+  border-radius: 24px;
+  color: white;
+  background:
+    radial-gradient(circle at 80% 20%, rgb(86 228 218 / 24%), transparent 28%),
+    linear-gradient(135deg, #072b45, #0b5571 48%, #12788a);
+  box-shadow: 0 25px 60px rgb(5 48 70 / 24%);
+}
+
+.activity-story__ambient {
+  position: absolute;
+  top: 12%;
+  right: 8%;
+  width: 260px;
+  height: 260px;
+  border: 1px solid rgb(185 253 255 / 24%);
+  border-radius: 42% 58% 63% 37%;
+  box-shadow:
+    0 0 0 38px rgb(126 239 244 / 5%),
+    0 0 0 82px rgb(126 239 244 / 3%);
+  animation: activity-orbit 12s ease-in-out infinite alternate;
+}
+
+.activity-story__stage > article {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  align-content: center;
+  width: min(700px, 70%);
+  min-height: 390px;
+  padding: 56px 64px;
+}
+
+.activity-story__stage article > span {
+  color: #8beef0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.activity-story__stage h2 {
+  margin: 13px 0 4px;
+  font-size: clamp(25px, 3vw, 42px);
+  line-height: 1.18;
+}
+
+.activity-story__stage article > strong {
+  margin: 10px 0;
+  color: #ffe080;
+  font-family: "DIN Alternate", "Bahnschrift", sans-serif;
+  font-size: clamp(48px, 8vw, 86px);
+  line-height: 1;
+}
+
+.activity-story__stage article > p {
+  max-width: 620px;
+  margin: 0;
+  color: #c9e5eb;
+  line-height: 1.7;
+}
+
+.activity-story__accents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 22px;
+}
+
+.activity-story__accents > div {
+  min-width: 112px;
+  padding: 10px 12px;
+  border: 1px solid rgb(190 245 250 / 18%);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 8%);
+  backdrop-filter: blur(8px);
+}
+
+.activity-story__accents b,
+.activity-story__accents small {
+  display: block;
+}
+
+.activity-story__accents b {
+  font-size: 22px;
+}
+
+.activity-story__accents small {
+  margin-top: 3px;
+  color: #a9d8e0;
+}
+
+.activity-story__stage > footer {
+  position: absolute;
+  right: 28px;
+  bottom: 24px;
+  left: 28px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.activity-story__progress,
+.activity-story__controls {
+  display: flex;
+  gap: 7px;
+}
+
+.activity-story__progress button {
+  width: 24px;
+  height: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 28%);
+  cursor: pointer;
+}
+
+.activity-story__progress button[aria-pressed="true"] {
+  width: 44px;
+  background: #ffe080;
+}
+
+.activity-story__controls button {
+  padding: 7px 11px;
+  border: 1px solid rgb(190 245 250 / 28%);
+  border-radius: 7px;
+  color: white;
+  background: rgb(1 34 51 / 44%);
+  cursor: pointer;
+}
+
+.activity-story__period,
+.activity-story__motion-note {
+  margin: 0;
+  color: #607b86;
+  font-size: 11px;
+}
+
+.activity-story__motion-note {
+  padding: 8px 10px;
+  border-left: 3px solid #1991a5;
+  background: #eef8fa;
+}
+
+.system-activity-report {
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+  border: 1px solid #c6dde4;
+  border-radius: 18px;
+  background: linear-gradient(145deg, white, #f3fafb);
+  box-shadow: 0 18px 45px rgb(26 79 96 / 10%);
+}
+
+.system-activity-report > header {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.system-activity-report h2 {
+  margin: 4px 0;
+  color: #163f50;
+}
+
+.system-activity-report header span,
+.system-activity-report header p,
+.system-activity-report footer {
+  color: #67818c;
+  font-size: 11px;
+}
+
+.system-activity-report header button {
+  padding: 10px 15px;
+  border: 0;
+  border-radius: 8px;
+  color: white;
+  background: #0d718d;
+  cursor: pointer;
+}
+
+.system-activity-report__hero {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.system-activity-report__hero article {
+  padding: 16px;
+  border-radius: 12px;
+  color: white;
+  background: linear-gradient(145deg, #0f566f, #16859a);
+}
+
+.system-activity-report__hero span,
+.system-activity-report__hero small,
+.system-activity-report__hero b {
+  display: block;
+}
+
+.system-activity-report__hero b {
+  margin: 5px 0;
+  color: #ffe080;
+  font-size: 31px;
+}
+
+.system-activity-report__grids {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.system-activity-report__grids > section {
+  padding: 13px;
+  border: 1px solid #d5e7ec;
+  border-radius: 10px;
+  background: white;
+}
+
+.system-activity-report__grids h3 {
+  margin: 0 0 9px;
+  color: #274f5e;
+  font-size: 13px;
+}
+
+.system-activity-report__grids ol {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.system-activity-report__grids li {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px dashed #dbe9ed;
+  color: #5d7781;
+  font-size: 11px;
+}
+
+.system-activity-report__grids li b {
+  color: #0d718d;
+}
+
+@keyframes activity-orbit {
+  to {
+    transform: translate(-28px, 18px) rotate(18deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-story__ambient {
+    animation: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .activity-story__stage > article {
+    width: auto;
+    padding: 40px 28px 90px;
+  }
+  .system-activity-report__hero {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .system-activity-report__grids {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,4 +1,12 @@
-export type OverviewDataMode = "SAMPLE_POINTS" | "REGIONAL_DATA" | "SUPPLY_BALANCE";
+import type { RegionalEstimateBatch } from "./regionalEstimates";
+export type OverviewDataMode =
+  | "SAMPLE_POINTS"
+  | "STORAGE_FACILITIES"
+  | "RAILWAY_FACILITIES"
+  | "PUBLIC_SITUATION"
+  | "REGIONAL_DATA"
+  | "SUPPLY_BALANCE"
+  | "MAP_ANNOTATION";
 
 export interface RegionalCropSummary {
   regionCode: string;
@@ -15,6 +23,117 @@ export interface RegionalCropSummary {
   comparisonAvailable: boolean;
   areaChangeRateAvailable: boolean;
   comparisonMessage: string | null;
+}
+
+export interface RegionalAgricultureProfile {
+  regionCode: string;
+  regionName: string;
+  administrativeLevel: string;
+  year: number;
+  automatic: boolean;
+  generatedAt: string;
+  coverageDescription?: string | undefined;
+  regionFacts: {
+    areaSquareKilometres: string | number;
+    directChildCount: number;
+    countyCount: number;
+    townshipCount: number;
+    villageCount: number;
+  };
+  sourceSummary: string;
+  calculationMethod: string;
+  refreshStatus?:
+    | {
+        cadence: string;
+        status: string;
+        lastAttemptAt: string | null;
+        lastSuccessAt: string | null;
+        nextRefreshAt: string | null;
+      }
+    | undefined;
+  weather?:
+    | {
+        meanTemperatureC: string | null;
+        precipitationMm: string | null;
+        soilMoisturePercent: string | null;
+        risk: string;
+        assessment: string;
+        observedAt: string;
+        sourceId: string;
+      }
+    | null
+    | undefined;
+  policies?:
+    | readonly {
+        title: string;
+        publishedOn: string | null;
+        sourceName: string;
+        sourceUrl: string;
+        affectedCrops: string;
+        impact: string;
+      }[]
+    | undefined;
+  indicators?:
+    | readonly {
+        category: string;
+        label: string;
+        value: string;
+        unit: string;
+        dataYear: number;
+        dataKind: "OBSERVED" | "ESTIMATED" | "PLAN" | "CONTEXT";
+        method: string;
+        sourceName: string;
+        sourceUrl: string;
+        verifiedAt?: string | undefined;
+      }[]
+    | undefined;
+  sources?:
+    | readonly {
+        id: string;
+        type: "AGRICULTURE" | "WEATHER" | "POLICY";
+        name: string;
+        url: string;
+        sourceClass: string;
+        reliabilityWeight: string;
+        publishedOn: string | null;
+        fetchedAt: string | null;
+        status: string;
+        evidence: string;
+      }[]
+    | undefined;
+  railway?: RegionalRailways | null | undefined;
+  estimateBatch?: RegionalEstimateBatch | undefined;
+  regionalCalculation?:
+    | {
+        status: string;
+        attemptedAt: string;
+        calculatedAt: string | null;
+        sourceStatus: string;
+      }
+    | null
+    | undefined;
+  crops: readonly {
+    productCode: "CORN" | "SOYBEAN" | "RICE";
+    productName: string;
+    dataKind: "OBSERVED" | "MODEL_ESTIMATE";
+    plantedAreaMu: string;
+    yieldPerMuKg: string;
+    totalOutputKg: string;
+    structurePercent: string;
+    basis: string;
+    formula?: string | undefined;
+    confidencePercent?: string | undefined;
+    uncertaintyLowKg?: string | undefined;
+    uncertaintyHighKg?: string | undefined;
+    forecasts: readonly {
+      year: number;
+      plantedAreaMu: string;
+      yieldPerMuKg: string;
+      totalOutputKg: string;
+      formula?: string | undefined;
+      confidencePercent?: string | undefined;
+    }[];
+  }[];
 }
 
 export interface SupplyBalanceSummary {
@@ -35,5 +154,35 @@ export interface SupplyBalanceSummary {
     value: string | null;
     display: string | null;
     note: string | null;
+  }[];
+}
+
+export interface RegionalRailways {
+  regionCode: string;
+  boundaryAvailable: boolean;
+  sourceAsOf: string | null;
+  facilities: readonly {
+    sourceId: string;
+    name: string;
+    kind: string;
+    longitude: number;
+    latitude: number;
+    operator: string;
+    reference: string;
+    status: string;
+    service: string;
+    locationRelation: "WITHIN" | "NEARBY";
+    distanceKm: number;
+    nearbyLines: string;
+    sourceUrl: string;
+  }[];
+  lines: readonly {
+    name: string;
+    mappedTrackKm: number;
+    usage: string;
+    electrification: string;
+    gauge: string;
+    operator: string;
+    sourceUrl: string;
   }[];
 }

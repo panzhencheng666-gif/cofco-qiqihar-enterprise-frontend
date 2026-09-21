@@ -14,6 +14,9 @@ export function sampleNetworkMarkerAccessibilityLabel(
   if (icon.layerType === "DESIGN_EXACT_LOCATION") {
     return `${icon.name}，设计样本位置`;
   }
+  if (icon.layerType === "DESIGN_EXPIRED_LOCATION") {
+    return `${icon.name}，作废设计样本保留位置，可供后续提取复用`;
+  }
   if (icon.layerType === "REGIONAL_ACTUAL_BADGE") {
     return `${icon.name}，仅确认到${regionalActualLevelLabel(icon.representedRegionLevel)}，不显示伪造图钉`;
   }

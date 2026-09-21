@@ -9,6 +9,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
+import type { OperationalFacilityCatalogue } from "../../domain/operationalFacilities";
 
 import type { OverviewRepository } from "../../application/ports/OverviewRepository";
 import type { OverviewRegionalDataRepository } from "../../application/ports/OverviewRegionalDataRepository";
@@ -25,8 +26,374 @@ import {
 } from "./OverviewPage";
 import { HttpContractError, HttpError } from "../../../../shared/api/HttpClient";
 
+vi.mock("../components/OperationalSituationMap", () => ({
+  OperationalSituationMap: ({
+    onRegionSelect,
+    facilities,
+  }: {
+    onRegionSelect: (region: OverviewRegion) => void;
+    facilities: { regionCode: string | null };
+  }) => (
+    <div aria-label="公开运营态势地图" data-scope={facilities.regionCode ?? "ALL"}>
+      <button
+        onClick={() =>
+          onRegionSelect({
+            code: "230200",
+            name: "齐齐哈尔市",
+            level: "PREFECTURE",
+            approvedRecordCount: null,
+          })
+        }
+      >
+        选择齐齐哈尔详情
+      </button>
+    </div>
+  ),
+}));
+
 describe("OverviewPage", () => {
-  it("loads independent regional data only after switching away from the default sample mode", async () => {
+  it("shows the public situation map while operational feeds are still loading", async () => {
+    const never = new Promise<never>(() => undefined);
+    render(
+      <OverviewPage
+        regionalDataRepository={{
+          operationalFacilities: vi.fn(() => never),
+          operationalSituation: vi.fn(() => never),
+          regionalSummary: vi.fn(),
+          supplyBalance: vi.fn(),
+        }}
+        repository={{
+          mapScope: () => Promise.resolve(sampleMapScope),
+          options: () => Promise.resolve(options),
+          regions: () => Promise.resolve([sampleRegion]),
+          locations: () => Promise.resolve([]),
+          indicators: () => Promise.resolve([]),
+          dashboard: () => Promise.resolve(emptyDashboard),
+        }}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "公开态势" }));
+
+    expect(await screen.findByLabelText("公开运营态势地图")).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "四区域总览" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not restart the facility catalogue for unrelated realtime business changes", async () => {
+    let realtimeCallbacks: OverviewRealtimeCallbacks | undefined;
+    const invalidateBusinessData = vi.fn();
+    const operationalFacilities = vi
+      .fn<NonNullable<OverviewRegionalDataRepository["operationalFacilities"]>>()
+      .mockResolvedValue({
+        regionCode: null,
+        productCode: "CORN",
+        asOf: "2026-09-20",
+        storageCategories: [],
+        storageFacilities: [],
+        railwayFacilities: [],
+        railwayLines: [],
+        railwayRoutes: [],
+        sources: [],
+      });
+    render(
+      <OverviewPage
+        realtimeStream={{
+          subscribe: (callbacks) => {
+            realtimeCallbacks = callbacks;
+            return () => undefined;
+          },
+        }}
+        regionalDataRepository={{
+          operationalFacilities,
+          operationalSituation: vi.fn().mockResolvedValue({
+            generatedAt: "2026-09-20T12:00:00Z",
+            weather: [],
+            publicEvents: [],
+            policyEvents: [],
+            sources: [],
+          }),
+          regionalSummary: vi.fn(),
+          supplyBalance: vi.fn(),
+        }}
+        repository={{
+          invalidateBusinessData,
+          mapScope: () => Promise.resolve(sampleMapScope),
+          options: () => Promise.resolve(options),
+          regions: () => Promise.resolve([sampleRegion]),
+          locations: () => Promise.resolve([]),
+          indicators: () => Promise.resolve([]),
+          dashboard: () => Promise.resolve(emptyDashboard),
+        }}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "公开态势" }));
+    await waitFor(() => expect(operationalFacilities).toHaveBeenCalledTimes(1));
+    invalidateBusinessData.mockClear();
+
+    act(() =>
+      realtimeCallbacks?.onBusinessChange({
+        aggregateType: "REPORT_RECORD",
+        actionCode: "REPORT_RECORD_UPDATED",
+        productCode: "CORN",
+        regionCodes: ["230200"],
+        surveyYear: 2026,
+      }),
+    );
+
+    await waitFor(() => expect(invalidateBusinessData).toHaveBeenCalledTimes(1));
+    expect(operationalFacilities).toHaveBeenCalledTimes(1);
+  });
+
+  it("merges storage and railway facilities into one public situation mode", async () => {
+    const operationalFacilities = vi
+      .fn<NonNullable<OverviewRegionalDataRepository["operationalFacilities"]>>()
+      .mockResolvedValue({
+        regionCode: null,
+        productCode: "CORN",
+        asOf: "2026-09-18",
+        storageCategories: [
+          { code: "OWNED", label: "自有库点", count: 0 },
+          { code: "LEASED", label: "租赁库点", count: 0 },
+          { code: "HISTORICAL_LEASED", label: "历史租赁库点", count: 0 },
+        ],
+        storageFacilities: [],
+        railwayFacilities: [],
+        railwayLines: [],
+        railwayRoutes: [],
+        sources: [
+          {
+            code: "STORAGE",
+            label: "关联库点",
+            status: "READY",
+            sourceAsOf: "2026-09-18",
+            sourceUrl: null,
+            notice: "仅展示核验数据。",
+          },
+          {
+            code: "RAILWAY",
+            label: "铁路站点",
+            status: "READY",
+            sourceAsOf: "2026-09-15",
+            sourceUrl: "https://www.openstreetmap.org/copyright",
+            notice: "公开地理参考。",
+          },
+        ],
+      });
+    render(
+      <OverviewPage
+        regionalDataRepository={{
+          operationalFacilities,
+          operationalSituation: vi.fn().mockResolvedValue({
+            generatedAt: "2026-09-18T06:00:00Z",
+            weather: [],
+            publicEvents: [],
+            policyEvents: [],
+            sources: [],
+          }),
+          regionalSummary: vi.fn(),
+          supplyBalance: vi.fn(),
+        }}
+        repository={{
+          mapScope: () => Promise.resolve(sampleMapScope),
+          options: () => Promise.resolve(options),
+          regions: () => Promise.resolve([sampleRegion]),
+          locations: () => Promise.resolve([]),
+          indicators: () => Promise.resolve([]),
+          dashboard: () => Promise.resolve(emptyDashboard),
+        }}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "关联库点" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "铁路站点" })).not.toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: "公开态势" }));
+    expect(await screen.findByLabelText("公开运营态势地图")).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { name: "四区域总览" }),
+    ).not.toBeInTheDocument();
+    await waitFor(() => expect(operationalFacilities).toHaveBeenCalledTimes(1));
+    operationalFacilities.mockResolvedValue({
+      ...(await (operationalFacilities.mock.results[0]!
+        .value as Promise<OperationalFacilityCatalogue>)),
+      regionCode: "230200",
+    });
+    await userEvent.click(screen.getByRole("button", { name: "选择齐齐哈尔详情" }));
+    await screen.findByRole("button", { name: "关闭地区详情" });
+    expect(screen.getByLabelText("公开运营态势地图")).toHaveAttribute(
+      "data-scope",
+      "ALL",
+    );
+  });
+
+  it("keeps the selected region catalogue when a railway detail is opened", async () => {
+    const railwayFacility = (sourceId: string, name: string) => ({
+      sourceId,
+      name,
+      kind: "station",
+      longitude: 124,
+      latitude: 47,
+      operator: "",
+      reference: "",
+      status: "运营情况待核验",
+      service: "业务范围待核验",
+      locationRelation: "WITHIN" as const,
+      distanceKm: 0,
+      nearbyLines: "",
+      sourceUrl: `https://www.openstreetmap.org/${sourceId}`,
+    });
+    const globalCatalogue: OperationalFacilityCatalogue = {
+      regionCode: null,
+      productCode: "CORN",
+      asOf: "2026-09-21",
+      storageCategories: [],
+      storageFacilities: [],
+      railwayFacilities: [
+        railwayFacility("node/global-qiqihar", "齐齐哈尔站"),
+        railwayFacility("node/global-heihe", "黑河站"),
+      ],
+      railwayLines: [],
+      railwayRoutes: [],
+      sources: [],
+    };
+    const regionalCatalogue: OperationalFacilityCatalogue = {
+      ...globalCatalogue,
+      regionCode: "230200",
+      railwayFacilities: [railwayFacility("node/global-qiqihar", "齐齐哈尔站")],
+    };
+    const operationalFacilities = vi
+      .fn<NonNullable<OverviewRegionalDataRepository["operationalFacilities"]>>()
+      .mockResolvedValueOnce(globalCatalogue)
+      .mockResolvedValueOnce(regionalCatalogue);
+
+    render(
+      <OverviewPage
+        regionalDataRepository={{
+          operationalFacilities,
+          operationalSituation: vi.fn().mockResolvedValue({
+            generatedAt: "2026-09-21T05:00:00Z",
+            weather: [],
+            publicEvents: [],
+            policyEvents: [],
+            sources: [],
+          }),
+          regionalSummary: vi.fn(),
+          supplyBalance: vi.fn(),
+        }}
+        repository={{
+          mapScope: () => Promise.resolve(sampleMapScope),
+          options: () => Promise.resolve(options),
+          regions: () => Promise.resolve([sampleRegion]),
+          locations: () => Promise.resolve([]),
+          indicators: () => Promise.resolve([]),
+          dashboard: () => Promise.resolve(emptyDashboard),
+        }}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole("button", { name: "公开态势" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "选择齐齐哈尔详情" }),
+    );
+    const railwayTab = await screen.findByRole("button", { name: "铁路 1" });
+
+    await userEvent.click(railwayTab);
+
+    expect(screen.getByRole("button", { name: "铁路 1" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "铁路 2" })).not.toBeInTheDocument();
+  });
+
+  it.each(["failed", "pending"])(
+    "shows the regional profile independently when summary is %s",
+    async (summaryState) => {
+      const regionalSummary = vi
+        .fn<OverviewRegionalDataRepository["regionalSummary"]>()
+        .mockImplementation(() =>
+          summaryState === "pending"
+            ? new Promise(() => undefined)
+            : Promise.reject(new Error("legacy summary does not support township")),
+        );
+      const regionalDataRepository: OverviewRegionalDataRepository = {
+        agricultureProfile: vi.fn().mockResolvedValue({
+          regionCode: "230200",
+          regionName: "齐齐哈尔市",
+          administrativeLevel: "PREFECTURE",
+          year: 2026,
+          automatic: true,
+          generatedAt: "2026-09-14T10:00:00Z",
+          regionFacts: {
+            areaSquareKilometres: "42202.36",
+            directChildCount: 16,
+            countyCount: 16,
+            townshipCount: 232,
+            villageCount: 2332,
+          },
+          sourceSummary: "地区年度正式数据优先，缺项由统计模型自动补齐",
+          calculationMethod: "结构系数估算；复合增长公式预测",
+          crops: [
+            {
+              productCode: "CORN",
+              productName: "玉米",
+              dataKind: "OBSERVED",
+              plantedAreaMu: "1500000",
+              yieldPerMuKg: "650",
+              totalOutputKg: "975000000",
+              structurePercent: "62",
+              basis: "采用地区年度正式数据自动汇总",
+              forecasts: [],
+            },
+          ],
+        }),
+        regionalSummary,
+        supplyBalance: vi.fn(),
+      };
+      render(
+        <OverviewPage
+          regionalDataRepository={regionalDataRepository}
+          repository={{
+            mapScope: () => Promise.resolve(sampleMapScope),
+            options: () => Promise.resolve(options),
+            regions: () => Promise.resolve([sampleRegion]),
+            locations: () => Promise.resolve([]),
+            indicators: () => Promise.resolve([]),
+            dashboard: () => Promise.resolve(emptyDashboard),
+          }}
+        />,
+      );
+
+      expect(await screen.findByRole("button", { name: "样本点" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      expect(regionalSummary).not.toHaveBeenCalled();
+      await userEvent.click(
+        await screen.findByRole("button", { name: "齐齐哈尔市，已核定 1 条" }),
+      );
+      await userEvent.click(screen.getByRole("button", { name: "地区数据" }));
+
+      await waitFor(() =>
+        expect(regionalSummary).toHaveBeenCalledWith({
+          regionCode: "230200",
+          year: 2026,
+          productCode: "CORN",
+        }),
+      );
+      expect(
+        await screen.findByRole("heading", { name: "齐齐哈尔市农业概况" }),
+      ).toBeVisible();
+      expect(
+        screen.getByText("公开资料自动核验 · 缺项自动补算 · 仅预测下一年"),
+      ).toBeVisible();
+      expect(
+        screen.getByText("地区数据范围：齐齐哈尔、黑河、呼伦贝尔、大兴安岭及下级地区"),
+      ).toBeVisible();
+      expect(screen.queryByText(/数据范围：.*个县区/)).not.toBeInTheDocument();
+    },
+  );
+
+  it("keeps the regional profile loading state instead of flashing the legacy summary", async () => {
     const regionalSummary = vi
       .fn<OverviewRegionalDataRepository["regionalSummary"]>()
       .mockResolvedValue({
@@ -35,17 +402,20 @@ describe("OverviewPage", () => {
         administrativeLevel: "PREFECTURE",
         year: 2026,
         productCode: "CORN",
-        plantedAreaMu: "1500000",
-        yieldPerMuKg: "650",
-        totalOutputKg: "975000000",
-        areaChangeWanMu: "10",
-        areaChangeRatePercent: "7.1429",
+        plantedAreaMu: "6100000",
+        yieldPerMuKg: null,
+        totalOutputKg: null,
+        areaChangeWanMu: "14.5",
+        areaChangeRatePercent: "2.43",
         currentDataAvailable: true,
         comparisonAvailable: true,
         areaChangeRateAvailable: true,
-        comparisonMessage: "已按2025年对比",
+        comparisonMessage: null,
       });
     const regionalDataRepository: OverviewRegionalDataRepository = {
+      agricultureProfile: vi.fn<
+        NonNullable<OverviewRegionalDataRepository["agricultureProfile"]>
+      >(() => new Promise(() => undefined)),
       regionalSummary,
       supplyBalance: vi.fn(),
     };
@@ -63,26 +433,14 @@ describe("OverviewPage", () => {
       />,
     );
 
-    expect(await screen.findByRole("button", { name: "样本点" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(regionalSummary).not.toHaveBeenCalled();
     await userEvent.click(
       await screen.findByRole("button", { name: "齐齐哈尔市，已核定 1 条" }),
     );
     await userEvent.click(screen.getByRole("button", { name: "地区数据" }));
 
-    await waitFor(() =>
-      expect(regionalSummary).toHaveBeenCalledWith({
-        regionCode: "230200",
-        year: 2026,
-        productCode: "CORN",
-      }),
-    );
-    expect(await screen.findByText("结构调整增减")).toBeInTheDocument();
-    expect(screen.getByText("地区填报范围：当前授权地区及全部下级地区")).toBeVisible();
-    expect(screen.queryByText(/数据范围：.*个县区/)).not.toBeInTheDocument();
+    await waitFor(() => expect(regionalSummary).toHaveBeenCalledOnce());
+    expect(screen.getByText("正在同步地区正式数据")).toBeVisible();
+    expect(screen.queryByText("结构调整增减")).not.toBeInTheDocument();
   });
 
   it("reloads supply balance when the selected regional annual production changes", async () => {
@@ -368,7 +726,7 @@ describe("OverviewPage", () => {
       });
 
       expect(optionsRequest).toHaveBeenCalledTimes(2);
-      expect(screen.getByRole("combobox", { name: "产品" })).toBeVisible();
+      expect(screen.getByRole("combobox", { name: "品种" })).toBeVisible();
     } finally {
       vi.useRealTimers();
     }
@@ -678,7 +1036,7 @@ describe("OverviewPage", () => {
       await screen.findByText("总揽业务聚合数据加载失败，请稍后重试。"),
     ).toHaveAttribute("role", "alert");
     expect(screen.queryByText("120")).not.toBeInTheDocument();
-    expect(screen.getAllByText("暂无审核数据").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("暂无入库数据").length).toBeGreaterThan(0);
   });
 
   it("distinguishes region authorization failures from invalid filters and empty data", async () => {
@@ -715,7 +1073,7 @@ describe("OverviewPage", () => {
       />,
     );
     expect(
-      await screen.findByText("当前总揽筛选条件无效，请重新选择地区、产品和年度。"),
+      await screen.findByText("当前总揽筛选条件无效，请重新选择地区、品种和年度。"),
     ).toHaveAttribute("role", "alert");
     invalid.unmount();
 
@@ -727,7 +1085,7 @@ describe("OverviewPage", () => {
         }}
       />,
     );
-    expect((await screen.findAllByText("暂无审核数据")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("暂无入库数据")).length).toBeGreaterThan(0);
     expect(screen.queryByText(/无权查看|筛选条件无效/u)).not.toBeInTheDocument();
   });
 
@@ -841,7 +1199,7 @@ describe("OverviewPage", () => {
 
   it("places the embedded business-directory return action before the region selector", async () => {
     const previousUrl = window.location.href;
-    window.history.replaceState({}, "", "/overview-monitoring/?embed=1#/overview");
+    window.history.replaceState({}, "", "/overview-monitoring/#/overview");
     try {
       render(
         <OverviewPage
@@ -862,8 +1220,7 @@ describe("OverviewPage", () => {
       const returnLink = within(navigation).getByRole("link", {
         name: "返回业务目录",
       });
-      expect(navigation).toHaveClass("is-embedded");
-      expect(returnLink).toHaveAttribute("href", "/#/我的工作/待我处理");
+      expect(returnLink.getAttribute("href")).toContain("/#/我的工作/待我处理");
       expect(navigation.firstElementChild).toBe(returnLink);
       expect(within(navigation).getByText("选择地区")).toBeVisible();
     } finally {
@@ -890,7 +1247,7 @@ describe("OverviewPage", () => {
     );
 
     expect(await screen.findByRole("img", { name: "行政区边界地图" })).toBeVisible();
-    expect((await screen.findAllByText("暂无审核数据")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("暂无入库数据")).length).toBeGreaterThan(0);
     expect(
       screen.queryByRole("complementary", { name: "所选地区样本点详情" }),
     ).not.toBeInTheDocument();
@@ -1689,7 +2046,7 @@ describe("OverviewPage", () => {
     const listCalls = list.mock.calls.length;
     const iconCalls = icons.mock.calls.length;
 
-    await userEvent.setup().selectOptions(screen.getByLabelText("产品"), "SOYBEAN");
+    await userEvent.setup().selectOptions(screen.getByLabelText("品种"), "SOYBEAN");
 
     expect(
       screen.getByRole("complementary", { name: "所选地区样本点详情" }),
@@ -1869,7 +2226,7 @@ describe("OverviewPage", () => {
     );
     expect(await screen.findByRole("img", { name: "行政区边界地图" })).toBeVisible();
     expect(
-      screen.getByText("2026年度暂无审核正式业务数据", { exact: false }),
+      screen.getByText("2026年度暂无正式入库业务数据", { exact: false }),
     ).toBeInTheDocument();
     const map = screen.getByLabelText("粮食商情总览地图");
     fireEvent.doubleClick(
@@ -2510,6 +2867,7 @@ describe("OverviewPage", () => {
       "aria-pressed",
       "true",
     );
+    expect(screen.queryByLabelText("总揽关键指标")).not.toBeInTheDocument();
     expect(
       await within(map).findByRole("img", {
         name: /众兴村设计覆盖，行政村展示分区覆盖徽标/,

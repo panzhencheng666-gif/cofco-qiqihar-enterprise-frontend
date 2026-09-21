@@ -78,6 +78,8 @@ const designSamplePointSchema = z
     displayLatitude: z.number().min(-90).max(90).optional(),
     displayRegionCode: z.string().min(1).optional(),
     locationMode: z.enum(["REPORTED_COORDINATE", "REGION_SCHEMATIC"]).optional(),
+    lifecycleStatus: z.enum(["ACTIVE", "EXPIRED"]).optional(),
+    expiredAt: z.string().min(1).optional(),
     version: z.number().int().nonnegative(),
     updatedAt: z.string().min(1),
   })

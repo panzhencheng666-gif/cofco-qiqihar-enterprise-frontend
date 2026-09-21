@@ -21,6 +21,7 @@ type SamplePointAggregateCounts = Pick<
   | "marketCount"
   | "logisticsCount"
   | "scopeKind"
+  | "expiredSamplePointCount"
 >;
 
 type SamplePointAggregateMarker = Pick<
@@ -38,8 +39,10 @@ export function samplePointAggregateMarkerText(
 export function samplePointAggregateLabel(
   aggregate: SamplePointAggregateCounts,
 ): string {
-  if (aggregate.sampleKind === "DESIGN")
-    return `设计样本点 ${aggregate.samplePointCount} 个，其中产情类 ${aggregate.productionCount} 个、市场类 ${aggregate.marketCount} 个、物流类 ${aggregate.logisticsCount ?? 0} 个`;
+  if (aggregate.sampleKind === "DESIGN") {
+    const expired = aggregate.expiredSamplePointCount ?? 0;
+    return `设计样本点 ${aggregate.samplePointCount} 个，其中有效 ${aggregate.samplePointCount - expired} 个、作废 ${expired} 个；产情类 ${aggregate.productionCount} 个、市场类 ${aggregate.marketCount} 个、物流类 ${aggregate.logisticsCount ?? 0} 个`;
+  }
   if (aggregate.sampleKind === "HISTORICAL") {
     const identity =
       aggregate.scopeKind === "PARENT_DIRECT" ? "本级直属历史样本点" : "历史样本点";

@@ -18,9 +18,9 @@ describe("OverviewCommandCenter", () => {
       />,
     );
 
-    expect(screen.getAllByText("正在同步审核数据")).toHaveLength(5);
+    expect(screen.getAllByText("正在同步入库数据")).toHaveLength(5);
     expect(screen.getAllByText("正在同步")).toHaveLength(5);
-    expect(screen.queryByText("等待审核数据")).not.toBeInTheDocument();
+    expect(screen.queryByText("等待入库数据")).not.toBeInTheDocument();
   });
 
   it("keeps navigation and sample-network controls in one non-overlapping tool row", () => {

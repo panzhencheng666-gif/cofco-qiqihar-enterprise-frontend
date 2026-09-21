@@ -24,10 +24,12 @@
   },
   "dependencies": {
     "@tanstack/react-query": "5.101.4",
+    "@turf/buffer": "^7.4.0",
+    "@turf/difference": "^7.4.0",
     "@turf/helpers": "^7.4.0",
     "@turf/union": "^7.4.0",
     "cesium": "1.143.0",
-    "maplibre-gl": "6.1.0",
+    "maplibre-gl": "^6.10.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "three": "^0.184.0",

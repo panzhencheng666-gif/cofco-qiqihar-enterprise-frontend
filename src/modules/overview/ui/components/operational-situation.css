@@ -1,0 +1,848 @@
+.overview-command-center:has(.overview-data-mode.is-public_situation) {
+  --command-details-width: clamp(390px, 27vw, 460px);
+}
+
+.overview-command-center.has-side-data-panel .situation-intelligence-controls {
+  top: calc(var(--command-kpi-top) + var(--command-map-tools-gap) + 48px);
+}
+
+.overview-command-center.has-side-data-panel .situation-layer-switcher {
+  top: calc(var(--command-kpi-top) + var(--command-map-tools-gap) + 102px);
+}
+
+.overview-data-mode.is-public_situation {
+  padding: 0;
+  border-color: rgb(226 233 223 / 62%);
+  background: rgb(242 242 234 / 94%);
+  box-shadow: 0 18px 44px rgb(16 27 25 / 28%);
+  backdrop-filter: blur(18px) saturate(0.9);
+}
+
+.overview-command-center.has-side-data-panel .overview-data-mode.is-public_situation {
+  padding: 0;
+  border-radius: 14px;
+  background: rgb(238 241 234 / 93%);
+}
+
+.overview-data-mode.is-public_situation > :is([role="status"], [role="alert"]) {
+  margin: 14px 16px 0;
+  color: #31423d;
+}
+
+.operational-situation-panel {
+  display: grid;
+  min-height: 100%;
+  align-content: start;
+  color: #23332f;
+  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.situation-inspector-heading {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0;
+  padding: 20px 20px 14px;
+  border-bottom: 1px solid rgb(53 75 67 / 16%);
+  background: rgb(242 242 234 / 96%);
+  backdrop-filter: blur(15px);
+}
+
+.situation-inspector-heading span,
+.situation-weather-detail header span,
+.situation-logistics-detail header span,
+.situation-evidence-card header span {
+  display: block;
+  color: #66796f;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.situation-inspector-heading h2 {
+  margin: 3px 0 2px;
+  color: #16231f;
+  font-family: "Songti SC", "STSong", serif;
+  font-size: clamp(24px, 2.3vw, 34px);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.situation-inspector-heading p {
+  margin: 0;
+  color: #65736e;
+  font-size: 11px;
+}
+
+.situation-inspector-heading__time {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #60706a;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.situation-inspector-heading__time i,
+.situation-source-catalogue li i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3d9569;
+  box-shadow: 0 0 0 4px rgb(61 149 105 / 13%);
+}
+
+.situation-inspector-tabs {
+  position: sticky;
+  top: 89px;
+  z-index: 3;
+  display: flex;
+  gap: 4px;
+  padding: 10px 14px;
+  overflow-x: auto;
+  border-bottom: 1px solid rgb(53 75 67 / 14%);
+  background: rgb(242 242 234 / 96%);
+  scrollbar-width: none;
+}
+
+.situation-inspector-tabs button {
+  min-height: 30px;
+  padding: 4px 11px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: #52645d;
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.situation-inspector-tabs button:hover {
+  background: rgb(49 75 64 / 7%);
+}
+
+.situation-inspector-tabs button[aria-pressed="true"] {
+  border-color: #536e61;
+  color: #f7f6ef;
+  background: #354c42;
+}
+
+.situation-inspector-tabs button.is-primary-action {
+  margin-left: auto;
+  border-color: rgb(136 101 38 / 36%);
+  color: #604816;
+  background: #e6d4a5;
+}
+
+.situation-weather-detail,
+.situation-logistics-detail,
+.situation-inspector-section,
+.situation-empty-detail,
+.situation-evidence-card,
+.storage-facility-editor {
+  margin: 14px;
+}
+
+.situation-weather-detail,
+.situation-logistics-detail,
+.situation-inspector-section {
+  display: grid;
+  gap: 14px;
+}
+
+.operational-situation-panel .operational-facility-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.operational-situation-panel .operational-facility-panel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.operational-situation-panel .operational-facility-panel > header small {
+  color: #728078;
+  font-size: 9px;
+}
+
+.operational-situation-panel .operational-facility-panel h2 {
+  margin: 2px 0 0;
+  color: #21332b;
+  font-family: "Songti SC", "STSong", serif;
+  font-size: 19px;
+}
+
+.operational-situation-panel .operational-source-badge {
+  border-color: rgb(49 94 74 / 24%);
+  color: #315e4a;
+  background: rgb(49 94 74 / 8%);
+}
+
+.operational-situation-panel
+  :is(.operational-facility-panel__categories, .railway-facility-route) {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.operational-situation-panel
+  :is(.operational-facility-panel__categories, .railway-facility-route)
+  span {
+  padding: 8px;
+  border: 1px solid rgb(45 68 59 / 15%);
+  border-radius: 3px;
+  color: #607069;
+  background: rgb(45 68 59 / 6%);
+  font-size: 9px;
+}
+
+.operational-situation-panel
+  :is(.operational-facility-panel__categories, .railway-facility-route)
+  b {
+  display: block;
+  margin-top: 3px;
+  color: #253a30;
+  font-size: 17px;
+}
+
+.operational-situation-panel .operational-facility-panel__list {
+  display: grid;
+  grid-auto-flow: row;
+  gap: 5px;
+  max-height: min(32vh, 300px);
+  overflow: auto;
+  padding-right: 3px;
+}
+
+.operational-situation-panel .operational-facility-panel__list button {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid rgb(45 68 59 / 14%);
+  border-radius: 3px;
+  color: #2c4037;
+  background: #f3f2e9;
+  text-align: left;
+  cursor: pointer;
+  content-visibility: auto;
+  contain-intrinsic-size: 48px;
+}
+
+.operational-situation-panel
+  .operational-facility-panel__list
+  button[aria-pressed="true"] {
+  border-color: #9a7635;
+  background: #ebe3cd;
+  box-shadow: inset 3px 0 #b58d42;
+}
+
+.operational-situation-panel .operational-facility-panel__list button span {
+  color: #708078;
+  font-size: 9px;
+}
+
+.realistic-weather-scene {
+  position: relative;
+  min-height: 230px;
+  margin: 0;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #233c3d;
+  box-shadow: inset 0 -70px 90px rgb(12 22 18 / 36%);
+  isolation: isolate;
+}
+
+.realistic-weather-scene::after {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: linear-gradient(180deg, rgb(5 20 29 / 4%), rgb(2 9 9 / 30%));
+  content: "";
+  pointer-events: none;
+}
+
+.realistic-weather-scene:is(.is-cloud, .is-rain, .is-snow, .is-storm) {
+  filter: saturate(0.74) brightness(0.83);
+}
+
+.realistic-weather-scene__satellite,
+.realistic-weather-scene__radar {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.realistic-weather-scene__radar {
+  z-index: 1;
+  opacity: 0.74;
+  mix-blend-mode: screen;
+}
+
+.realistic-weather-scene__live-status,
+.realistic-weather-scene__source {
+  position: absolute;
+  z-index: 3;
+  padding: 0.28rem 0.42rem;
+  border-radius: 4px;
+  background: rgb(5 24 23 / 72%);
+  color: rgb(255 255 255 / 90%);
+  font-size: 10px;
+  line-height: 1.2;
+  backdrop-filter: blur(5px);
+}
+
+.realistic-weather-scene__live-status {
+  top: 10px;
+  left: 10px;
+}
+
+.realistic-weather-scene__source {
+  right: 10px;
+  bottom: 58px;
+}
+
+.realistic-weather-scene__atmosphere {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.realistic-weather-scene__sun {
+  position: absolute;
+  top: 28px;
+  right: 52px;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: #ffdc89;
+  box-shadow: 0 0 38px 14px rgb(255 215 126 / 48%);
+  animation: weather-sun-breathe 4.6s ease-in-out infinite;
+}
+
+.realistic-weather-scene__cloud {
+  position: absolute;
+  top: 28px;
+  left: -34%;
+  width: 48%;
+  height: 70px;
+  border-radius: 0;
+  opacity: 0;
+  background:
+    radial-gradient(circle at 20% 62%, rgb(226 231 230 / 78%) 0 20%, transparent 23%),
+    radial-gradient(circle at 42% 42%, rgb(197 207 208 / 82%) 0 29%, transparent 32%),
+    radial-gradient(circle at 66% 58%, rgb(218 225 224 / 76%) 0 25%, transparent 28%),
+    radial-gradient(circle at 84% 68%, rgb(204 214 214 / 68%) 0 17%, transparent 20%);
+  filter: blur(2px);
+}
+
+.realistic-weather-scene__cloud.is-back {
+  top: 8px;
+  opacity: 0.38;
+  filter: blur(8px);
+  animation: weather-cloud-cross 18s linear infinite;
+}
+
+.realistic-weather-scene__cloud.is-front {
+  top: 45px;
+  animation: weather-cloud-cross 12s -6s linear infinite;
+}
+
+.realistic-weather-scene:is(.is-cloud, .is-rain, .is-snow, .is-storm)
+  .realistic-weather-scene__cloud {
+  opacity: 0.78;
+}
+
+.realistic-weather-scene:is(.is-rain, .is-snow, .is-storm)
+  .realistic-weather-scene__sun {
+  opacity: 0.16;
+}
+
+.realistic-weather-scene__precipitation {
+  position: absolute;
+  inset: 70px 0 36px;
+  display: none;
+}
+
+.realistic-weather-scene:is(.is-rain, .is-snow, .is-storm)
+  .realistic-weather-scene__precipitation {
+  display: block;
+}
+
+.realistic-weather-scene__precipitation i {
+  --drop: 0;
+  position: absolute;
+  top: calc((var(--drop) % 5) * -17px);
+  left: calc((var(--drop) * 37) % 96 * 1%);
+  width: 1px;
+  height: 24px;
+  opacity: 0.68;
+  background: rgb(215 238 243 / 86%);
+  transform: rotate(-12deg);
+  animation: weather-rain-fall calc(0.8s + (var(--drop) % 4) * 0.08s) linear infinite;
+  animation-delay: calc(var(--drop) * -0.11s);
+}
+
+.realistic-weather-scene.is-snow .realistic-weather-scene__precipitation i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  animation-name: weather-snow-fall;
+  animation-duration: calc(2.1s + (var(--drop) % 5) * 0.22s);
+}
+
+.realistic-weather-scene__lightning {
+  position: absolute;
+  top: 68px;
+  left: 62%;
+  display: none;
+  width: 6px;
+  height: 52px;
+  background: #fff4b1;
+  clip-path: polygon(55% 0, 100% 0, 67% 41%, 100% 41%, 0 100%, 28% 54%, 0 54%);
+  filter: drop-shadow(0 0 8px #fbe989);
+  animation: weather-lightning 3.7s infinite;
+}
+
+.realistic-weather-scene.is-storm .realistic-weather-scene__lightning {
+  display: block;
+}
+
+.realistic-weather-scene figcaption {
+  position: absolute;
+  right: 16px;
+  bottom: 15px;
+  left: 16px;
+  z-index: 3;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  color: #fff;
+  text-shadow: 0 2px 12px rgb(0 0 0 / 76%);
+}
+
+.realistic-weather-scene figcaption span {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.realistic-weather-scene figcaption strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 30px;
+  font-weight: 400;
+}
+
+.situation-weather-detail > header,
+.situation-logistics-detail > header,
+.situation-evidence-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0;
+}
+
+.situation-weather-detail h3,
+.situation-logistics-detail h3,
+.situation-evidence-card h3 {
+  margin: 3px 0 0;
+  color: #1b2a25;
+  font-family: "Songti SC", "STSong", serif;
+  font-size: 17px;
+}
+
+.situation-weather-detail > header > strong {
+  padding: 5px 8px;
+  border: 1px solid rgb(144 96 34 / 28%);
+  border-radius: 3px;
+  color: #76521f;
+  background: #eee1bf;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.situation-weather-detail__metrics,
+.situation-logistics-detail > dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid rgb(45 68 59 / 13%);
+  background: rgb(45 68 59 / 13%);
+}
+
+.situation-weather-detail__metrics > div,
+.situation-logistics-detail > dl > div {
+  display: grid;
+  gap: 3px;
+  padding: 12px;
+  background: #f8f7ef;
+}
+
+.situation-weather-detail__metrics :is(dt, dd),
+.situation-logistics-detail :is(dt, dd) {
+  margin: 0;
+}
+
+.situation-weather-detail__metrics dt,
+.situation-logistics-detail dt {
+  color: #6e7b75;
+  font-size: 9px;
+}
+
+.situation-weather-detail__metrics dd,
+.situation-logistics-detail dd {
+  color: #1e3129;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 19px;
+}
+
+.situation-weather-detail__assessment {
+  padding: 14px 0;
+  border-block: 1px solid rgb(45 68 59 / 15%);
+}
+
+.situation-weather-detail__assessment > span {
+  color: #6e7b75;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+}
+
+.situation-weather-detail__assessment h4 {
+  margin: 5px 0;
+  color: #2a3c34;
+  font-size: 13px;
+}
+
+.situation-weather-detail__assessment p {
+  margin: 0 0 7px;
+  color: #45564f;
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.situation-weather-detail__assessment small {
+  display: block;
+  color: #74827c;
+  font-size: 9px;
+  line-height: 1.55;
+}
+
+.situation-weather-detail > footer,
+.situation-evidence-card > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #74817c;
+  font-size: 9px;
+}
+
+.operational-situation-panel a {
+  color: #315e4a;
+  text-decoration-color: rgb(49 94 74 / 34%);
+}
+
+.situation-logistics-detail header time,
+.situation-logistics-detail li small,
+.situation-logistics-detail > p,
+.situation-logistics-detail dl small {
+  color: #74817c;
+  font-size: 9px;
+}
+
+.situation-logistics-detail ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.situation-logistics-detail li {
+  padding: 10px 0;
+  border-bottom: 1px solid rgb(45 68 59 / 13%);
+}
+
+.situation-logistics-detail li > div {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: #23362e;
+  font-size: 11px;
+}
+
+.situation-empty-detail {
+  padding: 34px 14px;
+  border-block: 1px solid rgb(45 68 59 / 14%);
+  text-align: center;
+}
+
+.situation-empty-detail h3 {
+  margin: 0 0 5px;
+  font-family: "Songti SC", "STSong", serif;
+}
+
+.situation-empty-detail p {
+  margin: 0;
+  color: #6d7b75;
+  font-size: 10px;
+}
+
+.situation-evidence-card {
+  padding: 13px;
+  border-left: 3px solid #b38942;
+  background: #ebe5d4;
+}
+
+.situation-evidence-card p {
+  color: #4c5a54;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.situation-evidence-card button,
+.storage-facility-edit-trigger {
+  border: 1px solid rgb(53 76 66 / 28%);
+  border-radius: 3px;
+  color: #304b3e;
+  background: transparent;
+  cursor: pointer;
+}
+
+.operational-situation-panel :is(.storage-facility-card, .railway-facility-card) {
+  border-color: rgb(45 68 59 / 18%);
+  border-radius: 3px;
+  color: #263730;
+  background: #f8f7ef;
+}
+
+.operational-situation-panel :is(.storage-facility-card, .railway-facility-card) dl {
+  background: rgb(45 68 59 / 13%);
+}
+
+.operational-situation-panel
+  :is(.storage-facility-card, .railway-facility-card)
+  dl
+  > div {
+  background: #f2f1e8;
+}
+
+.operational-situation-panel
+  :is(.storage-facility-card, .railway-facility-card)
+  :is(dd, h3, b) {
+  color: #21332b;
+}
+
+.operational-situation-panel
+  :is(.storage-facility-card, .railway-facility-card)
+  :is(dt, small, p, li span) {
+  color: #6c7973;
+}
+
+.storage-facility-edit-trigger {
+  min-height: 34px;
+}
+
+.storage-facility-editor {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgb(45 68 59 / 22%);
+  border-radius: 3px;
+  color: #24362e;
+  background: #f8f7ef;
+}
+
+.storage-facility-editor > header,
+.storage-facility-editor > footer,
+.storage-facility-editor__row {
+  display: flex;
+  gap: 10px;
+}
+
+.storage-facility-editor > :is(header, footer) {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.storage-facility-editor p {
+  margin: 0;
+  color: #68766f;
+  font-size: 10px;
+}
+
+.storage-facility-editor label {
+  display: grid;
+  flex: 1;
+  gap: 5px;
+  min-width: 0;
+  color: #53625b;
+  font-size: 10px;
+}
+
+.storage-facility-editor input,
+.storage-facility-editor select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 9px;
+  border: 1px solid rgb(45 68 59 / 25%);
+  border-radius: 3px;
+  color: #24362e;
+  background: #fffef8;
+}
+
+.storage-facility-editor button {
+  padding: 7px 11px;
+  border: 1px solid rgb(45 68 59 / 26%);
+  border-radius: 3px;
+  color: #273c32;
+  background: #ebe9dd;
+  cursor: pointer;
+}
+
+.storage-facility-editor__issue {
+  color: #a03c2c !important;
+}
+
+.situation-source-catalogue {
+  margin: 4px 14px 18px;
+  padding: 9px 0;
+  border-top: 1px solid rgb(45 68 59 / 14%);
+  color: #66746e;
+  font-size: 9px;
+}
+
+.situation-source-catalogue summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.situation-source-catalogue ul {
+  display: grid;
+  gap: 7px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.situation-source-catalogue li,
+.situation-source-catalogue li span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+}
+
+.situation-source-catalogue li {
+  align-items: flex-start;
+}
+
+.situation-source-catalogue li > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.situation-source-catalogue li span {
+  justify-content: flex-start;
+}
+
+.situation-source-catalogue li small,
+.situation-source-catalogue li p {
+  margin: 0;
+  color: #77837e;
+  line-height: 1.4;
+}
+
+.situation-source-catalogue li p {
+  color: #8b6d42;
+}
+
+.situation-source-catalogue li i {
+  width: 6px;
+  height: 6px;
+  box-shadow: none;
+}
+
+.situation-source-catalogue li i.is-stale {
+  background: #9b8655;
+}
+
+.situation-source-catalogue li i.is-unavailable {
+  background: #a64b3e;
+}
+
+@keyframes weather-cloud-cross {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+@keyframes weather-rain-fall {
+  from {
+    transform: translate3d(0, -18px, 0) rotate(-12deg);
+  }
+  to {
+    transform: translate3d(-18px, 175px, 0) rotate(-12deg);
+  }
+}
+
+@keyframes weather-snow-fall {
+  from {
+    transform: translate3d(0, -18px, 0);
+  }
+  50% {
+    transform: translate3d(16px, 78px, 0);
+  }
+  to {
+    transform: translate3d(-8px, 175px, 0);
+  }
+}
+
+@keyframes weather-lightning {
+  0%,
+  92%,
+  96%,
+  100% {
+    opacity: 0;
+  }
+  93%,
+  95% {
+    opacity: 1;
+  }
+}
+
+@keyframes weather-sun-breathe {
+  50% {
+    box-shadow: 0 0 52px 20px rgb(255 215 126 / 58%);
+  }
+}
+
+@media (max-width: 1180px) {
+  html:has(.overview-data-mode.is-public_situation),
+  body:has(.overview-data-mode.is-public_situation),
+  #root:has(.overview-data-mode.is-public_situation) {
+    width: 100%;
+    min-width: 0;
+    overflow-x: clip;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .realistic-weather-scene * {
+    animation: none !important;
+  }
+}

@@ -53,6 +53,7 @@ export function useOverviewRealtimeRefresh(
       navigator.onLine !== false && document.visibilityState !== "hidden";
     let fallbackTimer: number | undefined;
     let refreshTimer: number | undefined;
+    let recoveryNeeded = false;
     let pendingBusinessRefresh = false;
     let pendingGeographyRefresh = false;
     let pendingSamplePointRefresh = false;
@@ -178,12 +179,16 @@ export function useOverviewRealtimeRefresh(
     const availabilityChanged = () => {
       if (!available()) {
         stopFallback();
+        recoveryNeeded = true;
         if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
         refreshTimer = undefined;
         return;
       }
-      if (disconnected) {
+      if (recoveryNeeded) {
+        recoveryNeeded = false;
         refreshAll();
+      }
+      if (disconnected) {
         startFallback();
       } else scheduleRefresh({}); // Flush retained events once, including a hidden reconnect.
     };
@@ -194,7 +199,9 @@ export function useOverviewRealtimeRefresh(
       onBusinessChange: refreshChange,
       onConnected: () => {
         stopFallback();
-        if (disconnected) refreshAll();
+        // EventSource resumes the same cursor and replays missed business events. A brief
+        // transport reconnect therefore must not rebuild every overview data set. The
+        // fallback timer below remains the bounded safety net for a prolonged outage.
         disconnected = false;
       },
       onDisconnected: () => {

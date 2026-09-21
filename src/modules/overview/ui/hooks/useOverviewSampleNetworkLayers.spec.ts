@@ -36,6 +36,122 @@ const comparison: SampleNetworkComparison = {
 };
 
 describe("useOverviewSampleNetworkLayers", () => {
+  it("loads GENERAL design catalog records for village detail without legacy definition endpoints", async () => {
+    const general = {
+      id: "94000000-0000-0000-0000-000000000099",
+      contractVersion: "design-sample-fields-v1" as const,
+      contractDigest: `sha256:${"a".repeat(64)}`,
+      context: {
+        domainCode: "PRODUCTION",
+        productCode: "GENERAL",
+        objectTypeCode: "FARMER",
+      },
+      values: {},
+      name: "通用设计样本",
+      regionCode: "230202997001",
+      regionPath: "齐齐哈尔市/龙沙区/某镇/某村",
+      longitude: 123.95,
+      latitude: 47.35,
+      version: 1,
+      updatedAt: "2026-09-17T00:00:00Z",
+    };
+    const repository = {
+      ...repositoryWithSnapshot(),
+      designMapCatalog: vi.fn(() => Promise.resolve([general])),
+    } satisfies OverviewSamplePointRepository;
+    const { result } = renderHook(() =>
+      useOverviewSampleNetworkLayers({
+        productCode: "CORN",
+        refreshSequence: 0,
+        region: {
+          code: "230202997001",
+          level: "VILLAGE",
+          name: "某村",
+          parentCode: "230202997",
+        },
+        repository,
+        year: 2026,
+      }),
+    );
+
+    await waitFor(() =>
+      expect(result.current.designPoints).toEqual([
+        expect.objectContaining({
+          id: general.id,
+          regionCode: general.regionCode,
+          productLabel: "通用",
+        }),
+      ]),
+    );
+  });
+
+  it("loads the design catalog at county level so direct points and descendant counts are not hidden", async () => {
+    const direct = {
+      id: "94000000-0000-0000-0000-000000000090",
+      contractVersion: "design-sample-fields-v1" as const,
+      contractDigest: `sha256:${"a".repeat(64)}`,
+      context: {
+        domainCode: "PRODUCTION",
+        productCode: "CORN",
+        objectTypeCode: "FARMER",
+      },
+      values: {},
+      name: "县级设计点",
+      regionCode: "230202",
+      regionPath: "齐齐哈尔市/龙沙区",
+      longitude: 123.9,
+      latitude: 47.2,
+      version: 1,
+      updatedAt: "2026-09-17T00:00:00Z",
+      lifecycleStatus: "ACTIVE" as const,
+    };
+    const descendant = {
+      ...direct,
+      id: "94000000-0000-0000-0000-000000000091",
+      name: "村级作废设计点",
+      regionCode: "230202997001",
+      lifecycleStatus: "EXPIRED" as const,
+      expiredAt: "2026-09-16T00:00:00Z",
+    };
+    const repository = {
+      ...repositoryWithSnapshot(),
+      list: vi.fn<OverviewSamplePointRepository["list"]>(({ regionCode }) =>
+        Promise.resolve(emptySnapshot(regionCode).list),
+      ),
+      designMapCatalog: vi.fn(() => Promise.resolve([direct, descendant])),
+    } satisfies OverviewSamplePointRepository;
+    const { result } = renderHook(() =>
+      useOverviewSampleNetworkLayers({
+        productCode: "CORN",
+        refreshSequence: 0,
+        region: { code: "230202", level: "COUNTY", name: "龙沙区" },
+        mapRegions: [
+          {
+            code: "230202997",
+            level: "TOWNSHIP",
+            name: "某镇",
+            parentCode: "230202",
+          },
+        ],
+        repository,
+        year: 2026,
+      }),
+    );
+
+    await waitFor(() => expect(result.current.designPoints).toHaveLength(2));
+    act(() => result.current.setMode("design"));
+    expect(repository.designMapCatalog).toHaveBeenCalled();
+    expect(result.current.icons).toEqual([
+      expect.objectContaining({
+        name: "县级设计点",
+        layerType: "DESIGN_EXACT_LOCATION",
+      }),
+    ]);
+    expect(result.current.designPointAggregates?.[0]).toEqual(
+      expect.objectContaining({ samplePointCount: 1, expiredSamplePointCount: 1 }),
+    );
+  });
+
   afterEach(() => {
     vi.useRealTimers();
   });
@@ -797,6 +913,99 @@ describe("useOverviewSampleNetworkLayers", () => {
     );
   });
 
+  it("presents generated design provenance and keeps origin facts separate", () => {
+    const record = {
+      ...agriculturalInputStorePoint(),
+      name: "万发村设计点",
+      regionCode: "230230100001",
+      regionPath: "黑龙江省 / 齐齐哈尔市 / 克东县 / 克东镇 / 万发村",
+      values: {
+        DSP_ALLOCATION_PROVENANCE: {
+          coordinateSource: "GENERATED_DESIGN",
+          businessValuesStatus: "ORIGIN_ONLY_NOT_VERIFIED_AT_TARGET",
+          originalRegionCode: "230202997001",
+          originalName: "原龙沙农资店",
+          originalAddress: "龙沙区原地址",
+          originalValues: {
+            AGRI_INPUT_SEED_SALES_VOLUME: 1200,
+            AGRI_INPUT_SUPPLY_STATUS: "SUFFICIENT",
+          },
+        },
+      },
+    };
+
+    const detail = presentDesignSamplePoint(record, agriculturalInputContract());
+
+    expect(detail.allocationProvenance).toEqual({
+      coordinateSource: "GENERATED_DESIGN",
+      businessValuesStatus: "ORIGIN_ONLY_NOT_VERIFIED_AT_TARGET",
+      originalName: "原龙沙农资店",
+      originalAddress: "龙沙区原地址",
+      originalBusinessValues: [
+        {
+          code: "AGRI_INPUT_SEED_SALES_VOLUME",
+          label: "种子销售量",
+          value: "1200",
+          unit: "公斤",
+        },
+        {
+          code: "AGRI_INPUT_SUPPLY_STATUS",
+          label: "供货状态",
+          value: "充足",
+          unit: null,
+        },
+      ],
+      hasRetainedUnpresentedOriginalValues: false,
+    });
+    expect(detail.businessValues).toEqual([]);
+  });
+
+  it("uses the real reference v3 identity shape and distinguishes retained unsupported origin fields", () => {
+    const record = {
+      ...agriculturalInputStorePoint(),
+      contractVersion: "design-sample-fields-v3" as const,
+      context: {
+        domainCode: "REFERENCE",
+        productCode: "GENERAL",
+        objectTypeCode: "REFERENCE_POINT",
+      },
+      values: {
+        DSP_ADDRESS: "万发村设计地址",
+        DSP_MAINTAINER_NAME: "现维护人",
+        DSP_MAINTAINER_UNIT: "克东镇维护单位",
+        DSP_ALLOCATION_PROVENANCE: {
+          coordinateSource: "GENERATED_DESIGN",
+          businessValuesStatus: "ORIGIN_ONLY_NOT_VERIFIED_AT_TARGET",
+          originalName: "原始参考点",
+          originalAddress: "原始地址",
+          originalValues: {
+            DSP_MAINTAINER_NAME: "原维护人",
+            RETIRED_PRICE_FIELD: 8.5,
+          },
+        },
+      },
+    };
+
+    const detail = presentDesignSamplePoint(record, referencePointV3Contract());
+
+    expect(detail.businessValues).toEqual([
+      { code: "DSP_ADDRESS", label: "详细地址", value: "万发村设计地址", unit: null },
+      { code: "DSP_MAINTAINER_NAME", label: "维护人", value: "现维护人", unit: null },
+      {
+        code: "DSP_MAINTAINER_UNIT",
+        label: "维护单位",
+        value: "克东镇维护单位",
+        unit: null,
+      },
+    ]);
+    expect(detail.allocationProvenance).toMatchObject({
+      originalBusinessValues: [
+        { code: "DSP_MAINTAINER_NAME", label: "维护人", value: "原维护人", unit: null },
+      ],
+      hasRetainedUnpresentedOriginalValues: true,
+    });
+  });
+
   it("does not fall back to legacy design coverage while the authoritative list is loading", async () => {
     const legacyComparison: SampleNetworkComparison = {
       ...comparison,
@@ -966,6 +1175,77 @@ function agriculturalInputContract(): DesignSampleFieldContract {
       field("AGRI_INPUT_SUPPLY_STATUS", "供货状态", "ENUM", 330),
       field("AGRI_INPUT_PLANTING_INTENTION_TREND", "种植意向趋势", "ENUM", 340),
     ],
+  };
+}
+
+function referencePointV3Contract(): DesignSampleFieldContract {
+  const identity = (code: string, label: string, sortOrder: number) => ({
+    code,
+    sectionCode: "IDENTITY" as const,
+    label,
+    description: label,
+    valueType: "STRING" as const,
+    precision: null,
+    scale: null,
+    maxLength: 200,
+    unit: null,
+    enumOptions: [],
+    required: false,
+    nullable: true,
+    defaultValue: null,
+    editable: true,
+    minimumValue: null,
+    maximumValue: null,
+    groupCode: "IDENTITY",
+    sortOrder,
+    analysisRole: "IDENTITY",
+  });
+  return {
+    contractVersion: "design-sample-fields-v3",
+    contractDigest:
+      "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    context: {
+      domainCode: "REFERENCE",
+      productCode: "GENERAL",
+      objectTypeCode: "REFERENCE_POINT",
+    },
+    domains: [
+      {
+        code: "REFERENCE",
+        label: "参考点",
+        description: "设计参考点",
+        aliases: [],
+        sortOrder: 30,
+      },
+    ],
+    products: [{ code: "GENERAL", label: "通用", aliases: [], sortOrder: 40 }],
+    objectTypes: [
+      {
+        domainCode: "REFERENCE",
+        code: "REFERENCE_POINT",
+        label: "参考点",
+        aliases: [],
+        sortOrder: 190,
+      },
+    ],
+    supportedContexts: [
+      {
+        domainCode: "REFERENCE",
+        productCode: "GENERAL",
+        objectTypeCode: "REFERENCE_POINT",
+        sortOrder: 280,
+      },
+    ],
+    identityFields: [
+      identity("DSP_NAME", "名称", 10),
+      identity("DSP_REGION_CODE", "行政区", 20),
+      identity("DSP_ADDRESS", "详细地址", 30),
+      identity("DSP_LONGITUDE", "经度", 40),
+      identity("DSP_LATITUDE", "纬度", 50),
+      identity("DSP_MAINTAINER_NAME", "维护人", 60),
+      identity("DSP_MAINTAINER_UNIT", "维护单位", 70),
+    ],
+    observationFields: [],
   };
 }
 

@@ -42,6 +42,20 @@ describe("Overview command center navigation layout", () => {
     expect(metricValueRule).toMatch(/white-space:\s*nowrap/);
   });
 
+  it("keeps public situation controls below the mode tabs when the side panel is open", () => {
+    const css = readFileSync(
+      resolve("src/modules/overview/ui/components/operational-situation.css"),
+      "utf8",
+    );
+
+    expect(css).toMatch(
+      /\.overview-command-center\.has-side-data-panel \.situation-intelligence-controls\s*\{[^}]*top:\s*calc\(var\(--command-kpi-top\) \+ var\(--command-map-tools-gap\) \+ 48px\)/s,
+    );
+    expect(css).toMatch(
+      /\.overview-command-center\.has-side-data-panel \.situation-layer-switcher\s*\{[^}]*top:\s*calc\(var\(--command-kpi-top\) \+ var\(--command-map-tools-gap\) \+ 102px\)/s,
+    );
+  });
+
   it("centers the region selector label inside its control", () => {
     const css = readFileSync(resolve("src/app/styles/global.css"), "utf8");
 
@@ -63,6 +77,10 @@ describe("Overview command center navigation layout", () => {
 
   it("reserves exactly the same details width in CSS and the relief frame", () => {
     const css = readFileSync(resolve("src/app/styles/global.css"), "utf8");
+    const panelCss = readFileSync(
+      resolve("src/modules/overview/ui/components/overview-data-mode.css"),
+      "utf8",
+    );
     const geometry = readFileSync(
       resolve("src/modules/overview/ui/components/terrainReliefGeometry.ts"),
       "utf8",
@@ -72,9 +90,15 @@ describe("Overview command center navigation layout", () => {
 
     expect(cssWidth).toBeDefined();
     expect(cssWidth).toBe(frameWidth);
+    expect(panelCss).toMatch(
+      /\.overview-command-center\.has-side-data-panel \.overview-data-mode\s*\{[^}]*width:\s*var\(--command-details-width\)/s,
+    );
+    expect(panelCss).toMatch(
+      /\.overview-data-mode__detail-sheet\s*\{[^}]*position:\s*absolute[^}]*top:\s*16px[^}]*bottom:\s*16px/s,
+    );
   });
 
-  it("opens the relief safe frame whenever supply balance owns the right panel", () => {
+  it("opens the relief safe frame whenever data or facility details own the right panel", () => {
     const page = readFileSync(
       resolve("src/modules/overview/ui/pages/OverviewPage.tsx"),
       "utf8",
@@ -89,7 +113,7 @@ describe("Overview command center navigation layout", () => {
     );
 
     expect(page).toMatch(
-      /<BoundaryMap[\s\S]*?reserveRightPanel=\{dataMode === "SUPPLY_BALANCE"\}/,
+      /<BoundaryMap[\s\S]*?reserveRightPanel=\{\s*annotationArmed \|\|\s*dataMode === "SUPPLY_BALANCE" \|\|\s*dataMode === "REGIONAL_DATA" \|\|\s*operationalMapMode\s*\}/,
     );
     expect(boundaryMap).toContain("reserveRightPanel={reserveRightPanel}");
     expect(reliefMap).toMatch(/activeDetailLayout\s*=\s*reserveRightPanel\s*\|\|/);
@@ -173,5 +197,19 @@ describe("Overview command center navigation layout", () => {
     expect(auditRule).toMatch(/max-height:\s*\d+px/);
     expect(auditRule).toMatch(/overflow:\s*auto/);
     expect(auditRule).toMatch(/overflow-wrap:\s*anywhere/);
+  });
+
+  it("keeps the realistic public situation scene pinned to the map stage", () => {
+    const css = readFileSync(
+      resolve("src/modules/overview/ui/components/realistic-operational-situation.css"),
+      "utf8",
+    );
+    const mapRule = css.match(
+      /\.realistic-situation-scene,[\s\S]*?\.realistic-situation-loading\s*\{([^}]*)\}/s,
+    )?.[1];
+
+    expect(mapRule).toBeDefined();
+    expect(mapRule).toMatch(/position:\s*absolute/);
+    expect(mapRule).toMatch(/inset:\s*0/);
   });
 });

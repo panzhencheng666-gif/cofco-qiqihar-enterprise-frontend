@@ -32,6 +32,8 @@ import type { OverviewRegionalDataRepository } from "../modules/overview/applica
 import { HttpOverviewRepository } from "../modules/overview/infrastructure/http/HttpOverviewRepository";
 import { HttpOverviewSamplePointRepository } from "../modules/overview/infrastructure/http/HttpOverviewSamplePointRepository";
 import { HttpOverviewRegionalDataRepository } from "../modules/overview/infrastructure/http/HttpOverviewRegionalDataRepository";
+import type { MapAnnotationRepository } from "../modules/overview/application/ports/MapAnnotationRepository";
+import { HttpMapAnnotationRepository } from "../modules/overview/infrastructure/http/HttpMapAnnotationRepository";
 import { BrowserOverviewRealtimeStream } from "../modules/overview/infrastructure/realtime/BrowserOverviewRealtimeStream";
 import { OverviewPage } from "../modules/overview/ui/pages/OverviewPage";
 import { HttpDesignSampleFieldDefinitionRepository } from "../modules/design-sample/infrastructure/http/HttpDesignSampleFieldDefinitionRepository";
@@ -68,6 +70,7 @@ const overviewSamplePointRepository = new HttpOverviewSamplePointRepository(
 const overviewRegionalDataRepository = new HttpOverviewRegionalDataRepository(
   httpClient,
 );
+const mapAnnotationRepository = new HttpMapAnnotationRepository(httpClient);
 const overviewRealtimeStream = new BrowserOverviewRealtimeStream();
 
 export interface AppDependencies {
@@ -82,6 +85,7 @@ export interface AppDependencies {
   overviewRealtimeStream?: OverviewRealtimeStream;
   overviewSamplePointRepository?: OverviewSamplePointRepository;
   overviewRegionalDataRepository?: OverviewRegionalDataRepository;
+  mapAnnotationRepository?: MapAnnotationRepository;
   workItemRepository: WorkItemRepository;
 }
 
@@ -97,6 +101,7 @@ const productionDependencies: AppDependencies = {
   overviewRealtimeStream,
   overviewSamplePointRepository,
   overviewRegionalDataRepository,
+  mapAnnotationRepository,
   workItemRepository,
 };
 
@@ -113,7 +118,7 @@ interface WorkLocation {
 interface HashState {
   location?: AppLocation;
   workLocation?: WorkLocation;
-  utilityRoute?: "help" | "settings" | "account" | "notifications";
+  utilityRoute?: "help" | "settings" | "account" | "notifications" | "reporting";
   invalid: boolean;
 }
 
@@ -163,6 +168,9 @@ function locationFromHash(): HashState {
   }
   if (currentHash === "#/notifications") {
     return { invalid: false, utilityRoute: "notifications" };
+  }
+  if (currentHash === "#/报表中心") {
+    return { invalid: false, utilityRoute: "reporting" };
   }
 
   const workMatch = /^#\/work\/(pending|completed)(?:\?(.*))?$/.exec(currentHash);
@@ -287,7 +295,8 @@ export function App({
   const [navigationAttempt, setNavigationAttempt] = useState(0);
   const normalizedHash = safeDecodedHash(window.location.hash);
   const overviewRoute = normalizedHash === "#/overview";
-  const reportingRoute = normalizedHash.startsWith("#/报表中心");
+  const reportingRoute = hashState.utilityRoute === "reporting";
+  const embedded = new URLSearchParams(window.location.search).get("embed") === "1";
   const { domain: navigationDomain, pageKind: navigationPageKind } =
     supportedPageContext(hashState.location?.key);
   const utilityRoute = hashState.utilityRoute;
@@ -396,6 +405,14 @@ export function App({
     });
   }
 
+  if (reportingRoute && embedded) {
+    return (
+      <ReportingCenterPage
+        repository={dependencies.reportingRepository ?? reportingRepository}
+      />
+    );
+  }
+
   if (overviewRoute) {
     return (
       <OverviewPage
@@ -406,6 +423,9 @@ export function App({
         }
         regionalDataRepository={
           dependencies.overviewRegionalDataRepository ?? overviewRegionalDataRepository
+        }
+        mapAnnotationRepository={
+          dependencies.mapAnnotationRepository ?? mapAnnotationRepository
         }
       />
     );

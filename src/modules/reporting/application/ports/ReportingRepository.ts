@@ -6,6 +6,7 @@ import type {
   ReportPreviewCommand,
   ReportPublication,
 } from "../../domain/reporting";
+import type { ActivityReport, ActivityReportExport } from "../../domain/activityReport";
 export interface ReportingRepository {
   options(): Promise<ReportParameterOptions>;
   preview(command: ReportPreviewCommand): Promise<ReportPreview>;
@@ -16,4 +17,8 @@ export interface ReportingRepository {
     exportTaskId: string,
     expectedVersion: number,
   ): Promise<ReportPublication>;
+  personalActivity?(days: 7 | 30, signal?: AbortSignal): Promise<ActivityReport>;
+  systemActivity?(days: 7 | 30, signal?: AbortSignal): Promise<ActivityReport>;
+  exportSystemActivity?(days: 7 | 30): Promise<ActivityReportExport>;
+  downloadSystemActivity?(exportId: string): Promise<ReportExportFile>;
 }

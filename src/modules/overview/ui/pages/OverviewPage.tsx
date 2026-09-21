@@ -7,6 +7,7 @@ import type {
 import type { OverviewRealtimeStream } from "../../application/ports/OverviewRealtimeStream";
 import type { OverviewSamplePointRepository } from "../../application/ports/OverviewSamplePointRepository";
 import type { OverviewRegionalDataRepository } from "../../application/ports/OverviewRegionalDataRepository";
+import type { MapAnnotationRepository } from "../../application/ports/MapAnnotationRepository";
 import type {
   OverviewDashboardSummary,
   OverviewMapScope,
@@ -19,9 +20,17 @@ import type {
 } from "../../domain/overviewSamplePoint";
 import type {
   OverviewDataMode,
+  RegionalAgricultureProfile,
   RegionalCropSummary,
   SupplyBalanceSummary,
 } from "../../domain/overviewRegionalData";
+import type {
+  OperationalFacilityCatalogue,
+  StorageFacility,
+  StorageFacilityDraft,
+} from "../../domain/operationalFacilities";
+import type { OperationalSituationCatalogue } from "../../domain/operationalSituation";
+import { businessDirectoryUrl } from "../businessPlatformNavigation";
 import {
   BoundaryMap,
   toMapFeature,
@@ -40,6 +49,10 @@ import { useOverviewRealtimeRefresh } from "../hooks/useOverviewRealtimeRefresh"
 import { useOverviewSampleNetworkLayers } from "../hooks/useOverviewSampleNetworkLayers";
 import { visibleSampleNetworkMapIcons } from "../presentation/sampleNetworkLayers";
 import { HttpContractError, HttpError } from "../../../../shared/api/HttpClient";
+import { OperationalSituationMap } from "../components/OperationalSituationMap";
+import { enrichPublicWeather } from "../components/publicWeatherRefresh";
+import type { SituationTimelineItem } from "../components/operationalSituationTimeline";
+import { flattenCoordinates, type MapFeature } from "../components/boundaryGeometry";
 
 const OVERALL_SCOPE = "__OVERALL__";
 const MAP_SCOPE_RETRY_DELAYS_MS = [500, 1_000, 2_000] as const;
@@ -49,6 +62,47 @@ const ANNUAL_SAMPLE_NETWORK_START_YEAR = 2026;
 const NOOP_REALTIME_STREAM: OverviewRealtimeStream = {
   subscribe: () => () => undefined,
 };
+const EMPTY_OPERATIONAL_FACILITIES: OperationalFacilityCatalogue = {
+  regionCode: null,
+  productCode: null,
+  asOf: "",
+  storageCategories: [],
+  storageFacilities: [],
+  railwayFacilities: [],
+  railwayLines: [],
+  railwayRoutes: [],
+  sources: [],
+};
+const EMPTY_OPERATIONAL_SITUATION: OperationalSituationCatalogue = {
+  generatedAt: "1970-01-01T00:00:00Z",
+  weather: [],
+  publicEvents: [],
+  policyEvents: [],
+  logisticsFlows: [],
+  inventories: [],
+  sources: [],
+};
+
+function mapAnnotationBounds(features: readonly MapFeature[], backdrop?: MapFeature) {
+  const positions = [...(backdrop ? [backdrop] : []), ...features].flatMap(
+    ({ geometry }) => flattenCoordinates(geometry),
+  );
+  if (!positions.length) return undefined;
+  const longitudes = positions.map(([longitude]) => longitude);
+  const latitudes = positions.map(([, latitude]) => latitude);
+  return {
+    minLongitude: Math.min(...longitudes),
+    minLatitude: Math.min(...latitudes),
+    maxLongitude: Math.max(...longitudes),
+    maxLatitude: Math.max(...latitudes),
+  };
+}
+
+function annotationLevel(level?: OverviewRegion["level"]) {
+  if (level === "PREFECTURE") return "CITY" as const;
+  if (level === "COUNTY" || level === "TOWNSHIP" || level === "VILLAGE") return level;
+  return undefined;
+}
 
 function selectableOverviewYears(
   approvedBusinessYears: readonly number[],
@@ -171,7 +225,7 @@ function overviewDataIssue(error: unknown, fallback: string): string {
     return "当前账号无权查看该地区的核定业务数据，请返回已授权地区或联系权限管理员。";
   }
   if (error instanceof HttpError && error.status === 400) {
-    return "当前总揽筛选条件无效，请重新选择地区、产品和年度。";
+    return "当前总揽筛选条件无效，请重新选择地区、品种和年度。";
   }
   return fallback;
 }
@@ -187,11 +241,13 @@ function mapRegionTimeScope(
 export function OverviewPage({
   realtimeStream,
   regionalDataRepository,
+  mapAnnotationRepository,
   repository,
   samplePointRepository,
 }: {
   realtimeStream?: OverviewRealtimeStream;
   regionalDataRepository?: OverviewRegionalDataRepository;
+  mapAnnotationRepository?: MapAnnotationRepository;
   repository: OverviewRepository;
   samplePointRepository?: OverviewSamplePointRepository;
 }) {
@@ -230,10 +286,31 @@ export function OverviewPage({
   const [samplePointAggregateIssue, setSamplePointAggregateIssue] = useState<string>();
   const [selectedSamplePointId, setSelectedSamplePointId] = useState<string>();
   const [dataMode, setDataMode] = useState<OverviewDataMode>("SAMPLE_POINTS");
+  const [annotationArmed, setAnnotationArmed] = useState(false);
+  const [annotationOpen, setAnnotationOpen] = useState(false);
   const [regionalSummary, setRegionalSummary] = useState<RegionalCropSummary>();
+  const [agricultureProfile, setAgricultureProfile] =
+    useState<RegionalAgricultureProfile>();
   const [supplyBalance, setSupplyBalance] = useState<SupplyBalanceSummary>();
   const [regionalDataLoading, setRegionalDataLoading] = useState(false);
   const [regionalDataIssue, setRegionalDataIssue] = useState<string>();
+  const [operationalFacilities, setOperationalFacilities] =
+    useState<OperationalFacilityCatalogue>();
+  const [mapOperationalFacilities, setMapOperationalFacilities] =
+    useState<OperationalFacilityCatalogue>();
+  const [operationalFacilitiesLoading, setOperationalFacilitiesLoading] =
+    useState(false);
+  const [operationalFacilitiesIssue, setOperationalFacilitiesIssue] =
+    useState<string>();
+  const [operationalFacilityRevision, setOperationalFacilityRevision] = useState(0);
+  const [operationalSituation, setOperationalSituation] =
+    useState<OperationalSituationCatalogue>();
+  const [operationalSituationLoading, setOperationalSituationLoading] = useState(false);
+  const [operationalSituationIssue, setOperationalSituationIssue] = useState<string>();
+  const [selectedOperationalFacilityId, setSelectedOperationalFacilityId] =
+    useState<string>();
+  const [selectedOperationalSituationItem, setSelectedOperationalSituationItem] =
+    useState<SituationTimelineItem>();
   const [sampleExportPending, setSampleExportPending] = useState(false);
   const [sampleExportIssue, setSampleExportIssue] = useState<string>();
   const [pendingNavigationLabel, setPendingNavigationLabel] = useState<string>();
@@ -696,28 +773,211 @@ export function OverviewPage({
         : [],
     [sampleMode, sampleNetworkModel.icons, visibleRegions, selectedSamplePointId],
   );
-
   const regionalDataRegionCode =
     selectedRegion?.code ||
     mapContextRegion?.code ||
     (scopeRootCode !== OVERALL_SCOPE ? scopeRootCode : "");
+  const publicSituationMode = dataMode === "PUBLIC_SITUATION";
+  const operationalMapMode = publicSituationMode;
+  const operationalFacilityIds = publicSituationMode
+    ? [
+        ...(mapOperationalFacilities?.storageFacilities.map(
+          (facility) => facility.code,
+        ) ?? []),
+        ...(mapOperationalFacilities?.railwayFacilities.map(
+          (facility) => facility.sourceId,
+        ) ?? []),
+      ]
+    : [];
+  const effectiveOperationalFacilityId =
+    selectedOperationalFacilityId &&
+    operationalFacilityIds.includes(selectedOperationalFacilityId)
+      ? selectedOperationalFacilityId
+      : undefined;
+  const operationalSelectedRegion = selectedRegionSnapshot;
+
+  // Map coverage is independent of the inspector's selected region.
+  useEffect(() => {
+    if (!publicSituationMode || !regionalDataRepository?.operationalFacilities) return;
+    const controller = new AbortController();
+    void regionalDataRepository
+      .operationalFacilities(
+        {
+          ...(scopeRootCode !== OVERALL_SCOPE ? { regionCode: scopeRootCode } : {}),
+          ...(productCode ? { productCode } : {}),
+          asOf: new Date().toISOString().slice(0, 10),
+        },
+        controller.signal,
+      )
+      .then((next) => {
+        if (!controller.signal.aborted) setMapOperationalFacilities(next);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted)
+          setOperationalFacilitiesIssue("地图设施加载失败，请稍后重试。");
+      });
+    return () => controller.abort();
+  }, [
+    publicSituationMode,
+    regionalDataRepository,
+    scopeRootCode,
+    productCode,
+    operationalFacilityRevision,
+  ]);
 
   useEffect(() => {
-    if (!regionalDataRepository || dataMode === "SAMPLE_POINTS") return;
+    if (
+      !operationalMapMode ||
+      !regionalDataRepository?.operationalFacilities ||
+      !regionalDataRegionCode
+    )
+      return;
+    const controller = new AbortController();
+    Promise.resolve()
+      .then(() => {
+        if (controller.signal.aborted) return undefined;
+        setOperationalFacilitiesLoading(true);
+        setOperationalFacilitiesIssue(undefined);
+        return regionalDataRepository.operationalFacilities?.(
+          {
+            ...(regionalDataRegionCode ? { regionCode: regionalDataRegionCode } : {}),
+            ...(productCode ? { productCode } : {}),
+            asOf: new Date().toISOString().slice(0, 10),
+          },
+          controller.signal,
+        );
+      })
+      .then((next) => {
+        if (controller.signal.aborted || !next) return;
+        setOperationalFacilities(next);
+        setOperationalFacilitiesLoading(false);
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setOperationalFacilitiesLoading(false);
+        setOperationalFacilitiesIssue("运营设施加载失败，请稍后重试。");
+      });
+    return () => controller.abort();
+  }, [
+    operationalMapMode,
+    operationalFacilityRevision,
+    productCode,
+    regionalDataRegionCode,
+    regionalDataRepository,
+  ]);
+
+  useEffect(() => {
+    if (!publicSituationMode || !regionalDataRepository?.operationalSituation) return;
+    const controller = new AbortController();
+    const readSituation =
+      regionalDataRepository.operationalSituation.bind(regionalDataRepository);
+    let requestInFlight = false;
+    const loadSnapshot = (initial: boolean) => {
+      if (controller.signal.aborted || requestInFlight || document.hidden) return;
+      requestInFlight = true;
+      if (initial) setOperationalSituationLoading(true);
+      setOperationalSituationIssue(undefined);
+      void regionalDataRepository
+        .operationalSituation?.(
+          {
+            ...(selectedRegionCode ? { regionCode: selectedRegionCode } : {}),
+            ...(productCode ? { productCode } : {}),
+            ...(year === undefined ? {} : { surveyYear: year }),
+          },
+          controller.signal,
+        )
+        .then(async (next) => {
+          if (controller.signal.aborted) return;
+          setOperationalSituation(next);
+          const enriched = await enrichPublicWeather(
+            next,
+            (regionCode) =>
+              readSituation(
+                {
+                  regionCode,
+                  ...(productCode ? { productCode } : {}),
+                  ...(year === undefined ? {} : { surveyYear: year }),
+                },
+                controller.signal,
+              ),
+            controller.signal,
+          );
+          if (!controller.signal.aborted) setOperationalSituation(enriched);
+        })
+        .catch(() => {
+          if (!controller.signal.aborted)
+            setOperationalSituationIssue("公开态势快照加载失败，请稍后重试。");
+        })
+        .finally(() => {
+          requestInFlight = false;
+          if (!controller.signal.aborted && initial)
+            setOperationalSituationLoading(false);
+        });
+    };
+    loadSnapshot(true);
+    const interval = window.setInterval(() => loadSnapshot(false), 60_000);
+    const refreshWhenVisible = () => {
+      if (!document.hidden) loadSnapshot(false);
+    };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      controller.abort();
+    };
+  }, [
+    businessSequence,
+    publicSituationMode,
+    productCode,
+    regionalDataRepository,
+    selectedRegionCode,
+    year,
+  ]);
+
+  useEffect(() => {
+    if (
+      !regionalDataRepository ||
+      (dataMode !== "REGIONAL_DATA" && dataMode !== "SUPPLY_BALANCE")
+    )
+      return;
     if (!regionalDataRegionCode || !productCode || year === undefined) return;
     let active = true;
     const query = { regionCode: regionalDataRegionCode, productCode, year };
-    const request =
+    const request = () =>
       dataMode === "REGIONAL_DATA"
-        ? regionalDataRepository.regionalSummary(query).then((next) => {
+        ? Promise.all([
+            regionalDataRepository
+              .regionalSummary(query)
+              .then((next) => {
+                if (active && next) {
+                  setRegionalSummary(next);
+                  setSupplyBalance(undefined);
+                }
+                return next;
+              })
+              .catch(() => undefined),
+            (
+              regionalDataRepository.agricultureProfile?.(query) ??
+              Promise.resolve(undefined)
+            )
+              .then((profile) => {
+                if (active && profile) {
+                  setAgricultureProfile(profile);
+                  setSupplyBalance(undefined);
+                  setRegionalDataLoading(false);
+                }
+                return profile;
+              })
+              .catch(() => undefined),
+          ]).then(([next, profile]) => {
             if (!active) return;
-            setRegionalSummary(next);
-            setSupplyBalance(undefined);
+            if (!next && !profile) throw new Error("regional data unavailable");
           })
         : regionalDataRepository.supplyBalance(query).then((next) => {
             if (!active) return;
             setSupplyBalance(next);
             setRegionalSummary(undefined);
+            setAgricultureProfile(undefined);
           });
     Promise.resolve()
       .then(() => {
@@ -725,7 +985,7 @@ export function OverviewPage({
         setRegionalDataLoading(true);
         setRegionalDataIssue(undefined);
       })
-      .then(() => request)
+      .then(() => (active ? request() : undefined))
       .then(() => {
         if (!active) return;
         setRegionalDataLoading(false);
@@ -752,6 +1012,12 @@ export function OverviewPage({
     regionalSummary.productCode === productCode &&
     regionalSummary.year === year
       ? regionalSummary
+      : undefined;
+  const currentAgricultureProfile =
+    agricultureProfile &&
+    agricultureProfile.regionCode === regionalDataRegionCode &&
+    agricultureProfile.year === year
+      ? agricultureProfile
       : undefined;
   const currentSupplyBalance =
     supplyBalance &&
@@ -781,6 +1047,11 @@ export function OverviewPage({
     () => interactiveMapRegions.flatMap(toMapFeature),
     [interactiveMapRegions],
   );
+  const rootMapFeatures = useMemo(
+    () =>
+      rootRegions.filter(({ mapContextOnly }) => !mapContextOnly).flatMap(toMapFeature),
+    [rootRegions],
+  );
   const mapPoints = useMemo(() => {
     const byCode = new Map<string, ReturnType<typeof toMapPointFeature>[number]>();
     interactiveMapRegions.forEach((region) => {
@@ -805,6 +1076,10 @@ export function OverviewPage({
       name: overallMapScope.name,
     })[0];
   }, [mapContextRegion, overallMapScope, rootRegions, scopeRootCode]);
+  const annotationBounds = useMemo(
+    () => mapAnnotationBounds(mapFeatures, mapBackdrop),
+    [mapBackdrop, mapFeatures],
+  );
   const productLabel =
     options?.products.find((product) => product.code === productCode)?.label ??
     "粮食产品";
@@ -825,6 +1100,7 @@ export function OverviewPage({
   }
 
   function selectRegion(region: OverviewRegion) {
+    if (annotationArmed) return;
     if (selectedRegionCode !== region.code) {
       setSelectedRegionCode(region.code);
       setSelectedRegionSnapshot(region);
@@ -875,7 +1151,11 @@ export function OverviewPage({
       .catch(() => undefined);
   }
 
-  function drillDown(region: OverviewRegion) {
+  function drillDown(
+    region: OverviewRegion,
+    options: { preserveSelection?: boolean } = {},
+  ) {
+    if (annotationArmed) return;
     if (
       region.mapContextOnly ||
       region.level === "VILLAGE" ||
@@ -907,8 +1187,13 @@ export function OverviewPage({
         setMapContextRegion(region);
         setParentTrail((trail) => [...trail, parentCode ?? ""]);
         setParentCode(region.code);
-        setSelectedRegionCode("");
-        setSelectedRegionSnapshot(undefined);
+        if (options.preserveSelection) {
+          setSelectedRegionCode(region.code);
+          setSelectedRegionSnapshot(region);
+        } else {
+          setSelectedRegionCode("");
+          setSelectedRegionSnapshot(undefined);
+        }
         setDashboard(undefined);
         setDashboardIssue(undefined);
       })
@@ -993,9 +1278,31 @@ export function OverviewPage({
   return (
     <>
       <OverviewCommandCenter
+        showBusinessMetrics={
+          sampleMode &&
+          (!activeSamplePointRepository || sampleNetworkModel.mode === "actual")
+        }
+        publicSituation={publicSituationMode}
+        onReturnToOverview={() => {
+          navigationRequestRef.current += 1;
+          setPendingNavigationLabel(undefined);
+          setScopeRootCode(OVERALL_SCOPE);
+          setParentCode(undefined);
+          setParentTrail([]);
+          setMapContextRegion(undefined);
+          setMapContextTrail([]);
+          setSelectedRegionCode("");
+          setSelectedRegionSnapshot(undefined);
+          setSelectedOperationalFacilityId(undefined);
+          setSelectedOperationalSituationItem(undefined);
+          setAnnotationArmed(false);
+          setAnnotationOpen(false);
+          setDataMode("SAMPLE_POINTS");
+        }}
         sampleNetworkMode={
           activeSamplePointRepository ? sampleNetworkModel.mode : "actual"
         }
+        showLegend={!publicSituationMode}
         {...(overallMapScope
           ? {
               boundarySource: {
@@ -1012,45 +1319,156 @@ export function OverviewPage({
           !dashboard &&
           dashboardIssue === undefined
         }
-        {...(regionalDataRepository
+        {...(regionalDataRepository || mapAnnotationRepository
           ? {
               dataModeControls: (
                 <OverviewDataModeTabs
                   mode={dataMode}
                   onModeChange={(nextMode) => {
+                    navigationRequestRef.current += 1;
+                    setPendingNavigationLabel(undefined);
+                    setAnnotationArmed(false);
+                    setAnnotationOpen(false);
+                    if (nextMode === "PUBLIC_SITUATION") {
+                      setScopeRootCode(OVERALL_SCOPE);
+                      setParentCode(undefined);
+                      setParentTrail([]);
+                      setMapContextRegion(undefined);
+                      setMapContextTrail([]);
+                      setSelectedRegionCode("");
+                      setSelectedRegionSnapshot(undefined);
+                    }
                     setDataMode(nextMode);
                     setRegionalDataIssue(undefined);
+                    setOperationalFacilitiesIssue(undefined);
+                    setOperationalSituationIssue(undefined);
+                    setSelectedOperationalFacilityId(undefined);
+                    setSelectedOperationalSituationItem(undefined);
                     clearSamplePointSelection();
                   }}
                 />
               ),
             }
           : {})}
-        {...(regionalDataRepository && !sampleMode
+        {...((regionalDataRepository || mapAnnotationRepository) && !sampleMode
           ? {
-              dataModePanel: (
-                <OverviewDataModePanel
-                  loading={regionalDataLoading}
-                  mode={dataMode}
-                  productLabel={productLabel}
-                  {...(regionalDataIssue ? { issue: regionalDataIssue } : {})}
-                  {...(currentRegionalSummary
-                    ? { regionalSummary: currentRegionalSummary }
-                    : {})}
-                  {...(currentSupplyBalance
-                    ? { supplyBalance: currentSupplyBalance }
-                    : {})}
-                />
-              ),
-              sideDataPanel: dataMode === "SUPPLY_BALANCE",
-              scopeLabel: "地区填报范围：当前授权地区及全部下级地区",
-              dataSourceLabel:
-                "地区与供需数据保存后即为正式数据；历史版本由系统自动留存",
-              dataStatusText: regionalDataLoading
-                ? "正在同步地区正式数据"
-                : currentRegionalSummary || currentSupplyBalance
-                  ? "已同步地区正式数据"
-                  : "等待地区填报",
+              dataModePanel:
+                !publicSituationMode || operationalSelectedRegion ? (
+                  <OverviewDataModePanel
+                    loading={
+                      operationalMapMode
+                        ? operationalFacilitiesLoading || operationalSituationLoading
+                        : regionalDataLoading
+                    }
+                    mode={dataMode}
+                    productLabel={productLabel}
+                    {...(operationalMapMode
+                      ? operationalFacilitiesIssue
+                        ? { issue: operationalFacilitiesIssue }
+                        : operationalSituationIssue
+                          ? { issue: operationalSituationIssue }
+                          : {}
+                      : regionalDataIssue
+                        ? { issue: regionalDataIssue }
+                        : {})}
+                    {...((
+                      !regionalDataRegionCode
+                        ? mapOperationalFacilities
+                        : operationalFacilities
+                    )
+                      ? {
+                          operationalFacilities: (!regionalDataRegionCode
+                            ? mapOperationalFacilities
+                            : operationalFacilities)!,
+                        }
+                      : {})}
+                    {...(operationalSituation ? { operationalSituation } : {})}
+                    {...(effectiveOperationalFacilityId
+                      ? {
+                          selectedOperationalFacilityId: effectiveOperationalFacilityId,
+                        }
+                      : {})}
+                    {...(operationalSelectedRegion
+                      ? { selectedRegion: operationalSelectedRegion }
+                      : {})}
+                    {...(selectedOperationalSituationItem
+                      ? { selectedOperationalSituationItem }
+                      : {})}
+                    onOperationalSituationItemDismiss={() =>
+                      setSelectedOperationalSituationItem(undefined)
+                    }
+                    onOperationalFacilitySelect={(id) => {
+                      setSelectedOperationalSituationItem(undefined);
+                      setSelectedOperationalFacilityId(id);
+                    }}
+                    {...(regionalDataRepository?.createOperationalFacility
+                      ? {
+                          onOperationalFacilitySave: async (
+                            draft: StorageFacilityDraft,
+                            facilityCode?: string,
+                          ) => {
+                            const saved = facilityCode
+                              ? await regionalDataRepository.updateOperationalFacility?.(
+                                  facilityCode,
+                                  draft,
+                                )
+                              : await regionalDataRepository.createOperationalFacility?.(
+                                  draft,
+                                );
+                            if (!saved) throw new Error("库点保存接口不可用");
+                            setSelectedOperationalFacilityId(saved.code);
+                            setOperationalFacilityRevision((value) => value + 1);
+                          },
+                        }
+                      : {})}
+                    {...(regionalDataRepository?.archiveOperationalFacility
+                      ? {
+                          onOperationalFacilityArchive: async (
+                            facility: StorageFacility,
+                          ) => {
+                            await regionalDataRepository.archiveOperationalFacility?.(
+                              facility.code,
+                              facility.version,
+                            );
+                            setSelectedOperationalFacilityId(undefined);
+                            setOperationalFacilityRevision((value) => value + 1);
+                          },
+                        }
+                      : {})}
+                    {...(currentRegionalSummary
+                      ? { regionalSummary: currentRegionalSummary }
+                      : {})}
+                    {...(currentAgricultureProfile
+                      ? { agricultureProfile: currentAgricultureProfile }
+                      : {})}
+                    {...(currentSupplyBalance
+                      ? { supplyBalance: currentSupplyBalance }
+                      : {})}
+                  />
+                ) : undefined,
+              sideDataPanel:
+                dataMode === "SUPPLY_BALANCE" ||
+                dataMode === "REGIONAL_DATA" ||
+                (operationalMapMode && Boolean(operationalSelectedRegion)),
+              scopeLabel: "地区数据范围：齐齐哈尔、黑河、呼伦贝尔、大兴安岭及下级地区",
+              dataSourceLabel: publicSituationMode
+                ? "来源：公开地理服务、Open-Meteo 与正式业务数据"
+                : dataMode === "REGIONAL_DATA"
+                  ? "正式地区数据优先；缺项和未来值由系统统计模型自动生成"
+                  : "地区与供需数据保存后即为正式数据；历史版本由系统自动留存",
+              dataStatusText: publicSituationMode
+                ? operationalFacilitiesLoading || operationalSituationLoading
+                  ? "正在汇总公开态势快照"
+                  : operationalFacilities && operationalSituation
+                    ? "公开态势来源状态已同步"
+                    : "暂无可用公开态势"
+                : regionalDataLoading
+                  ? "正在自动计算地区数据"
+                  : currentAgricultureProfile
+                    ? "地区概况已自动生成"
+                    : currentRegionalSummary || currentSupplyBalance
+                      ? "已同步地区正式数据"
+                      : "请选择地图地区",
             }
           : {})}
         filters={
@@ -1071,9 +1489,9 @@ export function OverviewPage({
               </select>
             </label>
             <label>
-              <span>产品</span>
+              <span>品种</span>
               <select
-                aria-label="产品"
+                aria-label="品种"
                 value={productCode}
                 onChange={(event) => {
                   setProductCode(event.target.value);
@@ -1113,34 +1531,108 @@ export function OverviewPage({
           </section>
         }
         map={
-          <BoundaryMap
-            {...(mapBackdrop ? { backdrop: mapBackdrop } : {})}
-            features={mapFeatures}
-            points={mapPoints}
-            samplePointAggregates={sampleMode ? visibleSamplePointAggregates : []}
-            {...(activeSamplePointRepository
-              ? { samplePointAggregateStatus: visibleSamplePointAggregateStatus }
-              : {})}
-            samplePointIcons={visibleSampleNetworkIcons}
-            onSamplePointSelect={updateSelectedSamplePoint}
-            reserveRightPanel={dataMode === "SUPPLY_BALANCE"}
-            selectedCode={selectedRegionCode}
-            {...(selectedSamplePointId ? { selectedSamplePointId } : {})}
-            onSelect={selectRegion}
-            onSelectionPosition={updateMapSelectionPoint}
-            onDrill={drillDown}
-          />
+          <div className="overview-map-annotation-stage">
+            {!publicSituationMode && (
+              <BoundaryMap
+                annotationMode={annotationOpen}
+                {...(mapBackdrop ? { backdrop: mapBackdrop } : {})}
+                features={mapFeatures}
+                points={mapPoints}
+                samplePointAggregates={sampleMode ? visibleSamplePointAggregates : []}
+                {...(activeSamplePointRepository
+                  ? { samplePointAggregateStatus: visibleSamplePointAggregateStatus }
+                  : {})}
+                samplePointIcons={visibleSampleNetworkIcons}
+                onSamplePointSelect={updateSelectedSamplePoint}
+                reserveRightPanel={
+                  annotationArmed ||
+                  dataMode === "SUPPLY_BALANCE" ||
+                  dataMode === "REGIONAL_DATA" ||
+                  operationalMapMode
+                }
+                selectedCode={selectedRegionCode}
+                {...(selectedSamplePointId ? { selectedSamplePointId } : {})}
+                onSelect={selectRegion}
+                onSelectionPosition={updateMapSelectionPoint}
+                onDrill={drillDown}
+              />
+            )}
+            {publicSituationMode && annotationBounds && (
+              <OperationalSituationMap
+                {...(year !== undefined
+                  ? {
+                      regionSearch: {
+                        repository,
+                        roots: rootRegions.filter((region) => !region.mapContextOnly),
+                        productCode,
+                        year,
+                      },
+                    }
+                  : {})}
+                annotationActive={annotationOpen}
+                {...(mapBackdrop ? { backdrop: mapBackdrop } : {})}
+                bounds={annotationBounds}
+                canReturnToParent={Boolean(parentCode && parentCode !== scopeRootCode)}
+                facilities={mapOperationalFacilities ?? EMPTY_OPERATIONAL_FACILITIES}
+                features={mapFeatures}
+                rootFeatures={rootMapFeatures}
+                onFacilitySelect={(id) => {
+                  setSelectedOperationalSituationItem(undefined);
+                  setSelectedOperationalFacilityId(id);
+                }}
+                {...(mapAnnotationRepository
+                  ? {
+                      annotationRepository: mapAnnotationRepository,
+                      onAnnotationArmedChange: setAnnotationArmed,
+                      onAnnotationToggle: () => {
+                        setAnnotationArmed(false);
+                        setAnnotationOpen((current) => !current);
+                      },
+                    }
+                  : {})}
+                onRegionDrill={(region) =>
+                  drillDown(region, { preserveSelection: true })
+                }
+                onRegionSelect={(region) => {
+                  setSelectedOperationalFacilityId(undefined);
+                  setSelectedOperationalSituationItem(undefined);
+                  selectRegion(region);
+                }}
+                onReturnToParent={returnToParent}
+                onTimelineSelect={(item) => {
+                  setSelectedOperationalSituationItem(item);
+                  if (item?.category === "WEATHER") {
+                    setSelectedOperationalFacilityId(undefined);
+                    const region = [...visibleRegions, ...rootRegions].find(
+                      (candidate) => candidate.code === item.regionCode,
+                    );
+                    if (region) selectRegion(region);
+                  }
+                }}
+                {...(effectiveOperationalFacilityId
+                  ? { selectedFacilityId: effectiveOperationalFacilityId }
+                  : {})}
+                {...(selectedRegionCode ? { selectedRegionCode } : {})}
+                {...(annotationLevel(selectedRegionSnapshot?.level)
+                  ? {
+                      annotationAdministrativeLevel: annotationLevel(
+                        selectedRegionSnapshot?.level,
+                      )!,
+                    }
+                  : {})}
+                situation={operationalSituation ?? EMPTY_OPERATIONAL_SITUATION}
+              />
+            )}
+          </div>
         }
         navigation={
           <nav
             className={`overview-cockpit-navigation${embeddedInBusinessPlatform ? " is-embedded" : ""}`}
             aria-label="行政区导航"
           >
-            {embeddedInBusinessPlatform && (
-              <a href="/#/我的工作/待我处理" target="_top">
-                返回业务目录
-              </a>
-            )}
+            <a href={businessDirectoryUrl()} target="_top">
+              返回业务目录
+            </a>
             <details className="overview-region-browser">
               <summary>选择地区</summary>
               <div aria-label="行政区列表">
@@ -1216,7 +1708,7 @@ export function OverviewPage({
       {sampleMode && year !== undefined && !hasApprovedBusinessYear && (
         <p className="overview-cockpit-guidance" role="status">
           {year}
-          年度暂无审核正式业务数据：样本网络可查看，业务指标将在平台完成正式填报并审核后自动接入。
+          年度暂无正式入库业务数据：样本网络可查看，业务指标将在填报通过自动校验后自动接入。
         </p>
       )}
       {pendingNavigationLabel && (

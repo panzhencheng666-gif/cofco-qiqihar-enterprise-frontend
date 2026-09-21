@@ -76,7 +76,7 @@ describe("OverviewSelectedSamplePointDetails", () => {
     expect(screen.getByText("种植面积")).toBeVisible();
     expect(screen.getByText("120 亩")).toBeVisible();
     expect(
-      screen.getByText("审核来源历史：调研填报 · 业务日期 2026年8月5日 · 第2版"),
+      screen.getByText("入库来源历史：调研填报 · 业务日期 2026年8月5日 · 第2版"),
     ).toBeVisible();
     await waitFor(() =>
       expect(detail).toHaveBeenCalledWith({

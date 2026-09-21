@@ -2,6 +2,38 @@ import type { HttpClient } from "../../../../shared/api/HttpClient";
 import { HttpMasterDataRepository } from "./HttpMasterDataRepository";
 
 describe("HttpMasterDataRepository region hierarchy", () => {
+  it("reuses successful read requests and keeps applicability keys separate", async () => {
+    const get = vi.fn((_path: string, schema: Parameters<HttpClient["get"]>[1]) =>
+      Promise.resolve(schema.parse({ data: [{ code: "CORN", name: "玉米" }] })),
+    );
+    const repository = new HttpMasterDataRepository({ get: get as HttpClient["get"] });
+
+    const first = repository.getProducts("MARKET", "MONITORING");
+    const second = repository.getProducts("MARKET", "MONITORING");
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      [{ id: "CORN", name: "玉米" }],
+      [{ id: "CORN", name: "玉米" }],
+    ]);
+    await repository.getProducts("MARKET", "MONITORING");
+    await repository.getProducts("PRODUCTION", "MONITORING");
+
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it("evicts a failed read so the next attempt can recover", async () => {
+    const get = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockImplementation((_path: string, schema: Parameters<HttpClient["get"]>[1]) =>
+        Promise.resolve(schema.parse({ data: [] })),
+      );
+    const repository = new HttpMasterDataRepository({ get });
+
+    await expect(repository.getProducts()).rejects.toThrow("offline");
+    await expect(repository.getProducts()).resolves.toEqual([]);
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
   it("loads governed business periods with their marketing-year ownership", async () => {
     const http: HttpClient = {
       get: (path, schema) => {

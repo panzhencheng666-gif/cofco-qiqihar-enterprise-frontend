@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { HttpClient } from "../../api/HttpClient";
+import { ReadRequestCache } from "../../api/ReadRequestCache";
 import type {
   BusinessPageKey,
   ListPageDefinition,
@@ -54,53 +55,53 @@ const definitionSchema = z.object({
 });
 
 export class HttpPageDefinitionGateway implements PageDefinitionGateway {
+  private readonly reads = new ReadRequestCache();
+
   constructor(private readonly http: HttpClient) {}
 
   async getDefinition(key: BusinessPageKey): Promise<ListPageDefinition> {
-    const response = await this.http.get(
-      `/api/v1/page-definitions/${encodeURIComponent(key.domain)}/${encodeURIComponent(key.pageKind)}${key.productCode === undefined ? "" : `?productCode=${encodeURIComponent(key.productCode)}`}`,
-      definitionSchema,
-    );
-    const definition = response.data;
-
-    return {
-      key: {
-        domain: definition.domain,
-        pageKind: definition.pageKind,
-        ...(definition.productCode == null
-          ? {}
-          : { productCode: definition.productCode }),
-      },
-      title: definition.title,
-      breadcrumbs: definition.breadcrumbs.map((item) => ({
-        id: item.code,
-        label: item.label,
-      })),
-      filters: definition.filters.map((filter) => ({
-        id: filter.code,
-        label: filter.label,
-        control: filter.control,
-        placeholder: filter.placeholder,
-        options: filter.options,
-      })),
-      defaultContext: definition.defaultContext,
-      columnGroups: definition.columnGroups.map((group) => ({
-        id: group.code,
-        label: group.label,
-        fields: group.fields.map((field) => ({
-          id: field.code,
-          label: field.label,
-          valueType: field.valueType,
-          ...(field.unit === null ? {} : { unit: field.unit }),
-          ...(field.description === null ? {} : { description: field.description }),
+    const path = `/api/v1/page-definitions/${encodeURIComponent(key.domain)}/${encodeURIComponent(key.pageKind)}${key.productCode === undefined ? "" : `?productCode=${encodeURIComponent(key.productCode)}`}`;
+    return this.reads.get(path, async () => {
+      const definition = (await this.http.get(path, definitionSchema)).data;
+      return {
+        key: {
+          domain: definition.domain,
+          pageKind: definition.pageKind,
+          ...(definition.productCode == null
+            ? {}
+            : { productCode: definition.productCode }),
+        },
+        title: definition.title,
+        breadcrumbs: definition.breadcrumbs.map((item) => ({
+          id: item.code,
+          label: item.label,
         })),
-      })),
-      actions: definition.actions.map((action) => ({
-        id: action.code,
-        label: action.label,
-        scope: action.scope,
-      })),
-      pagination: definition.pagination,
-    };
+        filters: definition.filters.map((filter) => ({
+          id: filter.code,
+          label: filter.label,
+          control: filter.control,
+          placeholder: filter.placeholder,
+          options: filter.options,
+        })),
+        defaultContext: definition.defaultContext,
+        columnGroups: definition.columnGroups.map((group) => ({
+          id: group.code,
+          label: group.label,
+          fields: group.fields.map((field) => ({
+            id: field.code,
+            label: field.label,
+            valueType: field.valueType,
+            ...(field.unit === null ? {} : { unit: field.unit }),
+            ...(field.description === null ? {} : { description: field.description }),
+          })),
+        })),
+        actions: definition.actions.map((action) => ({
+          id: action.code,
+          label: action.label,
+          scope: action.scope,
+        })),
+        pagination: definition.pagination,
+      };
+    });
   }
 }

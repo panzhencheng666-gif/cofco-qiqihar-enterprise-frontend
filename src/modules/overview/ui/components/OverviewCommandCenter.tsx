@@ -18,7 +18,7 @@ export function OverviewCommandCenter({
   dataModePanel,
   dataModeControls,
   sideDataPanel = false,
-  dataSourceLabel = "业务数据仅展示已填报并审核内容",
+  dataSourceLabel = "业务数据仅展示已填报并通过自动校验的内容",
   dataStatusText,
   filters,
   map,
@@ -30,6 +30,10 @@ export function OverviewCommandCenter({
   sampleNetworkControls,
   sampleMode = true,
   sampleNetworkMode = "actual",
+  showBusinessMetrics,
+  publicSituation = false,
+  onReturnToOverview,
+  showLegend = true,
   scopeLabel,
   samplePoints,
   selectedSamplePoint,
@@ -59,6 +63,10 @@ export function OverviewCommandCenter({
   sampleNetworkControls?: ReactNode;
   sampleMode?: boolean;
   sampleNetworkMode?: SampleNetworkLayerMode;
+  showBusinessMetrics?: boolean;
+  publicSituation?: boolean;
+  onReturnToOverview?: () => void;
+  showLegend?: boolean;
   scopeLabel?: string;
   samplePoints?: ReactNode;
   selectedSamplePoint?: { details: ReactNode; name: string };
@@ -77,7 +85,7 @@ export function OverviewCommandCenter({
     resize();
     return () => window.removeEventListener("resize", resize);
   }, []);
-  const compactViewport = viewport.width <= 800;
+  const compactViewport = publicSituation || viewport.width <= 800;
   const stageScale = compactViewport
     ? 1
     : Math.min(1, viewport.height / 1080, viewport.width / 1280);
@@ -86,7 +94,8 @@ export function OverviewCommandCenter({
     width: compactViewport ? viewport.width : viewport.width / stageScale,
     height: compactViewport ? viewport.height : viewport.height / stageScale,
   } as CSSProperties;
-  const showBusinessMetrics = !sampleMode || sampleNetworkMode === "actual";
+  const businessMetricsVisible =
+    showBusinessMetrics ?? (!sampleMode || sampleNetworkMode === "actual");
   const metricByCode = new Map(dashboard?.metrics.map((item) => [item.code, item]));
   const overtureBoundary = boundarySource?.name.includes("Overture") ?? false;
   const selectedPath = selectedRegion?.name;
@@ -128,7 +137,7 @@ export function OverviewCommandCenter({
   return (
     <main
       style={stageStyle}
-      className={`overview-command-center${selectedRegion || selectedSamplePoint ? " has-details" : ""}${sideDataPanel ? " has-side-data-panel" : ""}${!showBusinessMetrics ? " without-business-kpis" : ""}`}
+      className={`overview-command-center${publicSituation ? " is-dedicated-situation" : ""}${selectedRegion || selectedSamplePoint ? " has-details" : ""}${sideDataPanel ? " has-side-data-panel" : ""}${!businessMetricsVisible ? " without-business-kpis" : ""}`}
     >
       <h2 className="overview-sr-only">粮食商情总览</h2>
 
@@ -147,10 +156,10 @@ export function OverviewCommandCenter({
             <i />
             {dataStatusText ??
               (awaitingDashboard
-                ? "正在同步审核数据"
+                ? "正在同步入库数据"
                 : hasApprovedSources
                   ? "已核验数据"
-                  : "等待审核数据")}
+                  : "等待入库数据")}
           </span>
           <b>更新于</b>
           <strong>
@@ -164,7 +173,7 @@ export function OverviewCommandCenter({
       </header>
 
       {dataModePanel ??
-        (showBusinessMetrics && (
+        (businessMetricsVisible && (
           <section aria-label="总揽关键指标" className="overview-command-kpis">
             {metrics.map((item) => (
               <article
@@ -183,66 +192,94 @@ export function OverviewCommandCenter({
           </section>
         ))}
 
-      <aside className="overview-command-legend">
-        <h3>图例</h3>
-        <span>
-          <i className="is-boundary" />
-          市界
-        </span>
-        <span>
-          <i className="is-county" />
-          县区界
-        </span>
-        <span>
-          <i className="is-township" />
-          乡镇界
-        </span>
-        <span>
-          <i className="is-village" />
-          行政村界
-        </span>
-        {sampleMode && (
+      {showLegend && (
+        <aside className="overview-command-legend">
+          <h3>图例</h3>
+          <span>
+            <i className="is-boundary" />
+            市界
+          </span>
+          <span>
+            <i className="is-county" />
+            县区界
+          </span>
+          <span>
+            <i className="is-township" />
+            乡镇界
+          </span>
+          <span>
+            <i className="is-village" />
+            行政村界
+          </span>
+          {sampleMode && (
+            <>
+              <span>
+                <img
+                  alt=""
+                  className="is-production-sample"
+                  src={publicAssetUrl("overview/sample-points/production-rice.svg")}
+                />
+                产情类样本点
+              </span>
+              <span>
+                <img
+                  alt=""
+                  className="is-market-sample"
+                  src={publicAssetUrl("overview/sample-points/market-bank.svg")}
+                />
+                市场类样本点
+              </span>
+              <span>
+                <img
+                  alt=""
+                  className="is-logistics-sample"
+                  src={publicAssetUrl("overview/sample-points/logistics-car.svg")}
+                />
+                物流类样本点
+              </span>
+              <span>
+                <i className="is-design-coverage" />
+                设计覆盖
+              </span>
+              <span>
+                <i className="is-design-exact" />
+                设计样本位置
+              </span>
+              <span>
+                <i className="is-design-expired" />
+                作废设计样本
+              </span>
+            </>
+          )}
+        </aside>
+      )}
+      <div className="overview-command-tools">
+        {publicSituation ? (
+          <button
+            className="situation-return-overview"
+            type="button"
+            onClick={onReturnToOverview}
+          >
+            ← 返回总揽监测
+          </button>
+        ) : (
           <>
-            <span>
-              <img
-                alt=""
-                className="is-production-sample"
-                src={publicAssetUrl("overview/sample-points/production-rice.svg")}
-              />
-              产情类样本点
-            </span>
-            <span>
-              <img
-                alt=""
-                className="is-market-sample"
-                src={publicAssetUrl("overview/sample-points/market-bank.svg")}
-              />
-              市场类样本点
-            </span>
-            <span>
-              <img
-                alt=""
-                className="is-logistics-sample"
-                src={publicAssetUrl("overview/sample-points/logistics-car.svg")}
-              />
-              物流类样本点
-            </span>
-            <span>
-              <i className="is-design-coverage" />
-              设计覆盖
-            </span>
-            <span>
-              <i className="is-design-exact" />
-              设计样本位置
-            </span>
+            {dataModeControls}
+            {navigation}
+            {sampleNetworkControls}
           </>
         )}
-      </aside>
-      <div className="overview-command-tools">
-        {dataModeControls}
-        {navigation}
-        {sampleNetworkControls}
       </div>
+      {publicSituation && sideDataPanel && (
+        <button
+          className="situation-close-details"
+          type="button"
+          onClick={onCloseDetails}
+          aria-label="关闭地区详情"
+        >
+          ×
+        </button>
+      )}
 
       {selectedRegion && selectionPoint && <SelectionLink point={selectionPoint} />}
 
@@ -301,11 +338,10 @@ export function OverviewCommandCenter({
         {boundarySource && (
           <span
             className="overview-boundary-provenance"
-            title={`${boundarySource.name} · ${boundarySource.license} · 来源可追溯的地图展示边界，非勘界或法律依据`}
+            title="公开地图资料，来源可追溯，仅作展示，非勘界或法律依据"
           >
-            边界：{overtureBoundary ? "Overture/OSM" : "来源数据"}{" "}
-            {boundarySource.revision}
-            （非勘界依据） ·{" "}
+            地图边界：{overtureBoundary ? "公开地图资料" : "来源资料"}
+            （仅作展示） ·{" "}
             <a
               href={
                 overtureBoundary
@@ -390,7 +426,7 @@ function metric(
   if (loading) {
     return {
       label,
-      sourceLabel: "正在同步审核数据",
+      sourceLabel: "正在同步入库数据",
       tone,
       unit: "",
       value: "正在同步",
@@ -398,7 +434,7 @@ function metric(
   }
   return {
     label,
-    sourceLabel: value?.sourceCount ? formatMetricAuditLabel(value) : "暂无审核数据",
+    sourceLabel: value?.sourceCount ? formatMetricAuditLabel(value) : "暂无入库数据",
     tone,
     unit: value?.unitCode ?? "",
     value:
@@ -406,7 +442,7 @@ function metric(
         ? formatNumber(value.value)
         : value?.sourceCount
           ? "计算条件未完整"
-          : "暂无审核数据",
+          : "暂无入库数据",
   };
 }
 
@@ -418,7 +454,7 @@ function formatNumber(value: string) {
 }
 
 function formatDateTime(value?: string) {
-  if (!value) return "暂无审核数据";
+  if (!value) return "暂无入库数据";
   const date = new Date(value);
   return Number.isNaN(date.valueOf())
     ? value

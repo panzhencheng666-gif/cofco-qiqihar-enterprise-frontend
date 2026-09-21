@@ -86,6 +86,9 @@ export function designPointRegionAggregates(
       scopeKind: "CHILD_REGION",
       anchorRegionCode: region.code,
       samplePointCount: selected.length,
+      expiredSamplePointCount: selected.filter(
+        (point) => point.lifecycleStatus === "EXPIRED",
+      ).length,
       productionCount: selected.filter(
         (point) => point.context.domainCode === "PRODUCTION",
       ).length,

@@ -12,6 +12,7 @@ export interface OverviewSamplePointAggregate {
   /** Real administrative region used to place the aggregate without fabricating coordinates. */
   anchorRegionCode?: string;
   samplePointCount: number;
+  expiredSamplePointCount?: number;
   productionCount: number;
   marketCount: number;
   /** Required by the live HTTP contract; optional only for legacy in-memory fixtures. */
@@ -116,6 +117,7 @@ export type SampleNetworkLayerType =
   | "HISTORICAL_ACTUAL"
   | "DESIGN_COVERAGE_BADGE"
   | "DESIGN_EXACT_LOCATION"
+  | "DESIGN_EXPIRED_LOCATION"
   | "REGIONAL_ACTUAL_BADGE";
 
 export type SampleNetworkRelationType =
@@ -140,6 +142,8 @@ export interface OverviewDesignSamplePointRecord {
   displayLatitude?: number | undefined;
   displayRegionCode?: string | undefined;
   locationMode?: "REPORTED_COORDINATE" | "REGION_SCHEMATIC" | undefined;
+  lifecycleStatus?: "ACTIVE" | "EXPIRED" | undefined;
+  expiredAt?: string | undefined;
   version: number;
   updatedAt: string;
 }
@@ -159,11 +163,22 @@ export interface OverviewDesignSamplePointBusinessValue {
   unit: string | null;
 }
 
+export interface OverviewDesignSamplePointAllocationProvenance {
+  coordinateSource: "GENERATED_DESIGN";
+  businessValuesStatus:
+    "ORIGIN_ONLY_NOT_VERIFIED_AT_TARGET" | "NO_OBSERVED_BUSINESS_FACTS";
+  originalName?: string;
+  originalAddress?: string;
+  originalBusinessValues: readonly OverviewDesignSamplePointBusinessValue[];
+  hasRetainedUnpresentedOriginalValues: boolean;
+}
+
 export interface OverviewDesignSamplePoint extends OverviewDesignSamplePointRecord {
   domainLabel: string;
   productLabel: string;
   objectTypeLabel: string;
   businessValues: readonly OverviewDesignSamplePointBusinessValue[];
+  allocationProvenance?: OverviewDesignSamplePointAllocationProvenance;
 }
 
 export interface SampleNetworkDesignPoint {

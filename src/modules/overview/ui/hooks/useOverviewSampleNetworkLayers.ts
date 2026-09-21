@@ -152,11 +152,10 @@ export function useOverviewSampleNetworkLayers({
       : typeof repository.historicalAggregates === "function"),
   );
   const canLoadDesignPoints = Boolean(
-    repository?.designPoints &&
-    repository.designPointDefinition &&
+    (repository?.designMapCatalog ||
+      (repository?.designPoints && repository.designPointDefinition)) &&
     productCode &&
-    regionCode &&
-    pointLevel,
+    regionCode,
   );
 
   const previousRefresh = useRef(refreshSequence);
@@ -176,8 +175,9 @@ export function useOverviewSampleNetworkLayers({
     });
     if (
       !canLoadDesignPoints ||
-      !repository?.designPoints ||
-      !repository.designPointDefinition
+      !repository ||
+      (!repository.designMapCatalog &&
+        (!repository.designPoints || !repository.designPointDefinition))
     ) {
       return () => {
         active = false;
@@ -530,9 +530,18 @@ export function useOverviewSampleNetworkLayers({
     [designPoints, region],
   );
   const designPointAggregates = useMemo(
+    () => designPointRegionAggregates(designPoints, mapRegions ?? []),
+    [designPoints, mapRegions],
+  );
+  const mapDesignPoints = useMemo(
     () =>
-      pointLevel ? designPointRegionAggregates(designPoints, mapRegions ?? []) : [],
-    [designPoints, mapRegions, pointLevel],
+      pointLevel
+        ? visibleDesignPoints
+        : visibleDesignPoints.filter(
+            (point) =>
+              point.regionCode === regionCode || point.displayRegionCode === regionCode,
+          ),
+    [pointLevel, regionCode, visibleDesignPoints],
   );
 
   const icons = useMemo(() => {
@@ -560,7 +569,7 @@ export function useOverviewSampleNetworkLayers({
           : {}),
         showExactDesignLocations,
       },
-      canLoadDesignPoints ? visibleDesignPoints : undefined,
+      canLoadDesignPoints ? mapDesignPoints : undefined,
     );
   }, [
     actualIcons,
@@ -574,7 +583,7 @@ export function useOverviewSampleNetworkLayers({
     regionLevel,
     regionParentCode,
     showExactDesignLocations,
-    visibleDesignPoints,
+    mapDesignPoints,
   ]);
 
   return {
@@ -626,7 +635,6 @@ async function loadDesignSamplePoints(
   productCode: string,
   regionCode?: string,
 ): Promise<readonly OverviewDesignSamplePoint[]> {
-  if (!repository.designPoints || !repository.designPointDefinition) return [];
   if (repository.designMapCatalog) {
     const records = await repository.designMapCatalog({
       productCode,
@@ -641,11 +649,13 @@ async function loadDesignSamplePoints(
             string
           >
         )[record.context.domainCode] ?? "样本",
-      productLabel: record.context.productCode,
+      productLabel:
+        record.context.productCode === "GENERAL" ? "通用" : record.context.productCode,
       objectTypeLabel: "设计样本",
       businessValues: [],
     }));
   }
+  if (!repository.designPoints || !repository.designPointDefinition) return [];
   const first = await repository.designPoints({
     page: 0,
     pageSize: DESIGN_SAMPLE_PAGE_SIZE,
@@ -701,24 +711,90 @@ export function presentDesignSamplePoint(
   if (!domainLabel || !productLabel || !objectTypeLabel) {
     throw new Error("Design sample point catalog mismatch");
   }
+  const allocationProvenance = designAllocationProvenance(record, definition);
+  const detailFields = presentableDesignFields(definition);
   return {
     ...record,
     domainLabel,
     productLabel,
     objectTypeLabel,
-    businessValues: definition.observationFields.flatMap((field) => {
-      const value = record.values[field.code];
-      if (value === undefined || value === null) return [];
-      return [
-        {
-          code: field.code,
-          label: field.label,
-          value: designSampleValueLabel(value),
-          unit: field.unit,
-        },
-      ];
-    }),
+    ...(allocationProvenance ? { allocationProvenance } : {}),
+    businessValues: presentDesignValues(record.values, detailFields),
   };
+}
+
+function designAllocationProvenance(
+  record: OverviewDesignSamplePointRecord,
+  definition: Awaited<
+    ReturnType<NonNullable<OverviewSamplePointRepository["designPointDefinition"]>>
+  >,
+) {
+  const raw = record.values.DSP_ALLOCATION_PROVENANCE;
+  if (!isRecord(raw) || raw.coordinateSource !== "GENERATED_DESIGN") return undefined;
+  if (
+    raw.businessValuesStatus !== "ORIGIN_ONLY_NOT_VERIFIED_AT_TARGET" &&
+    raw.businessValuesStatus !== "NO_OBSERVED_BUSINESS_FACTS"
+  )
+    return undefined;
+  const originalValues = isRecord(raw.originalValues) ? raw.originalValues : {};
+  const presentableFields = presentableDesignFields(definition);
+  const presentableCodes = new Set(presentableFields.map(({ code }) => code));
+  return {
+    coordinateSource: raw.coordinateSource,
+    businessValuesStatus: raw.businessValuesStatus,
+    ...(typeof raw.originalName === "string" && raw.originalName.trim()
+      ? { originalName: raw.originalName }
+      : {}),
+    ...(typeof raw.originalAddress === "string" && raw.originalAddress.trim()
+      ? { originalAddress: raw.originalAddress }
+      : {}),
+    originalBusinessValues: presentDesignValues(originalValues, presentableFields),
+    hasRetainedUnpresentedOriginalValues: Object.entries(originalValues).some(
+      ([code, value]) =>
+        value !== undefined && value !== null && !presentableCodes.has(code),
+    ),
+  } as const;
+}
+
+const PRESENTABLE_IDENTITY_CODES = new Set([
+  "DSP_ADDRESS",
+  "DSP_MAINTAINER_NAME",
+  "DSP_MAINTAINER_UNIT",
+]);
+
+function presentableDesignFields(
+  definition: Awaited<
+    ReturnType<NonNullable<OverviewSamplePointRepository["designPointDefinition"]>>
+  >,
+) {
+  return [
+    ...definition.identityFields.filter(({ code }) =>
+      PRESENTABLE_IDENTITY_CODES.has(code),
+    ),
+    ...definition.observationFields,
+  ];
+}
+
+function presentDesignValues(
+  values: Readonly<Record<string, unknown>>,
+  fields: ReturnType<typeof presentableDesignFields>,
+) {
+  return fields.flatMap((field) => {
+    const value = values[field.code];
+    if (value === undefined || value === null) return [];
+    return [
+      {
+        code: field.code,
+        label: field.label,
+        value: designSampleValueLabel(value),
+        unit: field.unit,
+      },
+    ];
+  });
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function designSampleValueLabel(value: unknown) {

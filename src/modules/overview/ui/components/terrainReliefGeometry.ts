@@ -106,6 +106,7 @@ export interface ReliefOverlayPlacement {
 
 export interface ReliefLabelPlacement extends ReliefOverlayPlacement, ReliefLabel {
   footprint: ReliefOverlayFootprint;
+  leaderAnchor?: ReliefPoint;
 }
 
 export interface ReliefSamplePointAggregatePlacement
@@ -212,12 +213,23 @@ export function overviewDetailsPanelLeft(stageWidth: number) {
 export function overviewReliefFrame(
   detailsOpen: boolean,
   stageWidth = 1920,
+  visibleRight?: number,
+  compactHeight?: number,
 ): ReliefFrame {
+  if (compactHeight !== undefined && visibleRight !== undefined) {
+    return {
+      x: 24,
+      y: 40,
+      width: Math.max(1, visibleRight - 48),
+      height: Math.max(1, compactHeight - 80),
+    };
+  }
   const x = 180;
   const right = detailsOpen
     ? Math.min(
         1300,
-        overviewDetailsPanelLeft(stageWidth) - OVERVIEW_DETAILS_MAP_SAFE_GAP,
+        (visibleRight ?? overviewDetailsPanelLeft(stageWidth)) -
+          OVERVIEW_DETAILS_MAP_SAFE_GAP,
       )
     : Math.min(1820, Math.max(1280, stageWidth) - 100);
   return {
@@ -967,6 +979,7 @@ export function reliefLabelFootprint(
 
 export function createReliefOverlayLayout(
   scene: ReliefSceneProjection,
+  selectedCode?: string,
 ): ReliefOverlayLayout {
   const surfaces = [...scene.features, ...(scene.backdrop ? [scene.backdrop] : [])];
   const surfaceByRegion = new Map(
@@ -1058,25 +1071,98 @@ export function createReliefOverlayLayout(
       radius: RELIEF_SAMPLE_POINT_ICON_RADIUS,
     };
   });
-  const labels = scene.labels.map((label) => {
-    const footprint = reliefLabelFootprint(
-      label,
-      aggregateByRegion.has(label.region.code),
-    );
-    const surface = surfaceByRegion.get(label.region.code);
-    const polygon = surface?.polygons[surface.primaryPolygonIndex ?? 0];
-    if (!polygon) {
-      return { ...label, footprint, scale: 1, visible: true };
+  // Reserve complete name/count rectangles in a stable order. Selection gets
+  // first choice; sample-network overlays never affect administrative placement.
+  const occupied: ReliefLabelPlacement[] = [];
+  const labelsByCode = new Map<string, ReliefLabelPlacement>();
+  const orderedLabels = [...scene.labels].sort(
+    (left, right) =>
+      Number(right.region.code === selectedCode) -
+        Number(left.region.code === selectedCode) ||
+      left.region.code.localeCompare(right.region.code),
+  );
+  for (const allowCallout of [false, true]) {
+    for (const label of orderedLabels) {
+      if (labelsByCode.has(label.region.code)) continue;
+      if (label.region.mapContextOnly) continue;
+      const footprint = reliefLabelFootprint(
+        label,
+        aggregateByRegion.has(label.region.code),
+      );
+      const surface = surfaceByRegion.get(label.region.code);
+      const polygon = surface?.polygons[surface.primaryPolygonIndex ?? 0];
+      const fits = (point: ReliefPoint) =>
+        point.x - footprint.width / 2 >= scene.frame.x &&
+        point.x + footprint.width / 2 <= scene.frame.x + scene.frame.width &&
+        point.y - footprint.height / 2 >= scene.frame.y &&
+        point.y + footprint.height / 2 <= scene.frame.y + scene.frame.height &&
+        occupied.every(
+          (other) =>
+            Math.abs(point.x - other.point.x) >=
+              (footprint.width + other.footprint.width) / 2 + 6 ||
+            Math.abs(point.y - other.point.y) >=
+              (footprint.height + other.footprint.height) / 2 + 6,
+        );
+      const inside = polygon
+        ? reliefPlacementCandidates(polygon, label.point).find(
+            (point) =>
+              fits(point) && reliefRectInsidePolygon(point, footprint, polygon),
+          )
+        : fits(label.point)
+          ? label.point
+          : undefined;
+      if (!inside && !allowCallout && label.region.code !== selectedCode) continue;
+      const callouts: ReliefPoint[] = [];
+      if (!inside) {
+        // A bounded screen-space search keeps names readable even for tiny
+        // counties. The leader ends at the unchanged geographic label anchor.
+        for (
+          let y = scene.frame.y + footprint.height / 2;
+          y <= scene.frame.y + scene.frame.height - footprint.height / 2;
+          y += 12
+        ) {
+          for (
+            let x = scene.frame.x + footprint.width / 2;
+            x <= scene.frame.x + scene.frame.width - footprint.width / 2;
+            x += 12
+          ) {
+            const point = { x, y };
+            if (
+              (Math.abs(point.x - label.point.x) > footprint.width / 2 + 8 ||
+                Math.abs(point.y - label.point.y) > footprint.height / 2 + 8) &&
+              fits(point)
+            )
+              callouts.push(point);
+          }
+        }
+        callouts.sort(
+          (left, right) =>
+            squaredPointDistance(left, label.point) -
+            squaredPointDistance(right, label.point),
+        );
+      }
+      const point = inside ?? callouts[0];
+      const placement: ReliefLabelPlacement = {
+        ...label,
+        footprint,
+        point: point ?? label.point,
+        scale: 1,
+        visible: Boolean(point),
+        ...(!inside && point ? { leaderAnchor: label.point } : {}),
+      };
+      if (placement.visible) occupied.push(placement);
+      labelsByCode.set(label.region.code, placement);
     }
-    return {
-      ...label,
-      footprint,
-      // Administrative names belong to the boundary layer. Sample-network
-      // modes are independent overlays and must never make the same region
-      // name jump between actual, design, and comparison views.
-      ...placeReliefRectInsidePolygon(polygon, label.point, footprint, []),
-    };
-  });
+  }
+  const labels = scene.labels.map(
+    (label) =>
+      labelsByCode.get(label.region.code) ?? {
+        ...label,
+        footprint: reliefLabelFootprint(label),
+        scale: 1,
+        visible: false,
+      },
+  );
   return {
     labels,
     samplePointAggregates,
@@ -1320,35 +1406,6 @@ function placeReliefCircleInsidePolygon(
   };
 }
 
-function placeReliefRectInsidePolygon(
-  polygon: ReliefPolygon,
-  preferred: ReliefPoint,
-  footprint: ReliefOverlayFootprint,
-  exclusions: readonly { point: ReliefPoint; radius: number }[],
-): ReliefOverlayPlacement {
-  const candidates = reliefPlacementCandidates(polygon, preferred);
-  const scaled = { height: footprint.height, width: footprint.width };
-  const point = candidates.find(
-    (candidate) =>
-      reliefRectInsidePolygon(candidate, scaled, polygon, OVERLAY_SAFE_MARGIN) &&
-      exclusions.every(
-        (exclusion) =>
-          !reliefCircleIntersectsRect(
-            exclusion.point,
-            exclusion.radius,
-            candidate,
-            scaled,
-          ),
-      ),
-  );
-  if (point) return { point, scale: 1, visible: true };
-  return {
-    point: candidates[0] ?? preferred,
-    scale: 1,
-    visible: true,
-  };
-}
-
 function reliefPlacementCandidates(polygon: ReliefPolygon, preferred: ReliefPoint) {
   const outer = polygon.rings.find(({ isHole }) => !isHole)?.points ?? [];
   if (!outer.length) return [];
@@ -1374,23 +1431,6 @@ function reliefPlacementCandidates(polygon: ReliefPolygon, preferred: ReliefPoin
     (left, right) =>
       squaredPointDistance(left, preferred) - squaredPointDistance(right, preferred),
   );
-}
-
-function reliefCircleIntersectsRect(
-  circle: ReliefPoint,
-  radius: number,
-  rectangle: ReliefPoint,
-  footprint: ReliefOverlayFootprint,
-) {
-  const closestX = Math.max(
-    rectangle.x - footprint.width / 2,
-    Math.min(circle.x, rectangle.x + footprint.width / 2),
-  );
-  const closestY = Math.max(
-    rectangle.y - footprint.height / 2,
-    Math.min(circle.y, rectangle.y + footprint.height / 2),
-  );
-  return Math.hypot(circle.x - closestX, circle.y - closestY) < radius;
 }
 
 function squaredPointDistance(left: ReliefPoint, right: ReliefPoint) {

@@ -1,4 +1,17 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredMapSelection } from "./useDeferredMapSelection";
+import {
+  RELIEF_DOUBLE_CLICK_LAYOUT_DELAY_MS,
+  useReliefLabelPriority,
+} from "./useReliefLabelPriority";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import * as THREE from "three";
 import { Line2 } from "three/examples/jsm/lines/Line2.js";
 import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
@@ -180,6 +193,7 @@ export default function TerrainReliefBoundaryMap({
   reserveRightPanel = false,
   selectedCode,
   selectedSamplePointId,
+  annotationMode = false,
 }: {
   backdrop?: MapFeature;
   command?: OverviewMapCommand;
@@ -197,6 +211,7 @@ export default function TerrainReliefBoundaryMap({
   reserveRightPanel?: boolean;
   selectedCode: string;
   selectedSamplePointId?: string;
+  annotationMode?: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const callbacksRef = useRef<RendererCallbacks>({
@@ -230,6 +245,8 @@ export default function TerrainReliefBoundaryMap({
   const activeDetailLayout = reserveRightPanel || (detailsOpen && detailLayoutOpen);
   const detailLayoutOpenRef = useRef(false);
   const [stageWidth, setStageWidth] = useState(commandStageWidth);
+  const [visibleMapWidth, setVisibleMapWidth] = useState<number>();
+  const [compactMapHeight, setCompactMapHeight] = useState<number>();
   const renderedStageWidth = Math.max(STAGE_WIDTH, Math.ceil(stageWidth));
   const wideStageOffset = overviewWideStageOffset(renderedStageWidth);
   const terrainSourceKey = useMemo(
@@ -244,12 +261,18 @@ export default function TerrainReliefBoundaryMap({
     [terrainSourceKey],
   );
   const fullMapFrame = useMemo(
-    () => overviewReliefFrame(false, stageWidth),
-    [stageWidth],
+    () => overviewReliefFrame(false, stageWidth, visibleMapWidth, compactMapHeight),
+    [stageWidth, visibleMapWidth, compactMapHeight],
   );
   const detailMapFrame = useMemo(
-    () => overviewReliefFrame(true, stageWidth),
-    [stageWidth],
+    () =>
+      overviewReliefFrame(
+        true,
+        stageWidth,
+        visibleMapWidth === undefined ? undefined : visibleMapWidth - wideStageOffset,
+        compactMapHeight,
+      ),
+    [stageWidth, visibleMapWidth, wideStageOffset, compactMapHeight],
   );
   const terrainProjectionResult = useMemo(() => {
     const startedAt = window.performance.now();
@@ -308,13 +331,10 @@ export default function TerrainReliefBoundaryMap({
     terrainProjectionResult.duration + terrainDetailProjectionResult.duration;
   const activeProjection = activeDetailLayout ? detailProjection : sceneProjection;
   const activeSurfaceBounds = reliefSceneBounds(activeProjection);
-  const activeLayoutTransform = activeDetailLayout
-    ? calculateLayoutTransform(sceneProjection, detailProjection)
-    : IDENTITY_LAYOUT_TRANSFORM;
-  const selectedOverlayLift = COMPONENT_HIGHLIGHT_LIFT * activeLayoutTransform.scaleY;
+  const labelPriorityCode = useReliefLabelPriority(selectedCode);
   const overlayLayout = useMemo(
-    () => createReliefOverlayLayout(activeProjection),
-    [activeProjection],
+    () => createReliefOverlayLayout(activeProjection, labelPriorityCode),
+    [activeProjection, labelPriorityCode],
   );
   const coordinateGroupBySamplePointId = useMemo(() => {
     const groups = new Map<string, OverviewSamplePointIcon[]>();
@@ -356,9 +376,15 @@ export default function TerrainReliefBoundaryMap({
     window.clearTimeout(layoutTimerRef.current);
     layoutTimerRef.current = undefined;
   }, []);
-  const scheduleSelection = useCallback((region: OverviewRegion) => {
-    callbacksRef.current.onSelect(region);
-  }, []);
+  const { schedule: deferSelection, cancel: cancelSelection } =
+    useDeferredMapSelection();
+  const scheduleSelection = useCallback(
+    (region: OverviewRegion) => {
+      if (region.level === "VILLAGE") callbacksRef.current.onSelect(region);
+      else deferSelection(() => callbacksRef.current.onSelect(region));
+    },
+    [deferSelection],
+  );
   const scheduleComponentSelection = useCallback(
     (region: OverviewRegion, componentId: number) => {
       const identity: ReliefComponentIdentity = {
@@ -367,22 +393,47 @@ export default function TerrainReliefBoundaryMap({
         parentCode: region.parentCode,
         regionCode: region.code,
       };
-      componentSelectionUpdateRef.current(identity);
-      callbacksRef.current.onSelect(region);
+      const select = () => {
+        componentSelectionUpdateRef.current(identity);
+        callbacksRef.current.onSelect(region);
+      };
+      if (region.level === "VILLAGE") select();
+      else deferSelection(select);
     },
-    [],
+    [deferSelection],
   );
   const drillImmediately = useCallback(
     (region: OverviewRegion) => {
+      cancelSelection();
       cancelLayoutTimer();
       callbacksRef.current.onDrill(region);
     },
-    [cancelLayoutTimer],
+    [cancelLayoutTimer, cancelSelection],
   );
 
   useEffect(() => {
     detailLayoutOpenRef.current = activeDetailLayout;
   }, [activeDetailLayout]);
+
+  useLayoutEffect(() => {
+    const viewport = hostRef.current?.parentElement;
+    if (!viewport) return;
+    // CSS reserves the real reading-panel width, including its unscaled text.
+    // Observe that viewport in stage coordinates so geometry and hit targets
+    // reframe together when the panel expands, collapses or the window resizes.
+    const measure = () => {
+      const compact = window.innerWidth <= 800;
+      // Desktop uses the stable presentation-stage frame; the CSS detail rail
+      // clips that frame without replacing the WebGL renderer. Mobile has no
+      // fixed stage scale, so it still follows the measured stacked viewport.
+      setVisibleMapWidth(compact ? viewport.clientWidth : undefined);
+      setCompactMapHeight(compact ? viewport.clientHeight : undefined);
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(viewport);
+    measure();
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const updateStageWidth = () => setStageWidth(commandStageWidth());
@@ -399,20 +450,22 @@ export default function TerrainReliefBoundaryMap({
       }, 0);
       return cancelLayoutTimer;
     }
-    // The detail drawer responds on the first click. The map itself keeps its
-    // original hit positions for one double-click interval, so the second
-    // click can still drill without paying an artificial 220 ms selection
-    // delay or losing its target while the safe frame is reflowed.
+    // Keep hit positions stable while the selected region's reading panel settles.
     layoutTimerRef.current = window.setTimeout(() => {
       layoutTimerRef.current = undefined;
       setDetailLayoutOpen(true);
-    }, 220);
+    }, RELIEF_DOUBLE_CLICK_LAYOUT_DELAY_MS);
     return cancelLayoutTimer;
   }, [cancelLayoutTimer, detailsOpen, selectedCode]);
 
   useEffect(() => {
     callbacksRef.current = { onDrill, onReady, onSelect, onUnavailable };
   }, [onDrill, onReady, onSelect, onUnavailable]);
+
+  useEffect(() => {
+    if (!annotationMode) return;
+    hoverUpdateRef.current(undefined);
+  }, [annotationMode]);
 
   useEffect(() => {
     positionCallbackRef.current = onSelectionPosition;
@@ -994,9 +1047,10 @@ export default function TerrainReliefBoundaryMap({
       });
 
     const eventTarget = (event: PointerEvent | MouseEvent) => {
-      const bounds = renderer.domElement.getBoundingClientRect();
-      pointer.x = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
-      pointer.y = -((event.clientY - bounds.top) / bounds.height) * 2 + 1;
+      const width = Math.max(renderer.domElement.clientWidth, 1);
+      const height = Math.max(renderer.domElement.clientHeight, 1);
+      pointer.x = (event.offsetX / width) * 2 - 1;
+      pointer.y = -(event.offsetY / height) * 2 + 1;
       raycaster.setFromCamera(pointer, camera);
       const hit = raycaster.intersectObjects(interactiveMeshes, false)[0];
       return hit ? targetByObject.get(hit.object.uuid) : undefined;
@@ -1010,6 +1064,11 @@ export default function TerrainReliefBoundaryMap({
       if (target) drillImmediately(target.region);
     };
     const handlePointerMove = (event: PointerEvent) => {
+      if (annotationMode) {
+        renderer.domElement.style.cursor = "default";
+        hoverUpdateRef.current(undefined);
+        return;
+      }
       const target = eventTarget(event);
       renderer.domElement.style.cursor = target ? "pointer" : "default";
       hoverUpdateRef.current(target);
@@ -1066,17 +1125,26 @@ export default function TerrainReliefBoundaryMap({
     scheduleSelection,
     stageWidth,
     terrainProjection,
+    annotationMode,
   ]);
 
   return (
     <div
       className="overview-terrain-relief-map"
       data-command-stage-width={stageWidth}
-      data-details-panel-left={overviewDetailsPanelLeft(stageWidth)}
+      data-details-panel-left={visibleMapWidth ?? overviewDetailsPanelLeft(stageWidth)}
       data-visible-surface-max-x={activeSurfaceBounds?.maxX}
       data-visible-surface-max-y={activeSurfaceBounds?.maxY}
       data-visible-surface-min-x={activeSurfaceBounds?.minX}
       data-visible-surface-min-y={activeSurfaceBounds?.minY}
+      data-projection-source-min-x={activeProjection.sourceBounds?.minX}
+      data-projection-source-max-x={activeProjection.sourceBounds?.maxX}
+      data-projection-source-min-y={activeProjection.sourceBounds?.minY}
+      data-projection-source-max-y={activeProjection.sourceBounds?.maxY}
+      data-projection-frame-x={activeProjection.frame.x}
+      data-projection-frame-y={activeProjection.frame.y}
+      data-projection-frame-width={activeProjection.frame.width}
+      data-projection-frame-height={activeProjection.frame.height}
     >
       <div
         className="overview-terrain-relief-canvas"
@@ -1090,62 +1158,100 @@ export default function TerrainReliefBoundaryMap({
       >
         {overlayLayout.labels
           .filter(({ region, visible }) => visible && !region.mapContextOnly)
-          .map(({ componentId, footprint, kind, point, region, scale }) => {
-            const identity = primaryComponentIdentity(activeProjection, region);
-            const isLeaf = region.mapContextOnly || region.level === "VILLAGE";
-            const selectedLift = region.code === selectedCode ? selectedOverlayLift : 0;
-            const aggregate = aggregateByRegion.get(region.code);
-            const visibleAggregateCount =
-              samplePointAggregateStatus === "ready" &&
-              aggregate &&
-              aggregate.samplePointCount > 0
-                ? aggregate.scopeKind === "PARENT_DIRECT"
-                  ? `本级${aggregate.samplePointCount}个`
-                  : `${aggregate.samplePointCount}个`
-                : undefined;
-            return (
-              <Fragment key={`${kind}-${region.code}-${componentId ?? "point"}`}>
-                <button
-                  aria-label={reliefRegionLabel({
-                    aggregate: aggregateByRegion.get(region.code),
-                    isLeaf,
-                    region,
-                    status: samplePointAggregateStatus,
-                  })}
-                  className={`overview-relief-label is-${kind} is-${region.level.toLowerCase()}${kind === "region" || aggregateRegionCodes.has(region.code) ? " can-have-count" : ""}${aggregateRegionCodes.has(region.code) ? " has-sample-point-aggregate" : ""}${region.code === selectedCode ? " is-selected" : ""}`}
-                  onClick={() =>
-                    identity
-                      ? scheduleComponentSelection(region, identity.componentId)
-                      : scheduleSelection(region)
-                  }
-                  {...(!isLeaf
-                    ? { onDoubleClick: () => drillImmediately(region) }
-                    : {})}
-                  onPointerEnter={() => hoverUpdateRef.current(identity)}
-                  onPointerLeave={() => hoverUpdateRef.current(undefined)}
-                  data-layout-scale={scale}
-                  data-region-code={region.code}
-                  style={{
-                    left: point.x,
-                    top: point.y - selectedLift,
-                    width: footprint.width,
-                    height: footprint.height,
-                    transform: `translate(-50%, -50%) scale(${scale})`,
-                  }}
-                  type="button"
-                >
-                  <span aria-hidden="true" className="overview-relief-label-name">
-                    {compactAdministrativeName(region.name)}
-                  </span>
-                  {visibleAggregateCount ? (
-                    <span aria-hidden="true" className="overview-relief-label-count">
-                      {visibleAggregateCount}
-                    </span>
+          .map(
+            ({ componentId, footprint, kind, leaderAnchor, point, region, scale }) => {
+              const identity = primaryComponentIdentity(activeProjection, region);
+              const leaderRatio = leaderAnchor
+                ? Math.max(
+                    Math.abs(leaderAnchor.x - point.x) / (footprint.width / 2),
+                    Math.abs(leaderAnchor.y - point.y) / (footprint.height / 2),
+                    1,
+                  )
+                : 1;
+              const isLeaf = region.mapContextOnly || region.level === "VILLAGE";
+              const aggregate = aggregateByRegion.get(region.code);
+              const visibleAggregateCount =
+                samplePointAggregateStatus === "ready" &&
+                aggregate &&
+                aggregate.samplePointCount > 0
+                  ? aggregate.scopeKind === "PARENT_DIRECT"
+                    ? `本级${aggregate.samplePointCount}个`
+                    : `${aggregate.samplePointCount}个`
+                  : undefined;
+              return (
+                <Fragment key={`${kind}-${region.code}-${componentId ?? "point"}`}>
+                  {leaderAnchor ? (
+                    <svg
+                      aria-hidden="true"
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        width: "100%",
+                        height: "100%",
+                        overflow: "visible",
+                        pointerEvents: "none",
+                      }}
+                    >
+                      <line
+                        x1={leaderAnchor.x}
+                        y1={leaderAnchor.y}
+                        x2={point.x + (leaderAnchor.x - point.x) / leaderRatio}
+                        y2={point.y + (leaderAnchor.y - point.y) / leaderRatio}
+                        stroke="rgba(221, 238, 247, 0.8)"
+                        strokeWidth={1}
+                      />
+                      <circle
+                        cx={leaderAnchor.x}
+                        cy={leaderAnchor.y}
+                        r={2}
+                        fill="rgba(221, 238, 247, 0.9)"
+                      />
+                    </svg>
                   ) : null}
-                </button>
-              </Fragment>
-            );
-          })}
+                  <button
+                    aria-label={reliefRegionLabel({
+                      aggregate: aggregateByRegion.get(region.code),
+                      isLeaf,
+                      region,
+                      status: samplePointAggregateStatus,
+                    })}
+                    className={`overview-relief-label is-${kind} is-${region.level.toLowerCase()}${kind === "region" || aggregateRegionCodes.has(region.code) ? " can-have-count" : ""}${aggregateRegionCodes.has(region.code) ? " has-sample-point-aggregate" : ""}${region.code === selectedCode ? " is-selected" : ""}`}
+                    onClick={() =>
+                      identity
+                        ? scheduleComponentSelection(region, identity.componentId)
+                        : scheduleSelection(region)
+                    }
+                    {...(!isLeaf
+                      ? { onDoubleClick: () => drillImmediately(region) }
+                      : {})}
+                    onPointerEnter={() => {
+                      if (!annotationMode) hoverUpdateRef.current(identity);
+                    }}
+                    onPointerLeave={() => hoverUpdateRef.current(undefined)}
+                    data-layout-scale={scale}
+                    data-region-code={region.code}
+                    style={{
+                      left: point.x,
+                      top: point.y,
+                      width: footprint.width,
+                      height: footprint.height,
+                      transform: `translate(-50%, -50%) scale(${scale})`,
+                    }}
+                    type="button"
+                  >
+                    <span aria-hidden="true" className="overview-relief-label-name">
+                      {compactAdministrativeName(region.name)}
+                    </span>
+                    {visibleAggregateCount ? (
+                      <span aria-hidden="true" className="overview-relief-label-count">
+                        {visibleAggregateCount}
+                      </span>
+                    ) : null}
+                  </button>
+                </Fragment>
+              );
+            },
+          )}
         {activeProjection.points
           .filter(({ region }) => region.level === "VILLAGE")
           .map(({ point, region }) => {
@@ -1160,7 +1266,9 @@ export default function TerrainReliefBoundaryMap({
                     ? scheduleComponentSelection(region, identity.componentId)
                     : scheduleSelection(region)
                 }
-                onPointerEnter={() => hoverUpdateRef.current(identity)}
+                onPointerEnter={() => {
+                  if (!annotationMode) hoverUpdateRef.current(identity);
+                }}
                 onPointerLeave={() => hoverUpdateRef.current(undefined)}
                 style={{ left: point.x, top: point.y }}
                 type="button"
@@ -1183,8 +1291,10 @@ export default function TerrainReliefBoundaryMap({
             }) => {
               const isDesignCoverage = icon.layerType === "DESIGN_COVERAGE_BADGE";
               const isDesignExact = icon.layerType === "DESIGN_EXACT_LOCATION";
+              const isDesignExpired = icon.layerType === "DESIGN_EXPIRED_LOCATION";
               const isRegionalActual = icon.layerType === "REGIONAL_ACTUAL_BADGE";
-              const isReferenceLayer = isDesignCoverage || isDesignExact;
+              const isReferenceLayer =
+                isDesignCoverage || isDesignExact || isDesignExpired;
               const expanded =
                 Math.abs(anchorPoint.x - point.x) > 0.01 ||
                 Math.abs(anchorPoint.y - point.y) > 0.01;
@@ -1329,6 +1439,9 @@ function sampleNetworkMarkerTitle(icon: OverviewSamplePointIcon): string {
   }
   if (icon.layerType === "DESIGN_EXACT_LOCATION") {
     return `${icon.name}；设计样本位置，详情中可查看是否为区域内示意位置`;
+  }
+  if (icon.layerType === "DESIGN_EXPIRED_LOCATION") {
+    return `${icon.name}；作废设计样本保留位置，可供后续提取复用`;
   }
   return `区域级现有样本；仅确认到${regionalActualLevelLabel(icon.representedRegionLevel)}，不绘制图钉`;
 }

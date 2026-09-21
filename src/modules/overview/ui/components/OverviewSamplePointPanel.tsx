@@ -632,6 +632,12 @@ export function OverviewSamplePointPanel({
       ...point.businessValues.flatMap(({ label, value }) => [label, value]),
     ].some((value) => value.toLocaleLowerCase("zh-CN").includes(normalizedDesignQuery));
   });
+  const expiredDesignPointCount = authoritativeDesignPoints.filter(
+    ({ lifecycleStatus }) => lifecycleStatus === "EXPIRED",
+  ).length;
+  const filteredExpiredDesignPointCount = filteredDesignPoints.filter(
+    ({ lifecycleStatus }) => lifecycleStatus === "EXPIRED",
+  ).length;
   const designPageCount = Math.max(
     1,
     Math.ceil(filteredDesignPoints.length / DESIGN_POINT_PAGE_SIZE),
@@ -842,7 +848,9 @@ export function OverviewSamplePointPanel({
             <span aria-hidden="true">◆</span>
             设计样本点
           </h3>
-          <p>设计样本点不带年份；点位、行政区、坐标和业务字段来自权威清单。</p>
+          <p>
+            设计样本点不带年份；点位、行政区和详情来自权威清单，详情会标明设计坐标及原始事实的适用范围。
+          </p>
           {networkModel?.designPointState === "loading" ? (
             <p role="status">正在同步设计样本点…</p>
           ) : null}
@@ -863,7 +871,14 @@ export function OverviewSamplePointPanel({
                   value={designQuery}
                 />
               </label>
-              <p role="status">当前地区共 {filteredDesignPoints.length} 个设计样本点</p>
+              <p role="status">
+                当前地区共 {filteredDesignPoints.length} 个设计样本点；有效
+                {filteredDesignPoints.length - filteredExpiredDesignPointCount} 个，作废
+                {filteredExpiredDesignPointCount} 个
+                {normalizedDesignQuery
+                  ? `（全地区作废 ${expiredDesignPointCount} 个）`
+                  : ""}
+              </p>
               <div
                 aria-label="设计样本点列表"
                 className="overview-design-sample-list"
@@ -878,7 +893,12 @@ export function OverviewSamplePointPanel({
                       }
                       type="button"
                     >
-                      <strong>{point.name}</strong>
+                      <strong>
+                        {point.name}
+                        {point.lifecycleStatus === "EXPIRED" ? (
+                          <em className="overview-design-expired-tag">已作废</em>
+                        ) : null}
+                      </strong>
                       <span>
                         {point.objectTypeLabel} · {point.productLabel}
                       </span>
@@ -1016,7 +1036,7 @@ export function OverviewSamplePointPanel({
                 {catalog.dataQualityIssueCount ? (
                   <p className="overview-sample-point-location-blocked" role="status">
                     系统契约异常：{catalog.dataQualityIssueCount}{" "}
-                    条审核通过样本未生成坐标样本；请回填报导入环节治理，系统不会推测坐标。
+                    条正式入库样本未生成坐标样本；请回填报导入环节治理，系统不会推测坐标。
                   </p>
                 ) : null}
                 <p className="overview-sample-point-filter-label">
@@ -1112,7 +1132,7 @@ export function OverviewSamplePointPanel({
                   {blockedLocationCount ? (
                     <span>
                       系统契约异常：另有 {blockedLocationCount}{" "}
-                      条审核通过样本未生成坐标样本
+                      条正式入库样本未生成坐标样本
                     </span>
                   ) : null}
                 </div>
@@ -1135,7 +1155,7 @@ export function OverviewSamplePointPanel({
                       <span>
                         {item.types.length
                           ? item.types.map((type) => type.name).join(" / ")
-                          : `${item.categories.map((role) => role.name).join(" / ")} · 当前品种暂无审核通过对象类型`}{" "}
+                          : `${item.categories.map((role) => role.name).join(" / ")} · 当前品种暂无正式入库对象类型`}{" "}
                         · {item.regionName}
                       </span>
                       <small>
@@ -1305,7 +1325,7 @@ export function OverviewSamplePointPanel({
                       </>
                     ) : (
                       <p className="overview-sample-point-period-note">
-                        该样本身份已正式入网；当前品种暂无审核通过业务记录。
+                        该样本身份已正式入网；当前品种暂无正式入库业务记录。
                       </p>
                     )}
                     {visibleAssociations.map((association, index) => (
@@ -1323,7 +1343,7 @@ export function OverviewSamplePointPanel({
                         </p>
                         {association.sourceVersion !== undefined ? (
                           <p>
-                            审核来源历史：{sourceRoleLabel(association.sourceRole)} ·
+                            入库来源历史：{sourceRoleLabel(association.sourceRole)} ·
                             业务日期 {formatChineseDate(association.occurrenceDate)} ·
                             第{association.sourceVersion}版
                           </p>
@@ -1384,7 +1404,12 @@ function DesignSamplePointDetail({
         const definition = await repository.designPointDefinition!(record.context);
         if (definition.contractDigest !== record.contractDigest)
           throw new Error("Metadata changed");
-        if (active) setDetail(presentDesignSamplePoint(record, definition));
+        if (active)
+          setDetail({
+            ...presentDesignSamplePoint(record, definition),
+            lifecycleStatus: selected.lifecycleStatus,
+            ...(selected.expiredAt ? { expiredAt: selected.expiredAt } : {}),
+          });
       })
       .catch(() => {
         if (active) setFailed(true);
@@ -1392,7 +1417,13 @@ function DesignSamplePointDetail({
     return () => {
       active = false;
     };
-  }, [selected.id, selected.version, repository]);
+  }, [
+    selected.expiredAt,
+    selected.id,
+    selected.lifecycleStatus,
+    selected.version,
+    repository,
+  ]);
   const point = detail?.id === selected.id ? detail : selected;
   if (repository.designPoint && !detail && !failed)
     return <p role="status">正在加载样本详情…</p>;
@@ -1405,12 +1436,22 @@ function DesignSamplePointDetail({
           {point.objectTypeLabel} · {point.productLabel}
         </span>
       </header>
+      {point.lifecycleStatus === "EXPIRED" ? (
+        <p className="overview-design-expired-notice">
+          已作废；保留在原地图位置，供后续设计样本分配时提取复用。
+        </p>
+      ) : null}
       <p>{point.regionPath}</p>
       <p>
-        {point.locationMode === "REGION_SCHEMATIC"
-          ? "地图为所属行政区内的示意位置，原始填报经纬度已保留。"
-          : "地图按填报经纬度展示。"}
+        {point.allocationProvenance?.coordinateSource === "GENERATED_DESIGN"
+          ? "地图按系统生成的设计坐标展示，不是填报坐标。"
+          : point.locationMode === "REGION_SCHEMATIC"
+            ? "地图为所属行政区内的示意位置，原始填报经纬度已保留。"
+            : "地图按填报经纬度展示。"}
       </p>
+      {point.allocationProvenance ? (
+        <DesignAllocationProvenance provenance={point.allocationProvenance} />
+      ) : null}
       {point.businessValues.length ? (
         <dl>
           {point.businessValues.map(({ code, label, unit, value }) => (
@@ -1426,6 +1467,42 @@ function DesignSamplePointDetail({
       ) : (
         <p>当前业务对象暂无已填写的适用信息。</p>
       )}
+    </section>
+  );
+}
+
+function DesignAllocationProvenance({
+  provenance,
+}: {
+  provenance: NonNullable<OverviewDesignSamplePoint["allocationProvenance"]>;
+}) {
+  if (provenance.businessValuesStatus === "NO_OBSERVED_BUSINESS_FACTS")
+    return <p>当前目标地区没有已观测业务事实。</p>;
+  return (
+    <section aria-label="设计样本来源事实">
+      <p>以下为来源地点留存事实，未在当前目标地区核验，不作为当前地区已填报事实。</p>
+      {provenance.originalName ? <p>来源点位：{provenance.originalName}</p> : null}
+      {provenance.originalAddress ? (
+        <p>来源地址：{provenance.originalAddress}</p>
+      ) : null}
+      {provenance.originalBusinessValues.length ? (
+        <dl>
+          {provenance.originalBusinessValues.map(({ code, label, unit, value }) => (
+            <div key={code}>
+              <dt>{label}</dt>
+              <dd>
+                {value}
+                {unit ? ` ${unit}` : ""}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p>来源地点没有可展示的已填写业务事实。</p>
+      )}
+      {provenance.hasRetainedUnpresentedOriginalValues ? (
+        <p>另有历史字段已保留，但当前权威元数据未定义，不能在此准确展示。</p>
+      ) : null}
     </section>
   );
 }

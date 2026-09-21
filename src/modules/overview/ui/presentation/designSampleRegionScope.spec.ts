@@ -75,6 +75,19 @@ describe("design map counts", () => {
     expect(samplePointAggregateLabel(aggregate)).toContain("设计样本点 1 个");
     expect(samplePointAggregateLabel(aggregate)).not.toContain("已核定");
   });
+
+  it("keeps expired designs in the total and exposes their count", () => {
+    const active = { ...point("active", 1, 1), lifecycleStatus: "ACTIVE" as const };
+    const expired = {
+      ...point("expired", 1.5, 1.5),
+      lifecycleStatus: "EXPIRED" as const,
+    };
+    const aggregate = designPointRegionAggregates([active, expired], [region])[0]!;
+
+    expect(aggregate.samplePointCount).toBe(2);
+    expect(aggregate.expiredSamplePointCount).toBe(1);
+    expect(samplePointAggregateLabel(aggregate)).toContain("作废 1 个");
+  });
 });
 
 it("uses the schematic coordinate for map membership without modifying reported coordinates", () => {

@@ -11,7 +11,7 @@ type MetricAuditContract = Pick<
 >;
 
 export function formatMetricAuditLabel(metric: MetricAuditContract) {
-  const parts = [`${metric.sourceCount} 条审核来源`];
+  const parts = [`${metric.sourceCount} 条入库来源`];
   append(parts, "截止", formatChineseCutoff(metric.dataCutoff));
   append(parts, "覆盖", businessText(metric.coverageScope, isTechnicalScope));
   append(parts, "版本", businessText(metric.calculationVersion, isTechnicalVersion));
