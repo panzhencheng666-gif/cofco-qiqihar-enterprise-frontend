@@ -5653,8 +5653,8 @@ select:focus-visible {
   }
 
   .overview-command-center .overview-region-browser > div {
-    right: 0;
-    left: auto;
+    right: auto;
+    left: 0;
     width: min(245px, calc(100vw - 24px));
     max-width: calc(100vw - 24px);
   }
