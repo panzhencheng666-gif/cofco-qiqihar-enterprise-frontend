@@ -144,4 +144,29 @@ describe("OperationalFacilityPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: /泰来/ }));
     expect(onSelect).toHaveBeenCalledWith("node/1");
   });
+
+  it("separates within-region and nearby railway counts", () => {
+    render(
+      <OperationalFacilityPanel
+        catalogue={{
+          ...catalogue,
+          railwayFacilities: [
+            catalogue.railwayFacilities[0]!,
+            {
+              ...catalogue.railwayFacilities[0]!,
+              sourceId: "node/2",
+              name: "邻近站",
+              locationRelation: "NEARBY",
+              distanceKm: 8,
+            },
+          ],
+        }}
+        mode="RAILWAY_FACILITIES"
+        onSelect={() => undefined}
+      />,
+    );
+
+    expect(screen.getByLabelText("境内站点 1")).toBeVisible();
+    expect(screen.getByLabelText("邻近站点 1")).toBeVisible();
+  });
 });

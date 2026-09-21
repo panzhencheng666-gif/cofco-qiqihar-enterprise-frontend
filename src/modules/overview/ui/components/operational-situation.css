@@ -154,6 +154,100 @@
   gap: 14px;
 }
 
+.operational-situation-panel .operational-facility-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.operational-situation-panel .operational-facility-panel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.operational-situation-panel .operational-facility-panel > header small {
+  color: #728078;
+  font-size: 9px;
+}
+
+.operational-situation-panel .operational-facility-panel h2 {
+  margin: 2px 0 0;
+  color: #21332b;
+  font-family: "Songti SC", "STSong", serif;
+  font-size: 19px;
+}
+
+.operational-situation-panel .operational-source-badge {
+  border-color: rgb(49 94 74 / 24%);
+  color: #315e4a;
+  background: rgb(49 94 74 / 8%);
+}
+
+.operational-situation-panel
+  :is(.operational-facility-panel__categories, .railway-facility-route) {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.operational-situation-panel
+  :is(.operational-facility-panel__categories, .railway-facility-route)
+  span {
+  padding: 8px;
+  border: 1px solid rgb(45 68 59 / 15%);
+  border-radius: 3px;
+  color: #607069;
+  background: rgb(45 68 59 / 6%);
+  font-size: 9px;
+}
+
+.operational-situation-panel
+  :is(.operational-facility-panel__categories, .railway-facility-route)
+  b {
+  display: block;
+  margin-top: 3px;
+  color: #253a30;
+  font-size: 17px;
+}
+
+.operational-situation-panel .operational-facility-panel__list {
+  display: grid;
+  grid-auto-flow: row;
+  gap: 5px;
+  max-height: min(32vh, 300px);
+  overflow: auto;
+  padding-right: 3px;
+}
+
+.operational-situation-panel .operational-facility-panel__list button {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid rgb(45 68 59 / 14%);
+  border-radius: 3px;
+  color: #2c4037;
+  background: #f3f2e9;
+  text-align: left;
+  cursor: pointer;
+  content-visibility: auto;
+  contain-intrinsic-size: 48px;
+}
+
+.operational-situation-panel
+  .operational-facility-panel__list
+  button[aria-pressed="true"] {
+  border-color: #9a7635;
+  background: #ebe3cd;
+  box-shadow: inset 3px 0 #b58d42;
+}
+
+.operational-situation-panel .operational-facility-panel__list button span {
+  color: #708078;
+  font-size: 9px;
+}
+
 .realistic-weather-scene {
   position: relative;
   min-height: 230px;

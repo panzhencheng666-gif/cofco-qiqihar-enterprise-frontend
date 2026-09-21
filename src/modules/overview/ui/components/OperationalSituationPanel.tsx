@@ -11,7 +11,7 @@ import type {
   WeatherObservation,
 } from "../../domain/operationalSituation";
 import "./operational-situation.css";
-import { RailwayFacilityCard, StorageFacilityCard } from "./OperationalFacilityPanel";
+import { OperationalFacilityPanel } from "./OperationalFacilityPanel";
 import type { SituationTimelineItem } from "./operationalSituationTimeline";
 import { RealisticWeatherScene } from "./RealisticWeatherScene";
 import { StorageFacilityEditor } from "./StorageFacilityEditor";
@@ -74,8 +74,9 @@ export function OperationalSituationPanel({
           : requestedMode;
   const activeStorage =
     detailMode === "STORAGE" ? (selectedStorage ?? fallbackStorage) : undefined;
-  const activeRailway =
-    detailMode === "RAILWAY" ? (selectedRailway ?? fallbackRailway) : undefined;
+  const railwayWithinCount = facilities.railwayFacilities.filter(
+    (facility) => facility.locationRelation === "WITHIN",
+  ).length;
   const areaName = selectedRegion?.name ?? activeWeather?.regionName ?? "四区域总览";
 
   function selectMode(mode: DetailMode) {
@@ -112,21 +113,20 @@ export function OperationalSituationPanel({
       </header>
 
       <nav className="situation-inspector-tabs" aria-label="态势详情分类">
-        {(
-          [
-            ["WEATHER", "天气"],
-            ["STORAGE", "库点"],
-            ["RAILWAY", "铁路"],
-            ["LOGISTICS", "物流"],
-          ] as const
-        ).map(([mode, label]) => (
+        {(["WEATHER", "STORAGE", "RAILWAY", "LOGISTICS"] as const).map((mode) => (
           <button
             aria-pressed={detailMode === mode}
             key={mode}
             type="button"
             onClick={() => selectMode(mode)}
           >
-            {label}
+            {mode === "WEATHER"
+              ? "天气"
+              : mode === "STORAGE"
+                ? `库点 ${facilities.storageFacilities.length}`
+                : mode === "RAILWAY"
+                  ? `铁路 ${railwayWithinCount}`
+                  : "物流"}
           </button>
         ))}
         {onFacilitySave && (
@@ -176,9 +176,14 @@ export function OperationalSituationPanel({
         </EmptyDetail>
       )}
 
-      {activeStorage && (
-        <section className="situation-inspector-section" aria-label="库点详情">
-          <StorageFacilityCard facility={activeStorage} />
+      {detailMode === "STORAGE" && (
+        <section className="situation-inspector-section" aria-label="库点详情与清单">
+          <OperationalFacilityPanel
+            catalogue={facilities}
+            mode="STORAGE_FACILITIES"
+            onSelect={(id) => onFacilitySelect?.(id)}
+            {...(selectedFacilityId ? { selectedId: selectedFacilityId } : {})}
+          />
           {onFacilitySave && (
             <button
               className="storage-facility-edit-trigger"
@@ -190,21 +195,16 @@ export function OperationalSituationPanel({
           )}
         </section>
       )}
-      {detailMode === "STORAGE" && !activeStorage && (
-        <EmptyDetail title="尚无库点记录">
-          可通过“库点填报”录入自有、租赁或历史租赁库点。
-        </EmptyDetail>
-      )}
 
-      {activeRailway && (
-        <section className="situation-inspector-section" aria-label="铁路详情">
-          <RailwayFacilityCard catalogue={facilities} facility={activeRailway} />
+      {detailMode === "RAILWAY" && (
+        <section className="situation-inspector-section" aria-label="铁路详情与清单">
+          <OperationalFacilityPanel
+            catalogue={facilities}
+            mode="RAILWAY_FACILITIES"
+            onSelect={(id) => onFacilitySelect?.(id)}
+            {...(selectedFacilityId ? { selectedId: selectedFacilityId } : {})}
+          />
         </section>
-      )}
-      {detailMode === "RAILWAY" && !activeRailway && (
-        <EmptyDetail title="当前范围无铁路节点">
-          放大或选择其他行政区后查看对应铁路物流节点。
-        </EmptyDetail>
       )}
 
       {detailMode === "LOGISTICS" && <LogisticsDetail situation={situation} />}
