@@ -52,7 +52,6 @@ import { weatherSpriteKind, type WeatherSpriteKind } from "./weatherSpriteKind";
 import { createWeatherSpritePainter } from "./animatedWeatherSprite";
 import { publicMapFocus } from "./publicMapFocus";
 import { mapAnnotationGesture } from "./mapAnnotationGesture";
-import { layoutOperationalMarkers } from "./operationalMarkerLayout";
 import {
   enhancementTimeoutMs,
   isRemoteEnhancementId,
@@ -169,7 +168,6 @@ const RAIL_SOURCE = "atlas-rail-routes";
 const LOGISTICS_SOURCE = "atlas-logistics";
 const INVENTORY_SOURCE = "atlas-inventory";
 const MARKER_SOURCE = "atlas-markers";
-const MARKER_LEADER_SOURCE = "atlas-marker-leaders";
 const ANNOTATION_SOURCE = "atlas-annotation";
 const REGION_LAYER_IDS = ["atlas-active-fill", "atlas-root-fill"] as const;
 const FACILITY_KINDS = ["OWNED", "LEASED", "HISTORICAL_LEASED", "RAILWAY"];
@@ -284,10 +282,6 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
       host.dataset.imageryZoom = map.getZoom().toFixed(2);
       host.dataset.detailLevel = detailLevel(map.getZoom());
     });
-    map.on("moveend", () => {
-      if (runtime.ready) refreshOperationalMarkerSources(runtime);
-    });
-
     const resizeObserver = new ResizeObserver(() => scheduleAtlasResize(runtime));
     resizeObserver.observe(host);
     return () => {
@@ -479,10 +473,6 @@ function installAtlasLayers(map: MapLibreMap) {
   map.addSource(LOGISTICS_SOURCE, { type: "geojson", data: emptyCollection() });
   map.addSource(INVENTORY_SOURCE, { type: "geojson", data: emptyCollection() });
   map.addSource(MARKER_SOURCE, { type: "geojson", data: emptyCollection() });
-  map.addSource(MARKER_LEADER_SOURCE, {
-    type: "geojson",
-    data: emptyCollection(),
-  });
   map.addSource(ANNOTATION_SOURCE, { type: "geojson", data: emptyCollection() });
 
   map.addLayer({
@@ -636,16 +626,6 @@ function installAtlasLayers(map: MapLibreMap) {
     },
   });
   map.addLayer({
-    id: "atlas-operational-marker-leaders",
-    type: "line",
-    source: MARKER_LEADER_SOURCE,
-    paint: {
-      "line-color": "#f4ead0",
-      "line-opacity": 0.62,
-      "line-width": ["interpolate", ["linear"], ["zoom"], 4, 0.7, 13, 1.25],
-    },
-  });
-  map.addLayer({
     id: "atlas-selected-facility-halo",
     type: "circle",
     source: MARKER_SOURCE,
@@ -656,9 +636,21 @@ function installAtlasLayers(map: MapLibreMap) {
     ],
     paint: {
       "circle-color": "rgba(255,212,95,0.18)",
-      "circle-radius": ["interpolate", ["linear"], ["zoom"], 4, 10, 13, 18],
+      "circle-radius": [
+        "interpolate",
+        ["exponential", 1.35],
+        ["zoom"],
+        4,
+        4,
+        7,
+        6,
+        10,
+        11,
+        13,
+        18,
+      ],
       "circle-stroke-color": "#ffd45f",
-      "circle-stroke-width": 2,
+      "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 4, 0.8, 13, 2],
     },
   });
   map.addLayer({
@@ -673,10 +665,22 @@ function installAtlasLayers(map: MapLibreMap) {
     paint: {
       "circle-color": "#342d22",
       "circle-opacity": 0.34,
-      "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 12, 12, 17],
+      "circle-radius": [
+        "interpolate",
+        ["exponential", 1.35],
+        ["zoom"],
+        4,
+        4,
+        7,
+        6,
+        10,
+        11,
+        13,
+        17,
+      ],
       "circle-stroke-color": "#f0c96c",
       "circle-stroke-opacity": 0.92,
-      "circle-stroke-width": 2,
+      "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 4, 0.7, 13, 2],
     },
   });
   map.addLayer({
@@ -928,7 +932,9 @@ function synchronizeAtlas(runtime: AtlasRuntime, props: FourRegionTerrainAtlasPr
   runtime.host.dataset.activeRegionCount = String(active.length);
   runtime.host.dataset.featureCount = String(props.rootFeatures.length + active.length);
   runtime.host.dataset.detailLevel = active[0]?.region.level ?? "PREFECTURE";
-  runtime.host.dataset.billboardCount = String(markerCollection(props).features.length);
+  runtime.host.dataset.billboardCount = String(
+    operationalMarkerCollection(props).features.length,
+  );
   runtime.host.dataset.facilityIconCount = String(
     props.facilities.storageFacilities.length +
       props.facilities.railwayFacilities.length,
@@ -1145,13 +1151,7 @@ function handleMapClick(runtime: AtlasRuntime, event: MapMouseEvent) {
     .find((feature) => featureStringProperty(feature, "id"));
   const facilityId = facility ? featureStringProperty(facility, "id") : undefined;
   if (facility && facilityId) {
-    const anchorLongitude = featureNumberProperty(facility, "anchorLongitude");
-    const anchorLatitude = featureNumberProperty(facility, "anchorLatitude");
-    const anchorPoint =
-      anchorLongitude === undefined || anchorLatitude === undefined
-        ? event.point
-        : map.project([anchorLongitude, anchorLatitude]);
-    const area = map.queryRenderedFeatures(anchorPoint, {
+    const area = map.queryRenderedFeatures(event.point, {
       layers: [...REGION_LAYER_IDS],
     })[0];
     const code = area ? featureStringProperty(area, "code") : undefined;
@@ -1355,7 +1355,6 @@ function inventoryCollection(props: FourRegionTerrainAtlasProps): FeatureCollect
 interface OperationalMarkerCandidate {
   id: string;
   latitude: number;
-  layoutId: string;
   longitude: number;
   properties: Record<string, string | number | boolean>;
 }
@@ -1373,7 +1372,6 @@ function operationalMarkerCandidates(
       return;
     candidates.push({
       id: facility.code,
-      layoutId: `${facility.relationType}:${facility.code}`,
       longitude: facility.longitude,
       latitude: facility.latitude,
       properties: {
@@ -1392,7 +1390,6 @@ function operationalMarkerCandidates(
       );
       candidates.push({
         id: facility.sourceId,
-        layoutId: `RAILWAY:${facility.sourceId}`,
         longitude: facility.longitude,
         latitude: facility.latitude,
         properties: {
@@ -1407,13 +1404,12 @@ function operationalMarkerCandidates(
   return candidates;
 }
 
-function markerCollection(props: FourRegionTerrainAtlasProps): FeatureCollection {
+function operationalMarkerCollection(
+  props: FourRegionTerrainAtlasProps,
+): FeatureCollection {
   const features: Feature[] = operationalMarkerCandidates(props).map((candidate) =>
     pointFeature(candidate.longitude, candidate.latitude, {
       ...candidate.properties,
-      anchorLongitude: candidate.longitude,
-      anchorLatitude: candidate.latitude,
-      displaced: false,
     }),
   );
   if (props.layers.WEATHER) {
@@ -1436,124 +1432,11 @@ function markerCollection(props: FourRegionTerrainAtlasProps): FeatureCollection
 }
 
 function refreshOperationalMarkerSources(runtime: AtlasRuntime) {
-  const candidates = operationalMarkerCandidates(runtime.props);
-  const markerFeatures: Feature[] = [];
-  const leaderFeatures: Feature[] = [];
-  const viewportWidth = runtime.host.clientWidth;
-  const viewportHeight = runtime.host.clientHeight;
-
-  try {
-    const gapPx = facilityMarkerGap(runtime.map.getZoom());
-    const projected = candidates.map((candidate) => {
-      const point = runtime.map.project([candidate.longitude, candidate.latitude]);
-      return { candidate, id: candidate.layoutId, x: point.x, y: point.y };
-    });
-    const visible = projected.filter(
-      ({ x, y }) =>
-        x >= -gapPx &&
-        x <= viewportWidth + gapPx &&
-        y >= -gapPx &&
-        y <= viewportHeight + gapPx,
-    );
-    const layout = layoutOperationalMarkers(visible, {
-      gapPx,
-      viewportWidth,
-      viewportHeight,
-      marginPx: gapPx / 2,
-    });
-    const candidatesByLayoutId = new Map(
-      candidates.map((candidate) => [candidate.layoutId, candidate]),
-    );
-    layout.forEach((item) => {
-      const candidate = candidatesByLayoutId.get(item.id);
-      if (!candidate) return;
-      const display = runtime.map.unproject([item.x, item.y]);
-      markerFeatures.push(
-        pointFeature(display.lng, display.lat, {
-          ...candidate.properties,
-          anchorLongitude: candidate.longitude,
-          anchorLatitude: candidate.latitude,
-          displaced: item.displaced,
-        }),
-      );
-      if (item.displaced)
-        leaderFeatures.push({
-          type: "Feature",
-          properties: { id: candidate.id },
-          geometry: {
-            type: "LineString",
-            coordinates: [
-              [candidate.longitude, candidate.latitude],
-              [display.lng, display.lat],
-            ],
-          },
-        });
-    });
-    markerFeatures.push(
-      ...projected
-        .filter(({ candidate }) => !visible.some(({ id }) => id === candidate.layoutId))
-        .map(({ candidate }) =>
-          pointFeature(candidate.longitude, candidate.latitude, {
-            ...candidate.properties,
-            anchorLongitude: candidate.longitude,
-            anchorLatitude: candidate.latitude,
-            displaced: false,
-          }),
-        ),
-    );
-  } catch {
-    markerFeatures.push(
-      ...candidates.map((candidate) =>
-        pointFeature(candidate.longitude, candidate.latitude, {
-          ...candidate.properties,
-          anchorLongitude: candidate.longitude,
-          anchorLatitude: candidate.latitude,
-          displaced: false,
-        }),
-      ),
-    );
-  }
-
-  runtime.host.dataset.operationalMarkerCount = String(markerFeatures.length);
-  runtime.host.dataset.operationalLeaderCount = String(leaderFeatures.length);
-  markerFeatures.push(...weatherMarkerFeatures(runtime.props));
-  setSource(runtime.map, MARKER_SOURCE, {
-    type: "FeatureCollection",
-    features: markerFeatures,
-  });
-  setSource(runtime.map, MARKER_LEADER_SOURCE, {
-    type: "FeatureCollection",
-    features: leaderFeatures,
-  });
-}
-
-function weatherMarkerFeatures(props: FourRegionTerrainAtlasProps): Feature[] {
-  if (!props.layers.WEATHER) return [];
-  return props.situation.weather.map((weather) =>
-    pointFeature(weather.longitude, weather.latitude, {
-      id: weather.regionCode ?? weather.rootRegionCode,
-      kind: "WEATHER",
-      name: weather.regionName,
-      regionCode: weather.regionCode ?? weather.rootRegionCode,
-      weatherKind: weatherSpriteKind(weather),
-      weatherFresh:
-        !props.weatherHistorical && weatherObservationFresh(weather.observedAt),
-      weatherImage: `atlas-icon-weather-${weatherSpriteKind(weather).toLowerCase()}${!props.weatherHistorical && weatherObservationFresh(weather.observedAt) ? "" : "-static"}`,
-    }),
-  );
-}
-
-function facilityMarkerGap(zoom: number) {
-  const stops = [
-    [4, 0.44],
-    [7, 0.56],
-    [10, 0.69],
-    [13, 0.81],
-  ] as const;
-  const lower = [...stops].reverse().find(([stop]) => zoom >= stop) ?? stops[0];
-  const upper = stops.find(([stop]) => zoom <= stop) ?? stops.at(-1)!;
-  const ratio = upper[0] === lower[0] ? 0 : (zoom - lower[0]) / (upper[0] - lower[0]);
-  return 32 * (lower[1] + (upper[1] - lower[1]) * ratio) + 4;
+  const collection = operationalMarkerCollection(runtime.props);
+  const facilityCount = operationalMarkerCandidates(runtime.props).length;
+  runtime.host.dataset.operationalMarkerCount = String(facilityCount);
+  runtime.host.dataset.operationalLeaderCount = "0";
+  setSource(runtime.map, MARKER_SOURCE, collection);
 }
 
 function startWeatherAnimation(runtime: AtlasRuntime) {
@@ -1697,11 +1580,6 @@ function setSource(map: MapLibreMap, id: string, data: FeatureCollection) {
 function featureStringProperty(feature: MapGeoJSONFeature, key: string) {
   const value: unknown = feature.properties?.[key];
   return typeof value === "string" ? value : undefined;
-}
-
-function featureNumberProperty(feature: MapGeoJSONFeature, key: string) {
-  const value: unknown = feature.properties?.[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function emptyCollection(): FeatureCollection {

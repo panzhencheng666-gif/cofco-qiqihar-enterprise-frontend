@@ -12,16 +12,16 @@ describe("four-region satellite and terrain style", () => {
   it("scales every facility icon together without selection-based resizing", () => {
     expect(FACILITY_ICON_SIZE).toEqual([
       "interpolate",
-      ["linear"],
+      ["exponential", 1.35],
       ["zoom"],
       4,
-      0.44,
+      0.18,
       7,
-      0.56,
+      0.3,
       10,
-      0.69,
+      0.52,
       13,
-      0.81,
+      0.84,
     ]);
     expect(JSON.stringify(FACILITY_ICON_SIZE)).not.toContain("selected");
   });
