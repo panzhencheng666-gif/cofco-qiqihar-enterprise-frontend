@@ -79,6 +79,87 @@ function isAbortError(error: unknown) {
     : error instanceof Error && error.name === "AbortError";
 }
 
+interface IconTypeCount {
+  code: string;
+  name: string;
+  iconKey: string;
+  count: number;
+}
+
+function listFromIcons(
+  regionCode: string,
+  icons: readonly OverviewSamplePointIcon[],
+): OverviewSamplePointList {
+  const categories = new Map<
+    string,
+    {
+      code: "PRODUCTION" | "MARKET" | "LOGISTICS";
+      name: string;
+      count: number;
+      types: Map<string, IconTypeCount>;
+    }
+  >();
+  for (const icon of icons) {
+    for (const role of icon.roles ?? []) {
+      const category = categories.get(role.code) ?? {
+        code: role.code,
+        name: role.name,
+        count: 0,
+        types: new Map<string, IconTypeCount>(),
+      };
+      category.count += 1;
+      for (const type of icon.types) {
+        const current = category.types.get(type.code);
+        if (current) {
+          current.count += 1;
+        } else {
+          category.types.set(type.code, {
+            code: type.code,
+            name: type.name,
+            iconKey: type.iconKey,
+            count: 1,
+          });
+        }
+      }
+      categories.set(role.code, category);
+    }
+  }
+  return {
+    regionCode,
+    totalCount: icons.length,
+    validCoordinateCount: icons.filter(
+      (icon) =>
+        icon.longitude != null && icon.latitude != null && !icon.dataQualityReason,
+    ).length,
+    dataQualityIssueCount: icons.filter((icon) => icon.dataQualityReason).length,
+    correctionSourceCount: 0,
+    unresolvedSourceCount: 0,
+    categories: [...categories.values()].map((category) => ({
+      code: category.code,
+      name: category.name,
+      count: category.count,
+      types: [...category.types.values()],
+    })),
+    items: icons.map((icon) => ({
+      samplePointId: icon.samplePointId,
+      name: icon.name,
+      regionCode: icon.regionCode ?? regionCode,
+      regionName: "",
+      locationState: "VALID",
+      dataQualityReason: icon.dataQualityReason,
+      categories: (icon.roles ?? []).map((role) => ({
+        code: role.code,
+        name: role.name,
+      })),
+      types: icon.types,
+      products: [],
+      latestBusinessDate: null,
+      summaryValues: {},
+    })),
+    correctionSources: [],
+  };
+}
+
 function releaseFlight(
   flightRef: { current: SampleLoadFlight | null },
   flight: SampleLoadFlight,
@@ -244,7 +325,7 @@ export function useOverviewSampleNetworkLayers({
         })
         .catch((failure: unknown) => {
           if (designFlightRef.current !== flight) return;
-          if (isAbortError(failure)) return;
+          if (isAbortError(failure) && flight.controller.signal.aborted) return;
           if (!retain) {
             setDesignPoints([]);
             setDesignPointState("unavailable");
@@ -365,7 +446,7 @@ export function useOverviewSampleNetworkLayers({
         })
         .catch((failure: unknown) => {
           if (comparisonFlightRef.current !== flight) return;
-          if (isAbortError(failure)) return;
+          if (isAbortError(failure) && flight.controller.signal.aborted) return;
           if (!retain) {
             if (comparisonSnapshotScopeRef.current !== comparisonScopeKey) {
               setComparisonSource(undefined);
@@ -479,7 +560,7 @@ export function useOverviewSampleNetworkLayers({
         })
         .catch((failure: unknown) => {
           if (historicalFlightRef.current !== flight) return;
-          if (isAbortError(failure)) return;
+          if (isAbortError(failure) && flight.controller.signal.aborted) return;
           if (!retain) {
             setHistoricalIcons([]);
             setHistoricalState("unavailable");
@@ -558,6 +639,16 @@ export function useOverviewSampleNetworkLayers({
         ? (repository.mapCatalog?.bind(repository) ??
           repository.snapshot?.bind(repository))
         : undefined;
+      const iconCatalog = (
+        query:
+          typeof filters | Omit<typeof filters, "categoryCode" | "typeCode" | "query">,
+      ) => {
+        const pending = repository.icons?.(query, {
+          signal: flight.controller.signal,
+        });
+        if (pending === undefined) return undefined;
+        return pending.then((loaded) => listFromIcons(regionCode, loaded ?? []));
+      };
       const snapshotRequest = readCatalog
         ? readCatalog(
             { ...filters, ...(region?.name ? { regionName: region.name } : {}) },
@@ -568,9 +659,13 @@ export function useOverviewSampleNetworkLayers({
               repository.list(filters, { signal: flight.controller.signal }),
               repository.icons(filters, { signal: flight.controller.signal }),
             ]).then(([list, icons]) => ({ icons, list }))
-          : repository
+          : (iconCatalog(filters)?.then((list) => ({
+              icons: [] as OverviewSamplePointIcon[],
+              list,
+            })) ??
+            repository
               .list(filters, { signal: flight.controller.signal })
-              .then((list) => ({ icons: [], list }));
+              .then((list) => ({ icons: [], list })));
       const refreshCatalog =
         !unfiltered &&
         (!sameCatalogScope || catalogRefreshSequenceRef.current !== refresh);
@@ -585,7 +680,8 @@ export function useOverviewSampleNetworkLayers({
           ? readCatalog(catalogFilters, { signal: flight.controller.signal }).then(
               ({ list }) => list,
             )
-          : repository.list(catalogFilters, { signal: flight.controller.signal })
+          : (iconCatalog(catalogFilters) ??
+            repository.list(catalogFilters, { signal: flight.controller.signal }))
         : Promise.resolve(undefined);
       Promise.all([snapshotRequest, catalogRequest])
         .then(([{ icons: nextIcons, list: nextList }, nextCatalog]) => {
@@ -604,7 +700,7 @@ export function useOverviewSampleNetworkLayers({
         })
         .catch((failure: unknown) => {
           if (catalogFlightRef.current !== flight) return;
-          if (isAbortError(failure)) return;
+          if (isAbortError(failure) && flight.controller.signal.aborted) return;
           if (!sameScope) {
             setFilteredList(undefined);
             setActualIcons([]);
