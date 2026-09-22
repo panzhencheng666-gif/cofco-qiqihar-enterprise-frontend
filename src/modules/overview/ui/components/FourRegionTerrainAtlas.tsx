@@ -20,6 +20,7 @@ import {
   type GeoJSONSource,
   type MapGeoJSONFeature,
   type MapMouseEvent,
+  type RasterTileSource,
 } from "maplibre-gl";
 
 // The engine's dynamic import.meta.url worker lookup cannot survive bundling.
@@ -34,12 +35,13 @@ import { flattenCoordinates, type MapFeature } from "./boundaryGeometry";
 import {
   FOUR_REGION_BASE_STYLE,
   FOUR_REGION_DETAIL_LAYERS,
-  FOUR_REGION_REMOTE_SOURCES,
+  fourRegionRemoteSources,
   OPERATIONAL_FACILITY_ICON_SIZE,
   publicBoundaryHierarchy,
   surfaceModePaint,
   type TerrainSurfaceMode,
 } from "./fourRegionTerrainStyle";
+import { satelliteTileUrl } from "./mapImageryMetadata";
 import { calculateOperationalMapPadding } from "./operationalMapViewport";
 import type { GeographicBounds } from "./realisticSituationModel";
 import {
@@ -121,6 +123,7 @@ export interface FourRegionTerrainAtlasProps {
   features: readonly MapFeature[];
   rootFeatures: readonly MapFeature[];
   layers: RealisticSceneLayers;
+  imageryVersion?: string;
   onFacilitySelect: (id: string) => void;
   onEnhancementState?: (state: TerrainEnhancementState) => void;
   onAnnotationPosition?: (longitude: number, latitude: number) => void;
@@ -144,6 +147,7 @@ interface AtlasRuntime {
   enhancementFailures: Set<TerrainEnhancementFailure>;
   enhancementTimers: Map<RemoteEnhancementId, ReturnType<typeof setTimeout>>;
   hierarchyKey: string;
+  imageryVersion: string | undefined;
   host: HTMLDivElement;
   map: MapLibreMap;
   props: FourRegionTerrainAtlasProps;
@@ -226,6 +230,7 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
       enhancementFailures: new Set(),
       enhancementTimers: new Map(),
       hierarchyKey: "",
+      imageryVersion: propsRef.current.imageryVersion,
       host,
       map,
       props: propsRef.current,
@@ -316,7 +321,7 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
 async function initializeAtlas(runtime: AtlasRuntime) {
   if (runtime.destroyed) return;
   const { host, map } = runtime;
-  installRemoteTerrain(map);
+  installRemoteTerrain(map, runtime.props.imageryVersion);
   startRemoteEnhancementDeadlines(runtime);
   const markerImagesDegraded = await installAtlasMarkerImages(map);
   if (runtime.destroyed) return;
@@ -438,8 +443,8 @@ async function installAtlasMarkerImages(map: MapLibreMap) {
   return hasFailures;
 }
 
-function installRemoteTerrain(map: MapLibreMap) {
-  Object.entries(FOUR_REGION_REMOTE_SOURCES).forEach(([id, source]) => {
+function installRemoteTerrain(map: MapLibreMap, imageryVersion?: string) {
+  Object.entries(fourRegionRemoteSources(imageryVersion)).forEach(([id, source]) => {
     if (!map.getSource(id)) map.addSource(id, source);
   });
   FOUR_REGION_DETAIL_LAYERS.forEach((layer) => {
@@ -817,6 +822,7 @@ function installAtlasLayers(map: MapLibreMap) {
 function synchronizeAtlas(runtime: AtlasRuntime, props: FourRegionTerrainAtlasProps) {
   const previous = runtime.syncedProps;
   runtime.props = props;
+  syncSatelliteTiles(runtime, props.imageryVersion);
   const rootsChanged = !previous || previous.rootFeatures !== props.rootFeatures;
   const hierarchyChanged =
     rootsChanged ||
@@ -961,6 +967,15 @@ function synchronizeAtlas(runtime: AtlasRuntime, props: FourRegionTerrainAtlasPr
     props.layers.WEATHER ? props.situation.weather.length : 0,
   );
   runtime.syncedProps = props;
+}
+
+function syncSatelliteTiles(runtime: AtlasRuntime, imageryVersion?: string) {
+  if (runtime.imageryVersion === imageryVersion) return;
+  const source = runtime.map.getSource<RasterTileSource>("satellite");
+  if (!source) return;
+  source.setTiles([satelliteTileUrl(imageryVersion)]);
+  runtime.imageryVersion = imageryVersion;
+  runtime.host.dataset.imageryVersion = imageryVersion ?? "unversioned";
 }
 
 function activeHierarchyFeatures(props: FourRegionTerrainAtlasProps) {

@@ -193,6 +193,11 @@
   color: inherit;
 }
 
+.realistic-situation-credits strong {
+  color: #ffe29a;
+  font-weight: 650;
+}
+
 .realistic-situation-filters,
 .realistic-situation-surface-modes,
 .realistic-situation-layer-menu,

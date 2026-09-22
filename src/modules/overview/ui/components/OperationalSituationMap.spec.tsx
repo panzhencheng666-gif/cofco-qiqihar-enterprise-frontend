@@ -48,14 +48,23 @@ describe("four-region terrain public situation scene", () => {
   });
 
   it("streams multiresolution satellite tiles, terrain, roads and buildings while zooming", () => {
-    expect(scene).toContain("FOUR_REGION_REMOTE_SOURCES");
+    expect(scene).toContain("fourRegionRemoteSources");
     expect(scene).toContain("FOUR_REGION_DETAIL_LAYERS");
     expect(scene).toContain("map.setTerrain");
     expect(scene).toContain('map.on("zoom"');
-    expect(terrainStyle).toContain("/api/v1/overview/map-imagery/tiles/{z}/{x}/{y}");
+    expect(terrainStyle).toContain("satelliteTileUrl(imageryVersion)");
     expect(terrainStyle).toContain('id: "atlas-buildings"');
     expect(terrainStyle).toContain('id: "atlas-road-labels"');
     expect(terrainStyle).not.toContain("World_Imagery/MapServer/export");
+  });
+
+  it("loads weekly imagery metadata once and updates only the raster tile source", () => {
+    expect(wrapper).toContain(".metadata(controller.signal)");
+    expect(wrapper).toContain("imageryVersion: imageryMetadata.imageryPeriod");
+    expect(wrapper).toContain("imageryLabel(imageryMetadata)");
+    expect(scene).toContain("syncSatelliteTiles(runtime, props.imageryVersion)");
+    expect(scene).toContain("source.setTiles([satelliteTileUrl(imageryVersion)])");
+    expect(scene).not.toContain("imageryMetadataRepository.invalidate");
   });
 
   it("uses real terrain relief without artificial administrative extrusion walls", () => {
