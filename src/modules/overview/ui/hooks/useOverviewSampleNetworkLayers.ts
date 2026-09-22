@@ -67,6 +67,30 @@ export interface OverviewSampleNetworkLayerModel {
 const SEARCH_DEBOUNCE_MS = 250;
 const DESIGN_SAMPLE_PAGE_SIZE = 100;
 
+interface SampleLoadFlight {
+  refresh: number;
+  trailing: boolean;
+  controller: AbortController;
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException
+    ? error.name === "AbortError"
+    : error instanceof Error && error.name === "AbortError";
+}
+
+function releaseFlight(
+  flightRef: { current: SampleLoadFlight | null },
+  flight: SampleLoadFlight,
+  refreshNow: number,
+  start: () => void,
+) {
+  if (flightRef.current !== flight) return;
+  const follow = flight.trailing || refreshNow !== flight.refresh;
+  flightRef.current = null;
+  if (follow) start();
+}
+
 export function useOverviewSampleNetworkLayers({
   productCode,
   mapRegions,
@@ -139,6 +163,18 @@ export function useOverviewSampleNetworkLayers({
   const catalogSnapshotScopeRef = useRef("");
   const catalogRefreshSequenceRef = useRef<number | undefined>(undefined);
   const filteredSnapshotScopeRef = useRef("");
+  const refreshSequenceRef = useRef(refreshSequence);
+  const catalogFlightRef = useRef<SampleLoadFlight | null>(null);
+  const comparisonFlightRef = useRef<SampleLoadFlight | null>(null);
+  const historicalFlightRef = useRef<SampleLoadFlight | null>(null);
+  const designFlightRef = useRef<SampleLoadFlight | null>(null);
+  const comparisonReadyScopeRef = useRef("");
+  const historicalReadyScopeRef = useRef("");
+  const designReadyScopeRef = useRef("");
+  const startCatalogRef = useRef<() => void>(() => {});
+  const startComparisonRef = useRef<() => void>(() => {});
+  const startHistoricalRef = useRef<() => void>(() => {});
+  const startDesignRef = useRef<() => void>(() => {});
   const canLoadComparison = Boolean(applicable && repository && productCode);
   const pointLevel = regionLevel === "TOWNSHIP" || regionLevel === "VILLAGE";
   const canLoadCatalog = Boolean(applicable && repository && productCode && regionCode);
@@ -166,39 +202,67 @@ export function useOverviewSampleNetworkLayers({
   }, [refreshSequence, repository]);
 
   useEffect(() => {
-    let active = true;
-    void Promise.resolve().then(() => {
-      if (!active) return;
-      setDesignPointState(canLoadDesignPoints ? "loading" : "idle");
-      setDesignPointIssue(undefined);
-      if (!canLoadDesignPoints) setDesignPoints([]);
-    });
-    if (
-      !canLoadDesignPoints ||
-      !repository ||
-      (!repository.designMapCatalog &&
-        (!repository.designPoints || !repository.designPointDefinition))
-    ) {
-      return () => {
-        active = false;
+    refreshSequenceRef.current = refreshSequence;
+  }, [refreshSequence]);
+
+  useEffect(() => {
+    startDesignRef.current = () => {
+      const refresh = refreshSequenceRef.current;
+      const existing = designFlightRef.current;
+      if (existing) {
+        if (existing.refresh !== refresh) existing.trailing = true;
+        return;
+      }
+      const scope = `${productCode}:${regionCode ?? ""}:${canLoadDesignPoints}`;
+      const retain = designReadyScopeRef.current === scope && canLoadDesignPoints;
+      if (!retain) {
+        setDesignPointState(canLoadDesignPoints ? "loading" : "idle");
+        setDesignPointIssue(undefined);
+        if (!canLoadDesignPoints) setDesignPoints([]);
+      }
+      if (
+        !canLoadDesignPoints ||
+        !repository ||
+        (!repository.designMapCatalog &&
+          (!repository.designPoints || !repository.designPointDefinition))
+      ) {
+        return;
+      }
+      const flight: SampleLoadFlight = {
+        refresh,
+        trailing: false,
+        controller: new AbortController(),
       };
-    }
-    loadDesignSamplePoints(repository, productCode, regionCode?.slice(0, 6))
-      .then((next) => {
-        if (!active) return;
-        setDesignPoints(next);
-        setDesignPointState("ready");
-      })
-      .catch((failure: unknown) => {
-        if (!active) return;
-        setDesignPoints([]);
-        setDesignPointState("unavailable");
-        setDesignPointIssue(designPointLoadIssue(failure));
-      });
-    return () => {
-      active = false;
+      designFlightRef.current = flight;
+      loadDesignSamplePoints(repository, productCode, regionCode?.slice(0, 6))
+        .then((next) => {
+          if (designFlightRef.current !== flight) return;
+          designReadyScopeRef.current = scope;
+          setDesignPoints(next);
+          setDesignPointState("ready");
+          setDesignPointIssue(undefined);
+        })
+        .catch((failure: unknown) => {
+          if (designFlightRef.current !== flight) return;
+          if (isAbortError(failure)) return;
+          if (!retain) {
+            setDesignPoints([]);
+            setDesignPointState("unavailable");
+          }
+          setDesignPointIssue(designPointLoadIssue(failure));
+        })
+        .finally(() => {
+          releaseFlight(designFlightRef, flight, refreshSequenceRef.current, () =>
+            startDesignRef.current(),
+          );
+        });
     };
-  }, [canLoadDesignPoints, productCode, regionCode, refreshSequence, repository]);
+    startDesignRef.current();
+    return () => {
+      designFlightRef.current?.controller.abort();
+      designFlightRef.current = null;
+    };
+  }, [canLoadDesignPoints, productCode, regionCode, repository]);
 
   const setCategoryCode = useCallback(
     (next: OverviewSamplePointCategoryCode | undefined) => {
@@ -257,55 +321,75 @@ export function useOverviewSampleNetworkLayers({
   }, [filterScopeKey]);
 
   useEffect(() => {
-    let active = true;
-    const sameScope = comparisonSnapshotScopeRef.current === comparisonScopeKey;
-    void Promise.resolve().then(() => {
-      if (!active) return;
-      if (!sameScope) {
-        setComparisonSource(undefined);
+    startComparisonRef.current = () => {
+      const refresh = refreshSequenceRef.current;
+      const existing = comparisonFlightRef.current;
+      if (existing) {
+        if (existing.refresh !== refresh) existing.trailing = true;
+        return;
       }
-      setState(canLoadComparison ? "loading" : "idle");
-      setIssue(undefined);
-    });
-    if (!canLoadComparison || !repository || year === undefined) {
-      return () => {
-        active = false;
-      };
-    }
-    const comparisonRequest = repository.designComparison
-      ? repository.designComparison({
-          year,
-          ...(comparisonRegionCode ? { regionCode: comparisonRegionCode } : {}),
-        })
-      : repository.comparison({
-          productCode,
-          year,
-          ...(comparisonRegionCode ? { regionCode: comparisonRegionCode } : {}),
-        });
-    comparisonRequest
-      .then((next) => {
-        if (!active) return;
-        comparisonSnapshotScopeRef.current = comparisonScopeKey;
-        setComparisonSource(next);
-        setState("ready");
-      })
-      .catch(() => {
-        if (!active) return;
-        if (!sameScope) {
+      const retain =
+        comparisonReadyScopeRef.current === comparisonScopeKey && canLoadComparison;
+      if (!retain) {
+        if (comparisonSnapshotScopeRef.current !== comparisonScopeKey) {
           setComparisonSource(undefined);
         }
-        setState("unavailable");
-        setIssue("设计样本点与年度样本网络加载失败，请稍后重试。");
-      });
+        setState(canLoadComparison ? "loading" : "idle");
+        setIssue(undefined);
+      }
+      if (!canLoadComparison || !repository || year === undefined) return;
+      const flight: SampleLoadFlight = {
+        refresh,
+        trailing: false,
+        controller: new AbortController(),
+      };
+      comparisonFlightRef.current = flight;
+      const comparisonRequest = repository.designComparison
+        ? repository.designComparison({
+            year,
+            ...(comparisonRegionCode ? { regionCode: comparisonRegionCode } : {}),
+          })
+        : repository.comparison({
+            productCode,
+            year,
+            ...(comparisonRegionCode ? { regionCode: comparisonRegionCode } : {}),
+          });
+      comparisonRequest
+        .then((next) => {
+          if (comparisonFlightRef.current !== flight) return;
+          comparisonSnapshotScopeRef.current = comparisonScopeKey;
+          comparisonReadyScopeRef.current = comparisonScopeKey;
+          setComparisonSource(next);
+          setState("ready");
+          setIssue(undefined);
+        })
+        .catch((failure: unknown) => {
+          if (comparisonFlightRef.current !== flight) return;
+          if (isAbortError(failure)) return;
+          if (!retain) {
+            if (comparisonSnapshotScopeRef.current !== comparisonScopeKey) {
+              setComparisonSource(undefined);
+            }
+            setState("unavailable");
+          }
+          setIssue("设计样本点与年度样本网络加载失败，请稍后重试。");
+        })
+        .finally(() => {
+          releaseFlight(comparisonFlightRef, flight, refreshSequenceRef.current, () =>
+            startComparisonRef.current(),
+          );
+        });
+    };
+    startComparisonRef.current();
     return () => {
-      active = false;
+      comparisonFlightRef.current?.controller.abort();
+      comparisonFlightRef.current = null;
     };
   }, [
     canLoadComparison,
     comparisonScopeKey,
     comparisonRegionCode,
     productCode,
-    refreshSequence,
     repository,
     year,
   ]);
@@ -324,73 +408,100 @@ export function useOverviewSampleNetworkLayers({
   );
 
   useEffect(() => {
-    let active = true;
-    const controller = new AbortController();
-    void Promise.resolve().then(() => {
-      if (!active) return;
-      setHistoricalState(canLoadHistorical ? "loading" : "idle");
-      setHistoricalIssue(undefined);
-      setHistoricalIcons([]);
-      setHistoricalAggregates([]);
-    });
-    if (!canLoadHistorical || !repository || year === undefined) {
-      return () => {
-        active = false;
-        controller.abort();
-      };
-    }
-    Promise.all([
-      regionCode && repository.historicalIcons
-        ? repository.historicalIcons(
-            {
-              productCode,
-              regionCode,
-              year,
-              ...(categoryCode ? { categoryCode } : {}),
-              ...(typeCode ? { typeCode } : {}),
-              ...(requestQuery.trim() ? { query: requestQuery.trim() } : {}),
-            },
-            { signal: controller.signal },
-          )
-        : Promise.resolve([]),
-      repository.historicalAggregates?.(
-        {
-          productCode,
-          year,
-          ...(mapParentCode ? { parentCode: mapParentCode } : {}),
-          ...(categoryCode ? { categoryCode } : {}),
-          ...(typeCode ? { typeCode } : {}),
-          ...(requestQuery.trim() ? { query: requestQuery.trim() } : {}),
-        },
-        { signal: controller.signal },
-      ) ?? Promise.resolve([]),
-    ])
-      .then(([next, aggregates]) => {
-        if (!active) return;
-        setHistoricalAggregates(
-          aggregates.map((aggregate) => ({ ...aggregate, sampleKind: "HISTORICAL" })),
-        );
-        setHistoricalIcons(
-          next.map((icon) => ({ ...icon, layerType: "HISTORICAL_ACTUAL" })),
-        );
-        setHistoricalState("ready");
-      })
-      .catch(() => {
-        if (!active) return;
+    startHistoricalRef.current = () => {
+      const refresh = refreshSequenceRef.current;
+      const existing = historicalFlightRef.current;
+      if (existing) {
+        if (existing.refresh !== refresh) existing.trailing = true;
+        return;
+      }
+      const scope = [
+        productCode,
+        year ?? "",
+        regionCode ?? "",
+        mapParentCode ?? "",
+        categoryCode ?? "",
+        typeCode ?? "",
+        requestQuery.trim(),
+        canLoadHistorical,
+      ].join(":");
+      const retain = historicalReadyScopeRef.current === scope && canLoadHistorical;
+      if (!retain) {
+        setHistoricalState(canLoadHistorical ? "loading" : "idle");
+        setHistoricalIssue(undefined);
         setHistoricalIcons([]);
-        setHistoricalState("unavailable");
-        setHistoricalIssue("历史样本点加载失败，请稍后重试。");
-      });
+        setHistoricalAggregates([]);
+      }
+      if (!canLoadHistorical || !repository || year === undefined) return;
+      const flight: SampleLoadFlight = {
+        refresh,
+        trailing: false,
+        controller: new AbortController(),
+      };
+      historicalFlightRef.current = flight;
+      Promise.all([
+        regionCode && repository.historicalIcons
+          ? repository.historicalIcons(
+              {
+                productCode,
+                regionCode,
+                year,
+                ...(categoryCode ? { categoryCode } : {}),
+                ...(typeCode ? { typeCode } : {}),
+                ...(requestQuery.trim() ? { query: requestQuery.trim() } : {}),
+              },
+              { signal: flight.controller.signal },
+            )
+          : Promise.resolve([]),
+        repository.historicalAggregates?.(
+          {
+            productCode,
+            year,
+            ...(mapParentCode ? { parentCode: mapParentCode } : {}),
+            ...(categoryCode ? { categoryCode } : {}),
+            ...(typeCode ? { typeCode } : {}),
+            ...(requestQuery.trim() ? { query: requestQuery.trim() } : {}),
+          },
+          { signal: flight.controller.signal },
+        ) ?? Promise.resolve([]),
+      ])
+        .then(([next, aggregates]) => {
+          if (historicalFlightRef.current !== flight) return;
+          historicalReadyScopeRef.current = scope;
+          setHistoricalAggregates(
+            aggregates.map((aggregate) => ({ ...aggregate, sampleKind: "HISTORICAL" })),
+          );
+          setHistoricalIcons(
+            next.map((icon) => ({ ...icon, layerType: "HISTORICAL_ACTUAL" })),
+          );
+          setHistoricalState("ready");
+          setHistoricalIssue(undefined);
+        })
+        .catch((failure: unknown) => {
+          if (historicalFlightRef.current !== flight) return;
+          if (isAbortError(failure)) return;
+          if (!retain) {
+            setHistoricalIcons([]);
+            setHistoricalState("unavailable");
+          }
+          setHistoricalIssue("历史样本点加载失败，请稍后重试。");
+        })
+        .finally(() => {
+          releaseFlight(historicalFlightRef, flight, refreshSequenceRef.current, () =>
+            startHistoricalRef.current(),
+          );
+        });
+    };
+    startHistoricalRef.current();
     return () => {
-      active = false;
-      controller.abort();
+      historicalFlightRef.current?.controller.abort();
+      historicalFlightRef.current = null;
     };
   }, [
     canLoadHistorical,
     mapParentCode,
     categoryCode,
     productCode,
-    refreshSequence,
     regionCode,
     repository,
     requestQuery,
@@ -399,102 +510,128 @@ export function useOverviewSampleNetworkLayers({
   ]);
 
   useEffect(() => {
-    let active = true;
-    const sameScope = filteredSnapshotScopeRef.current === filteredScopeKey;
-    const sameCatalogScope = catalogSnapshotScopeRef.current === filterScopeKey;
-    const unfiltered = !categoryCode && !typeCode && !requestQuery.trim();
-    const controller = new AbortController();
-    const filters = {
-      productCode,
-      regionCode: regionCode ?? "",
-      year: year ?? 0,
-      ...(categoryCode ? { categoryCode } : {}),
-      ...(typeCode ? { typeCode } : {}),
-      ...(requestQuery.trim() ? { query: requestQuery.trim() } : {}),
-    };
-    void Promise.resolve().then(() => {
-      if (!active) return;
+    startCatalogRef.current = () => {
+      const refresh = refreshSequenceRef.current;
+      const existing = catalogFlightRef.current;
+      if (existing) {
+        if (existing.refresh !== refresh) existing.trailing = true;
+        return;
+      }
+      const sameScope = filteredSnapshotScopeRef.current === filteredScopeKey;
+      const sameCatalogScope = catalogSnapshotScopeRef.current === filterScopeKey;
+      const unfiltered = !categoryCode && !typeCode && !requestQuery.trim();
+      if (!canLoadCatalog || !repository || year === undefined || !regionCode) {
+        if (!sameScope) {
+          setActualIcons([]);
+          setFilteredList(undefined);
+        }
+        if (unfiltered && !sameCatalogScope) setCatalog(undefined);
+        setFilteredState("idle");
+        setCatalogState("idle");
+        return;
+      }
       if (!sameScope) {
         setActualIcons([]);
         setFilteredList(undefined);
       }
-      if (unfiltered) {
-        if (!sameCatalogScope) setCatalog(undefined);
-        setCatalogState(canLoadCatalog ? "loading" : "idle");
+      setFilteredState("loading");
+      if (unfiltered && !sameCatalogScope) {
+        setCatalog(undefined);
+        setCatalogState("loading");
         setCatalogIssue(undefined);
       }
-      setFilteredState(canLoadCatalog ? "loading" : "idle");
-    });
-    if (!canLoadCatalog || !repository || year === undefined || !regionCode) {
-      return () => {
-        active = false;
-        controller.abort();
+      const flight: SampleLoadFlight = {
+        refresh,
+        trailing: false,
+        controller: new AbortController(),
       };
-    }
-    const readCatalog = pointLevel
-      ? (repository.mapCatalog?.bind(repository) ??
-        repository.snapshot?.bind(repository))
-      : undefined;
-    const snapshotRequest = readCatalog
-      ? readCatalog(
-          { ...filters, ...(region?.name ? { regionName: region.name } : {}) },
-          { signal: controller.signal },
-        )
-      : pointLevel
-        ? Promise.all([
-            repository.list(filters, { signal: controller.signal }),
-            repository.icons(filters, { signal: controller.signal }),
-          ]).then(([list, icons]) => ({ icons, list }))
-        : repository
-            .list(filters, { signal: controller.signal })
-            .then((list) => ({ icons: [], list }));
-    const refreshCatalog =
-      !unfiltered &&
-      (!sameCatalogScope || catalogRefreshSequenceRef.current !== refreshSequence);
-    const catalogFilters = {
-      productCode,
-      regionCode,
-      year,
-      ...(region?.name ? { regionName: region.name } : {}),
-    };
-    const catalogRequest = refreshCatalog
-      ? readCatalog
-        ? readCatalog(catalogFilters, { signal: controller.signal }).then(
-            ({ list }) => list,
+      catalogFlightRef.current = flight;
+      const filters = {
+        productCode,
+        regionCode,
+        year,
+        ...(categoryCode ? { categoryCode } : {}),
+        ...(typeCode ? { typeCode } : {}),
+        ...(requestQuery.trim() ? { query: requestQuery.trim() } : {}),
+      };
+      const readCatalog = pointLevel
+        ? (repository.mapCatalog?.bind(repository) ??
+          repository.snapshot?.bind(repository))
+        : undefined;
+      const snapshotRequest = readCatalog
+        ? readCatalog(
+            { ...filters, ...(region?.name ? { regionName: region.name } : {}) },
+            { signal: flight.controller.signal },
           )
-        : repository.list(catalogFilters, { signal: controller.signal })
-      : Promise.resolve(undefined);
-    Promise.all([snapshotRequest, catalogRequest])
-      .then(([{ icons: nextIcons, list: nextList }, nextCatalog]) => {
-        if (!active) return;
-        filteredSnapshotScopeRef.current = filteredScopeKey;
-        setFilteredList(nextList);
-        setActualIcons(nextIcons);
-        setFilteredState("ready");
-        if (unfiltered || nextCatalog) {
-          catalogSnapshotScopeRef.current = filterScopeKey;
-          catalogRefreshSequenceRef.current = refreshSequence;
-          setCatalog(nextCatalog ?? nextList);
-          setCatalogState("ready");
-          setCatalogIssue(undefined);
-        }
-      })
-      .catch(() => {
-        if (!active) return;
-        if (!sameScope) {
-          setFilteredList(undefined);
-          setActualIcons([]);
-        }
-        setFilteredState("unavailable");
-        if (unfiltered || refreshCatalog) {
-          if (!sameCatalogScope) setCatalog(undefined);
-          setCatalogState("unavailable");
-          setCatalogIssue("样本点分类加载失败，请稍后重试。");
-        }
-      });
+        : pointLevel
+          ? Promise.all([
+              repository.list(filters, { signal: flight.controller.signal }),
+              repository.icons(filters, { signal: flight.controller.signal }),
+            ]).then(([list, icons]) => ({ icons, list }))
+          : repository
+              .list(filters, { signal: flight.controller.signal })
+              .then((list) => ({ icons: [], list }));
+      const refreshCatalog =
+        !unfiltered &&
+        (!sameCatalogScope || catalogRefreshSequenceRef.current !== refresh);
+      const catalogFilters = {
+        productCode,
+        regionCode,
+        year,
+        ...(region?.name ? { regionName: region.name } : {}),
+      };
+      const catalogRequest = refreshCatalog
+        ? readCatalog
+          ? readCatalog(catalogFilters, { signal: flight.controller.signal }).then(
+              ({ list }) => list,
+            )
+          : repository.list(catalogFilters, { signal: flight.controller.signal })
+        : Promise.resolve(undefined);
+      Promise.all([snapshotRequest, catalogRequest])
+        .then(([{ icons: nextIcons, list: nextList }, nextCatalog]) => {
+          if (catalogFlightRef.current !== flight) return;
+          filteredSnapshotScopeRef.current = filteredScopeKey;
+          setFilteredList(nextList);
+          setActualIcons(nextIcons);
+          setFilteredState("ready");
+          if (unfiltered || nextCatalog) {
+            catalogSnapshotScopeRef.current = filterScopeKey;
+            catalogRefreshSequenceRef.current = flight.refresh;
+            setCatalog(nextCatalog ?? nextList);
+            setCatalogState("ready");
+            setCatalogIssue(undefined);
+          }
+        })
+        .catch((failure: unknown) => {
+          if (catalogFlightRef.current !== flight) return;
+          if (isAbortError(failure)) return;
+          if (!sameScope) {
+            setFilteredList(undefined);
+            setActualIcons([]);
+            setFilteredState("unavailable");
+          } else {
+            setFilteredState("ready");
+          }
+          if (unfiltered || refreshCatalog) {
+            if (!sameCatalogScope) {
+              setCatalog(undefined);
+              setCatalogState("unavailable");
+              setCatalogIssue("样本点分类加载失败，请稍后重试。");
+            } else {
+              setCatalogIssue("样本点刷新失败，继续显示上一份已加载目录。");
+            }
+          }
+        })
+        .finally(() => {
+          releaseFlight(catalogFlightRef, flight, refreshSequenceRef.current, () =>
+            startCatalogRef.current(),
+          );
+        });
+    };
+    startCatalogRef.current();
     return () => {
-      active = false;
-      controller.abort();
+      catalogFlightRef.current?.controller.abort();
+      catalogFlightRef.current = null;
     };
   }, [
     canLoadCatalog,
@@ -505,13 +642,31 @@ export function useOverviewSampleNetworkLayers({
     productCode,
     pointLevel,
     requestQuery,
-    refreshSequence,
     regionCode,
     region?.name,
     repository,
     typeCode,
     year,
   ]);
+
+  useEffect(() => {
+    const refresh = refreshSequenceRef.current;
+    const nudge = (
+      flightRef: { current: SampleLoadFlight | null },
+      start: () => void,
+    ) => {
+      const flight = flightRef.current;
+      if (flight) {
+        if (flight.refresh !== refresh) flight.trailing = true;
+        return;
+      }
+      start();
+    };
+    nudge(catalogFlightRef, () => startCatalogRef.current());
+    nudge(comparisonFlightRef, () => startComparisonRef.current());
+    nudge(historicalFlightRef, () => startHistoricalRef.current());
+    nudge(designFlightRef, () => startDesignRef.current());
+  }, [refreshSequence]);
 
   const comparison = useMemo(
     () =>
