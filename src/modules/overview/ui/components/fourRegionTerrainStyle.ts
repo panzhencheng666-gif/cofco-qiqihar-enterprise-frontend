@@ -4,6 +4,7 @@ import type {
   SourceSpecification,
   StyleSpecification,
 } from "maplibre-gl";
+import { satelliteTileUrl } from "./mapImageryMetadata";
 
 export type TerrainSurfaceMode = "SANDBOX" | "FUSION" | "IMAGERY";
 
@@ -86,37 +87,43 @@ export const FOUR_REGION_BASE_STYLE: StyleSpecification = {
   ],
 };
 
-export const FOUR_REGION_REMOTE_SOURCES: Record<string, SourceSpecification> = {
-  satellite: {
-    type: "raster",
-    tiles: ["/api/v1/overview/map-imagery/tiles/{z}/{x}/{y}"],
-    tileSize: 256,
-    maxzoom: 18,
-    attribution: "企业影像网关（商业源按部署配置；未配置时回退 Esri World Imagery）",
-  },
-  "terrain-dem": {
-    type: "raster-dem",
-    tiles: TERRAIN_TILES,
-    tileSize: 256,
-    maxzoom: 15,
-    encoding: "terrarium",
-    attribution:
-      '<a href="https://registry.opendata.aws/terrain-tiles/">Mapzen Terrain Tiles on AWS</a>',
-  },
-  "hillshade-dem": {
-    type: "raster-dem",
-    tiles: TERRAIN_TILES,
-    tileSize: 256,
-    maxzoom: 12,
-    encoding: "terrarium",
-  },
-  openmaptiles: {
-    type: "vector",
-    url: "https://tiles.openfreemap.org/planet",
-    attribution:
-      '<a href="https://openfreemap.org/">OpenFreeMap</a> © OpenMapTiles · <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
-  },
-};
+export function fourRegionRemoteSources(
+  imageryVersion?: string,
+): Record<string, SourceSpecification> {
+  return {
+    satellite: {
+      type: "raster",
+      tiles: [satelliteTileUrl(imageryVersion)],
+      tileSize: 256,
+      maxzoom: 18,
+      attribution: "Copernicus Sentinel-2；不可用区域由企业影像网关提供历史底图",
+    },
+    "terrain-dem": {
+      type: "raster-dem",
+      tiles: TERRAIN_TILES,
+      tileSize: 256,
+      maxzoom: 15,
+      encoding: "terrarium",
+      attribution:
+        '<a href="https://registry.opendata.aws/terrain-tiles/">Mapzen Terrain Tiles on AWS</a>',
+    },
+    "hillshade-dem": {
+      type: "raster-dem",
+      tiles: TERRAIN_TILES,
+      tileSize: 256,
+      maxzoom: 12,
+      encoding: "terrarium",
+    },
+    openmaptiles: {
+      type: "vector",
+      url: "https://tiles.openfreemap.org/planet",
+      attribution:
+        '<a href="https://openfreemap.org/">OpenFreeMap</a> © OpenMapTiles · <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+    },
+  };
+}
+
+export const FOUR_REGION_REMOTE_SOURCES = fourRegionRemoteSources();
 
 const chineseName: ExpressionSpecification = [
   "coalesce",

@@ -13,6 +13,8 @@ import type {
 } from "../../domain/operationalFacilities";
 import type { OperationalSituationCatalogue } from "../../domain/operationalSituation";
 import type { OverviewRegion } from "../../domain/overview";
+import { HttpMapImageryRepository } from "../../infrastructure/http/HttpMapImageryRepository";
+import { FetchHttpClient } from "../../../../shared/api/HttpClient";
 import type { MapFeature } from "./boundaryGeometry";
 import type {
   RealisticSceneCommand,
@@ -26,8 +28,14 @@ import {
   operationalSituationTimeline,
   type SituationTimelineItem,
 } from "./operationalSituationTimeline";
+import {
+  imageryLabel,
+  imageryWarning,
+  type MapImageryMetadata,
+} from "./mapImageryMetadata";
 
 const FourRegionTerrainAtlas = lazy(() => import("./FourRegionTerrainAtlas"));
+const mapImageryRepository = new HttpMapImageryRepository(new FetchHttpClient());
 import { PublicRegionSearch, type PublicRegionSearchProps } from "./PublicRegionSearch";
 
 export interface SituationMapBounds {
@@ -116,6 +124,8 @@ export function OperationalSituationMap({
   const [layerMenuOpen, setLayerMenuOpen] = useState(false);
   const [enhancementState, setEnhancementState] =
     useState<TerrainEnhancementState>("LOADING");
+  const [imageryMetadata, setImageryMetadata] = useState<MapImageryMetadata>();
+  const [imageryMetadataUnavailable, setImageryMetadataUnavailable] = useState(false);
   const [command, setCommand] = useState<RealisticSceneCommand>();
   const [focusRequest, setFocusRequest] = useState<{
     id: number;
@@ -125,6 +135,17 @@ export function OperationalSituationMap({
   useEffect(() => {
     const timer = window.setInterval(() => setWeatherClock(Date.now()), 60_000);
     return () => window.clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    void mapImageryRepository
+      .metadata(controller.signal)
+      .then((metadata) => setImageryMetadata(metadata))
+      .catch((error: unknown) => {
+        if (!(error instanceof DOMException && error.name === "AbortError"))
+          setImageryMetadataUnavailable(true);
+      });
+    return () => controller.abort();
   }, []);
   const [annotation, setAnnotation] = useState<MapAnnotation>();
   const [annotationDraft, setAnnotationDraft] = useState<readonly [number, number]>();
@@ -332,6 +353,9 @@ export function OperationalSituationMap({
           features={features}
           rootFeatures={rootFeatures}
           layers={layers}
+          {...(imageryMetadata
+            ? { imageryVersion: imageryMetadata.imageryPeriod }
+            : {})}
           onFacilitySelect={onFacilitySelect}
           onEnhancementState={setEnhancementState}
           onAnnotationPosition={(longitude, latitude) => {
@@ -633,8 +657,13 @@ export function OperationalSituationMap({
       </div>
 
       <p className="realistic-situation-credits">
-        四区域卫星地表：企业影像网关（商业源按部署配置；未配置时回退 Esri World
-        Imagery） · 降水雷达：RainViewer · 行政边界：平台治理数据
+        四区域卫星地表：
+        {imageryMetadata ? imageryLabel(imageryMetadata) : "正在读取影像版本"}
+        {imageryMetadata && imageryWarning(imageryMetadata) && (
+          <strong> · {imageryWarning(imageryMetadata)}</strong>
+        )}
+        {imageryMetadataUnavailable && <strong> · 影像版本信息暂不可用</strong>}
+        {" · 降水雷达：RainViewer · 行政边界：平台治理数据"}
       </p>
 
       <section className="realistic-situation-timeline" aria-label="真实态势时间轴">
