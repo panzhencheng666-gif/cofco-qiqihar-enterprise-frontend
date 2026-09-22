@@ -1128,6 +1128,57 @@ describe("useOverviewSampleNetworkLayers", () => {
     },
   );
 
+  it("shows a prefecture catalog from icon data when the full sample list does not return", async () => {
+    const list = vi.fn<OverviewSamplePointRepository["list"]>(
+      () => new Promise(() => undefined),
+    );
+    const icons = vi.fn<OverviewSamplePointRepository["icons"]>(() =>
+      Promise.resolve([
+        {
+          samplePointId: "94000000-0000-0000-0000-000000000021",
+          name: "呼伦贝尔样本",
+          regionCode: "150700",
+          iconKey: "farmer",
+          roles: [{ code: "PRODUCTION", name: "产情类", iconKey: "production" }],
+          types: [{ code: "FARMER", name: "农户", iconKey: "farmer" }],
+          longitude: 123.4,
+          latitude: 48.2,
+          dataQualityReason: null,
+        },
+      ]),
+    );
+    const repository = {
+      ...repositoryWithSnapshot(),
+      icons,
+      list,
+    } satisfies OverviewSamplePointRepository;
+    const { result } = renderHook(() =>
+      useOverviewSampleNetworkLayers({
+        productCode: "CORN",
+        refreshSequence: 0,
+        region: { code: "150700", level: "PREFECTURE", name: "呼伦贝尔市" },
+        repository,
+        year: 2026,
+      }),
+    );
+
+    await waitFor(() => expect(result.current.catalog?.totalCount).toBe(1));
+    expect(result.current.catalogState).toBe("ready");
+    expect(result.current.catalog?.items[0]?.name).toBe("呼伦贝尔样本");
+    expect(result.current.catalog?.categories[0]).toEqual(
+      expect.objectContaining({ code: "PRODUCTION", count: 1 }),
+    );
+    expect(list).not.toHaveBeenCalled();
+    expect(icons.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        productCode: "CORN",
+        regionCode: "150700",
+        year: 2026,
+      }),
+    );
+    expect(icons.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
   it("keeps the loaded catalog visible when a later refresh fails", async () => {
     const list = vi
       .fn<OverviewSamplePointRepository["list"]>()
