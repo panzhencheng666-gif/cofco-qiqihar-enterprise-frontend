@@ -61,7 +61,18 @@ describe("weekly map imagery presentation", () => {
       "放大后为历史底图，清晰度随地区变化",
     );
     expect(satelliteTileUrl("2026-09")).toBe(
-      "/api/v1/overview/map-imagery/tiles/{z}/{x}/{y}?version=2026-09",
+      "/api/v1/overview/map-imagery/tiles/2026-09/{z}/{x}/{y}",
+    );
+    const fourRegion = {
+      ...currentMetadata,
+      updateCadence: "MONTHLY",
+      imageryPeriod: "2026-09-r2",
+      coverageRegionCodes: ["230200", "150700", "231100", "232700"],
+    };
+    expect(imageryLabel(fourRegion)).toContain("近期影像覆盖四区域");
+    expect(imageryLabel(fourRegion)).toContain("同一近期10米影像放大");
+    expect(satelliteTileUrl("2026-09-r2")).toBe(
+      "/api/v1/overview/map-imagery/tiles/2026-09-r2/{z}/{x}/{y}",
     );
     expect(
       imageryWarning({ ...currentMetadata, updateCadence: "MONTHLY", status: "STALE" }),
