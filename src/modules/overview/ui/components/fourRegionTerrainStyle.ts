@@ -96,7 +96,7 @@ export function fourRegionRemoteSources(
       tiles: [satelliteTileUrl(imageryVersion)],
       tileSize: 256,
       maxzoom: 14,
-      attribution: "Copernicus Sentinel-2；不可用区域由企业影像网关提供历史底图",
+      attribution: "Copernicus Sentinel-2；原始分辨率和采集时间见地图标注",
     },
     "terrain-dem": {
       type: "raster-dem",
