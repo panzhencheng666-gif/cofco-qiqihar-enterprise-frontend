@@ -208,6 +208,7 @@ export default function FourRegionTerrainAtlas(props: FourRegionTerrainAtlasProp
         dragPan: true,
         fadeDuration: 0,
         localIdeographFontFamily: "PingFang SC, Microsoft YaHei, sans-serif",
+        maxZoom: 18,
         maxPitch: 68,
         minPitch: 34,
         pitch: 52,

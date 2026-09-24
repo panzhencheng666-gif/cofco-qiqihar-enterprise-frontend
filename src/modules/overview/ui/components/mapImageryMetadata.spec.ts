@@ -49,4 +49,19 @@ describe("weekly map imagery presentation", () => {
       "/api/v1/overview/map-imagery/tiles/{z}/{x}/{y}",
     );
   });
+
+  it("shows monthly observation cadence and accepts monthly release versions", () => {
+    expect(imageryLabel({ ...currentMetadata, updateCadence: "MONTHLY" })).toContain(
+      "每月更新",
+    );
+    expect(imageryLabel({ ...currentMetadata, updateCadence: "MONTHLY" })).toContain(
+      "放大后为历史底图，清晰度随地区变化",
+    );
+    expect(satelliteTileUrl("2026-09")).toBe(
+      "/api/v1/overview/map-imagery/tiles/{z}/{x}/{y}?version=2026-09",
+    );
+    expect(
+      imageryWarning({ ...currentMetadata, updateCadence: "MONTHLY", status: "STALE" }),
+    ).toContain("本月");
+  });
 });

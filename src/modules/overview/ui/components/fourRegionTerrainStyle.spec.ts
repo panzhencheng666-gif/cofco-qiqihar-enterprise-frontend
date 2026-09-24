@@ -65,7 +65,7 @@ describe("four-region satellite and terrain style", () => {
       "openmaptiles",
     ]);
     expect(FOUR_REGION_REMOTE_SOURCES.satellite?.type).toBe("raster");
-    expect(FOUR_REGION_REMOTE_SOURCES.satellite).toMatchObject({ maxzoom: 14 });
+    expect(FOUR_REGION_REMOTE_SOURCES.satellite).toMatchObject({ maxzoom: 18 });
     expect(JSON.stringify(FOUR_REGION_REMOTE_SOURCES.satellite)).toContain(
       "/api/v1/overview/map-imagery/tiles/{z}/{x}/{y}",
     );
