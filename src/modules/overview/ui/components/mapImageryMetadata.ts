@@ -42,7 +42,11 @@ export function imageryLabel(metadata: MapImageryMetadata): string {
     metadata.updateCadence === "MONTHLY"
       ? " · 14级以上放大后为历史底图，清晰度随地区变化"
       : "";
-  return `${metadata.provider}${resolution}${acquisition}${cadence}${zoomNotice}`;
+  const coverageNotice =
+    metadata.updateCadence === "MONTHLY" && metadata.status === "CURRENT"
+      ? " · 近期影像覆盖齐齐哈尔，其他区域沿用历史底图"
+      : "";
+  return `${metadata.provider}${resolution}${acquisition}${cadence}${coverageNotice}${zoomNotice}`;
 }
 
 export function imageryWarning(metadata: MapImageryMetadata): string | undefined {

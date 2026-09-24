@@ -55,6 +55,9 @@ describe("weekly map imagery presentation", () => {
       "每月更新",
     );
     expect(imageryLabel({ ...currentMetadata, updateCadence: "MONTHLY" })).toContain(
+      "近期影像覆盖齐齐哈尔，其他区域沿用历史底图",
+    );
+    expect(imageryLabel({ ...currentMetadata, updateCadence: "MONTHLY" })).toContain(
       "放大后为历史底图，清晰度随地区变化",
     );
     expect(satelliteTileUrl("2026-09")).toBe(
