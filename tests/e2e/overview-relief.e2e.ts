@@ -21,6 +21,51 @@ const township = region("230225204", "宝山乡", "TOWNSHIP", "230225");
 const village = region("230225204014", "宝山村", "VILLAGE", "230225204");
 
 test.describe("overview owned-relief interaction", () => {
+  test("keeps business modules reachable as a foldable changes size", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      hasTouch: true,
+      isMobile: true,
+    });
+    try {
+      const page = await context.newPage();
+      await installOverviewFixture(page);
+      await page.goto("/?embed=1#/overview");
+      const moduleMenu = page.getByText("业务模块", { exact: true });
+      const supply = page.getByRole("link", { name: "供需平衡" });
+
+      for (const width of [390, 820, 1100]) {
+        await page.setViewportSize({ width, height: 900 });
+        await expect(moduleMenu).toBeVisible();
+        await moduleMenu.click();
+        await expect(supply).toBeVisible();
+        await moduleMenu.click();
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= window.innerWidth,
+          ),
+        ).toBe(true);
+      }
+
+      await moduleMenu.click();
+      await expect(supply).toBeVisible();
+      await expect(supply).toHaveAttribute(
+        "href",
+        "http://127.0.0.1:63182/#/供需分析/供需平衡",
+      );
+      await expect(supply).toHaveAttribute("target", "_top");
+      await page.route("http://127.0.0.1:63182/**", (route) =>
+        route.fulfill({ contentType: "text/html", body: "<title>业务工作台</title>" }),
+      );
+      await supply.click();
+      await expect(page).toHaveURL("http://127.0.0.1:63182/#/供需分析/供需平衡");
+    } finally {
+      await context.close();
+    }
+  });
+
   test("keeps every selected facility through wheel zoom and drag, then lists the searched region", async ({
     page,
   }) => {

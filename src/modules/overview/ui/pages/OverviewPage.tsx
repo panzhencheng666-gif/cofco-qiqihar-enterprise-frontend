@@ -30,7 +30,7 @@ import type {
   StorageFacilityDraft,
 } from "../../domain/operationalFacilities";
 import type { OperationalSituationCatalogue } from "../../domain/operationalSituation";
-import { businessDirectoryUrl } from "../businessPlatformNavigation";
+import { businessDirectoryUrl, businessModuleUrl } from "../businessPlatformNavigation";
 import {
   BoundaryMap,
   toMapFeature,
@@ -1633,6 +1633,25 @@ export function OverviewPage({
             <a href={businessDirectoryUrl()} target="_top">
               返回业务目录
             </a>
+            <details className="overview-business-modules">
+              <summary>业务模块</summary>
+              <div aria-label="业务模块" role="group">
+                {(
+                  [
+                    ["产情监测", "#/产情监测/玉米产情填报"],
+                    ["市场监测", "#/市场监测/玉米市场采集"],
+                    ["物流监测", "#/市场监测/玉米物流监测"],
+                    ["供需平衡", "#/供需分析/供需平衡"],
+                    ["我的任务", "#/我的工作/我的任务"],
+                    ["周期总结", "#/经营总览/周期总结"],
+                  ] as const
+                ).map(([label, route]) => (
+                  <a href={businessModuleUrl(route)} key={route} target="_top">
+                    {label}
+                  </a>
+                ))}
+              </div>
+            </details>
             <details className="overview-region-browser">
               <summary>选择地区</summary>
               <div aria-label="行政区列表">
