@@ -18,9 +18,12 @@ export interface MapImageryMetadata {
 
 const UNVERSIONED_TILE_URL = "/api/v1/overview/map-imagery/tiles/{z}/{x}/{y}";
 const RELEASE_VERSION = /^\d{4}-(?:W\d{2}|\d{2})(?:-r(?:[2-9]|[1-9]\d))?$/;
+const MONTHLY_RELEASE_VERSION = /^\d{4}-\d{2}(?:-r(?:[2-9]|[1-9]\d))?$/;
 const FOUR_REGION_CODES = ["230200", "150700", "231100", "232700"];
 
 export function satelliteTileUrl(version?: string): string {
+  if (version && MONTHLY_RELEASE_VERSION.test(version))
+    return `/api/v1/overview/map-imagery/tiles/${version}/{z}/{x}/{y}`;
   return version && RELEASE_VERSION.test(version)
     ? `${UNVERSIONED_TILE_URL}?version=${encodeURIComponent(version)}`
     : UNVERSIONED_TILE_URL;
