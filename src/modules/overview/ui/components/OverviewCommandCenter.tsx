@@ -85,7 +85,12 @@ export function OverviewCommandCenter({
     resize();
     return () => window.removeEventListener("resize", resize);
   }, []);
-  const compactViewport = publicSituation || viewport.width <= 800;
+  const compactViewport =
+    publicSituation ||
+    viewport.width <= 800 ||
+    (viewport.width <= 1180 &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(hover: none) and (pointer: coarse)").matches);
   const stageScale = compactViewport
     ? 1
     : Math.min(1, viewport.height / 1080, viewport.width / 1280);

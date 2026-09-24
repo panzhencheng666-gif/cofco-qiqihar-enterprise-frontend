@@ -2210,6 +2210,10 @@ select:focus-visible {
   border: 1px solid rgb(64 135 194 / 32%);
   background: #091c30;
 }
+.overview-cockpit-navigation .overview-business-modules {
+  position: relative;
+  display: none;
+}
 .overview-map-legend {
   position: absolute;
   bottom: 12px;
@@ -5548,7 +5552,7 @@ select:focus-visible {
   white-space: nowrap;
 }
 
-@media (max-width: 800px) {
+@media (max-width: 800px), (max-width: 1180px) and (hover: none) and (pointer: coarse) {
   html,
   body,
   #root {
@@ -5652,6 +5656,58 @@ select:focus-visible {
     flex-wrap: wrap;
   }
 
+  .overview-command-tools .overview-business-modules {
+    display: block;
+  }
+
+  .overview-business-modules summary {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 14px;
+    border: 1px solid rgb(201 245 255 / 40%);
+    border-radius: 7px;
+    color: #e8faff;
+    background: rgb(4 77 122 / 78%);
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .overview-business-modules summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .overview-business-modules > div {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    z-index: 20;
+    display: grid;
+    width: min(280px, calc(100vw - 24px));
+    max-height: min(60dvh, 420px);
+    padding: 6px;
+    overflow-y: auto;
+    border: 1px solid rgb(201 245 255 / 55%);
+    border-radius: 8px;
+    background: #0b3e66;
+    box-shadow: 0 18px 40px rgb(0 20 39 / 38%);
+  }
+
+  .overview-business-modules a {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 8px 12px;
+    border-radius: 5px;
+    color: #e8faff;
+    text-decoration: none;
+  }
+
+  .overview-business-modules a:hover,
+  .overview-business-modules a:focus-visible {
+    background: rgb(96 174 217 / 35%);
+  }
+
   .overview-command-center .overview-region-browser > div {
     right: auto;
     left: 0;
@@ -5728,4 +5784,17 @@ select:focus-visible {
 
 .overview-command-center.without-business-kpis {
   --command-kpi-height: 0px;
+}
+
+@media (max-width: 800px) {
+  .overview-command-center .overview-region-browser > div {
+    right: 0;
+    left: auto;
+  }
+
+  .overview-business-modules > div {
+    right: 0;
+    left: auto;
+    width: min(190px, calc(100vw - 24px));
+  }
 }

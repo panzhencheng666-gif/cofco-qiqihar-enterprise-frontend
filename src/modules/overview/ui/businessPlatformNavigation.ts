@@ -4,14 +4,21 @@ const BUSINESS_PLATFORM_PATH = "/";
 export function businessDirectoryUrl(origin = window.location.origin): string {
   const configured = import.meta.env.VITE_BUSINESS_PLATFORM_URL?.trim();
   if (configured)
-    return `${normalizeBusinessPlatformBaseUrl(configured)}/#/我的工作/待我处理`;
+    return `${normalizeBusinessPlatformBaseUrl(configured)}/#/我的工作/我的任务`;
   const url = new URL(origin);
   const local = ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname);
   if (local)
     url.port = String(
       parsePositivePort(import.meta.env.VITE_BUSINESS_PLATFORM_PORT) ?? 63182,
     );
-  return `${url.origin}${local ? "/" : "/workbench/"}#/我的工作/待我处理`;
+  return `${url.origin}${local ? "/" : "/workbench/"}#/我的工作/我的任务`;
+}
+
+export function businessModuleUrl(
+  route: string,
+  origin = window.location.origin,
+): string {
+  return `${businessDirectoryUrl(origin).split("#", 1)[0]}${route}`;
 }
 
 function normalizeBusinessPlatformBaseUrl(value: string): string {
