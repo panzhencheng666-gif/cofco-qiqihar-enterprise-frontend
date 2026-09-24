@@ -32,19 +32,24 @@ export function imageryLabel(metadata: MapImageryMetadata): string {
     metadata.acquisitionFrom && metadata.acquisitionTo
       ? ` · 采集 ${formatDate(metadata.acquisitionFrom)}至${formatDate(metadata.acquisitionTo)}`
       : " · 历史影像";
-  const cadence = metadata.updateCadence === "WEEKLY"
-    ? " · 每周一同步"
-    : metadata.updateCadence === "MONTHLY" ? " · 每月更新" : "";
-  const zoomNotice = metadata.updateCadence === "MONTHLY"
-    ? " · 14级以上放大后为历史底图，清晰度随地区变化"
-    : "";
+  const cadence =
+    metadata.updateCadence === "WEEKLY"
+      ? " · 每周一同步"
+      : metadata.updateCadence === "MONTHLY"
+        ? " · 每月更新"
+        : "";
+  const zoomNotice =
+    metadata.updateCadence === "MONTHLY"
+      ? " · 14级以上放大后为历史底图，清晰度随地区变化"
+      : "";
   return `${metadata.provider}${resolution}${acquisition}${cadence}${zoomNotice}`;
 }
 
 export function imageryWarning(metadata: MapImageryMetadata): string | undefined {
-  if (metadata.status === "STALE") return metadata.updateCadence === "MONTHLY"
-    ? "本月同步未成功，当前沿用上一成功版本。"
-    : "本周同步未成功，当前沿用上一成功版本。";
+  if (metadata.status === "STALE")
+    return metadata.updateCadence === "MONTHLY"
+      ? "本月同步未成功，当前沿用上一成功版本。"
+      : "本周同步未成功，当前沿用上一成功版本。";
   if (metadata.status === "FALLBACK") return "当前显示历史影像，不代表近期地表现状。";
   return undefined;
 }

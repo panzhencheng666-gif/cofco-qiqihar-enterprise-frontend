@@ -60,8 +60,8 @@ describe("weekly map imagery presentation", () => {
     expect(satelliteTileUrl("2026-09")).toBe(
       "/api/v1/overview/map-imagery/tiles/{z}/{x}/{y}?version=2026-09",
     );
-    expect(imageryWarning({ ...currentMetadata, updateCadence: "MONTHLY", status: "STALE" })).toContain(
-      "本月",
-    );
+    expect(
+      imageryWarning({ ...currentMetadata, updateCadence: "MONTHLY", status: "STALE" }),
+    ).toContain("本月");
   });
 });
