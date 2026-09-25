@@ -30,6 +30,13 @@ export function satelliteTileUrl(version?: string): string {
 }
 
 export function imageryLabel(metadata: MapImageryMetadata): string {
+  if (metadata.imageryPeriod === "2026-09-r4") {
+    return `${metadata.provider} · 10米RGB（20米云分类） · 2026年9月14日至20日优先，历史影像补缺` +
+      (metadata.acquisitionFrom && metadata.acquisitionTo
+        ? ` · 实际采集范围 ${formatDate(metadata.acquisitionFrom)}至${formatDate(metadata.acquisitionTo)}`
+        : "") +
+      " · 各位置采集日期不同，14级以上仅放大原影像";
+  }
   const resolution = metadata.spatialResolutionMeters
     ? ` · ${metadata.spatialResolutionMeters}米`
     : "";
