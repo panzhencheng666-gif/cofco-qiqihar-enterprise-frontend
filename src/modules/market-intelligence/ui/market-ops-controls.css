@@ -1,0 +1,225 @@
+.mi-layers button:disabled {
+  cursor: not-allowed;
+  border-style: dashed;
+  color: #82918f;
+  background: rgb(17 21 21 / 82%);
+}
+.mi-layers button:disabled small {
+  color: #b39168;
+  font-size: 8px;
+  letter-spacing: 0;
+}
+.mi-layers button:disabled span {
+  opacity: 0.5;
+}
+.mi-guide-entry {
+  color: #b8c9c2;
+  border-color: #4d5b58 !important;
+}
+.mi-overview-live .mi-overview-panel {
+  height: clamp(290px, 34vh, 390px);
+}
+.mi-overview-live .mi-overview-body {
+  gap: 6px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.mi-live-toolbar,
+.mi-live-channels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.mi-live-toolbar button,
+.mi-live-channels button {
+  padding: 4px 9px;
+  border: 1px solid #4b5655;
+  background: #202626;
+  color: #d9e2df;
+  font-size: 10px;
+}
+.mi-live-toolbar button:hover:not(:disabled),
+.mi-live-channels button:hover {
+  border-color: #c4a47b;
+}
+.mi-live-toolbar button:disabled {
+  color: #83918c;
+  border-color: #39413e;
+  cursor: not-allowed;
+}
+.mi-live-channels button[aria-pressed="true"] {
+  color: #f4d4aa;
+  border-color: #a88350;
+}
+.mi-live-screen {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 126px;
+  background: #0b0e0e;
+}
+.mi-live-player,
+.mi-live-player iframe {
+  width: 100%;
+  height: 100%;
+  min-height: 126px;
+  border: 0;
+}
+.mi-live-empty {
+  width: 100%;
+  min-height: 126px;
+  margin: 0;
+  letter-spacing: 0.03em;
+}
+.mi-live-paused {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 3px 8px;
+  background: #111d1de6;
+  color: #efcf9f;
+  font-size: 10px;
+  pointer-events: none;
+}
+.mi-live-footnote {
+  flex: none;
+  margin: 0 !important;
+  color: #95a9a2 !important;
+  font-size: 9px !important;
+}
+.mi-live-settings-backdrop,
+.mi-button-guide-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgb(0 0 0 / 76%);
+}
+.mi-live-settings,
+.mi-button-guide {
+  width: min(670px, 100%);
+  max-height: min(760px, 90vh);
+  overflow-y: auto;
+  border: 1px solid #53615a;
+  background: #171b1b;
+  box-shadow: 0 24px 70px rgb(0 0 0 / 55%);
+  color: #e3e9e5;
+}
+.mi-live-settings > header,
+.mi-button-guide > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-bottom: 1px solid #42504b;
+}
+.mi-live-settings h2,
+.mi-button-guide h2 {
+  margin: 0;
+  font-size: 17px;
+}
+.mi-button-guide header small {
+  color: #b99b73;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+.mi-live-settings > header button,
+.mi-button-guide > header button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #58645f;
+  font-size: 19px;
+}
+.mi-live-settings > p {
+  margin: 0;
+  padding: 14px 18px;
+  color: #afc1b9;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.mi-live-settings-list {
+  max-height: 120px;
+  overflow-y: auto;
+  margin: 0 18px 14px;
+  border-top: 1px solid #3c4742;
+}
+.mi-live-settings-list > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 0;
+  border-bottom: 1px solid #3c4742;
+  font-size: 11px;
+}
+.mi-live-settings-list > span {
+  display: block;
+  padding: 12px 0;
+  color: #a7b7b0;
+  font-size: 11px;
+}
+.mi-live-settings-list button {
+  color: #e3bd91;
+}
+.mi-live-settings label {
+  display: grid;
+  gap: 5px;
+  margin: 0 18px 12px;
+  color: #c2d1cb;
+  font-size: 11px;
+}
+.mi-live-settings input,
+.mi-live-settings select {
+  min-height: 34px;
+  padding: 0 9px;
+  border: 1px solid #53615a;
+  border-radius: 0;
+  background: #101515;
+  color: #eef3ef;
+}
+.mi-live-settings .mi-live-settings-error {
+  padding-top: 0;
+  color: #eca29b;
+}
+.mi-live-settings-add {
+  margin: 4px 18px 18px;
+  padding: 9px 15px;
+  border: 1px solid #b38c58;
+  color: #f3d5aa;
+}
+.mi-button-guide-rows {
+  display: grid;
+}
+.mi-button-guide-rows > div {
+  display: grid;
+  grid-template-columns: minmax(190px, 33%) 1fr;
+  gap: 18px;
+  padding: 12px 18px;
+  border-bottom: 1px solid #303c37;
+  font-size: 11px;
+}
+.mi-button-guide-rows strong {
+  color: #e8d0a8;
+  font-weight: 600;
+}
+.mi-button-guide-rows p {
+  margin: 0;
+  color: #c0d0c8;
+  line-height: 1.6;
+}
+.mi-button-guide footer {
+  padding: 13px 18px;
+  color: #a8b9b0;
+  font-size: 11px;
+}
+@media (max-width: 650px) {
+  .mi-button-guide-rows > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .mi-live-footnote {
+    display: none;
+  }
+}

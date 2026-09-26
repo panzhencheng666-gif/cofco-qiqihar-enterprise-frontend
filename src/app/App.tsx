@@ -36,6 +36,7 @@ import type { MapAnnotationRepository } from "../modules/overview/application/po
 import { HttpMapAnnotationRepository } from "../modules/overview/infrastructure/http/HttpMapAnnotationRepository";
 import { BrowserOverviewRealtimeStream } from "../modules/overview/infrastructure/realtime/BrowserOverviewRealtimeStream";
 import { OverviewPage } from "../modules/overview/ui/pages/OverviewPage";
+import { MarketIntelligencePage } from "../modules/market-intelligence/ui/MarketIntelligencePage";
 import { HttpDesignSampleFieldDefinitionRepository } from "../modules/design-sample/infrastructure/http/HttpDesignSampleFieldDefinitionRepository";
 import type { WorkItemScope } from "../modules/work-management/domain/workItem";
 import type {
@@ -295,6 +296,10 @@ export function App({
   const [navigationAttempt, setNavigationAttempt] = useState(0);
   const normalizedHash = safeDecodedHash(window.location.hash);
   const overviewRoute = normalizedHash === "#/overview";
+  const marketIntelligenceRoute =
+    normalizedHash === "#/market-intelligence" ||
+    normalizedHash === "#/market-intelligence/tools" ||
+    normalizedHash.startsWith("#/market-intelligence/analysis/");
   const reportingRoute = hashState.utilityRoute === "reporting";
   const embedded = new URLSearchParams(window.location.search).get("embed") === "1";
   const { domain: navigationDomain, pageKind: navigationPageKind } =
@@ -302,7 +307,12 @@ export function App({
   const utilityRoute = hashState.utilityRoute;
 
   useEffect(() => {
-    if (hashState.workLocation || hashState.utilityRoute || overviewRoute) {
+    if (
+      hashState.workLocation ||
+      hashState.utilityRoute ||
+      overviewRoute ||
+      marketIntelligenceRoute
+    ) {
       return;
     }
     let active = true;
@@ -351,6 +361,7 @@ export function App({
     hashState.workLocation,
     hashState.utilityRoute,
     overviewRoute,
+    marketIntelligenceRoute,
     navigationAttempt,
   ]);
 
@@ -429,6 +440,10 @@ export function App({
         }
       />
     );
+  }
+
+  if (marketIntelligenceRoute) {
+    return <MarketIntelligencePage />;
   }
 
   return (
