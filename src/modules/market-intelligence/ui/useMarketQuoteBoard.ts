@@ -66,11 +66,23 @@ export function useMarketQuoteBoard() {
   const [now, setNow] = useState(0);
 
   useEffect(() => {
-    const controller = new AbortController();
-    let latestRequest = 0;
+    // Skip overlapping polls so a slow successful response can still publish.
+    // A per-request timeout releases the slot even if fetch never settles.
+    let disposed = false;
+    let active: { controller: AbortController; timeout: number } | null = null;
     async function refresh() {
-      if (document.hidden) return;
-      const request = ++latestRequest;
+      if (disposed || document.hidden || active) return;
+      const controller = new AbortController();
+      const request = {
+        controller,
+        timeout: window.setTimeout(() => {
+          if (disposed || active !== request) return;
+          controller.abort();
+          active = null;
+          setError(true);
+        }, 20_000),
+      };
+      active = request;
       try {
         const response = await fetch("/api/v1/market-intelligence/quotes/overview", {
           credentials: "same-origin",
@@ -79,14 +91,18 @@ export function useMarketQuoteBoard() {
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const body = z.object({ data: boardSchema }).parse(await response.json());
-        if (controller.signal.aborted || request !== latestRequest) return;
+        if (disposed || controller.signal.aborted || active !== request) return;
         const received = performance.now();
         setReceivedAt(received);
         setNow(received);
         setBoard(body.data);
         setError(false);
       } catch {
-        if (!controller.signal.aborted && request === latestRequest) setError(true);
+        if (!disposed && !controller.signal.aborted && active === request)
+          setError(true);
+      } finally {
+        window.clearTimeout(request.timeout);
+        if (active === request) active = null;
       }
     }
     void refresh();
@@ -95,7 +111,12 @@ export function useMarketQuoteBoard() {
     const onVisible = () => void refresh();
     document.addEventListener("visibilitychange", onVisible);
     return () => {
-      controller.abort();
+      disposed = true;
+      if (active) {
+        active.controller.abort();
+        window.clearTimeout(active.timeout);
+        active = null;
+      }
       window.clearInterval(timer);
       window.clearInterval(clock);
       document.removeEventListener("visibilitychange", onVisible);

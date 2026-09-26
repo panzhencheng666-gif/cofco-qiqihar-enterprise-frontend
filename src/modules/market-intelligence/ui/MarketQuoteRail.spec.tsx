@@ -88,6 +88,7 @@ describe("market quote source interruption", () => {
   });
 
   it("ignores an older supplier failure that arrives after a newer healthy response", async () => {
+    vi.useFakeTimers();
     let releaseFirst: (() => void) | undefined;
     const first = new Promise<unknown>((resolve) => {
       releaseFirst = () =>
@@ -98,14 +99,14 @@ describe("market quote source interruption", () => {
       vi
         .fn()
         .mockReturnValueOnce(first)
-        .mockResolvedValueOnce({
+        .mockResolvedValue({
           ok: true,
           json: () => Promise.resolve(board("CONNECTED")),
         }),
     );
     render(<MarketQuoteRail onSelect={() => {}} />);
-    fireEvent(document, new Event("visibilitychange"));
-    expect(await screen.findByText("授权行情源已连接")).toBeVisible();
+    await act(() => vi.advanceTimersByTimeAsync(30_000));
+    expect(screen.getByText("授权行情源已连接")).toBeVisible();
 
     await act(async () => {
       releaseFirst?.();
@@ -117,6 +118,7 @@ describe("market quote source interruption", () => {
   });
 
   it("ignores an older rejected request after a newer healthy response", async () => {
+    vi.useFakeTimers();
     let rejectFirst: (() => void) | undefined;
     const first = new Promise<unknown>((_resolve, reject) => {
       rejectFirst = () => reject(new Error("older request failed"));
@@ -126,14 +128,14 @@ describe("market quote source interruption", () => {
       vi
         .fn()
         .mockReturnValueOnce(first)
-        .mockResolvedValueOnce({
+        .mockResolvedValue({
           ok: true,
           json: () => Promise.resolve(board("CONNECTED")),
         }),
     );
     render(<MarketQuoteRail onSelect={() => {}} />);
-    fireEvent(document, new Event("visibilitychange"));
-    expect(await screen.findByText("授权行情源已连接")).toBeVisible();
+    await act(() => vi.advanceTimersByTimeAsync(30_000));
+    expect(screen.getByText("授权行情源已连接")).toBeVisible();
 
     await act(async () => {
       rejectFirst?.();
@@ -259,7 +261,7 @@ describe("market feed health", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(31_000);
     });
-    expect(screen.getByText("行情状态更新已超时")).toBeVisible();
+    expect(screen.getByText("行情接口不可用")).toBeVisible();
     expect(screen.getByText("2,180")).toHaveClass("stale");
   });
 
