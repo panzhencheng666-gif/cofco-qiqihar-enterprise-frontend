@@ -53,9 +53,19 @@ const indicatorGroups = metricGroups.filter((group) => group.id !== "calculation
 const indicatorCatalog = metricCatalog.filter(
   (topic) => !topic.id.startsWith("calculation-"),
 );
-const global2DZoom = (width: number) =>
-  Math.max(-1, Math.log2(Math.max(width, 320) / 512) - 0.08);
+const global2DBounds: [[number, number], [number, number]] = [
+  [-180, -75],
+  [180, 80],
+];
 const global2DCenter: [number, number] = [0, 10];
+
+function fitGlobal2D(map: Map, duration = 0) {
+  const margin = Math.min(44, Math.max(12, map.getContainer().clientWidth * 0.07));
+  map.fitBounds(global2DBounds, {
+    padding: { top: 36, right: margin, bottom: 62, left: margin },
+    duration,
+  });
+}
 const graticule = {
   type: "FeatureCollection" as const,
   features: [
@@ -848,6 +858,8 @@ function AnalysisRows({
 export function MarketIntelligencePage() {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Map | null>(null);
+  const scopeRef = useRef<"全球" | "中国">("全球");
+  const modeRef = useRef<"2D" | "3D">("2D");
   const [commodity, setCommodity] = useState<(typeof commodities)[number]>("玉米");
   const [scope, setScope] = useState<"全球" | "中国">("全球");
   const [mode, setMode] = useState<"2D" | "3D">("2D");
@@ -892,15 +904,16 @@ export function MarketIntelligencePage() {
         container: mapContainer.current,
         style: terrainStyle,
         center: global2DCenter,
-        zoom: global2DZoom(mapContainer.current.clientWidth),
-        minZoom: -1,
+        zoom: 0,
+        minZoom: -1.5,
         maxZoom: 12,
         maxPitch: 55,
         dragRotate: false,
-        renderWorldCopies: false,
+        renderWorldCopies: true,
         attributionControl: false,
       });
       mapRef.current = map;
+      fitGlobal2D(map);
     } catch {
       queueMicrotask(() => setMapFailed(true));
       return;
@@ -918,6 +931,9 @@ export function MarketIntelligencePage() {
       const map = mapRef.current;
       if (!map) return;
       map.resize();
+      if (scopeRef.current === "全球" && modeRef.current === "2D") {
+        fitGlobal2D(map);
+      }
     });
     observer.observe(element);
     return () => observer.disconnect();
@@ -954,16 +970,16 @@ export function MarketIntelligencePage() {
 
   function changeScope(next: "全球" | "中国") {
     setScope(next);
-    mapRef.current?.flyTo({
-      center: next === "全球" ? (mode === "3D" ? [15, 20] : global2DCenter) : [104, 35],
-      zoom:
-        next === "全球"
-          ? mode === "3D"
-            ? 2.15
-            : global2DZoom(mapRef.current?.getContainer().clientWidth ?? 800)
-          : mode === "3D"
-            ? 1.7
-            : 3.4,
+    scopeRef.current = next;
+    const map = mapRef.current;
+    if (!map) return;
+    if (next === "全球" && mode === "2D") {
+      fitGlobal2D(map, 700);
+      return;
+    }
+    map.flyTo({
+      center: next === "全球" ? [15, 20] : [104, 35],
+      zoom: next === "全球" ? 2.15 : mode === "3D" ? 1.7 : 3.4,
       duration: 700,
     });
   }
@@ -974,27 +990,26 @@ export function MarketIntelligencePage() {
     const map = mapRef.current;
     if (next === "陆运" && map && map.getZoom() < 5) {
       setScope("中国");
+      scopeRef.current = "中国";
       map.flyTo({ center: [104, 35], zoom: 5.4, duration: 700 });
     }
   }
 
   function changeMode(next: "2D" | "3D") {
     setMode(next);
+    modeRef.current = next;
     const map = mapRef.current;
     if (!map) return;
     const projection = { type: next === "3D" ? "globe" : "mercator" } as const;
     map.setProjection(projection);
+    if (next === "2D" && scope === "全球") {
+      fitGlobal2D(map, 700);
+      return;
+    }
     map.easeTo({
-      center: scope === "中国" ? [104, 35] : next === "3D" ? [15, 20] : global2DCenter,
+      center: scope === "中国" ? [104, 35] : [15, 20],
       pitch: 0,
-      zoom:
-        scope === "中国"
-          ? next === "3D"
-            ? 1.7
-            : 3.4
-          : next === "3D"
-            ? 2.15
-            : global2DZoom(map.getContainer().clientWidth),
+      zoom: scope === "中国" ? (next === "3D" ? 1.7 : 3.4) : 2.15,
       duration: 700,
     });
   }
@@ -1090,7 +1105,12 @@ export function MarketIntelligencePage() {
 
       <div className="mi-content">
         <section className="mi-map-area" aria-label="交互式全球地图">
-          <div ref={mapContainer} className="mi-map" />
+          <div
+            ref={mapContainer}
+            className={
+              scope === "全球" && mode === "2D" ? "mi-map mi-map-global-2d" : "mi-map"
+            }
+          />
           <div className="mi-map-header">
             <strong>全球粮食商情态势</strong>
             <span>地理底图与历史航线参考</span>
