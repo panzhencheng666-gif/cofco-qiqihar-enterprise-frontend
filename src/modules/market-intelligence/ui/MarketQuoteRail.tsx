@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { quoteHasRequiredContract, useMarketQuoteBoard } from "./useMarketQuoteBoard";
+import { formatQuoteSourceAge, quoteSourceAgeSeconds } from "./quoteSourceAge";
 import type { AnalysisTopic } from "./metricCatalog";
 import { findMetric } from "./metricCatalog";
 
@@ -76,6 +77,9 @@ export function MarketQuoteRail({
           );
           const quote = contractIssue ? undefined : rawQuote;
           const cached = Boolean(quote && sourceUnavailable);
+          const sourceAge = quote
+            ? quoteSourceAgeSeconds(quote.sourceAt, board?.feedPublishedAt, feedAge)
+            : null;
           const diff = quote?.previousClose ? quote.last - quote.previousClose : null;
           const pct =
             diff !== null && quote?.previousClose
@@ -100,7 +104,7 @@ export function MarketQuoteRail({
                 contractIssue
                   ? "合约身份待核验，报价未展示"
                   : quote
-                    ? `${quote.provider} · ${quote.contractId ? `报文合约 ${quote.contractId} · ` : ""}源时间 ${quote.sourceAt} · ${cached ? "来源中断，显示最后一次成功接收的缓存报价" : quote.state === "CURRENT" ? "与发布频率匹配" : "数据已过期"}`
+                    ? `${quote.provider} · ${quote.contractId ? `报文合约 ${quote.contractId} · ` : ""}源时间 ${quote.sourceAt} · 距源时间 ${formatQuoteSourceAge(sourceAge)} · ${cached ? "来源中断，显示最后一次成功接收的缓存报价" : quote.state === "CURRENT" ? "与发布频率匹配" : "数据已过期"}`
                     : "授权行情待接入"
               }
             >
@@ -119,6 +123,7 @@ export function MarketQuoteRail({
                       ? `${quote.contractId ? `报文合约 ${quote.contractId} · ` : ""}源时间 ${quote.sourceAt}`
                       : "尚无可展示报价"}
                 </small>
+                {quote && <small>距源时间 {formatQuoteSourceAge(sourceAge)}</small>}
               </span>
               <b className={cached || quote?.state === "STALE" ? "stale" : ""}>
                 {quote ? number.format(quote.last) : "--"}

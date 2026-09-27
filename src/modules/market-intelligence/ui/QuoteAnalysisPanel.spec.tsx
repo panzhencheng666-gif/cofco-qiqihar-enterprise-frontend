@@ -79,6 +79,7 @@ describe("quote analysis route", () => {
     });
     expect(screen.getByLabelText("最新报价")).toHaveTextContent("2,180");
     expect(screen.getByText("DCE.c2601")).toBeVisible();
+    expect(screen.getByText("报价距源时间").parentElement).toHaveTextContent("1 秒");
     await act(async () => {
       await vi.advanceTimersByTimeAsync(10_000);
     });
