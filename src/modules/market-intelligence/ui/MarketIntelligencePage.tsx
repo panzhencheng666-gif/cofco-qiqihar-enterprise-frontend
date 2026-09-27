@@ -23,6 +23,7 @@ import { MoaDomesticRail } from "./MoaDomesticRail";
 import { SourceSyncRail } from "./SourceSyncRail";
 import { UnifiedNewsRail } from "./UnifiedNewsRail";
 import { MarketQuoteRail } from "./MarketQuoteRail";
+import { RosarioSpotRail } from "./RosarioSpotRail";
 import "./market-intelligence.css";
 import "./market-ops-controls.css";
 
@@ -635,6 +636,7 @@ function OverviewPanels({
       <UnifiedNewsRail onSelect={onSelect} />
       <SourceSyncRail />
       <MoaDomesticRail onSelect={onSelect} />
+      <RosarioSpotRail />
       {showQuotes && <MarketQuoteRail onSelect={onSelect} />}
       <WorldBankMonthlyRail onSelect={onSelect} />
       <WorldBankMonthlyRail source="fao-food-price" onSelect={onSelect} />
