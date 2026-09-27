@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Map, setWorkerUrl, type StyleSpecification } from "maplibre-gl";
+import {
+  Map,
+  setWorkerUrl,
+  type MapMovementEvent,
+  type StyleSpecification,
+} from "maplibre-gl";
 import mapWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { AnalysisWindow } from "./AnalysisWindow";
@@ -860,6 +865,7 @@ export function MarketIntelligencePage() {
   const mapRef = useRef<Map | null>(null);
   const scopeRef = useRef<"全球" | "中国">("全球");
   const modeRef = useRef<"2D" | "3D">("2D");
+  const autoFitGlobalRef = useRef(true);
   const [commodity, setCommodity] = useState<(typeof commodities)[number]>("玉米");
   const [scope, setScope] = useState<"全球" | "中国">("全球");
   const [mode, setMode] = useState<"2D" | "3D">("2D");
@@ -913,6 +919,16 @@ export function MarketIntelligencePage() {
         attributionControl: false,
       });
       mapRef.current = map;
+      const markManualMove = (event: MapMovementEvent) => {
+        if (
+          event.originalEvent &&
+          scopeRef.current === "全球" &&
+          modeRef.current === "2D"
+        ) {
+          autoFitGlobalRef.current = false;
+        }
+      };
+      map.on("movestart", markManualMove);
       fitGlobal2D(map);
     } catch {
       queueMicrotask(() => setMapFailed(true));
@@ -931,7 +947,11 @@ export function MarketIntelligencePage() {
       const map = mapRef.current;
       if (!map) return;
       map.resize();
-      if (scopeRef.current === "全球" && modeRef.current === "2D") {
+      if (
+        scopeRef.current === "全球" &&
+        modeRef.current === "2D" &&
+        autoFitGlobalRef.current
+      ) {
         fitGlobal2D(map);
       }
     });
@@ -974,6 +994,7 @@ export function MarketIntelligencePage() {
     const map = mapRef.current;
     if (!map) return;
     if (next === "全球" && mode === "2D") {
+      autoFitGlobalRef.current = true;
       fitGlobal2D(map, 700);
       return;
     }
@@ -1003,6 +1024,7 @@ export function MarketIntelligencePage() {
     const projection = { type: next === "3D" ? "globe" : "mercator" } as const;
     map.setProjection(projection);
     if (next === "2D" && scope === "全球") {
+      autoFitGlobalRef.current = true;
       fitGlobal2D(map, 700);
       return;
     }
@@ -1155,14 +1177,20 @@ export function MarketIntelligencePage() {
           </div>
           <div className="mi-map-controls" aria-label="地图缩放">
             <button
-              onClick={() => mapRef.current?.zoomIn()}
+              onClick={() => {
+                autoFitGlobalRef.current = false;
+                mapRef.current?.zoomIn();
+              }}
               type="button"
               aria-label="放大地图"
             >
               ＋
             </button>
             <button
-              onClick={() => mapRef.current?.zoomOut()}
+              onClick={() => {
+                autoFitGlobalRef.current = false;
+                mapRef.current?.zoomOut();
+              }}
               type="button"
               aria-label="缩小地图"
             >
