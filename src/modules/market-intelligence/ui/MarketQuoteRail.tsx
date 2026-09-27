@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMarketQuoteBoard } from "./useMarketQuoteBoard";
+import { quoteHasRequiredContract, useMarketQuoteBoard } from "./useMarketQuoteBoard";
 import type { AnalysisTopic } from "./metricCatalog";
 import { findMetric } from "./metricCatalog";
 
@@ -70,7 +70,11 @@ export function MarketQuoteRail({
         aria-label={`${selectedGroup}行情，可滚动`}
       >
         {rows.map((instrument) => {
-          const quote = hidePrices ? undefined : quotes.get(instrument.id);
+          const rawQuote = hidePrices ? undefined : quotes.get(instrument.id);
+          const contractIssue = Boolean(
+            rawQuote && !quoteHasRequiredContract(instrument.id, rawQuote.contractId),
+          );
+          const quote = contractIssue ? undefined : rawQuote;
           const cached = Boolean(quote && sourceUnavailable);
           const diff = quote?.previousClose ? quote.last - quote.previousClose : null;
           const pct =
@@ -93,9 +97,11 @@ export function MarketQuoteRail({
                 });
               }}
               title={
-                quote
-                  ? `${quote.provider} · 源时间 ${quote.sourceAt} · ${cached ? "来源中断，显示最后一次成功接收的缓存报价" : quote.state === "CURRENT" ? "与发布频率匹配" : "数据已过期"}`
-                  : "授权行情待接入"
+                contractIssue
+                  ? "合约身份待核验，报价未展示"
+                  : quote
+                    ? `${quote.provider} · ${quote.contractId ? `报文合约 ${quote.contractId} · ` : ""}源时间 ${quote.sourceAt} · ${cached ? "来源中断，显示最后一次成功接收的缓存报价" : quote.state === "CURRENT" ? "与发布频率匹配" : "数据已过期"}`
+                    : "授权行情待接入"
               }
             >
               <span className="mi-quote-name">
@@ -106,7 +112,13 @@ export function MarketQuoteRail({
                   {cached && " · 缓存报价"}
                   {!cached && quote?.state === "STALE" && " · 报价已过期"}
                 </small>
-                <small>{quote ? `源时间 ${quote.sourceAt}` : "尚无可展示报价"}</small>
+                <small>
+                  {contractIssue
+                    ? "合约身份待核验 · 报价未展示"
+                    : quote
+                      ? `${quote.contractId ? `报文合约 ${quote.contractId} · ` : ""}源时间 ${quote.sourceAt}`
+                      : "尚无可展示报价"}
+                </small>
               </span>
               <b className={cached || quote?.state === "STALE" ? "stale" : ""}>
                 {quote ? number.format(quote.last) : "--"}

@@ -30,6 +30,7 @@ function payload(last = 2180, state = "RECONCILED") {
           previousClose: 2170,
           sourceAt: `2026-09-26T01:30:${last === 2190 ? "02" : "00"}Z`,
           provider: "合成测试源",
+          contractId: "DCE.c2601",
           state: "CURRENT",
         },
       ],
@@ -77,6 +78,7 @@ describe("quote analysis route", () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(screen.getByLabelText("最新报价")).toHaveTextContent("2,180");
+    expect(screen.getByText("DCE.c2601")).toBeVisible();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(10_000);
     });
@@ -111,6 +113,17 @@ describe("quote analysis route", () => {
     serve(data);
     open();
     expect(await screen.findByText("目录单位不一致 · 报价未展示")).toBeVisible();
+    expect(screen.getByLabelText("最新报价")).toHaveTextContent("--");
+  });
+  it("hides grain prices when the backend has no contract identity", async () => {
+    const data = payload();
+    data.data.quotes = data.data.quotes.map((item) => ({
+      ...item,
+      contractId: "",
+    }));
+    serve(data);
+    open();
+    expect(await screen.findByText("合约身份待核验 · 报价未展示")).toBeVisible();
     expect(screen.getByLabelText("最新报价")).toHaveTextContent("--");
   });
   it("does not silently select among duplicate instrument names", async () => {

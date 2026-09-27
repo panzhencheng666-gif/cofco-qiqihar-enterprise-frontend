@@ -23,6 +23,7 @@ const quote = {
   previousClose: 2170,
   sourceAt: "2026-09-25T12:00:00Z",
   provider: "授权测试源",
+  contractId: undefined as string | undefined,
   state: "CURRENT",
 };
 
@@ -291,6 +292,29 @@ describe("market feed health", () => {
     render(<MarketQuoteRail onSelect={() => {}} />);
     expect(await screen.findByText("采集状态待核验")).toBeVisible();
     expect(screen.getByText("2,180")).toHaveClass("stale");
+  });
+
+  it("shows a grain contract only when the quote includes its identity", async () => {
+    const grain = {
+      ...instrument,
+      id: "dce-corn",
+      name: "大商所玉米主力",
+      group: "谷物",
+      unit: "元/吨",
+    };
+    const response = board("CONNECTED");
+    response.data.instruments = [grain];
+    response.data.quotes = [{ ...quote, id: grain.id }];
+    serve(response);
+    render(<MarketQuoteRail onSelect={() => {}} />);
+    expect(await screen.findByText("合约身份待核验 · 报价未展示")).toBeVisible();
+    expect(screen.queryByText("2,180")).toBeNull();
+
+    cleanup();
+    response.data.quotes = [{ ...quote, id: grain.id, contractId: "DCE.c2601" }];
+    render(<MarketQuoteRail onSelect={() => {}} />);
+    expect(await screen.findByText(/报文合约 DCE\.c2601/)).toBeVisible();
+    expect(screen.getByText("2,180")).toBeVisible();
   });
 
   it("shows newly received price and source time after snapshot recovery", async () => {

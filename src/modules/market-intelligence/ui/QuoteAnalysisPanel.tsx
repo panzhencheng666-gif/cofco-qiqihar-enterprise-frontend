@@ -1,5 +1,5 @@
 import type { AnalysisTopic } from "./metricCatalog";
-import { useMarketQuoteBoard } from "./useMarketQuoteBoard";
+import { quoteHasRequiredContract, useMarketQuoteBoard } from "./useMarketQuoteBoard";
 
 const number = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 3 });
 const cadence = {
@@ -28,10 +28,17 @@ export function QuoteAnalysisPanel({ topic }: { topic: AnalysisTopic }) {
         : unitMismatch
           ? "目录单位不一致 · 报价未展示"
           : null;
-  const quote =
+  const rawQuote =
     !hidePrices && !mappingIssue
       ? board?.quotes.find((item) => item.id === instrument?.id)
       : undefined;
+  const contractIssue =
+    rawQuote &&
+    instrument &&
+    !quoteHasRequiredContract(instrument.id, rawQuote.contractId)
+      ? "合约身份待核验 · 报价未展示"
+      : null;
+  const quote = contractIssue ? undefined : rawQuote;
   const cached = Boolean(quote && sourceUnavailable);
   const stale = cached || quote?.state === "STALE";
   const previous = quote?.previousClose ?? null;
@@ -51,7 +58,7 @@ export function QuoteAnalysisPanel({ topic }: { topic: AnalysisTopic }) {
           <small>MARKET / QUOTE MONITOR</small>
           <h2>{topic.title}</h2>
         </div>
-        <p role="status">{mappingIssue ?? label ?? "正在读取行情"}</p>
+        <p role="status">{mappingIssue ?? contractIssue ?? label ?? "正在读取行情"}</p>
       </header>
       <div className="mi-quote-analysis-tape">
         <div aria-label="最新报价">
@@ -92,6 +99,10 @@ export function QuoteAnalysisPanel({ topic }: { topic: AnalysisTopic }) {
               <dd>{quote?.sourceAt ?? "--"}</dd>
             </div>
             <div>
+              <dt>报文合约代码</dt>
+              <dd>{quote?.contractId || "待核验"}</dd>
+            </div>
+            <div>
               <dt>采集心跳年龄</dt>
               <dd>{feedAge === null ? "待核验" : `${Math.floor(feedAge)} 秒`}</dd>
             </div>
@@ -123,7 +134,7 @@ export function QuoteAnalysisPanel({ topic }: { topic: AnalysisTopic }) {
             线、买卖盘和成交持仓尚未接入，不由定时刷新生成或补造。
           </p>
           <p>
-            主力标的是目录名称；供应商实际合约、换月规则与授权范围仍需通过供应商配置核验。这里的系统标的编号不是供应商合约代码。
+            主力标的是目录名称；报文合约代码不证明供应商订阅代码、主力换月规则或授权范围已核验。这里的系统标的编号不是供应商合约代码。
           </p>
         </section>
       </div>
