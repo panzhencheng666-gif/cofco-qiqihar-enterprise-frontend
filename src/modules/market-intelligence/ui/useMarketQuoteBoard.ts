@@ -14,6 +14,7 @@ const quoteSchema = z.object({
   previousClose: z.number().nullable(),
   sourceAt: z.string(),
   provider: z.string(),
+  contractId: z.string().optional(),
   state: z.enum(["CURRENT", "STALE"]),
 });
 const boardSchema = z.object({
@@ -27,6 +28,17 @@ const boardSchema = z.object({
   lastError: z.string().nullable().optional(),
 });
 type Board = z.infer<typeof boardSchema>;
+
+const contractRequiredIds = new Set([
+  "dce-soybean",
+  "dce-corn",
+  "czce-wheat",
+  "czce-common-wheat",
+  "czce-rice",
+]);
+export function quoteHasRequiredContract(id: string, contractId?: string) {
+  return !contractRequiredIds.has(id) || Boolean(contractId?.trim());
+}
 
 const statusText: Record<string, string> = {
   PENDING_AUTHORIZATION: "行情授权待核验",
