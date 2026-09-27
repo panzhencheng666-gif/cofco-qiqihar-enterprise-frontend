@@ -217,7 +217,7 @@ describe("market feed health", () => {
     expect(screen.getByText("2,180")).toHaveClass("stale");
     expect(screen.getByText(/缓存报价/)).toBeVisible();
     expect(screen.getByText(/采集心跳 0 秒/)).toBeVisible();
-    expect(screen.getByText(/源时间/)).toBeVisible();
+    expect(screen.getByText(/^源时间 /)).toBeVisible();
   });
 
   it.each(["ENTITLEMENT_ERROR", "PENDING_AUTHORIZATION", "SESSION_LOST", "CLOSED"])(
@@ -338,5 +338,15 @@ describe("market feed health", () => {
     expect(screen.getByText("2,190")).not.toHaveClass("stale");
     expect(screen.getByText("源时间 2026-09-25T12:00:02Z")).toBeVisible();
     expect(screen.queryByText(/缓存报价/)).toBeNull();
+  });
+
+  it("shows quote source age separately from collector heartbeat age", async () => {
+    const response = board("CONNECTED");
+    response.data.feedAgeSeconds = 9;
+    serve(response);
+    render(<MarketQuoteRail onSelect={() => {}} />);
+    expect(await screen.findByText("上证指数")).toBeVisible();
+    expect(screen.getByText("距源时间 10 秒")).toBeVisible();
+    expect(screen.getByText(/采集心跳 9 秒（非行情延迟）/)).toBeVisible();
   });
 });

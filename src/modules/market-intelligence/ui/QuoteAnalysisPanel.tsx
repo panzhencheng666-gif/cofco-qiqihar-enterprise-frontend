@@ -1,5 +1,6 @@
 import type { AnalysisTopic } from "./metricCatalog";
 import { quoteHasRequiredContract, useMarketQuoteBoard } from "./useMarketQuoteBoard";
+import { formatQuoteSourceAge, quoteSourceAgeSeconds } from "./quoteSourceAge";
 
 const number = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 3 });
 const cadence = {
@@ -39,6 +40,9 @@ export function QuoteAnalysisPanel({ topic }: { topic: AnalysisTopic }) {
       ? "合约身份待核验 · 报价未展示"
       : null;
   const quote = contractIssue ? undefined : rawQuote;
+  const sourceAge = quote
+    ? quoteSourceAgeSeconds(quote.sourceAt, board?.feedPublishedAt, feedAge)
+    : null;
   const cached = Boolean(quote && sourceUnavailable);
   const stale = cached || quote?.state === "STALE";
   const previous = quote?.previousClose ?? null;
@@ -99,6 +103,10 @@ export function QuoteAnalysisPanel({ topic }: { topic: AnalysisTopic }) {
               <dd>{quote?.sourceAt ?? "--"}</dd>
             </div>
             <div>
+              <dt>报价距源时间</dt>
+              <dd>{quote ? formatQuoteSourceAge(sourceAge) : "待核验"}</dd>
+            </div>
+            <div>
               <dt>报文合约代码</dt>
               <dd>{quote?.contractId || "待核验"}</dd>
             </div>
@@ -121,7 +129,7 @@ export function QuoteAnalysisPanel({ topic }: { topic: AnalysisTopic }) {
           </dl>
           <p>
             每 10
-            秒自动检查报价；采集心跳年龄不代表交易所行情延迟。源时间保留供应商时区，不以页面刷新时间代替。
+            秒自动检查报价；报价距源时间按服务端采集心跳推算，不代表交易所到屏幕的传输延迟。源时间保留供应商时区，不以页面刷新时间代替。
           </p>
         </section>
         <section>
