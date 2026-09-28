@@ -2,13 +2,7 @@ import { useEffect, useState } from "react";
 import { loadLatestNews, type UnifiedHeadline } from "./UnifiedNewsRail";
 import { ChinaIndexAnalysisPanel } from "./ChinaIndexAnalysisPanel";
 import { metricCatalog } from "./metricCatalog";
-
-const publicationDay = new Intl.DateTimeFormat("zh-CN", {
-  year: "numeric",
-  month: "numeric",
-  day: "numeric",
-  timeZone: "UTC",
-});
+import { beijingInstantLabel, newsPublicationLabel } from "./newsTime";
 
 export function MoaNewsAnalysisPanel({
   title,
@@ -59,7 +53,7 @@ export function MoaNewsAnalysisPanel({
           <strong>{title}</strong>
           <span>
             {article
-              ? `发布日期 ${publicationDay.format(new Date(article.publishedAt))} · 采集 ${new Date(article.fetchedAt).toLocaleString("zh-CN")}`
+              ? `发布日期 ${newsPublicationLabel(article)} · 采集 ${beijingInstantLabel(article.fetchedAt)}`
               : status === "unavailable"
                 ? "新闻源暂不可用，等待重新同步"
                 : status === "ready"
@@ -92,7 +86,7 @@ export function MoaNewsAnalysisPanel({
       <ChinaIndexAnalysisPanel
         key={indexId}
         topicId={indexId}
-        event={article ? { date: article.publishedAt.slice(0, 10), title } : undefined}
+        event={article ? { date: article.publishedOn, title } : undefined}
       />
       <div className="mi-news-analysis-method">
         <strong>证据边界</strong>

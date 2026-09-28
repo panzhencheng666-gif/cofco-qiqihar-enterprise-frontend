@@ -2,15 +2,7 @@ import { useEffect, useState } from "react";
 import { loadFaoNews, type FaoHeadline } from "./FaoNewsRail";
 import { metricCatalog } from "./metricCatalog";
 import { WorldBankMonthlyPanel } from "./WorldBankMonthlyPanel";
-
-const dateFormat = new Intl.DateTimeFormat("zh-CN", {
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "UTC",
-});
+import { beijingInstantLabel } from "./newsTime";
 
 export function FaoNewsAnalysisPanel({ title }: { title: string }) {
   const [article, setArticle] = useState<FaoHeadline | null>(null);
@@ -40,7 +32,7 @@ export function FaoNewsAnalysisPanel({ title }: { title: string }) {
           <strong>{title}</strong>
           <span>
             {article
-              ? `发布时间 ${dateFormat.format(new Date(article.publishedAt))} UTC · 采集时间 ${dateFormat.format(new Date(article.fetchedAt))} UTC`
+              ? `来源发布日期 ${article.publishedAt.slice(0, 10)}（未核验时分） · 采集时间 ${beijingInstantLabel(article.fetchedAt)}`
               : status}
           </span>
         </div>

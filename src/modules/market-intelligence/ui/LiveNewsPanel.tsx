@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { findMetric, type AnalysisTopic } from "./metricCatalog";
+import { VideoNewsList } from "./VideoNewsList";
+import { OfficialWebcastList } from "./OfficialWebcastList";
 
 type PlayerStateEvent = { data: number };
 type YouTubePlayer = {
@@ -293,16 +295,18 @@ export function LiveNewsPanel({
             aria-label="进入新闻直播分析工作台"
             title="打开新闻直播的独立分析界面"
           >
-            <span>新闻直播</span>
+            <span>新闻视频与直播</span>
             <span aria-hidden="true">↗</span>
           </button>
           <small>
             {channels.length
               ? `${channels.length} 条本机视频配置`
-              : "视频源与授权待接入"}
+              : "官方视频按源同步 · 站内直播待授权"}
           </small>
         </header>
         <div className="mi-overview-body">
+          <OfficialWebcastList />
+          <VideoNewsList />
           <div className="mi-live-toolbar" aria-label="直播控制">
             <button
               type="button"
