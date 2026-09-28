@@ -28,13 +28,6 @@ export async function loadFaoNews(signal?: AbortSignal) {
 
 const riskPattern =
   /flood|drought|climate|crisis|shortfall|price|supply|crop|resilien|soil|trade|hunger|food security/i;
-const dateFormat = new Intl.DateTimeFormat("zh-CN", {
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  timeZone: "UTC",
-});
-
 function HeadlineList({
   title,
   items,
@@ -69,7 +62,7 @@ function HeadlineList({
               }
             >
               <span className="mi-news-headline-source">
-                FAO 新闻 · {dateFormat.format(new Date(item.publishedAt))}
+                FAO 新闻 · {item.publishedAt.slice(0, 10)} · 来源仅核验日期
               </span>
               <strong>{item.title}</strong>
               <small>查看来源与独立研判界面 ↗</small>
