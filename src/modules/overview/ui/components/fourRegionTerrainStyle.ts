@@ -143,7 +143,7 @@ export const FOUR_REGION_DETAIL_LAYERS: LayerSpecification[] = [
       "raster-brightness-max": 0.9,
       "raster-contrast": 0.2,
       "raster-saturation": -0.32,
-      "raster-fade-duration": 120,
+      "raster-fade-duration": 0,
     },
   },
   {
