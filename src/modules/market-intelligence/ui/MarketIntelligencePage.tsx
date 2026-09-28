@@ -863,6 +863,8 @@ function AnalysisRows({
 }
 
 export function MarketIntelligencePage() {
+  const staticPublicPreview =
+    import.meta.env.BASE_URL === "/overview-monitoring/market-intelligence/";
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Map | null>(null);
   const scopeRef = useRef<"全球" | "中国">("全球");
@@ -1041,9 +1043,13 @@ export function MarketIntelligencePage() {
   return (
     <main className="market-screen" aria-label="全球粮食商情监测">
       <div className="mi-banner">
-        <span>商情平台</span>
+        <span>{staticPublicPreview ? "公网界面预览" : "商情平台"}</span>
         <strong>粮食、能源、航运与金融成本同屏观察</strong>
-        <span>地图资料与部分公开源已接入 · 其他指标待接入</span>
+        <span>
+          {staticPublicPreview
+            ? "地图资料可浏览 · 行情与业务数据接口待接入"
+            : "地图资料与部分公开源已接入 · 其他指标待接入"}
+        </span>
       </div>
       <header className="mi-topbar">
         <div className="mi-brand">
@@ -1086,26 +1092,28 @@ export function MarketIntelligencePage() {
       <div className="mi-subnav" aria-label="商情看板视图">
         <span className="active">主看板</span>
         <span>地理态势 · 指标监控 · 研判工作台</span>
-        <nav className="mi-report-actions" aria-label="商情报表导出">
-          <span>导出</span>
-          {(
-            [
-              ["DAY", "日报"],
-              ["WEEK", "周报"],
-              ["MONTH", "月报"],
-              ["QUARTER", "季报"],
-              ["YEAR", "年报"],
-            ] as const
-          ).map(([period, label]) => (
-            <a
-              key={period}
-              href={`/api/v1/market-intelligence/reports/docx?period=${period}`}
-              download
-            >
-              {label}
-            </a>
-          ))}
-        </nav>
+        {!staticPublicPreview && (
+          <nav className="mi-report-actions" aria-label="商情报表导出">
+            <span>导出</span>
+            {(
+              [
+                ["DAY", "日报"],
+                ["WEEK", "周报"],
+                ["MONTH", "月报"],
+                ["QUARTER", "季报"],
+                ["YEAR", "年报"],
+              ] as const
+            ).map(([period, label]) => (
+              <a
+                key={period}
+                href={`/api/v1/market-intelligence/reports/docx?period=${period}`}
+                download
+              >
+                {label}
+              </a>
+            ))}
+          </nav>
+        )}
         <button
           type="button"
           className="mi-tools-entry"
