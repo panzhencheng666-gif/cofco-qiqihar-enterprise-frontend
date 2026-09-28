@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { findMetric, type AnalysisTopic } from "./metricCatalog";
 import { VideoNewsList } from "./VideoNewsList";
+import { OfficialWebcastList } from "./OfficialWebcastList";
 
 type PlayerStateEvent = { data: number };
 type YouTubePlayer = {
@@ -304,6 +305,7 @@ export function LiveNewsPanel({
           </small>
         </header>
         <div className="mi-overview-body">
+          <OfficialWebcastList />
           <VideoNewsList />
           <div className="mi-live-toolbar" aria-label="直播控制">
             <button
