@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { z } from "zod";
+import { videoIdFromUrl } from "./videoPlayback";
 
 const videoSchema = z.object({
   sourceName: z.string(),
@@ -21,7 +22,11 @@ export async function loadVideoNews(signal?: AbortSignal): Promise<Video[]> {
   return z.object({ data: z.array(videoSchema) }).parse(await response.json()).data;
 }
 
-export function VideoNewsList() {
+export function VideoNewsList({
+  onSelectVideo,
+}: {
+  onSelectVideo?: (video: { id: string; name: string }) => void;
+}) {
   const [videos, setVideos] = useState<Video[]>([]);
   const [error, setError] = useState(false);
   useEffect(() => {
@@ -55,7 +60,9 @@ export function VideoNewsList() {
         <span>{error ? "接口暂不可用" : `${videos.length} 条已保存 · 按源更新`}</span>
       </header>
       <p>
-        发布日期由来源页面提供；点击后在发布方平台观看。直播节目与站内播放授权尚待核实。
+        {onSelectVideo
+          ? "发布日期由来源页面提供；选择视频将在本窗口请求官方播放器，能否播放以平台返回为准。录像不代表正在直播。"
+          : "发布日期由来源页面提供；点击后在发布方平台观看。直播节目与站内播放授权尚待核实。"}
       </p>
       <div className="mi-video-news-list">
         {videos.map((video) => (
@@ -63,10 +70,30 @@ export function VideoNewsList() {
             <small>
               {video.sourceName} · {video.publishedOn} · 来源仅提供日期
             </small>
-            <a href={video.url} target="_blank" rel="noopener noreferrer">
-              <strong>{video.title}</strong>
-              <span>前往发布方视频页观看 ↗</span>
-            </a>
+            {onSelectVideo ? (
+              videoIdFromUrl(video.url) ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const id = videoIdFromUrl(video.url);
+                    if (id) onSelectVideo({ id, name: video.title });
+                  }}
+                >
+                  <strong>{video.title}</strong>
+                  <span>在本窗口加载视频</span>
+                </button>
+              ) : (
+                <div>
+                  <strong>{video.title}</strong>
+                  <p>尚无可识别的站内播放源</p>
+                </div>
+              )
+            ) : (
+              <a href={video.url} target="_blank" rel="noopener noreferrer">
+                <strong>{video.title}</strong>
+                <span>前往发布方视频页观看 ↗</span>
+              </a>
+            )}
             <a
               href={video.sourcePageUrl}
               target="_blank"

@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { findMetric, type AnalysisTopic } from "./metricCatalog";
 import { VideoNewsList } from "./VideoNewsList";
-import { OfficialWebcastList } from "./OfficialWebcastList";
+import { OfficialWebcastList, type WebcastSelection } from "./OfficialWebcastList";
+import { createUnWebTvPlayer, loadUnWebTvSdk } from "./unWebTvPlayer";
+import { videoIdFromUrl } from "./videoPlayback";
+export { videoIdFromUrl } from "./videoPlayback";
 
 type PlayerStateEvent = { data: number };
 type YouTubePlayer = {
@@ -21,6 +24,7 @@ type YouTubeApi = {
         onReady: () => void;
         onStateChange: (event: PlayerStateEvent) => void;
         onError: () => void;
+        onAutoplayBlocked: () => void;
       };
     },
   ) => YouTubePlayer;
@@ -76,6 +80,30 @@ const categories = ["官方通报", "行业媒体", "国际新闻"] as const;
 type Category = (typeof categories)[number];
 type Channel = { id: string; name: string; category: Category };
 const storageKey = "cofco-market-live-channels-v1";
+const autoplayStorageKey = "cofco-market-live-autoplay-v1";
+const officialVideoStorageKey = "cofco-market-official-video-v1";
+
+function readOfficialVideo(): Channel | null {
+  try {
+    const value: unknown = JSON.parse(
+      localStorage.getItem(officialVideoStorageKey) ?? "null",
+    );
+    if (typeof value !== "object" || value === null) return null;
+    const record = value as Record<string, unknown>;
+    if (
+      typeof record.id !== "string" ||
+      !/^[A-Za-z0-9_-]{11}$/.test(record.id) ||
+      typeof record.name !== "string" ||
+      !record.name.trim() ||
+      record.name.length > 300 ||
+      record.category !== "官方通报"
+    )
+      return null;
+    return { id: record.id, name: record.name, category: "官方通报" };
+  } catch {
+    return null;
+  }
+}
 
 function readChannels(): Channel[] {
   try {
@@ -99,21 +127,11 @@ function readChannels(): Channel[] {
   }
 }
 
-export function videoIdFromUrl(value: string): string | null {
+function readAutoplayPreference(): boolean {
   try {
-    const url = new URL(value.trim());
-    if (url.protocol !== "https:") return null;
-    const host = url.hostname.toLowerCase();
-    let id: string | null = null;
-    if (host === "youtu.be") id = url.pathname.split("/")[1] ?? null;
-    if (["youtube.com", "www.youtube.com", "m.youtube.com"].includes(host)) {
-      if (url.pathname === "/watch") id = url.searchParams.get("v");
-      else if (url.pathname.startsWith("/live/"))
-        id = url.pathname.split("/")[2] ?? null;
-    }
-    return id && /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
+    return localStorage.getItem(autoplayStorageKey) === "true";
   } catch {
-    return null;
+    return false;
   }
 }
 
@@ -125,13 +143,24 @@ export function LiveNewsPanel({
   const [category, setCategory] = useState<Category>("官方通报");
   const [channels, setChannels] = useState(readChannels);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [started, setStarted] = useState(false);
+  const [officialVideo, setOfficialVideo] = useState(readOfficialVideo);
+  const [officialWebcast, setOfficialWebcast] = useState<WebcastSelection | null>(null);
+  const [autoplay, setAutoplay] = useState(readAutoplayPreference);
+  const [started, setStarted] = useState(
+    () =>
+      readAutoplayPreference() &&
+      (readOfficialVideo() !== null ||
+        readChannels().some((item) => item.category === "官方通报")),
+  );
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [playerReady, setPlayerReady] = useState(false);
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const [playerError, setPlayerError] = useState("");
   const [playerEpoch, setPlayerEpoch] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [programmesOpen, setProgrammesOpen] = useState(false);
+  const [programmeTab, setProgrammeTab] = useState<"频道" | "直播" | "视频">("频道");
   const [videoUrl, setVideoUrl] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [formError, setFormError] = useState("");
@@ -140,17 +169,24 @@ export function LiveNewsPanel({
   const screenRef = useRef<HTMLDivElement>(null);
   const visibleChannels = channels.filter((item) => item.category === category);
   const selected =
-    visibleChannels.find((item) => item.id === selectedId) ?? visibleChannels[0];
+    officialWebcast ??
+    officialVideo ??
+    visibleChannels.find((item) => item.id === selectedId) ??
+    visibleChannels[0];
   const selectedVideoId = selected?.id;
+  const selectedProvider = officialWebcast ? "un-webtv" : "youtube";
 
   useEffect(() => {
-    if (!settingsOpen) return;
+    if (!settingsOpen && !programmesOpen) return;
     const onEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setSettingsOpen(false);
+      if (event.key === "Escape") {
+        setSettingsOpen(false);
+        setProgrammesOpen(false);
+      }
     };
     window.addEventListener("keydown", onEscape);
     return () => window.removeEventListener("keydown", onEscape);
-  }, [settingsOpen]);
+  }, [settingsOpen, programmesOpen]);
 
   useEffect(() => {
     if (!started || !selectedVideoId) return;
@@ -159,9 +195,73 @@ export function LiveNewsPanel({
     let cancelled = false;
     const mount = document.createElement("div");
     slot.replaceChildren(mount);
+    if (selectedProvider === "un-webtv" && officialWebcast) {
+      const fail = (message: string) => {
+        if (cancelled) return;
+        setPlayerReady(false);
+        setPlaying(false);
+        setPlayerError(message);
+      };
+      const remaining = Date.parse(officialWebcast.validUntil) - Date.now();
+      if (remaining <= 0) {
+        fail("节目播放信息已过期，请重新选择节目。");
+        return;
+      }
+      mount.id = `un-webtv-${crypto.randomUUID()}`;
+      mount.className = "mi-live-player";
+      void loadUnWebTvSdk()
+        .then((api) => {
+          if (cancelled) return;
+          if (Date.parse(officialWebcast.validUntil) <= Date.now()) {
+            fail("节目播放信息已过期，请重新选择节目。");
+            return;
+          }
+          setAutoplayBlocked(false);
+          const player = createUnWebTvPlayer(api, mount.id, selectedVideoId, {
+            onReady: () => {
+              if (cancelled) return;
+              setPlayerReady(true);
+              player.playVideo();
+            },
+            onPlaying: (value) => {
+              if (cancelled) return;
+              setPlaying(value);
+              if (value) setAutoplayBlocked(false);
+            },
+            onMuted: (value) => {
+              if (!cancelled) setMuted(value);
+            },
+            onBlocked: () => {
+              if (cancelled) return;
+              setAutoplayBlocked(true);
+              setPlaying(false);
+            },
+            onError: () => fail("视频无法播放；请检查来源状态和播放权限。"),
+          });
+          playerRef.current = player;
+        })
+        .catch(() => fail("播放器连接失败，请稍后重试。"));
+      const expiry = window.setTimeout(
+        () => {
+          playerRef.current?.destroy();
+          playerRef.current = null;
+          fail("节目播放信息已过期，请重新选择节目。");
+          cancelled = true;
+        },
+        Math.min(remaining, 2147483647),
+      );
+      return () => {
+        cancelled = true;
+        window.clearTimeout(expiry);
+        playerRef.current?.destroy();
+        playerRef.current = null;
+        slot.replaceChildren();
+      };
+    }
     loadYouTubeApi()
       .then((api) => {
         if (cancelled) return;
+        setAutoplayBlocked(false);
         playerRef.current = new api.Player(mount, {
           videoId: selectedVideoId,
           playerVars: { autoplay: 1, origin: window.location.origin, rel: 0 },
@@ -170,7 +270,17 @@ export function LiveNewsPanel({
               if (!cancelled) setPlayerReady(true);
             },
             onStateChange: (event) => {
-              if (!cancelled) setPlaying(event.data === 1);
+              if (!cancelled) {
+                setPlaying(event.data === 1);
+                if (event.data === 1) setAutoplayBlocked(false);
+              }
+            },
+            onAutoplayBlocked: () => {
+              if (!cancelled) {
+                setAutoplayBlocked(true);
+                setPlayerReady(true);
+                setPlaying(false);
+              }
             },
             onError: () => {
               if (!cancelled) {
@@ -190,17 +300,30 @@ export function LiveNewsPanel({
       playerRef.current = null;
       slot.replaceChildren();
     };
-  }, [started, selectedVideoId, playerEpoch]);
+  }, [started, selectedVideoId, playerEpoch, selectedProvider, officialWebcast]);
 
   function saveChannels(next: Channel[]) {
     setChannels(next);
     localStorage.setItem(storageKey, JSON.stringify(next));
   }
 
+  function rememberOfficialVideo(next: Channel | null) {
+    setOfficialWebcast(null);
+    setOfficialVideo(next);
+    try {
+      if (next) localStorage.setItem(officialVideoStorageKey, JSON.stringify(next));
+      else localStorage.removeItem(officialVideoStorageKey);
+    } catch {
+      // Storage denial must not prevent playback in the current session.
+    }
+  }
+
   function selectCategory(next: Category) {
+    if (next === category) return;
+    rememberOfficialVideo(null);
     setCategory(next);
     setSelectedId(null);
-    setStarted(false);
+    setStarted(autoplay && channels.some((item) => item.category === next));
     setPlaying(false);
     setMuted(false);
     setPlayerReady(false);
@@ -208,8 +331,10 @@ export function LiveNewsPanel({
   }
 
   function selectChannel(id: string) {
+    if (!officialVideo && selectedVideoId === id) return;
+    rememberOfficialVideo(null);
     setSelectedId(id);
-    setStarted(false);
+    setStarted(autoplay);
     setPlaying(false);
     setMuted(false);
     setPlayerReady(false);
@@ -234,11 +359,22 @@ export function LiveNewsPanel({
     else playerRef.current?.playVideo();
   }
 
+  function setAutoplayPreference(enabled: boolean) {
+    setAutoplay(enabled);
+    localStorage.setItem(autoplayStorageKey, String(enabled));
+    if (enabled && selectedVideoId && !started) {
+      setPlayerError("");
+      setPlayerReady(false);
+      setPlaying(false);
+      setStarted(true);
+    }
+  }
+
   function toggleMute() {
     if (!selected || !playerReady || !playerRef.current) return;
     if (muted) playerRef.current.unMute();
     else playerRef.current.mute();
-    setMuted(!muted);
+    if (selectedProvider === "youtube") setMuted(!muted);
   }
 
   function addChannel() {
@@ -263,12 +399,13 @@ export function LiveNewsPanel({
       category,
     };
     saveChannels([...channels, next]);
+    rememberOfficialVideo(null);
     setSelectedId(id);
     setVideoUrl("");
     setDisplayName("");
     setFormError("");
     setSettingsOpen(false);
-    setStarted(false);
+    setStarted(autoplay);
     setPlaying(false);
     setPlayerReady(false);
     setPlayerError("");
@@ -305,8 +442,6 @@ export function LiveNewsPanel({
           </small>
         </header>
         <div className="mi-overview-body">
-          <OfficialWebcastList />
-          <VideoNewsList />
           <div className="mi-live-toolbar" aria-label="直播控制">
             <button
               type="button"
@@ -350,6 +485,9 @@ export function LiveNewsPanel({
             >
               ⚙ 设置
             </button>
+            <button type="button" onClick={() => setProgrammesOpen(true)}>
+              选择节目
+            </button>
           </div>
           <div className="mi-live-sources" role="group" aria-label="直播栏目">
             {categories.map((item) => (
@@ -364,26 +502,11 @@ export function LiveNewsPanel({
               </button>
             ))}
           </div>
-          {visibleChannels.length > 0 && (
-            <div className="mi-live-channels" role="group" aria-label="已配置视频">
-              {visibleChannels.map((item) => (
-                <button
-                  type="button"
-                  key={item.id}
-                  aria-pressed={selected?.id === item.id}
-                  onClick={() => selectChannel(item.id)}
-                  title={`选择${item.name}`}
-                >
-                  {item.name}
-                </button>
-              ))}
-            </div>
-          )}
           <div ref={screenRef} className="mi-live-screen">
             {selected && started ? (
-              <div ref={playerSlotRef} className="mi-live-player" />
+              <div key="player" ref={playerSlotRef} className="mi-live-player" />
             ) : (
-              <div className="mi-live-empty">
+              <div key="empty" className="mi-live-empty">
                 <span className="mi-live-pulse" />
                 {selected
                   ? `${selected.name} · 点击播放`
@@ -395,15 +518,117 @@ export function LiveNewsPanel({
                 {playerError}
               </span>
             )}
-            {selected && started && playerReady && !playing && !playerError && (
-              <span className="mi-live-paused">已暂停</span>
-            )}
+            {selected &&
+              started &&
+              playerReady &&
+              !playing &&
+              !playerError &&
+              !autoplayBlocked && <span className="mi-live-paused">已暂停</span>}
           </div>
+          {selected && started && autoplayBlocked && !playerError && (
+            <p role="status">浏览器阻止了自动播放，请点击播放继续。</p>
+          )}
           <p className="mi-live-footnote">
             栏目筛选和视频控制仅作用于播放器；新闻与指标由服务端独立采集。自定义链接只保存在本机，播放时才连接视频平台。
           </p>
         </div>
       </section>
+      {programmesOpen && (
+        <div
+          className="mi-live-settings-backdrop"
+          role="presentation"
+          onClick={() => setProgrammesOpen(false)}
+        >
+          <section
+            className="mi-live-settings"
+            role="dialog"
+            aria-modal="true"
+            aria-label="选择节目"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header>
+              <h2>选择节目</h2>
+              <button
+                type="button"
+                aria-label="关闭节目选择"
+                onClick={() => setProgrammesOpen(false)}
+              >
+                ×
+              </button>
+            </header>
+            <div role="tablist" aria-label="节目类型">
+              {(["频道", "直播", "视频"] as const).map((tab) => (
+                <button
+                  type="button"
+                  key={tab}
+                  role="tab"
+                  aria-selected={programmeTab === tab}
+                  onClick={() => setProgrammeTab(tab)}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+            <div role="tabpanel" aria-label={programmeTab}>
+              {programmeTab === "直播" && (
+                <OfficialWebcastList
+                  onSelectWebcast={(programme) => {
+                    rememberOfficialVideo(null);
+                    setOfficialWebcast(programme);
+                    setCategory("官方通报");
+                    setStarted(true);
+                    setPlaying(false);
+                    setMuted(false);
+                    setPlayerReady(false);
+                    setPlayerError("");
+                    setAutoplayBlocked(false);
+                    setPlayerEpoch((value) => value + 1);
+                    setProgrammesOpen(false);
+                  }}
+                />
+              )}
+              {programmeTab === "视频" && (
+                <VideoNewsList
+                  onSelectVideo={(video) => {
+                    rememberOfficialVideo({
+                      ...video,
+                      name: video.name.slice(0, 300),
+                      category: "官方通报",
+                    });
+                    setCategory("官方通报");
+                    setStarted(true);
+                    setPlaying(false);
+                    setMuted(false);
+                    setPlayerReady(false);
+                    setPlayerError("");
+                    setPlayerEpoch((value) => value + 1);
+                    setProgrammesOpen(false);
+                  }}
+                />
+              )}
+              {programmeTab === "频道" && (
+                <div className="mi-live-channels" role="group" aria-label="已配置视频">
+                  {channels.length === 0 && <p>尚未配置可播放频道。</p>}
+                  {channels.map((item) => (
+                    <button
+                      type="button"
+                      key={item.id}
+                      aria-pressed={selected?.id === item.id}
+                      onClick={() => {
+                        selectCategory(item.category);
+                        selectChannel(item.id);
+                        setProgrammesOpen(false);
+                      }}
+                    >
+                      {item.category} · {item.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
       {settingsOpen && (
         <div
           className="mi-live-settings-backdrop"
@@ -427,6 +652,14 @@ export function LiveNewsPanel({
                 ×
               </button>
             </header>
+            <label title="仅对已配置且有权观看的视频生效">
+              <input
+                type="checkbox"
+                checked={autoplay}
+                onChange={(event) => setAutoplayPreference(event.target.checked)}
+              />
+              选择自动播放
+            </label>
             <p>
               官方直播目录和播放授权尚未接入。可添加你有权观看的 YouTube
               视频链接作本机预览；这不会成为系统新闻数据源，也不保证该视频正在直播。
