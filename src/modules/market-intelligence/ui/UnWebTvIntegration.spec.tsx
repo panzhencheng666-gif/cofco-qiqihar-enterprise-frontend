@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LiveNewsPanel } from "./LiveNewsPanel";
+import { OfficialWebcastList } from "./OfficialWebcastList";
 
 afterEach(() => {
   cleanup();
@@ -48,6 +49,30 @@ function catalogue(data: unknown[]) {
 }
 
 describe("admitted official live programme selection", () => {
+  it.each([401, 403, 503, "network"])(
+    "withdraws cached playback when catalogue refresh fails with %s",
+    async (failure) => {
+      const request = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ data: programmes() }),
+      });
+      if (failure === "network") request.mockRejectedValue(new Error("offline"));
+      else request.mockResolvedValue({ ok: false, status: failure });
+      vi.stubGlobal("fetch", request);
+      const onSelect = vi.fn();
+      render(<OfficialWebcastList onSelectWebcast={onSelect} />);
+      await screen.findByRole("button", { name: /Test programme 1/ });
+      fireEvent(document, new Event("visibilitychange"));
+      await screen.findByText("直播目录接口暂不可用");
+      expect(
+        screen.queryByRole("button", { name: /Test programme/ }),
+      ).not.toBeInTheDocument();
+      expect(onSelect).not.toHaveBeenCalled();
+      expect(
+        screen.getByRole("link", { name: /UN Web TV 官方直播与节目安排/ }),
+      ).toBeInTheDocument();
+    },
+  );
   it("loads two selected entries into the same panel and controls SDK state", async () => {
     const instances: Array<{
       play: ReturnType<typeof vi.fn>;

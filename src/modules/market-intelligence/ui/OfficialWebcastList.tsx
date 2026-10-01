@@ -61,7 +61,10 @@ export function OfficialWebcastList({
         setNow(Date.now());
         setError(false);
       } catch {
-        if (!controller.signal.aborted) setError(true);
+        if (!controller.signal.aborted) {
+          setEvents([]);
+          setError(true);
+        }
       }
     }
     void refresh();
