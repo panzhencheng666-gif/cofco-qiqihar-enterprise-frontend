@@ -647,7 +647,7 @@ export function useOverviewSampleNetworkLayers({
           signal: flight.controller.signal,
         });
         if (pending === undefined) return undefined;
-        return pending.then((loaded) => loaded ?? []);
+        return pending.then((loaded) => listFromIcons(regionCode, loaded ?? []));
       };
       const snapshotRequest = readCatalog
         ? readCatalog(
@@ -659,9 +659,9 @@ export function useOverviewSampleNetworkLayers({
               repository.list(filters, { signal: flight.controller.signal }),
               repository.icons(filters, { signal: flight.controller.signal }),
             ]).then(([list, icons]) => ({ icons, list }))
-          : (iconCatalog(filters)?.then((icons) => ({
-              icons,
-              list: listFromIcons(regionCode, icons),
+          : (iconCatalog(filters)?.then((list) => ({
+              icons: [] as OverviewSamplePointIcon[],
+              list,
             })) ??
             repository
               .list(filters, { signal: flight.controller.signal })
@@ -680,9 +680,7 @@ export function useOverviewSampleNetworkLayers({
           ? readCatalog(catalogFilters, { signal: flight.controller.signal }).then(
               ({ list }) => list,
             )
-          : (iconCatalog(catalogFilters)?.then((icons) =>
-              listFromIcons(regionCode, icons),
-            ) ??
+          : (iconCatalog(catalogFilters) ??
             repository.list(catalogFilters, { signal: flight.controller.signal }))
         : Promise.resolve(undefined);
       Promise.all([snapshotRequest, catalogRequest])
