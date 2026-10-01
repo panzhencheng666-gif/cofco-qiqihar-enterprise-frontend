@@ -8,6 +8,32 @@ afterEach(() => {
 });
 
 describe("persistent official video news", () => {
+  it("does not offer in-window playback for a directory page", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            data: [
+              {
+                sourceName: "Publisher",
+                title: "Directory only",
+                url: "https://example.org/videos",
+                publishedOn: "2026-09-28",
+                fetchedAt: "2026-09-28T00:00:00Z",
+                sourcePageUrl: "https://example.org/videos",
+              },
+            ],
+          }),
+      }),
+    );
+    render(<VideoNewsList onSelectVideo={() => {}} />);
+    expect(await screen.findByText("Directory only")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Directory only/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Directory only/ })).toBeNull();
+    expect(screen.getByText("尚无可识别的站内播放源")).toBeVisible();
+  });
   it("reloads saved entries on return and links to the publisher's video page", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

@@ -22,6 +22,7 @@ import { WorldBankMonthlyRail } from "./WorldBankMonthlyRail";
 import { MoaDomesticRail } from "./MoaDomesticRail";
 import { SourceSyncRail } from "./SourceSyncRail";
 import { UnifiedNewsRail } from "./UnifiedNewsRail";
+import { NewsDiscoveryRail } from "./NewsDiscoveryRail";
 import { MarketQuoteRail } from "./MarketQuoteRail";
 import { RosarioSpotRail } from "./RosarioSpotRail";
 import "./market-intelligence.css";
@@ -635,6 +636,7 @@ function OverviewPanels({
     <div className="mi-overview-grid">
       <UnifiedNewsRail onSelect={onSelect} />
       <SourceSyncRail />
+      <NewsDiscoveryRail />
       <MoaDomesticRail onSelect={onSelect} />
       <RosarioSpotRail />
       {showQuotes && <MarketQuoteRail onSelect={onSelect} />}

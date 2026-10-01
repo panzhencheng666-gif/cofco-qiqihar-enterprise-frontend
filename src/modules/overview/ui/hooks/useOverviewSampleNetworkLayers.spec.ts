@@ -1071,6 +1071,136 @@ describe("useOverviewSampleNetworkLayers", () => {
       "当前账号无权查看该地区的设计样本点，请返回已授权地区或联系权限管理员。",
     );
   });
+
+  it.each(["CORN", "SOYBEAN", "RICE"])(
+    "finishes the first %s catalog load when refreshes arrive before it returns",
+    async (productCode) => {
+      let resolveList:
+        ((value: ReturnType<typeof emptySnapshot>["list"]) => void) | undefined;
+      const list = vi.fn<OverviewSamplePointRepository["list"]>(
+        () =>
+          new Promise((resolve) => {
+            resolveList = resolve;
+          }),
+      );
+      const repository = {
+        ...repositoryWithSnapshot(),
+        list,
+      } satisfies OverviewSamplePointRepository;
+      const { result, rerender } = renderHook(
+        ({ refreshSequence }) =>
+          useOverviewSampleNetworkLayers({
+            productCode,
+            refreshSequence,
+            region: { code: "230200", level: "PREFECTURE", name: "齐齐哈尔市" },
+            repository,
+            year: 2026,
+          }),
+        { initialProps: { refreshSequence: 0 } },
+      );
+
+      await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
+      const firstSignal = list.mock.calls[0]?.[1]?.signal;
+      expect(firstSignal?.aborted).toBe(false);
+
+      rerender({ refreshSequence: 1 });
+      rerender({ refreshSequence: 2 });
+      rerender({ refreshSequence: 3 });
+
+      expect(list).toHaveBeenCalledTimes(1);
+      expect(firstSignal?.aborted).toBe(false);
+      expect(result.current.catalog).toBeUndefined();
+      expect(result.current.catalogState).toBe("loading");
+
+      await act(async () => {
+        resolveList?.({ ...emptySnapshot("230200").list, totalCount: 12 });
+        await Promise.resolve();
+      });
+
+      await waitFor(() => expect(result.current.catalog?.totalCount).toBe(12));
+      expect(result.current.catalogState).toBe("ready");
+      expect(result.current.catalog).toBeDefined();
+      expect(list).toHaveBeenCalledTimes(2);
+      expect(firstSignal?.aborted).toBe(false);
+      expect(list.mock.calls.every((call) => call[0].productCode === productCode)).toBe(
+        true,
+      );
+    },
+  );
+
+  it("keeps the loaded catalog visible when a later refresh fails", async () => {
+    const list = vi
+      .fn<OverviewSamplePointRepository["list"]>()
+      .mockResolvedValueOnce({ ...emptySnapshot("230200").list, totalCount: 8 })
+      .mockRejectedValueOnce(new Error("refresh failed"));
+    const repository = {
+      ...repositoryWithSnapshot(),
+      list,
+    } satisfies OverviewSamplePointRepository;
+    const { result, rerender } = renderHook(
+      ({ refreshSequence }) =>
+        useOverviewSampleNetworkLayers({
+          productCode: "RICE",
+          refreshSequence,
+          region: { code: "230200", level: "PREFECTURE", name: "齐齐哈尔市" },
+          repository,
+          year: 2026,
+        }),
+      { initialProps: { refreshSequence: 0 } },
+    );
+
+    await waitFor(() => expect(result.current.catalog?.totalCount).toBe(8));
+    rerender({ refreshSequence: 1 });
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(result.current.issue).toBe("样本点刷新失败，继续显示上一份已加载目录。"),
+    );
+    expect(result.current.catalogState).toBe("ready");
+    expect(result.current.catalog?.totalCount).toBe(8);
+    expect(result.current.filteredList?.totalCount).toBe(8);
+  });
+
+  it("ignores a late catalog response after the selected product changes", async () => {
+    let resolveCorn:
+      ((value: ReturnType<typeof emptySnapshot>["list"]) => void) | undefined;
+    const list = vi.fn<OverviewSamplePointRepository["list"]>(({ productCode }) => {
+      if (productCode === "CORN") {
+        return new Promise((resolve) => {
+          resolveCorn = resolve;
+        });
+      }
+      return Promise.resolve({ ...emptySnapshot("230200").list, totalCount: 4 });
+    });
+    const repository = {
+      ...repositoryWithSnapshot(),
+      list,
+    } satisfies OverviewSamplePointRepository;
+    const { result, rerender } = renderHook(
+      ({ productCode }) =>
+        useOverviewSampleNetworkLayers({
+          productCode,
+          refreshSequence: 0,
+          region: { code: "230200", level: "PREFECTURE", name: "齐齐哈尔市" },
+          repository,
+          year: 2026,
+        }),
+      { initialProps: { productCode: "CORN" } },
+    );
+
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
+    const cornSignal = list.mock.calls[0]?.[1]?.signal;
+    rerender({ productCode: "SOYBEAN" });
+    expect(cornSignal?.aborted).toBe(true);
+    await waitFor(() => expect(result.current.catalog?.totalCount).toBe(4));
+
+    await act(async () => {
+      resolveCorn?.({ ...emptySnapshot("230200").list, totalCount: 99 });
+      await Promise.resolve();
+    });
+
+    expect(result.current.catalog?.totalCount).toBe(4);
+    expect(list.mock.calls.at(-1)?.[0].productCode).toBe("SOYBEAN");
+  });
 });
 
 function agriculturalInputStorePoint() {
