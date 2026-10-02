@@ -1,6 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { beijingInstantLabel } from "./newsTime";
+import {
+  isFaoProgrammePage,
+  loadOfficialPlayback,
+  type OfficialPlaybackSelection,
+} from "./officialPlayback";
 
 const playbackSchema = z.object({
   provider: z.literal("un-webtv"),
@@ -46,12 +51,34 @@ function canPlay(event: Webcast, now: number): boolean {
 
 export function OfficialWebcastList({
   onSelectWebcast,
+  onSelectOfficialVideo,
 }: {
   onSelectWebcast?: (selection: WebcastSelection) => void;
+  onSelectOfficialVideo?: (selection: OfficialPlaybackSelection) => void;
 } = {}) {
   const [events, setEvents] = useState<Webcast[]>([]);
   const [error, setError] = useState(false);
   const [now, setNow] = useState(0);
+  const [loading, setLoading] = useState<string | null>(null);
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
+  const selectionRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => selectionRequest.current?.abort(), []);
+  async function selectFao(event: Webcast) {
+    selectionRequest.current?.abort();
+    const controller = new AbortController();
+    selectionRequest.current = controller;
+    setLoading(event.url);
+    setPlaybackError(null);
+    try {
+      const playback = await loadOfficialPlayback(event.url, controller.signal);
+      if (!controller.signal.aborted)
+        onSelectOfficialVideo?.({ ...playback, name: event.title });
+    } catch {
+      if (!controller.signal.aborted) setPlaybackError(event.url);
+    } finally {
+      if (!controller.signal.aborted) setLoading(null);
+    }
+  }
   useEffect(() => {
     const controller = new AbortController();
     async function refresh() {
@@ -92,9 +119,7 @@ export function OfficialWebcastList({
         <strong>官方直播与回看</strong>
         <span>{error ? "接口暂不可用" : `${events.length} 条已保存 · 按源更新`}</span>
       </header>
-      <p>
-        播出安排按来源时区换算为北京时间；只有通过来源准入且播放信息有效的节目可在本窗口加载。
-      </p>
+      <p>播出时间为北京时间；点击已播节目在当前窗口播放，未开始的节目显示预告。</p>
       <p>
         <a
           href="https://webtv.un.org/en/schedule"
@@ -112,7 +137,22 @@ export function OfficialWebcastList({
               {new Date(event.startsAt).getTime() > now ? " 预告" : " 已到播出时间"}
             </small>
             {onSelectWebcast ? (
-              canPlay(event, now) ? (
+              onSelectOfficialVideo && isFaoProgrammePage(event.url) ? (
+                <button
+                  type="button"
+                  disabled={loading !== null || Date.parse(event.startsAt) > now}
+                  onClick={() => void selectFao(event)}
+                >
+                  <strong>{event.title}</strong>
+                  <span>
+                    {Date.parse(event.startsAt) > now
+                      ? "尚未开始"
+                      : loading === event.url
+                        ? "正在加载播放源…"
+                        : "在本窗口播放"}
+                  </span>
+                </button>
+              ) : canPlay(event, now) ? (
                 <button
                   type="button"
                   onClick={() => {
@@ -141,24 +181,30 @@ export function OfficialWebcastList({
                 <span>打开官方直播或回看页 ↗</span>
               </a>
             )}
-            {onSelectWebcast && (
+            {playbackError === event.url && (
+              <p role="alert">节目尚未提供播放源或暂不可用，请重试</p>
+            )}
+            {onSelectWebcast &&
+              (!onSelectOfficialVideo || !isFaoProgrammePage(event.url)) && (
+                <a
+                  href={event.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mi-video-news-source-link"
+                >
+                  来源节目资料（站外）
+                </a>
+              )}
+            {!onSelectOfficialVideo && (
               <a
-                href={event.url}
+                href={event.sourcePageUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="mi-video-news-source-link"
               >
-                来源节目资料（站外）
+                查看来源目录 ↗
               </a>
             )}
-            <a
-              href={event.sourcePageUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mi-video-news-source-link"
-            >
-              查看来源目录 ↗
-            </a>
           </article>
         ))}
         {displayed.length === 0 && (

@@ -276,6 +276,58 @@ describe("live video controls", () => {
     expect(localStorage.getItem("cofco-market-official-video-v1")).toBeNull();
   });
 
+  it("plays an official FAO replay inside the same window with native media events", async () => {
+    const mediaUrl =
+      "https://vod.fao.org/video/20261001-COFO28-Day4-Plenary-EV-floor.mp4";
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue();
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((request: string) =>
+        Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              data: request.includes("/playback?")
+                ? { mediaUrl }
+                : [
+                    {
+                      sourceName: "FAO Webcast",
+                      title: "COFO evening replay",
+                      url: "https://www.fao.org/webcast/detail/cofo-evening/en",
+                      startsAt: "2026-09-25T09:30:00Z",
+                      fetchedAt: "2026-09-27T00:00:00Z",
+                      sourcePageUrl: "https://www.fao.org/webcast/",
+                    },
+                  ],
+            }),
+        }),
+      ),
+    );
+    render(<LiveNewsPanel onSelect={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "选择节目" }));
+    fireEvent.click(screen.getByRole("tab", { name: "直播" }));
+    fireEvent.click(await screen.findByRole("button", { name: /COFO evening replay/ }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "选择节目" })).toBeNull(),
+    );
+    const video = document.querySelector("video")!;
+    expect(video).not.toBeNull();
+    expect(video).toHaveAttribute("src", mediaUrl);
+    expect(video).toHaveAttribute("controls");
+    fireEvent.canPlay(video);
+    fireEvent.playing(video);
+    expect(screen.getByRole("button", { name: "Ⅱ 暂停" })).toBeEnabled();
+    fireEvent.pause(video);
+    expect(screen.getByRole("button", { name: "▶ 播放" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "声音" }));
+    expect(video.muted).toBe(true);
+    cleanup();
+    expect(video).not.toHaveAttribute("src");
+    vi.restoreAllMocks();
+  });
+
   it("keeps the player primary and opens the programme directory only on demand", () => {
     render(<LiveNewsPanel onSelect={() => {}} />);
     expect(screen.queryByRole("region", { name: "官方直播与回看列表" })).toBeNull();

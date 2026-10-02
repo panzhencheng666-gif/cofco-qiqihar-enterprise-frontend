@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { findMetric, type AnalysisTopic } from "./metricCatalog";
 import { VideoNewsList } from "./VideoNewsList";
+import type { OfficialPlaybackSelection } from "./officialPlayback";
 import { OfficialWebcastList, type WebcastSelection } from "./OfficialWebcastList";
 import { createUnWebTvPlayer, loadUnWebTvSdk } from "./unWebTvPlayer";
 import { videoIdFromUrl } from "./videoPlayback";
@@ -145,6 +146,10 @@ export function LiveNewsPanel({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [officialVideo, setOfficialVideo] = useState(readOfficialVideo);
   const [officialWebcast, setOfficialWebcast] = useState<WebcastSelection | null>(null);
+  const [officialMedia, setOfficialMedia] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [autoplay, setAutoplay] = useState(readAutoplayPreference);
   const [started, setStarted] = useState(
     () =>
@@ -169,12 +174,17 @@ export function LiveNewsPanel({
   const screenRef = useRef<HTMLDivElement>(null);
   const visibleChannels = channels.filter((item) => item.category === category);
   const selected =
+    officialMedia ??
     officialWebcast ??
     officialVideo ??
     visibleChannels.find((item) => item.id === selectedId) ??
     visibleChannels[0];
   const selectedVideoId = selected?.id;
-  const selectedProvider = officialWebcast ? "un-webtv" : "youtube";
+  const selectedProvider = officialMedia
+    ? "fao"
+    : officialWebcast
+      ? "un-webtv"
+      : "youtube";
 
   useEffect(() => {
     if (!settingsOpen && !programmesOpen) return;
@@ -195,6 +205,72 @@ export function LiveNewsPanel({
     let cancelled = false;
     const mount = document.createElement("div");
     slot.replaceChildren(mount);
+    if (selectedProvider === "fao") {
+      const video = document.createElement("video");
+      video.className = "mi-live-player";
+      video.controls = true;
+      video.playsInline = true;
+      video.preload = "metadata";
+      video.src = selectedVideoId;
+      const play = () => {
+        void video.play().catch(() => {
+          if (!cancelled) {
+            setAutoplayBlocked(true);
+            setPlaying(false);
+          }
+        });
+      };
+      video.addEventListener(
+        "canplay",
+        () => {
+          if (!cancelled) setPlayerReady(true);
+        },
+        { once: true },
+      );
+      video.addEventListener("playing", () => {
+        if (!cancelled) {
+          setPlaying(true);
+          setAutoplayBlocked(false);
+        }
+      });
+      for (const event of ["pause", "ended"])
+        video.addEventListener(event, () => {
+          if (!cancelled) setPlaying(false);
+        });
+      video.addEventListener("volumechange", () => {
+        if (!cancelled) setMuted(video.muted);
+      });
+      video.addEventListener("error", () => {
+        if (!cancelled) {
+          setPlayerReady(false);
+          setPlaying(false);
+          setPlayerError("官方回看暂不可用，请重试。");
+        }
+      });
+      mount.replaceWith(video);
+      playerRef.current = {
+        playVideo: play,
+        pauseVideo: () => video.pause(),
+        mute: () => {
+          video.muted = true;
+        },
+        unMute: () => {
+          video.muted = false;
+        },
+        destroy: () => {
+          video.pause();
+          video.removeAttribute("src");
+          video.load();
+        },
+      };
+      play();
+      return () => {
+        cancelled = true;
+        playerRef.current?.destroy();
+        playerRef.current = null;
+        slot.replaceChildren();
+      };
+    }
     if (selectedProvider === "un-webtv" && officialWebcast) {
       const fail = (message: string) => {
         if (cancelled) return;
@@ -308,6 +384,7 @@ export function LiveNewsPanel({
   }
 
   function rememberOfficialVideo(next: Channel | null) {
+    setOfficialMedia(null);
     setOfficialWebcast(null);
     setOfficialVideo(next);
     try {
@@ -316,6 +393,25 @@ export function LiveNewsPanel({
     } catch {
       // Storage denial must not prevent playback in the current session.
     }
+  }
+
+  function selectOfficialVideo(video: OfficialPlaybackSelection) {
+    rememberOfficialVideo(
+      "id" in video
+        ? { ...video, name: video.name.slice(0, 300), category: "官方通报" }
+        : null,
+    );
+    if ("mediaUrl" in video)
+      setOfficialMedia({ id: video.mediaUrl, name: video.name.slice(0, 300) });
+    setCategory("官方通报");
+    setStarted(true);
+    setPlaying(false);
+    setMuted(false);
+    setPlayerReady(false);
+    setPlayerError("");
+    setAutoplayBlocked(false);
+    setPlayerEpoch((value) => value + 1);
+    setProgrammesOpen(false);
   }
 
   function selectCategory(next: Category) {
@@ -572,6 +668,7 @@ export function LiveNewsPanel({
             <div role="tabpanel" aria-label={programmeTab}>
               {programmeTab === "直播" && (
                 <OfficialWebcastList
+                  onSelectOfficialVideo={selectOfficialVideo}
                   onSelectWebcast={(programme) => {
                     rememberOfficialVideo(null);
                     setOfficialWebcast(programme);
@@ -588,23 +685,7 @@ export function LiveNewsPanel({
                 />
               )}
               {programmeTab === "视频" && (
-                <VideoNewsList
-                  onSelectVideo={(video) => {
-                    rememberOfficialVideo({
-                      ...video,
-                      name: video.name.slice(0, 300),
-                      category: "官方通报",
-                    });
-                    setCategory("官方通报");
-                    setStarted(true);
-                    setPlaying(false);
-                    setMuted(false);
-                    setPlayerReady(false);
-                    setPlayerError("");
-                    setPlayerEpoch((value) => value + 1);
-                    setProgrammesOpen(false);
-                  }}
-                />
+                <VideoNewsList onSelectVideo={selectOfficialVideo} />
               )}
               {programmeTab === "频道" && (
                 <div className="mi-live-channels" role="group" aria-label="已配置视频">
