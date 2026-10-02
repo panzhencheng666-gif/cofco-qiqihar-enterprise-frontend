@@ -1,6 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { videoIdFromUrl } from "./videoPlayback";
+import {
+  loadOfficialPlayback,
+  isFaoProgrammePage,
+  type OfficialPlaybackSelection,
+} from "./officialPlayback";
 
 const videoSchema = z.object({
   sourceName: z.string(),
@@ -25,10 +30,35 @@ export async function loadVideoNews(signal?: AbortSignal): Promise<Video[]> {
 export function VideoNewsList({
   onSelectVideo,
 }: {
-  onSelectVideo?: (video: { id: string; name: string }) => void;
+  onSelectVideo?: (video: OfficialPlaybackSelection) => void;
 }) {
   const [videos, setVideos] = useState<Video[]>([]);
   const [error, setError] = useState(false);
+  const [loading, setLoading] = useState<string | null>(null);
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
+  const selectionRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => selectionRequest.current?.abort(), []);
+  async function selectVideo(video: Video) {
+    const id = videoIdFromUrl(video.url);
+    if (id) {
+      onSelectVideo?.({ id, name: video.title });
+      return;
+    }
+    selectionRequest.current?.abort();
+    const controller = new AbortController();
+    selectionRequest.current = controller;
+    setLoading(video.url);
+    setPlaybackError(null);
+    try {
+      const playback = await loadOfficialPlayback(video.url, controller.signal);
+      if (!controller.signal.aborted)
+        onSelectVideo?.({ ...playback, name: video.title });
+    } catch {
+      if (!controller.signal.aborted) setPlaybackError(video.url);
+    } finally {
+      if (!controller.signal.aborted) setLoading(null);
+    }
+  }
   useEffect(() => {
     const controller = new AbortController();
     async function refresh() {
@@ -71,16 +101,16 @@ export function VideoNewsList({
               {video.sourceName} · {video.publishedOn} · 来源仅提供日期
             </small>
             {onSelectVideo ? (
-              videoIdFromUrl(video.url) ? (
+              videoIdFromUrl(video.url) || isFaoProgrammePage(video.url) ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    const id = videoIdFromUrl(video.url);
-                    if (id) onSelectVideo({ id, name: video.title });
-                  }}
+                  disabled={loading !== null}
+                  onClick={() => void selectVideo(video)}
                 >
                   <strong>{video.title}</strong>
-                  <span>在本窗口加载视频</span>
+                  <span>
+                    {loading === video.url ? "正在加载播放源…" : "在本窗口播放"}
+                  </span>
                 </button>
               ) : (
                 <div>
@@ -94,14 +124,17 @@ export function VideoNewsList({
                 <span>前往发布方视频页观看 ↗</span>
               </a>
             )}
-            <a
-              href={video.sourcePageUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mi-video-news-source-link"
-            >
-              查看官方视频目录 ↗
-            </a>
+            {playbackError === video.url && <p role="alert">播放源暂不可用，请重试</p>}
+            {!onSelectVideo && (
+              <a
+                href={video.sourcePageUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mi-video-news-source-link"
+              >
+                查看官方视频目录 ↗
+              </a>
+            )}
           </article>
         ))}
         {videos.length === 0 && (
