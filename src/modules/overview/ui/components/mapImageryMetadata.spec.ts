@@ -61,10 +61,37 @@ describe("weekly map imagery presentation", () => {
       "放大后为历史底图，清晰度随地区变化",
     );
     expect(satelliteTileUrl("2026-09")).toBe(
-      "/api/v1/overview/map-imagery/tiles/{z}/{x}/{y}?version=2026-09",
+      "/api/v1/overview/map-imagery/tiles/2026-09/{z}/{x}/{y}",
+    );
+    const fourRegion = {
+      ...currentMetadata,
+      updateCadence: "MONTHLY",
+      imageryPeriod: "2026-09-r2",
+      coverageRegionCodes: ["230200", "150700", "231100", "232700"],
+    };
+    expect(imageryLabel(fourRegion)).toContain("近期影像覆盖四区域");
+    expect(imageryLabel(fourRegion)).toContain("同一近期10米影像放大");
+    expect(satelliteTileUrl("2026-09-r2")).toBe(
+      "/api/v1/overview/map-imagery/tiles/2026-09-r2/{z}/{x}/{y}",
     );
     expect(
       imageryWarning({ ...currentMetadata, updateCadence: "MONTHLY", status: "STALE" }),
     ).toContain("本月");
+  });
+
+  it("labels the September mixed release without claiming every position is from the recent week", () => {
+    const label = imageryLabel({
+      ...currentMetadata,
+      updateCadence: "MONTHLY",
+      imageryPeriod: "2026-09-r4",
+      acquisitionFrom: "2026-08-02T02:43:05Z",
+      acquisitionTo: "2026-09-20T03:04:18Z",
+      coverageRegionCodes: ["230200", "150700", "231100", "232700"],
+    });
+    expect(label).toContain("10米RGB（20米云分类）");
+    expect(label).toContain("9月14日至20日优先，历史影像补缺");
+    expect(label).toContain("实际采集范围 2026年08月02日至2026年09月20日");
+    expect(label).toContain("各位置采集日期不同");
+    expect(label).not.toContain("近期影像覆盖四区域");
   });
 });

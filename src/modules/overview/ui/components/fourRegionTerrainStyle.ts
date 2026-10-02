@@ -95,8 +95,8 @@ export function fourRegionRemoteSources(
       type: "raster",
       tiles: [satelliteTileUrl(imageryVersion)],
       tileSize: 256,
-      maxzoom: 18,
-      attribution: "Copernicus Sentinel-2；不可用区域由企业影像网关提供历史底图",
+      maxzoom: 14,
+      attribution: "Copernicus Sentinel-2；原始分辨率和采集时间见地图标注",
     },
     "terrain-dem": {
       type: "raster-dem",
@@ -143,7 +143,7 @@ export const FOUR_REGION_DETAIL_LAYERS: LayerSpecification[] = [
       "raster-brightness-max": 0.9,
       "raster-contrast": 0.2,
       "raster-saturation": -0.32,
-      "raster-fade-duration": 120,
+      "raster-fade-duration": 0,
     },
   },
   {
