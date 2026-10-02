@@ -12,19 +12,20 @@ it("keeps an older publication date distinct from the latest successful collecti
     "fetch",
     vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({
-        data: [
-          {
-            code: "moa-department-news",
-            name: "农业农村部动态",
-            cadence: "2 分钟轮询",
-            lastAttemptAt: "2026-10-02T03:47:00Z",
-            lastSuccessAt: "2026-10-02T03:46:00Z",
-            latestPublishedOn: "2026-09-30",
-            lastError: "IOException",
-          },
-        ],
-      }),
+      json: () =>
+        Promise.resolve({
+          data: [
+            {
+              code: "moa-department-news",
+              name: "农业农村部动态",
+              cadence: "2 分钟轮询",
+              lastAttemptAt: "2026-10-02T03:47:00Z",
+              lastSuccessAt: "2026-10-02T03:46:00Z",
+              latestPublishedOn: "2026-09-30",
+              lastError: "IOException",
+            },
+          ],
+        }),
     }),
   );
   render(<SourceSyncRail />);
