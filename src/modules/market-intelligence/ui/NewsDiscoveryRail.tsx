@@ -38,6 +38,10 @@ const snapshotSchema = z.object({
     "FAILED",
   ]),
   lastSearchCompletedAt: z.iso.datetime().nullable(),
+  searchReason: z.string().max(80).nullable().optional(),
+  nextSearchAt: z.iso.datetime().nullable().optional(),
+  pendingReviewCount: z.number().int().nonnegative().optional(),
+  awaitingSourceCount: z.number().int().nonnegative().optional(),
   observedAt: z.iso.datetime(),
   items: z.array(itemSchema).max(100),
 });
@@ -107,6 +111,7 @@ export function NewsDiscoveryRail() {
     };
   }, [generation]);
   const items = snapshot?.state === "DISABLED" ? [] : (snapshot?.items ?? []);
+  const budgetClosed = snapshot?.searchReason === "BUDGET_CLOSED";
   const status = error
     ? "发现接口暂不可用"
     : !snapshot
@@ -131,12 +136,25 @@ export function NewsDiscoveryRail() {
       <p role="status">{status}</p>
       {snapshot && snapshot.state !== "DISABLED" && (
         <p>
-          {searchLabels[snapshot.searchState]}
+          {budgetClosed
+            ? "搜索额度已用尽或授权已到期，自动搜索暂停"
+            : searchLabels[snapshot.searchState]}
           {snapshot.lastSearchCompletedAt
             ? ` · 上次搜索结束 ${beijingInstantLabel(snapshot.lastSearchCompletedAt)}`
             : ""}
         </p>
       )}
+      {snapshot?.state === "CONFIGURED" && !budgetClosed && snapshot.nextSearchAt && (
+        <p>下次搜索 {beijingInstantLabel(snapshot.nextSearchAt)}</p>
+      )}
+      {snapshot &&
+        snapshot.state !== "DISABLED" &&
+        (snapshot.pendingReviewCount ?? 0) > 0 && (
+          <p>
+            {snapshot.pendingReviewCount} 条新闻等待核验，其中{" "}
+            {snapshot.awaitingSourceCount ?? 0} 条等待来源准入
+          </p>
+        )}
       <div className="mi-news-card-scroll">
         {items.map((item) => (
           <a

@@ -57,6 +57,43 @@ it("distinguishes disabled from successful empty search", async () => {
   expect(await screen.findByText("公开网络发现未启用")).toBeVisible();
   expect(screen.queryByText(/采集成功/)).not.toBeInTheDocument();
 });
+it("explains a spent search budget and candidates waiting for source approval", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      response({
+        ...snapshot,
+        searchState: "FAILED",
+        searchReason: "BUDGET_CLOSED",
+        nextSearchAt: "2026-09-29T00:00:00Z",
+        pendingReviewCount: 49,
+        awaitingSourceCount: 49,
+        items: [],
+      }),
+    ),
+  );
+  render(<NewsDiscoveryRail />);
+  expect(await screen.findByText(/搜索额度已用尽或授权已到期/)).toBeVisible();
+  expect(screen.getByText(/49 条新闻等待核验，其中 49 条等待来源准入/)).toBeVisible();
+  expect(screen.queryByText(/最近搜索失败/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/下次搜索/)).not.toBeInTheDocument();
+});
+it("shows the next scheduled search separately from the last completed search", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      response({
+        ...snapshot,
+        searchReason: "CANDIDATES",
+        nextSearchAt: "2026-09-28T16:05:00Z",
+        pendingReviewCount: 1,
+        awaitingSourceCount: 0,
+      }),
+    ),
+  );
+  render(<NewsDiscoveryRail />);
+  expect(await screen.findByText(/下次搜索 2026\/09\/29 00:05 北京时间/)).toBeVisible();
+});
 it("labels expired search and retained verified history", async () => {
   vi.stubGlobal(
     "fetch",

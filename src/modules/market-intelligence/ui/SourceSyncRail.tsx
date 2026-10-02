@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { z } from "zod";
+import { beijingInstantLabel } from "./newsTime";
 
 const sourceSchema = z.object({
   code: z.string(),
   name: z.string(),
   cadence: z.string(),
   lastAttemptAt: z.string().nullable(),
-  lastSuccessAt: z.string().nullable(),
+  lastSuccessAt: z.iso.datetime().nullable(),
   latestPublishedOn: z.string().nullable(),
   lastError: z.string().nullable(),
 });
@@ -88,6 +89,11 @@ export function SourceSyncRail() {
               </div>
               <div className={`mi-source-sync-state ${status.state}`}>
                 <b>{status.label}</b>
+                {source.lastSuccessAt && (
+                  <small>
+                    上次成功采集 {beijingInstantLabel(source.lastSuccessAt)}
+                  </small>
+                )}
                 <small>
                   {source.latestPublishedOn
                     ? `源发布日期 ${source.latestPublishedOn}`
